@@ -233,6 +233,7 @@ async function main(): Promise<void> {
       name: "初一数学一班",
       description: "MVP 业务闭环演示班级",
       status: ClassroomStatus.ACTIVE,
+      allowStudentLeave: true,
       joinCodeExpiresAt: new Date("2027-07-01T00:00:00.000Z"),
     },
     create: {
@@ -241,6 +242,7 @@ async function main(): Promise<void> {
       description: "MVP 业务闭环演示班级",
       joinCode: "MATH2026",
       status: ClassroomStatus.ACTIVE,
+      allowStudentLeave: true,
       joinCodeExpiresAt: new Date("2027-07-01T00:00:00.000Z"),
     },
   });
@@ -251,6 +253,7 @@ async function main(): Promise<void> {
       teacherId: teacherTwo.id,
       name: "教师隔离测试班",
       status: ClassroomStatus.ACTIVE,
+      allowStudentLeave: false,
     },
     create: {
       teacherId: teacherTwo.id,
@@ -258,6 +261,7 @@ async function main(): Promise<void> {
       description: "用于验证教师之间的数据隔离",
       joinCode: "MATH-ISO",
       status: ClassroomStatus.ACTIVE,
+      allowStudentLeave: false,
     },
   });
 
@@ -271,7 +275,7 @@ async function main(): Promise<void> {
       },
       update: {
         status: MembershipStatus.ACTIVE,
-        removedAt: null,
+        endedAt: null,
       },
       create: {
         classroomId: classroom.id,

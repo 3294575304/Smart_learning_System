@@ -20,7 +20,7 @@
 - `User` 与 `UserProfile` 是一对一关系。
 - 教师 `User` 与 `Classroom` 是一对多关系。
 - 学生与班级通过 `ClassMembership` 建立多对多关系。
-- `ClassMembership(classroomId, studentId)` 唯一；移除后复用原记录重新激活，不能插入重复成员。
+- `ClassMembership(classroomId, studentId)` 唯一；学生主动退出后可复用原记录重新激活，教师移除后禁止自行重新加入。
 
 ### 2.2 题库与知识点
 
@@ -82,13 +82,14 @@
 |                   | `description`       | 班级说明。                       |
 |                   | `joinCode`          | 全局唯一加班码。                 |
 |                   | `joinCodeExpiresAt` | 加班码可选失效时间。             |
+|                   | `allowStudentLeave` | 是否允许学生主动退出。           |
 |                   | `status`            | 活跃、关闭或归档。               |
 |                   | `closedAt`          | 班级关闭时间。                   |
 | `ClassMembership` | `classroomId`       | 所属班级。                       |
 |                   | `studentId`         | 加入班级的学生。                 |
-|                   | `status`            | 当前有效或已移除。               |
+|                   | `status`            | 有效、主动退出或教师移除。       |
 |                   | `joinedAt`          | 首次或最近一次有效加入时间。     |
-|                   | `removedAt`         | 移除时间；有效成员必须为空。     |
+|                   | `endedAt`           | 成员关系结束时间；有效时为空。   |
 
 ### 3.4 KnowledgePoint / Question
 
@@ -372,7 +373,7 @@ WHERE "status" IN ('PENDING', 'STARTED');
 | 用户                         | 使用 `User.status=INACTIVE`；存在业务数据时外键 `RESTRICT` 禁止物理删除。                                                |
 | 用户资料                     | 仅在账号确实被删除时 `CASCADE`。                                                                                         |
 | 班级                         | 使用 `CLOSED/ARCHIVED`；成员、作业和 AI 历史均 `RESTRICT`。                                                              |
-| 班级成员                     | 使用 `REMOVED` 和 `removedAt`；保留提交审计。                                                                            |
+| 班级成员                     | 使用 `LEFT/REMOVED` 和 `endedAt`；保留提交审计。                                                                         |
 | 题目、知识点                 | 使用停用/归档；已被作业或统计引用时 `RESTRICT`。                                                                         |
 | 未发布题目的选项和题目知识点 | 随题目 `CASCADE`，便于编辑草稿。                                                                                         |
 | 作业                         | 发布后不物理删除；仅草稿可删除，其题目快照 `CASCADE`。                                                                   |
@@ -385,7 +386,7 @@ WHERE "status" IN ('PENDING', 'STARTED');
 
 ### 7.1 重复加入班级
 
-服务层使用 `upsert(classroomId, studentId)`；数据库唯一约束保证并发请求最多创建一条成员记录。已移除学生重新加入时更新原记录为 `ACTIVE`。
+数据库唯一约束保证并发请求最多创建一条成员记录。主动退出的 `LEFT` 成员可使用有效邀请码重新激活；教师移除的 `REMOVED` 成员不能自行重新加入。
 
 ### 7.2 重复提交
 

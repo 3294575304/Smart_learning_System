@@ -26,6 +26,7 @@ enum ClassroomStatus {
 
 enum MembershipStatus {
   ACTIVE
+  LEFT
   REMOVED
 }
 
@@ -202,6 +203,7 @@ model Classroom {
   description       String?         @db.Text
   joinCode          String          @unique
   joinCodeExpiresAt DateTime?
+  allowStudentLeave Boolean         @default(false)
   status            ClassroomStatus @default(ACTIVE)
   closedAt          DateTime?
   createdAt         DateTime        @default(now())
@@ -222,7 +224,7 @@ model ClassMembership {
   studentId   String
   status      MembershipStatus @default(ACTIVE)
   joinedAt    DateTime         @default(now())
-  removedAt   DateTime?
+  endedAt     DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
