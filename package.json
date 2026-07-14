@@ -12,12 +12,15 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
-    "db:setup": "prisma migrate dev && prisma db seed"
+    "db:setup": "prisma migrate dev && prisma db seed",
+    "test": "tsx --test tests/auth/*.test.ts",
+    "test:integration": "tsx tests/auth/http-integration.ts"
   },
   "engines": {
     "node": ">=20.9.0"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
@@ -25,6 +28,7 @@
     "next": "^15.5.20",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-hook-form": "^7.62.0",
     "tailwind-merge": "^3.6.0",
     "zod": "^3.25.76"
   },

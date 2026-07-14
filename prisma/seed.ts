@@ -219,6 +219,10 @@ async function upsertAnalysisInsight(input: {
 }
 
 async function main(): Promise<void> {
+  await prisma.authSession.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
+
   const users = await Promise.all(seedUsers.map(upsertUser));
   const [admin, teacher, teacherTwo, student, studentTwo, studentThree] = users;
 
