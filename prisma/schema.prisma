@@ -13,14 +13,630 @@ enum Role {
   STUDENT
 }
 
-model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
 
-  @@index([role])
+enum ClassroomStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum MembershipStatus {
+  ACTIVE
+  REMOVED
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  FILL_BLANK
+  SHORT_ANSWER
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum QuestionVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  PENDING_REVIEW
+  GRADED
+  PUBLISHED
+  WITHDRAWN
+}
+
+enum GradingStatus {
+  UNGRADED
+  AUTO_GRADED
+  MANUAL_REVIEW_REQUIRED
+  GRADED
+}
+
+enum MasteryLevel {
+  NOT_STARTED
+  BEGINNER
+  DEVELOPING
+  PROFICIENT
+  MASTERED
+}
+
+enum MasteryTrend {
+  UNKNOWN
+  UP
+  STABLE
+  DOWN
+}
+
+enum AIRecordStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  FALLBACK
+}
+
+enum AIAnalysisScope {
+  STUDENT
+  CLASSROOM
+}
+
+enum AIInsightType {
+  STRENGTH
+  WEAKNESS
+  RISK
+  SUGGESTION
+}
+
+enum RiskLevel {
+  UNKNOWN
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RecommendationSource {
+  RULE
+  AI
+  HYBRID
+}
+
+enum RecommendationStatus {
+  PENDING
+  STARTED
+  COMPLETED
+  DISMISSED
+  EXPIRED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  role         Role
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  profile                     UserProfile?
+  taughtClassrooms            Classroom[]                  @relation("ClassroomTeacher")
+  classMemberships            ClassMembership[]            @relation("ClassMembershipStudent")
+  createdQuestions            Question[]                   @relation("QuestionCreator")
+  createdKnowledgePoints      KnowledgePoint[]             @relation("KnowledgePointCreator")
+  assignments                 Assignment[]                 @relation("AssignmentTeacher")
+  submissions                 Submission[]                 @relation("SubmissionStudent")
+  gradedAnswers               StudentAnswer[]              @relation("StudentAnswerGrader")
+  wrongQuestions              WrongQuestion[]              @relation("WrongQuestionStudent")
+  knowledgeMasteries          StudentKnowledgeMastery[]    @relation("MasteryStudent")
+  requestedAIAnalyses         AIAnalysis[]                 @relation("AIAnalysisRequester")
+  studentAIAnalyses           AIAnalysis[]                 @relation("AIAnalysisStudent")
+  personalizedRecommendations PersonalizedRecommendation[]
+  aiTutoringRecords           AITutoringRecord[]
+
+  @@index([role, status])
+  @@index([createdAt])
+}
+
+model UserProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  displayName String
+  avatarUrl   String?
+  bio         String?  @db.Text
+  phone       String?
+  studentNo   String?  @unique
+  teacherNo   String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([displayName])
+}
+
+model Classroom {
+  id                String          @id @default(cuid())
+  teacherId         String
+  name              String
+  description       String?         @db.Text
+  joinCode          String          @unique
+  joinCodeExpiresAt DateTime?
+  status            ClassroomStatus @default(ACTIVE)
+  closedAt          DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  teacher     User              @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  memberships ClassMembership[]
+  assignments Assignment[]
+  aiAnalyses  AIAnalysis[]
+
+  @@index([teacherId, status])
+  @@index([status, createdAt])
+}
+
+model ClassMembership {
+  id          String           @id @default(cuid())
+  classroomId String
+  studentId   String
+  status      MembershipStatus @default(ACTIVE)
+  joinedAt    DateTime         @default(now())
+  removedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  student   User      @relation("ClassMembershipStudent", fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([classroomId, studentId])
+  @@index([studentId, status])
+  @@index([classroomId, status])
+}
+
+model KnowledgePoint {
+  id          String   @id @default(cuid())
+  createdById String
+  parentId    String?
+  code        String   @unique
+  name        String
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy                   User                               @relation("KnowledgePointCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  parent                      KnowledgePoint?                    @relation("KnowledgePointTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children                    KnowledgePoint[]                   @relation("KnowledgePointTree")
+  questionLinks               QuestionKnowledgePoint[]
+  assignmentQuestionSnapshots AssignmentQuestionKnowledgePoint[]
+  studentMasteries            StudentKnowledgeMastery[]
+  aiInsights                  AIAnalysisInsight[]
+  recommendations             PersonalizedRecommendation[]
+  aiTutoringRecords           AITutoringRecord[]
+
+  @@index([parentId, isActive])
+  @@index([name])
+}
+
+model Question {
+  id                String             @id @default(cuid())
+  creatorId         String
+  title             String
+  content           String             @db.Text
+  type              QuestionType
+  difficulty        QuestionDifficulty
+  visibility        QuestionVisibility @default(PRIVATE)
+  status            QuestionStatus     @default(DRAFT)
+  explanation       String             @db.Text
+  correctBoolean    Boolean?
+  referenceAnswer   String?            @db.Text
+  acceptableAnswers String[]           @default([])
+  isCaseSensitive   Boolean            @default(false)
+  gradingConfig     Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  creator             User                         @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  options             QuestionOption[]
+  knowledgePointLinks QuestionKnowledgePoint[]
+  assignmentQuestions AssignmentQuestion[]
+  recommendations     PersonalizedRecommendation[]
+  aiTutoringRecords   AITutoringRecord[]
+
+  @@index([creatorId, status, createdAt])
+  @@index([visibility, status, type, difficulty])
+  @@index([type, difficulty])
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  label      String
+  content    String   @db.Text
+  isCorrect  Boolean  @default(false)
+  sortOrder  Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, label])
+  @@unique([questionId, sortOrder])
+  @@index([questionId, isCorrect])
+}
+
+model QuestionKnowledgePoint {
+  id               String   @id @default(cuid())
+  questionId       String
+  knowledgePointId String
+  weight           Decimal  @default(1) @db.Decimal(6, 3)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  question       Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  knowledgePoint KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+
+  @@unique([questionId, knowledgePointId])
+  @@index([knowledgePointId, questionId])
+}
+
+model Assignment {
+  id          String           @id @default(cuid())
+  classroomId String
+  teacherId   String
+  title       String
+  description String?          @db.Text
+  status      AssignmentStatus @default(DRAFT)
+  totalPoints Decimal          @default(0) @db.Decimal(10, 2)
+  publishedAt DateTime?
+  dueAt       DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  classroom   Classroom            @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  teacher     User                 @relation("AssignmentTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  questions   AssignmentQuestion[]
+  submissions Submission[]
+
+  @@index([classroomId, status, dueAt])
+  @@index([teacherId, status, createdAt])
+}
+
+model AssignmentQuestion {
+  id                        String             @id @default(cuid())
+  assignmentId              String
+  questionId                String
+  sortOrder                 Int
+  points                    Decimal            @db.Decimal(8, 2)
+  titleSnapshot             String
+  contentSnapshot           String             @db.Text
+  typeSnapshot              QuestionType
+  difficultySnapshot        QuestionDifficulty
+  explanationSnapshot       String             @db.Text
+  correctBooleanSnapshot    Boolean?
+  referenceAnswerSnapshot   String?            @db.Text
+  acceptableAnswersSnapshot String[]           @default([])
+  isCaseSensitiveSnapshot   Boolean            @default(false)
+  gradingConfigSnapshot     Json?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+
+  assignment              Assignment                         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  sourceQuestion          Question                           @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  optionSnapshots         AssignmentQuestionOption[]
+  knowledgePointSnapshots AssignmentQuestionKnowledgePoint[]
+  studentAnswers          StudentAnswer[]
+  wrongQuestions          WrongQuestion[]
+
+  @@unique([assignmentId, sortOrder])
+  @@unique([assignmentId, questionId])
+  @@index([questionId])
+  @@index([assignmentId, typeSnapshot])
+}
+
+model AssignmentQuestionOption {
+  id                   String   @id @default(cuid())
+  assignmentQuestionId String
+  sourceOptionId       String?
+  labelSnapshot        String
+  contentSnapshot      String   @db.Text
+  isCorrectSnapshot    Boolean
+  sortOrder            Int
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  assignmentQuestion AssignmentQuestion    @relation(fields: [assignmentQuestionId], references: [id], onDelete: Cascade)
+  selectedByAnswers  StudentAnswerOption[]
+
+  @@unique([assignmentQuestionId, sortOrder])
+  @@unique([assignmentQuestionId, labelSnapshot])
+  @@index([assignmentQuestionId, isCorrectSnapshot])
+}
+
+model AssignmentQuestionKnowledgePoint {
+  id                   String   @id @default(cuid())
+  assignmentQuestionId String
+  knowledgePointId     String
+  codeSnapshot         String
+  nameSnapshot         String
+  weightSnapshot       Decimal  @db.Decimal(6, 3)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  assignmentQuestion AssignmentQuestion @relation(fields: [assignmentQuestionId], references: [id], onDelete: Cascade)
+  knowledgePoint     KnowledgePoint     @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+
+  @@unique([assignmentQuestionId, knowledgePointId])
+  @@index([knowledgePointId, assignmentQuestionId])
+}
+
+model Submission {
+  id             String           @id @default(cuid())
+  assignmentId   String
+  studentId      String
+  attemptNumber  Int              @default(1)
+  idempotencyKey String           @unique
+  status         SubmissionStatus @default(IN_PROGRESS)
+  startedAt      DateTime         @default(now())
+  submittedAt    DateTime?
+  gradedAt       DateTime?
+  publishedAt    DateTime?
+  withdrawnAt    DateTime?
+  score          Decimal?         @db.Decimal(10, 2)
+  maxScore       Decimal?         @db.Decimal(10, 2)
+  percentage     Decimal?         @db.Decimal(5, 2)
+  feedback       String?          @db.Text
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  assignment Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  student    User            @relation("SubmissionStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  answers    StudentAnswer[]
+
+  @@unique([assignmentId, studentId, attemptNumber])
+  @@index([assignmentId, status, submittedAt])
+  @@index([studentId, status, createdAt])
+}
+
+model StudentAnswer {
+  id                   String        @id @default(cuid())
+  submissionId         String
+  assignmentQuestionId String
+  graderId             String?
+  textAnswer           String?       @db.Text
+  booleanAnswer        Boolean?
+  gradingStatus        GradingStatus @default(UNGRADED)
+  score                Decimal?      @db.Decimal(8, 2)
+  maxScore             Decimal       @db.Decimal(8, 2)
+  isCorrect            Boolean?
+  teacherFeedback      String?       @db.Text
+  gradedAt             DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  submission         Submission            @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  assignmentQuestion AssignmentQuestion    @relation(fields: [assignmentQuestionId], references: [id], onDelete: Restrict)
+  grader             User?                 @relation("StudentAnswerGrader", fields: [graderId], references: [id], onDelete: Restrict)
+  selectedOptions    StudentAnswerOption[]
+  wrongQuestion      WrongQuestion?
+
+  @@unique([submissionId, assignmentQuestionId])
+  @@index([assignmentQuestionId, gradingStatus])
+  @@index([graderId, gradedAt])
+}
+
+model StudentAnswerOption {
+  id                         String   @id @default(cuid())
+  studentAnswerId            String
+  assignmentQuestionOptionId String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  studentAnswer            StudentAnswer            @relation(fields: [studentAnswerId], references: [id], onDelete: Cascade)
+  assignmentQuestionOption AssignmentQuestionOption @relation(fields: [assignmentQuestionOptionId], references: [id], onDelete: Restrict)
+
+  @@unique([studentAnswerId, assignmentQuestionOptionId])
+  @@index([assignmentQuestionOptionId])
+}
+
+model WrongQuestion {
+  id                   String    @id @default(cuid())
+  studentId            String
+  studentAnswerId      String    @unique
+  assignmentQuestionId String
+  isResolved           Boolean   @default(false)
+  reviewCount          Int       @default(0)
+  firstWrongAt         DateTime  @default(now())
+  lastReviewedAt       DateTime?
+  resolvedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  student            User               @relation("WrongQuestionStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  studentAnswer      StudentAnswer      @relation(fields: [studentAnswerId], references: [id], onDelete: Restrict)
+  assignmentQuestion AssignmentQuestion @relation(fields: [assignmentQuestionId], references: [id], onDelete: Restrict)
+
+  @@index([studentId, isResolved, firstWrongAt])
+  @@index([assignmentQuestionId])
+}
+
+model StudentKnowledgeMastery {
+  id               String       @id @default(cuid())
+  studentId        String
+  knowledgePointId String
+  level            MasteryLevel @default(NOT_STARTED)
+  trend            MasteryTrend @default(UNKNOWN)
+  masteryScore     Decimal      @default(0) @db.Decimal(5, 2)
+  earnedPoints     Decimal      @default(0) @db.Decimal(12, 2)
+  availablePoints  Decimal      @default(0) @db.Decimal(12, 2)
+  answeredCount    Int          @default(0)
+  correctCount     Int          @default(0)
+  calculatedAt     DateTime     @default(now())
+  sourceStartedAt  DateTime?
+  sourceEndedAt    DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  student        User           @relation("MasteryStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  knowledgePoint KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, knowledgePointId])
+  @@index([studentId, level, masteryScore])
+  @@index([knowledgePointId, masteryScore])
+}
+
+model AIAnalysis {
+  id            String          @id @default(cuid())
+  requestKey    String          @unique
+  requestedById String
+  studentId     String?
+  classroomId   String?
+  scope         AIAnalysisScope
+  status        AIRecordStatus  @default(PENDING)
+  riskLevel     RiskLevel       @default(UNKNOWN)
+  summary       String?         @db.Text
+  overallScore  Decimal?        @db.Decimal(5, 2)
+  sampleSize    Int             @default(0)
+  basedOnFrom   DateTime?
+  basedOnTo     DateTime?
+  provider      String?
+  model         String?
+  promptVersion String
+  retryCount    Int             @default(0)
+  fallbackUsed  Boolean         @default(false)
+  inputMetrics  Json?
+  rawResponse   Json?
+  errorCode     String?
+  completedAt   DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  requestedBy     User                         @relation("AIAnalysisRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  student         User?                        @relation("AIAnalysisStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  classroom       Classroom?                   @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  insights        AIAnalysisInsight[]
+  recommendations PersonalizedRecommendation[]
+
+  @@index([studentId, status, createdAt])
+  @@index([classroomId, status, createdAt])
+  @@index([requestedById, createdAt])
+  @@index([scope, riskLevel, createdAt])
+}
+
+model AIAnalysisInsight {
+  id                String        @id @default(cuid())
+  analysisId        String
+  knowledgePointId  String?
+  type              AIInsightType
+  title             String
+  detail            String        @db.Text
+  priority          Int           @default(0)
+  metricName        String?
+  metricValue       Decimal?      @db.Decimal(12, 4)
+  recommendedAction String?       @db.Text
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  analysis       AIAnalysis      @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  knowledgePoint KnowledgePoint? @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+
+  @@index([analysisId, type, priority])
+  @@index([knowledgePointId, type])
+}
+
+model PersonalizedRecommendation {
+  id               String               @id @default(cuid())
+  studentId        String
+  questionId       String
+  knowledgePointId String?
+  analysisId       String?
+  cycleKey         String
+  source           RecommendationSource
+  status           RecommendationStatus @default(PENDING)
+  reason           String               @db.Text
+  targetDifficulty QuestionDifficulty
+  priority         Int                  @default(0)
+  expiresAt        DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  dismissedAt      DateTime?
+  wasCorrect       Boolean?
+  score            Decimal?             @db.Decimal(8, 2)
+  maxScore         Decimal?             @db.Decimal(8, 2)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  student        User            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  question       Question        @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  knowledgePoint KnowledgePoint? @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+  analysis       AIAnalysis?     @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, questionId, cycleKey])
+  @@index([studentId, status, priority, createdAt])
+  @@index([knowledgePointId, status])
+  @@index([analysisId])
+}
+
+model AITutoringRecord {
+  id               String         @id @default(cuid())
+  requestKey       String         @unique
+  studentId        String
+  questionId       String
+  knowledgePointId String?
+  status           AIRecordStatus @default(PENDING)
+  prompt           String         @db.Text
+  answer           String?        @db.Text
+  explanationSteps String[]       @default([])
+  hints            String[]       @default([])
+  provider         String?
+  model            String?
+  promptVersion    String
+  retryCount       Int            @default(0)
+  fallbackUsed     Boolean        @default(false)
+  confidence       Decimal?       @db.Decimal(5, 4)
+  safetyFlagged    Boolean        @default(false)
+  inputContext     Json?
+  rawResponse      Json?
+  errorCode        String?
+  promptTokens     Int?
+  completionTokens Int?
+  latencyMs        Int?
+  completedAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  student        User            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  question       Question        @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  knowledgePoint KnowledgePoint? @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+
+  @@index([studentId, questionId, createdAt])
+  @@index([status, createdAt])
+  @@index([knowledgePointId, createdAt])
 }
