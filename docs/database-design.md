@@ -105,15 +105,17 @@
 |                          | `title`             | 题目短标题。                                          |
 |                          | `content`           | 完整题干。                                            |
 |                          | `type`              | 单选、多选、判断、填空或简答。                        |
-|                          | `difficulty`        | 简单、中等或困难。                                    |
+|                          | `difficulty`        | 1 到 5 的整数难度。                                   |
 |                          | `visibility`        | 私有题或公共题。                                      |
 |                          | `status`            | 草稿、启用、停用或归档。                              |
 |                          | `explanation`       | 成绩发布后可展示的解析。                              |
+|                          | `tags`              | 轻量标签数组，用于题库整理。                          |
 |                          | `correctBoolean`    | 判断题标准答案。                                      |
 |                          | `referenceAnswer`   | 简答题参考答案。                                      |
 |                          | `acceptableAnswers` | 填空题可接受答案数组。                                |
 |                          | `isCaseSensitive`   | 文本自动批改是否区分大小写。                          |
 |                          | `gradingConfig`     | 题型相关少量扩展配置，例如数值容差；必须经 Zod 校验。 |
+|                          | `deletedAt`         | 有引用题目的软删除时间；普通查询默认排除。            |
 | `QuestionOption`         | `questionId`        | 所属单选或多选题。                                    |
 |                          | `label`             | 选项标签，例如 A、B。                                 |
 |                          | `content`           | 选项内容。                                            |

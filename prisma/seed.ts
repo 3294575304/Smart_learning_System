@@ -10,7 +10,6 @@ import {
   MembershipStatus,
   Prisma,
   PrismaClient,
-  QuestionDifficulty,
   QuestionStatus,
   QuestionType,
   QuestionVisibility,
@@ -39,9 +38,10 @@ interface SeedQuestion {
   title: string;
   content: string;
   type: QuestionType;
-  difficulty: QuestionDifficulty;
+  difficulty: number;
   visibility: QuestionVisibility;
   explanation: string;
+  tags?: string[];
   correctBoolean?: boolean;
   referenceAnswer?: string;
   acceptableAnswers?: string[];
@@ -150,6 +150,7 @@ async function upsertQuestion(seedQuestion: SeedQuestion) {
     visibility: seedQuestion.visibility,
     status: QuestionStatus.ACTIVE,
     explanation: seedQuestion.explanation,
+    tags: seedQuestion.tags ?? [],
     correctBoolean: seedQuestion.correctBoolean,
     referenceAnswer: seedQuestion.referenceAnswer,
     acceptableAnswers: seedQuestion.acceptableAnswers ?? [],
@@ -336,18 +337,20 @@ async function main(): Promise<void> {
     title: "基础加法",
     content: "2 + 3 的结果是多少？",
     type: QuestionType.SINGLE_CHOICE,
-    difficulty: QuestionDifficulty.EASY,
+    difficulty: 1,
     visibility: QuestionVisibility.PUBLIC,
     explanation: "将 2 与 3 相加得到 5。",
+    tags: ["基础", "计算"],
   });
   const multipleChoice = await upsertQuestion({
     creatorId: teacher.id,
     title: "12 的因数",
     content: "下列哪些数是 12 的因数？",
     type: QuestionType.MULTIPLE_CHOICE,
-    difficulty: QuestionDifficulty.MEDIUM,
+    difficulty: 3,
     visibility: QuestionVisibility.PRIVATE,
     explanation: "能整除 12 的数是其因数。",
+    tags: ["因数", "多选"],
     gradingConfig: { mode: "EXACT_SET" },
   });
   const trueFalse = await upsertQuestion({
@@ -355,9 +358,10 @@ async function main(): Promise<void> {
     title: "三角形内角和",
     content: "平面三角形的内角和等于 180 度。",
     type: QuestionType.TRUE_FALSE,
-    difficulty: QuestionDifficulty.EASY,
+    difficulty: 1,
     visibility: QuestionVisibility.PRIVATE,
     explanation: "欧氏平面内任意三角形的内角和为 180 度。",
+    tags: ["几何", "判断"],
     correctBoolean: true,
   });
   const fillBlank = await upsertQuestion({
@@ -365,9 +369,10 @@ async function main(): Promise<void> {
     title: "解一元一次方程",
     content: "解方程 3x = 12，x = ____。",
     type: QuestionType.FILL_BLANK,
-    difficulty: QuestionDifficulty.MEDIUM,
+    difficulty: 3,
     visibility: QuestionVisibility.PRIVATE,
     explanation: "等式两边同时除以 3，得到 x = 4。",
+    tags: ["方程", "填空"],
     acceptableAnswers: ["4", "4.0"],
     gradingConfig: { trimWhitespace: true, numericTolerance: 0 },
   });
@@ -376,9 +381,10 @@ async function main(): Promise<void> {
     title: "说明勾股定理",
     content: "请用自己的语言说明勾股定理，并写出公式。",
     type: QuestionType.SHORT_ANSWER,
-    difficulty: QuestionDifficulty.HARD,
+    difficulty: 5,
     visibility: QuestionVisibility.PRIVATE,
     explanation: "直角三角形两条直角边平方和等于斜边平方。",
+    tags: ["几何", "简答"],
     referenceAnswer:
       "在直角三角形中，两直角边 a、b 与斜边 c 满足 a² + b² = c²。",
     gradingConfig: { manualReviewRequired: true },
@@ -388,7 +394,7 @@ async function main(): Promise<void> {
     title: "隔离测试私有题",
     content: "该题只应由李老师管理。",
     type: QuestionType.TRUE_FALSE,
-    difficulty: QuestionDifficulty.EASY,
+    difficulty: 1,
     visibility: QuestionVisibility.PRIVATE,
     explanation: "用于权限测试。",
     correctBoolean: true,
@@ -549,41 +555,44 @@ async function main(): Promise<void> {
     }
   }
 
-  const submission = await prisma.submission.upsert({
+  const existingSubmission = await prisma.submission.findFirst({
     where: {
-      assignmentId_studentId_attemptNumber: {
-        assignmentId: assignment.id,
-        studentId: student.id,
-        attemptNumber: 1,
-      },
+      OR: [
+        { idempotencyKey: "seed-submit-student-1-assignment-1" },
+        {
+          assignmentId: assignment.id,
+          studentId: student.id,
+          status: { not: SubmissionStatus.WITHDRAWN },
+        },
+      ],
     },
-    update: {
-      idempotencyKey: "seed-submit-student-1-assignment-1",
-      status: SubmissionStatus.PUBLISHED,
-      submittedAt: new Date("2026-07-14T02:00:00.000Z"),
-      gradedAt: new Date("2026-07-14T02:10:00.000Z"),
-      publishedAt: new Date("2026-07-14T02:15:00.000Z"),
-      score: new Prisma.Decimal(23),
-      maxScore: new Prisma.Decimal(30),
-      percentage: new Prisma.Decimal("76.67"),
-      feedback: "基础知识较扎实，需要加强方程计算。",
-    },
-    create: {
-      assignmentId: assignment.id,
-      studentId: student.id,
-      attemptNumber: 1,
-      idempotencyKey: "seed-submit-student-1-assignment-1",
-      status: SubmissionStatus.PUBLISHED,
-      startedAt: new Date("2026-07-14T01:30:00.000Z"),
-      submittedAt: new Date("2026-07-14T02:00:00.000Z"),
-      gradedAt: new Date("2026-07-14T02:10:00.000Z"),
-      publishedAt: new Date("2026-07-14T02:15:00.000Z"),
-      score: new Prisma.Decimal(23),
-      maxScore: new Prisma.Decimal(30),
-      percentage: new Prisma.Decimal("76.67"),
-      feedback: "基础知识较扎实，需要加强方程计算。",
-    },
+    orderBy: { attemptNumber: "asc" },
   });
+  const submissionData = {
+    idempotencyKey: "seed-submit-student-1-assignment-1",
+    status: SubmissionStatus.PUBLISHED,
+    submittedAt: new Date("2026-07-14T02:00:00.000Z"),
+    gradedAt: new Date("2026-07-14T02:10:00.000Z"),
+    publishedAt: new Date("2026-07-14T02:15:00.000Z"),
+    score: new Prisma.Decimal(23),
+    maxScore: new Prisma.Decimal(30),
+    percentage: new Prisma.Decimal("76.67"),
+    feedback: "基础知识较扎实，需要加强方程计算。",
+  };
+  const submission = existingSubmission
+    ? await prisma.submission.update({
+        where: { id: existingSubmission.id },
+        data: submissionData,
+      })
+    : await prisma.submission.create({
+        data: {
+          assignmentId: assignment.id,
+          studentId: student.id,
+          attemptNumber: 1,
+          startedAt: new Date("2026-07-14T01:30:00.000Z"),
+          ...submissionData,
+        },
+      });
 
   const answerSeeds = [
     {
@@ -928,7 +937,7 @@ async function main(): Promise<void> {
       source: RecommendationSource.HYBRID,
       status: RecommendationStatus.PENDING,
       reason: "一元一次方程掌握度低于 60%，推荐同难度巩固练习。",
-      targetDifficulty: QuestionDifficulty.MEDIUM,
+      targetDifficulty: 3,
       priority: 10,
       expiresAt: new Date("2027-01-01T00:00:00.000Z"),
     },
@@ -941,7 +950,7 @@ async function main(): Promise<void> {
       source: RecommendationSource.HYBRID,
       status: RecommendationStatus.PENDING,
       reason: "一元一次方程掌握度低于 60%，推荐同难度巩固练习。",
-      targetDifficulty: QuestionDifficulty.MEDIUM,
+      targetDifficulty: 3,
       priority: 10,
       expiresAt: new Date("2027-01-01T00:00:00.000Z"),
     },
@@ -960,7 +969,7 @@ async function main(): Promise<void> {
       source: RecommendationSource.RULE,
       status: RecommendationStatus.COMPLETED,
       reason: "用于复习基础运算。",
-      targetDifficulty: QuestionDifficulty.EASY,
+      targetDifficulty: 1,
       priority: 1,
       completedAt: new Date("2026-07-13T01:00:00.000Z"),
       wasCorrect: true,
@@ -975,7 +984,7 @@ async function main(): Promise<void> {
       source: RecommendationSource.RULE,
       status: RecommendationStatus.COMPLETED,
       reason: "用于复习基础运算。",
-      targetDifficulty: QuestionDifficulty.EASY,
+      targetDifficulty: 1,
       priority: 1,
       completedAt: new Date("2026-07-13T01:00:00.000Z"),
       wasCorrect: true,

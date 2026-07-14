@@ -38,12 +38,6 @@ enum QuestionType {
   SHORT_ANSWER
 }
 
-enum QuestionDifficulty {
-  EASY
-  MEDIUM
-  HARD
-}
-
 enum QuestionStatus {
   DRAFT
   ACTIVE
@@ -267,15 +261,17 @@ model Question {
   title             String
   content           String             @db.Text
   type              QuestionType
-  difficulty        QuestionDifficulty
+  difficulty        Int
   visibility        QuestionVisibility @default(PRIVATE)
   status            QuestionStatus     @default(DRAFT)
   explanation       String             @db.Text
+  tags              String[]           @default([])
   correctBoolean    Boolean?
   referenceAnswer   String?            @db.Text
   acceptableAnswers String[]           @default([])
   isCaseSensitive   Boolean            @default(false)
   gradingConfig     Json?
+  deletedAt         DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -286,8 +282,8 @@ model Question {
   recommendations     PersonalizedRecommendation[]
   aiTutoringRecords   AITutoringRecord[]
 
-  @@index([creatorId, status, createdAt])
-  @@index([visibility, status, type, difficulty])
+  @@index([creatorId, status, deletedAt, createdAt])
+  @@index([visibility, status, deletedAt, type, difficulty])
   @@index([type, difficulty])
 }
 
@@ -347,23 +343,23 @@ model Assignment {
 }
 
 model AssignmentQuestion {
-  id                        String             @id @default(cuid())
+  id                        String       @id @default(cuid())
   assignmentId              String
   questionId                String
   sortOrder                 Int
-  points                    Decimal            @db.Decimal(8, 2)
+  points                    Decimal      @db.Decimal(8, 2)
   titleSnapshot             String
-  contentSnapshot           String             @db.Text
+  contentSnapshot           String       @db.Text
   typeSnapshot              QuestionType
-  difficultySnapshot        QuestionDifficulty
-  explanationSnapshot       String             @db.Text
+  difficultySnapshot        Int
+  explanationSnapshot       String       @db.Text
   correctBooleanSnapshot    Boolean?
-  referenceAnswerSnapshot   String?            @db.Text
-  acceptableAnswersSnapshot String[]           @default([])
-  isCaseSensitiveSnapshot   Boolean            @default(false)
+  referenceAnswerSnapshot   String?      @db.Text
+  acceptableAnswersSnapshot String[]     @default([])
+  isCaseSensitiveSnapshot   Boolean      @default(false)
   gradingConfigSnapshot     Json?
-  createdAt                 DateTime           @default(now())
-  updatedAt                 DateTime           @updatedAt
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
 
   assignment              Assignment                         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   sourceQuestion          Question                           @relation(fields: [questionId], references: [id], onDelete: Restrict)
@@ -598,7 +594,7 @@ model PersonalizedRecommendation {
   source           RecommendationSource
   status           RecommendationStatus @default(PENDING)
   reason           String               @db.Text
-  targetDifficulty QuestionDifficulty
+  targetDifficulty Int
   priority         Int                  @default(0)
   expiresAt        DateTime?
   startedAt        DateTime?
