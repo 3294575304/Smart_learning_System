@@ -16,6 +16,14 @@ export function LogoutButton() {
       onClick={() => {
         startTransition(async () => {
           const result = await logoutAction();
+          if (result.success) {
+            for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+              const key = localStorage.key(index);
+              if (key?.startsWith("assignment-draft:")) {
+                localStorage.removeItem(key);
+              }
+            }
+          }
           router.push(result.success ? result.data.redirectTo : "/login");
           router.refresh();
         });

@@ -21,6 +21,15 @@ export default async function TeacherPage() {
             创建、筛选和维护题目，也可以从公共题库复制。
           </p>
         </Link>
+        <Link
+          className="rounded-xl border bg-white p-5 transition-colors hover:bg-gray-50"
+          href="/teacher/assignments"
+        >
+          <h2 className="font-semibold">作业管理</h2>
+          <p className="text-muted-foreground mt-2 text-sm">
+            选择题目、预约发布并管理班级作业。
+          </p>
+        </Link>
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div>

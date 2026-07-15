@@ -1,4 +1,5 @@
 import { Role } from "@prisma/client";
+import Link from "next/link";
 
 import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
 import { LeaveClassroomButton } from "@/components/classrooms/leave-classroom-button";
@@ -11,6 +12,15 @@ export default async function StudentPage() {
 
   return (
     <section>
+      <Link
+        className="mb-6 block rounded-xl border bg-white p-5 transition-colors hover:bg-gray-50"
+        href="/student/assignments"
+      >
+        <h2 className="font-semibold">我的作业</h2>
+        <p className="text-muted-foreground mt-2 text-sm">
+          查看已发布作业、在线作答并查看提交结果。
+        </p>
+      </Link>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div>
           <h1 className="text-2xl font-semibold">我的班级</h1>

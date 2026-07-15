@@ -13,8 +13,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
     "db:setup": "prisma migrate dev && prisma db seed",
-    "test": "tsx --test tests/auth/*.test.ts tests/classrooms/*.test.ts tests/questions/*.test.ts",
-    "test:integration": "tsx tests/auth/http-integration.ts && tsx tests/classrooms/http-integration.ts && tsx tests/questions/http-integration.ts"
+    "test": "tsx --test tests/auth/*.test.ts tests/classrooms/*.test.ts tests/questions/*.test.ts tests/assignments/*.test.ts",
+    "test:integration": "tsx tests/auth/http-integration.ts && tsx tests/classrooms/http-integration.ts && tsx tests/questions/http-integration.ts && tsx tests/assignments/http-integration.ts"
   },
   "engines": {
     "node": ">=20.9.0"

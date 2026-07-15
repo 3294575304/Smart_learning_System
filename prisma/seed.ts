@@ -446,6 +446,7 @@ async function main(): Promise<void> {
     description: "包含五类题型的完整批改演示",
     status: AssignmentStatus.PUBLISHED,
     totalPoints: new Prisma.Decimal(30),
+    allowResubmission: false,
     publishedAt: new Date("2026-07-14T01:00:00.000Z"),
     dueAt: new Date("2027-01-01T00:00:00.000Z"),
   };
@@ -578,6 +579,8 @@ async function main(): Promise<void> {
     maxScore: new Prisma.Decimal(30),
     percentage: new Prisma.Decimal("76.67"),
     feedback: "基础知识较扎实，需要加强方程计算。",
+    saveVersion: 1,
+    lastSavedAt: new Date("2026-07-14T01:55:00.000Z"),
   };
   const submission = existingSubmission
     ? await prisma.submission.update({

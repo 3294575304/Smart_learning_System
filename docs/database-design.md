@@ -135,6 +135,7 @@
 |                                    | `description`               | 作业说明。                                      |
 |                                    | `status`                    | 草稿、已发布、已关闭或已归档。                  |
 |                                    | `totalPoints`               | 作业总分。                                      |
+|                                    | `allowResubmission`         | 截止前是否允许创建后续提交尝试。                |
 |                                    | `publishedAt`               | 发布时间。                                      |
 |                                    | `dueAt`                     | 可选截止时间。                                  |
 |                                    | `closedAt`                  | 实际关闭时间。                                  |
@@ -182,6 +183,8 @@
 |                       | `maxScore`                   | 批改时总满分。                                   |
 |                       | `percentage`                 | 百分制成绩，范围 0–100。                         |
 |                       | `feedback`                   | 作业级教师评语。                                 |
+|                       | `saveVersion`                | 自动保存乐观锁版本，防止旧请求覆盖新答案。       |
+|                       | `lastSavedAt`                | 最近一次成功自动保存时间。                       |
 | `StudentAnswer`       | `submissionId`               | 所属提交。                                       |
 |                       | `assignmentQuestionId`       | 回答的作业题快照。                               |
 |                       | `graderId`                   | 可选人工批改教师。                               |
@@ -322,16 +325,16 @@
 Prisma 6 无法在 Schema 中声明以下索引，因此直接写入 migration：
 
 ```sql
-CREATE UNIQUE INDEX "Submission_one_current_per_assignment_student_key"
+CREATE UNIQUE INDEX "Submission_one_in_progress_per_assignment_student_key"
 ON "Submission"("assignmentId", "studentId")
-WHERE "status" <> 'WITHDRAWN';
+WHERE "status" = 'IN_PROGRESS';
 
 CREATE UNIQUE INDEX "PersonalizedRecommendation_one_active_question_per_student_key"
 ON "PersonalizedRecommendation"("studentId", "questionId")
 WHERE "status" IN ('PENDING', 'STARTED');
 ```
 
-第一条允许保留多条已撤回历史，但同一学生、同一作业只能有一个当前尝试。第二条允许未来重新推荐已完成或已过期题目，但不能同时产生两条活动推荐。
+第一条允许保留多次已提交历史，但同一学生、同一作业最多只有一个正在编辑的尝试。第二条允许未来重新推荐已完成或已过期题目，但不能同时产生两条活动推荐。
 
 ### 4.3 查询索引
 
@@ -392,11 +395,11 @@ WHERE "status" IN ('PENDING', 'STARTED');
 
 ### 7.2 重复提交
 
-1. 客户端为一次交卷生成稳定 `idempotencyKey`。
-2. 服务层事务锁定当前 `Submission` 并只允许从 `IN_PROGRESS` 转为已提交状态。
-3. 唯一幂等键防止相同请求重复执行。
-4. 部分唯一索引防止并发创建多个非撤回尝试。
-5. 教师撤回异常提交后，旧记录变为 `WITHDRAWN`，新记录使用递增 `attemptNumber`。
+1. 客户端为每次开始作答生成稳定 `idempotencyKey`。
+2. 服务层事务只允许当前提交从 `IN_PROGRESS` 转为已提交状态，重复点击直接返回同一结果。
+3. 唯一幂等键防止相同开始请求重复创建尝试。
+4. 部分唯一索引防止并发创建多个进行中的尝试。
+5. 开启重复提交后，历史记录保持不可变，新记录使用递增 `attemptNumber`。
 
 ### 7.3 重复推荐
 

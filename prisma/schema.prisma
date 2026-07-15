@@ -320,18 +320,19 @@ model QuestionKnowledgePoint {
 }
 
 model Assignment {
-  id          String           @id @default(cuid())
-  classroomId String
-  teacherId   String
-  title       String
-  description String?          @db.Text
-  status      AssignmentStatus @default(DRAFT)
-  totalPoints Decimal          @default(0) @db.Decimal(10, 2)
-  publishedAt DateTime?
-  dueAt       DateTime?
-  closedAt    DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                String           @id @default(cuid())
+  classroomId       String
+  teacherId         String
+  title             String
+  description       String?          @db.Text
+  status            AssignmentStatus @default(DRAFT)
+  totalPoints       Decimal          @default(0) @db.Decimal(10, 2)
+  allowResubmission Boolean          @default(false)
+  publishedAt       DateTime?
+  dueAt             DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   classroom   Classroom            @relation(fields: [classroomId], references: [id], onDelete: Restrict)
   teacher     User                 @relation("AssignmentTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
@@ -426,6 +427,8 @@ model Submission {
   maxScore       Decimal?         @db.Decimal(10, 2)
   percentage     Decimal?         @db.Decimal(5, 2)
   feedback       String?          @db.Text
+  saveVersion    Int              @default(0)
+  lastSavedAt    DateTime?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
