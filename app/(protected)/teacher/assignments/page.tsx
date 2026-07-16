@@ -80,7 +80,14 @@ export default async function TeacherAssignmentsPage() {
                     >
                       编辑
                     </Link>
-                  ) : null}
+                  ) : (
+                    <Link
+                      className="text-sm underline"
+                      href={`/teacher/assignments/${assignment.id}/results`}
+                    >
+                      成绩统计
+                    </Link>
+                  )}
                 </div>
               </div>
             </article>
