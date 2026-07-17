@@ -18,6 +18,10 @@ import {
 import { AIAnalysisOperationError } from "@/services/ai/errors";
 import { generateRuleBasedAnalysis } from "@/services/ai/fallback";
 import { buildStudentAnalysisInput } from "@/services/ai/input-builder";
+import {
+  createLearningAnalysisMetadata,
+  type LearningAnalysisMetadata,
+} from "@/services/ai/metadata";
 import type { AIProvider } from "@/services/ai/provider";
 import { createAIProvider } from "@/services/ai/provider-factory";
 import { createAnalysisRequestKey } from "@/services/ai/request-key";
@@ -93,12 +97,21 @@ function insightRows(
   ];
 }
 
-async function existingOutput(
-  requestKey: string,
-): Promise<StudentAnalysisOutput | null> {
+async function existingAnalysis(requestKey: string): Promise<{
+  analysis: StudentAnalysisOutput;
+  metadata: LearningAnalysisMetadata;
+} | null> {
   const existing = await prisma.aIAnalysis.findUnique({
     where: { requestKey },
-    select: { status: true, rawResponse: true },
+    select: {
+      status: true,
+      rawResponse: true,
+      model: true,
+      promptVersion: true,
+      fallbackUsed: true,
+      completedAt: true,
+      updatedAt: true,
+    },
   });
   if (!existing) return null;
   if (existing.status === AIRecordStatus.PENDING) {
@@ -110,19 +123,25 @@ async function existingOutput(
       "已有分析记录无法读取，请更新数据后重试",
     );
   }
-  return parsed.data;
+  return {
+    analysis: parsed.data,
+    metadata: createLearningAnalysisMetadata(existing),
+  };
 }
 
 export async function getStudentAnalysis(
   studentId: string,
   submissionId: string,
-): Promise<StudentAnalysisOutput> {
+): Promise<{
+  analysis: StudentAnalysisOutput;
+  metadata: LearningAnalysisMetadata;
+}> {
   const batch = await buildStudentAnalysisInput(studentId, submissionId);
   const requestKey = createAnalysisRequestKey(
     batch.input,
     STUDENT_ANALYSIS_PROMPT_VERSION,
   );
-  const output = await existingOutput(requestKey);
+  const output = await existingAnalysis(requestKey);
   if (!output) throw new ResourceNotFoundError("尚未生成当前数据的学情分析");
   return output;
 }
@@ -131,13 +150,16 @@ export async function createStudentAnalysis(
   studentId: string,
   submissionId: string,
   injectedProvider?: AIProvider,
-): Promise<StudentAnalysisOutput> {
+): Promise<{
+  analysis: StudentAnalysisOutput;
+  metadata: LearningAnalysisMetadata;
+}> {
   const batch = await buildStudentAnalysisInput(studentId, submissionId);
   const requestKey = createAnalysisRequestKey(
     batch.input,
     STUDENT_ANALYSIS_PROMPT_VERSION,
   );
-  const reused = await existingOutput(requestKey);
+  const reused = await existingAnalysis(requestKey);
   if (reused) return reused;
 
   let analysis: { id: string };
@@ -175,7 +197,7 @@ export async function createStudentAnalysis(
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      const concurrentOutput = await existingOutput(requestKey);
+      const concurrentOutput = await existingAnalysis(requestKey);
       if (concurrentOutput) return concurrentOutput;
     }
     throw error;
@@ -245,5 +267,9 @@ export async function createStudentAnalysis(
     }
   });
 
-  return execution.output;
+  const stored = await existingAnalysis(requestKey);
+  if (!stored) {
+    throw new AIAnalysisOperationError("学情分析结果保存失败", 500);
+  }
+  return stored;
 }

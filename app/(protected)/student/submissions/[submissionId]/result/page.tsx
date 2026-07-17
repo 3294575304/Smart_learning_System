@@ -2,6 +2,7 @@ import { GradingStatus, Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { LearningAnalysisCard } from "@/components/learning-analysis/learning-analysis-card";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentSubmissionResult } from "@/services/assignments/service";
@@ -75,6 +76,7 @@ export default async function ResultPage({ params }: Props) {
             </article>
           ))}
         </div>
+        <LearningAnalysisCard submissionId={result.id} />
       </section>
     );
   } catch (error: unknown) {

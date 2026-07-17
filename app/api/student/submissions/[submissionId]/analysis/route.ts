@@ -10,6 +10,7 @@ import {
   createStudentAnalysis,
   getStudentAnalysis,
 } from "@/services/ai/service";
+import { learningAnalysisMetadataHeaders } from "@/services/ai/metadata";
 import { submissionIdSchema } from "@/services/assignments/schemas";
 
 interface Context {
@@ -31,7 +32,12 @@ export async function GET(_request: Request, context: Context) {
   if (!id.success) return invalidIdResponse();
   try {
     const student = await requireAuthenticatedUser([Role.STUDENT]);
-    return apiSuccess(await getStudentAnalysis(student.id, id.data));
+    const result = await getStudentAnalysis(student.id, id.data);
+    return apiSuccess(
+      result.analysis,
+      200,
+      learningAnalysisMetadataHeaders(result.metadata),
+    );
   } catch (error: unknown) {
     return analysisErrorResponse(error);
   }
@@ -42,7 +48,12 @@ export async function POST(_request: Request, context: Context) {
   if (!id.success) return invalidIdResponse();
   try {
     const student = await requireAuthenticatedUser([Role.STUDENT]);
-    return apiSuccess(await createStudentAnalysis(student.id, id.data));
+    const result = await createStudentAnalysis(student.id, id.data);
+    return apiSuccess(
+      result.analysis,
+      200,
+      learningAnalysisMetadataHeaders(result.metadata),
+    );
   } catch (error: unknown) {
     return analysisErrorResponse(error);
   }

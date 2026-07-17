@@ -164,6 +164,24 @@ async function main(): Promise<void> {
   const first = await apiRequest(path, "POST", studentCookie);
   assert.equal(first.response.status, 200);
   assert.equal(first.body.success, true);
+  assert.equal(first.response.headers.get("X-Learning-Analysis-Source"), "AI");
+  assert.equal(
+    first.response.headers.get("X-Learning-Analysis-Model"),
+    "mock-student-analyzer-v1",
+  );
+  assert.equal(
+    first.response.headers.get("X-Learning-Analysis-Prompt-Version"),
+    "student-analysis-v1",
+  );
+  assert.equal(
+    first.response.headers.get("X-Learning-Analysis-Fallback"),
+    "false",
+  );
+  assert.ok(
+    Date.parse(
+      first.response.headers.get("X-Learning-Analysis-Generated-At") ?? "",
+    ),
+  );
   assert.deepEqual(Object.keys(first.body.data ?? {}).sort(), [
     "confidence",
     "errorPatterns",

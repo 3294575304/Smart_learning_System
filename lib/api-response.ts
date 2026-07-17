@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
-export function apiSuccess<T>(data: T, status = 200): NextResponse {
-  return NextResponse.json({ success: true, data }, { status });
+export function apiSuccess<T>(
+  data: T,
+  status = 200,
+  headers?: HeadersInit,
+): NextResponse {
+  return NextResponse.json({ success: true, data }, { status, headers });
 }
 
 export function apiError(
