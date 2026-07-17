@@ -84,3 +84,42 @@ test("autosave validates the optional per-question response time", () => {
   assert.equal(valid.success, true);
   assert.equal(invalid.success, false);
 });
+
+test("autosave accepts an omitted or zero response time", () => {
+  const omitted = autosaveAnswersSchema.safeParse({
+    version: 0,
+    answers: [
+      { assignmentQuestionId: questionId, kind: "BOOLEAN", value: true },
+    ],
+  });
+  const zero = autosaveAnswersSchema.safeParse({
+    version: 0,
+    answers: [
+      {
+        assignmentQuestionId: questionId,
+        kind: "BOOLEAN",
+        value: true,
+        responseTimeMs: 0,
+      },
+    ],
+  });
+  assert.equal(omitted.success, true);
+  assert.equal(zero.success, true);
+});
+
+test("autosave rejects negative, fractional, and over-limit response times", () => {
+  for (const responseTimeMs of [-1, 1.5, 86_400_001]) {
+    const parsed = autosaveAnswersSchema.safeParse({
+      version: 0,
+      answers: [
+        {
+          assignmentQuestionId: questionId,
+          kind: "BOOLEAN",
+          value: true,
+          responseTimeMs,
+        },
+      ],
+    });
+    assert.equal(parsed.success, false);
+  }
+});

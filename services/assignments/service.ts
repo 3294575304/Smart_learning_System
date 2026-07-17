@@ -682,6 +682,7 @@ export async function getStudentSubmissionDraft(
       optionIds: answer.selectedOptions.map(
         (selection) => selection.assignmentQuestionOptionId,
       ),
+      responseTimeMs: answer.responseTimeMs,
     })),
   };
 }
@@ -801,12 +802,42 @@ export async function saveStudentAnswers(
       const question = questionMap.get(answer.assignmentQuestionId);
       if (!question) continue;
       if (answer.kind === "EMPTY") {
-        await transaction.studentAnswer.deleteMany({
-          where: {
-            submissionId,
-            assignmentQuestionId: answer.assignmentQuestionId,
-          },
-        });
+        if (answer.responseTimeMs === undefined) {
+          await transaction.studentAnswer.deleteMany({
+            where: {
+              submissionId,
+              assignmentQuestionId: answer.assignmentQuestionId,
+            },
+          });
+        } else {
+          const persisted = await transaction.studentAnswer.upsert({
+            where: {
+              submissionId_assignmentQuestionId: {
+                submissionId,
+                assignmentQuestionId: answer.assignmentQuestionId,
+              },
+            },
+            update: {
+              textAnswer: null,
+              booleanAnswer: null,
+              responseTimeMs: answer.responseTimeMs,
+              gradingStatus: GradingStatus.UNGRADED,
+              score: null,
+              isCorrect: null,
+              gradedAt: null,
+            },
+            create: {
+              submissionId,
+              assignmentQuestionId: answer.assignmentQuestionId,
+              responseTimeMs: answer.responseTimeMs,
+              maxScore: question.points,
+            },
+            select: { id: true },
+          });
+          await transaction.studentAnswerOption.deleteMany({
+            where: { studentAnswerId: persisted.id },
+          });
+        }
         continue;
       }
       const persisted = await transaction.studentAnswer.upsert({

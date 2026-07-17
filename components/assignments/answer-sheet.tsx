@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
+import {
+  bindQuestionTimingLifecycle,
+  QuestionTimingTracker,
+} from "@/components/assignments/question-timing";
 import type { SavedAnswerInput } from "@/services/assignments/schemas";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 
@@ -28,6 +32,7 @@ interface SavedAnswer {
   textAnswer: string | null;
   booleanAnswer: boolean | null;
   optionIds: string[];
+  responseTimeMs: number | null;
 }
 
 interface Props {
@@ -81,21 +86,40 @@ function initialAnswers(
   );
 }
 
-function apiAnswers(answers: AnswerMap): SavedAnswerInput[] {
+function apiAnswers(
+  answers: AnswerMap,
+  responseTimes: Record<string, number>,
+): SavedAnswerInput[] {
   return Object.entries(answers).map(([assignmentQuestionId, answer]) => {
+    const responseTimeMs = responseTimes[assignmentQuestionId] ?? 0;
     if (answer.kind === "CHOICE") {
       return answer.optionIds.length === 0
-        ? { assignmentQuestionId, kind: "EMPTY" }
-        : { assignmentQuestionId, kind: "CHOICE", optionIds: answer.optionIds };
+        ? { assignmentQuestionId, kind: "EMPTY", responseTimeMs }
+        : {
+            assignmentQuestionId,
+            kind: "CHOICE",
+            optionIds: answer.optionIds,
+            responseTimeMs,
+          };
     }
     if (answer.kind === "BOOLEAN") {
       return answer.value === null
-        ? { assignmentQuestionId, kind: "EMPTY" }
-        : { assignmentQuestionId, kind: "BOOLEAN", value: answer.value };
+        ? { assignmentQuestionId, kind: "EMPTY", responseTimeMs }
+        : {
+            assignmentQuestionId,
+            kind: "BOOLEAN",
+            value: answer.value,
+            responseTimeMs,
+          };
     }
     return answer.value.length === 0
-      ? { assignmentQuestionId, kind: "EMPTY" }
-      : { assignmentQuestionId, kind: "TEXT", value: answer.value };
+      ? { assignmentQuestionId, kind: "EMPTY", responseTimeMs }
+      : {
+          assignmentQuestionId,
+          kind: "TEXT",
+          value: answer.value,
+          responseTimeMs,
+        };
   });
 }
 
@@ -108,10 +132,24 @@ export function AnswerSheet({ submission }: Props) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const versionRef = useRef(submission.version);
   const latestAnswersRef = useRef(answers);
   const activeSaveRef = useRef<Promise<boolean> | null>(null);
   const hydratedRef = useRef(false);
+  const trackerRef = useRef<QuestionTimingTracker | null>(null);
+  if (!trackerRef.current) {
+    trackerRef.current = new QuestionTimingTracker(
+      submission.questions.map((question) => question.id),
+      Object.fromEntries(
+        submission.answers.map((answer) => [
+          answer.assignmentQuestionId,
+          answer.responseTimeMs ?? 0,
+        ]),
+      ),
+    );
+  }
+  const timingTracker = trackerRef.current;
 
   const answeredCount = useMemo(
     () =>
@@ -125,9 +163,25 @@ export function AnswerSheet({ submission }: Props) {
     [answers],
   );
 
+  const persistLocalDraft = useCallback(
+    (snapshot: AnswerMap, responseTimes: Record<string, number>) => {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          answers: snapshot,
+          responseTimes,
+          savedAt: Date.now(),
+        }),
+      );
+    },
+    [storageKey],
+  );
+
   const persist = useCallback(
     async (snapshot: AnswerMap): Promise<boolean> => {
       if (activeSaveRef.current) await activeSaveRef.current;
+      const responseTimes = timingTracker.checkpoint();
+      persistLocalDraft(snapshot, responseTimes);
       setSaveState("saving");
       setSaveError(null);
       const task = (async () => {
@@ -139,20 +193,20 @@ export function AnswerSheet({ submission }: Props) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             version: versionRef.current,
-            answers: apiAnswers(snapshot),
+            answers: apiAnswers(snapshot, responseTimes),
           }),
         });
         if (!response.success) {
           setSaveState("failed");
           setSaveError(response.error);
           return false;
-      }
-      versionRef.current = response.data.version;
-      setSaveState("saved");
-      if (latestAnswersRef.current === snapshot) {
-        localStorage.removeItem(storageKey);
-      }
-      return true;
+        }
+        versionRef.current = response.data.version;
+        setSaveState("saved");
+        if (latestAnswersRef.current === snapshot) {
+          localStorage.removeItem(storageKey);
+        }
+        return true;
       })();
       activeSaveRef.current = task;
       try {
@@ -161,33 +215,50 @@ export function AnswerSheet({ submission }: Props) {
         activeSaveRef.current = null;
       }
     },
-    [storageKey, submission.id],
+    [persistLocalDraft, storageKey, submission.id, timingTracker],
   );
 
   useEffect(() => {
     const local = localStorage.getItem(storageKey);
     if (local) {
       try {
-        const parsed = JSON.parse(local) as { answers: AnswerMap };
+        const parsed = JSON.parse(local) as {
+          answers?: AnswerMap;
+          responseTimes?: Record<string, number>;
+        };
         if (parsed.answers) setAnswers(parsed.answers);
+        if (parsed.responseTimes) {
+          timingTracker.restoreAccumulated(parsed.responseTimes);
+        }
       } catch {
         localStorage.removeItem(storageKey);
       }
     }
     hydratedRef.current = true;
-  }, [storageKey]);
+  }, [storageKey, timingTracker]);
+
+  useEffect(() => {
+    const firstQuestion = submission.questions[0];
+    if (!firstQuestion) return;
+    timingTracker.activate(firstQuestion.id);
+    return bindQuestionTimingLifecycle(timingTracker, {
+      documentTarget: document,
+      windowTarget: window,
+      isHidden: () => document.hidden,
+      hasFocus: () => document.hasFocus(),
+      beforeUnload: () =>
+        persistLocalDraft(latestAnswersRef.current, timingTracker.snapshot()),
+    });
+  }, [persistLocalDraft, submission.questions, timingTracker]);
 
   useEffect(() => {
     latestAnswersRef.current = answers;
     if (!hydratedRef.current) return;
-    localStorage.setItem(
-      storageKey,
-      JSON.stringify({ answers, savedAt: Date.now() }),
-    );
+    persistLocalDraft(answers, timingTracker.checkpoint());
     setSaveState("idle");
     const timer = window.setTimeout(() => void persist(answers), 900);
     return () => window.clearTimeout(timer);
-  }, [answers, persist, storageKey]);
+  }, [answers, persist, persistLocalDraft, timingTracker]);
 
   async function submit() {
     if (!window.confirm("确认提交作业？提交后本次答案将不能修改。")) return;
@@ -210,6 +281,14 @@ export function AnswerSheet({ submission }: Props) {
     localStorage.removeItem(storageKey);
     router.replace(`/student/submissions/${response.data.id}/result`);
     router.refresh();
+  }
+
+  function selectQuestion(nextIndex: number) {
+    const nextQuestion = submission.questions[nextIndex];
+    if (!nextQuestion || nextIndex === activeQuestionIndex) return;
+    timingTracker.activate(nextQuestion.id);
+    setActiveQuestionIndex(nextIndex);
+    void persist(latestAnswersRef.current);
   }
 
   function setChoice(
@@ -275,107 +354,163 @@ export function AnswerSheet({ submission }: Props) {
         </div>
       </div>
 
-      {submission.questions.map((question) => {
-        const answer = answers[question.id];
-        return (
-          <article className="rounded-xl border bg-white p-5" key={question.id}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-medium">
-                  {question.sortOrder}. {question.title}
+      <nav
+        aria-label="题目导航"
+        className="flex max-w-full flex-wrap gap-2 rounded-xl border bg-white p-4"
+      >
+        {submission.questions.map((question, index) => (
+          <button
+            aria-current={index === activeQuestionIndex ? "step" : undefined}
+            className={`min-w-10 rounded-md border px-3 py-2 text-sm ${
+              index === activeQuestionIndex
+                ? "border-black bg-black text-white"
+                : "bg-white hover:bg-gray-50"
+            }`}
+            key={question.id}
+            onClick={() => selectQuestion(index)}
+            type="button"
+          >
+            {question.sortOrder}
+          </button>
+        ))}
+      </nav>
+
+      {submission.questions[activeQuestionIndex]
+        ? (() => {
+            const question = submission.questions[activeQuestionIndex];
+            const answer = answers[question.id];
+            return (
+              <article
+                className="rounded-xl border bg-white p-5"
+                key={question.id}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-medium">
+                      {question.sortOrder}. {question.title}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {QUESTION_TYPE_LABELS[question.type]}
+                    </p>
+                  </div>
+                  <span className="text-sm text-gray-500">
+                    {question.points} 分
+                  </span>
+                </div>
+                <p className="mt-4 text-sm whitespace-pre-wrap">
+                  {question.content}
                 </p>
-                <p className="mt-1 text-sm text-gray-500">
-                  {QUESTION_TYPE_LABELS[question.type]}
-                </p>
-              </div>
-              <span className="text-sm text-gray-500">
-                {question.points} 分
-              </span>
-            </div>
-            <p className="mt-4 text-sm whitespace-pre-wrap">
-              {question.content}
-            </p>
-            {(question.type === QuestionType.SINGLE_CHOICE ||
-              question.type === QuestionType.MULTIPLE_CHOICE) &&
-            answer?.kind === "CHOICE" ? (
-              <div className="mt-4 space-y-2">
-                {question.options.map((option) => (
-                  <label
-                    className="flex cursor-pointer items-start gap-3 rounded-md border p-3"
-                    key={option.id}
-                  >
-                    <input
-                      checked={answer.optionIds.includes(option.id)}
-                      name={
-                        question.type === QuestionType.SINGLE_CHOICE
-                          ? question.id
-                          : undefined
-                      }
-                      onChange={(event) =>
-                        setChoice(question, option.id, event.target.checked)
-                      }
-                      type={
-                        question.type === QuestionType.SINGLE_CHOICE
-                          ? "radio"
-                          : "checkbox"
-                      }
-                    />
-                    <span className="text-sm">
-                      <strong>{option.label}.</strong> {option.content}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            ) : null}
-            {question.type === QuestionType.TRUE_FALSE &&
-            answer?.kind === "BOOLEAN" ? (
-              <div className="mt-4 flex gap-4">
-                {[
-                  { label: "正确", value: true },
-                  { label: "错误", value: false },
-                ].map((item) => (
-                  <label
-                    className="flex items-center gap-2 rounded-md border px-4 py-3 text-sm"
-                    key={item.label}
-                  >
-                    <input
-                      checked={answer.value === item.value}
-                      name={question.id}
-                      onChange={() =>
-                        setAnswers((current) => ({
-                          ...current,
-                          [question.id]: { kind: "BOOLEAN", value: item.value },
-                        }))
-                      }
-                      type="radio"
-                    />
-                    {item.label}
-                  </label>
-                ))}
-              </div>
-            ) : null}
-            {(question.type === QuestionType.FILL_BLANK ||
-              question.type === QuestionType.SHORT_ANSWER) &&
-            answer?.kind === "TEXT" ? (
-              <textarea
-                className="mt-4 min-h-28 w-full rounded-md border p-3 text-sm"
-                onChange={(event) =>
-                  setAnswers((current) => ({
-                    ...current,
-                    [question.id]: { kind: "TEXT", value: event.target.value },
-                  }))
-                }
-                placeholder={
-                  question.type === QuestionType.FILL_BLANK
-                    ? "请输入答案"
-                    : "请输入作答内容"
-                }
-                value={answer.value}
-              />
-            ) : null}
-          </article>
-        );
-      })}
+                {(question.type === QuestionType.SINGLE_CHOICE ||
+                  question.type === QuestionType.MULTIPLE_CHOICE) &&
+                answer?.kind === "CHOICE" ? (
+                  <div className="mt-4 space-y-2">
+                    {question.options.map((option) => (
+                      <label
+                        className="flex cursor-pointer items-start gap-3 rounded-md border p-3"
+                        key={option.id}
+                      >
+                        <input
+                          checked={answer.optionIds.includes(option.id)}
+                          name={
+                            question.type === QuestionType.SINGLE_CHOICE
+                              ? question.id
+                              : undefined
+                          }
+                          onChange={(event) =>
+                            setChoice(question, option.id, event.target.checked)
+                          }
+                          type={
+                            question.type === QuestionType.SINGLE_CHOICE
+                              ? "radio"
+                              : "checkbox"
+                          }
+                        />
+                        <span className="text-sm">
+                          <strong>{option.label}.</strong> {option.content}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+                {question.type === QuestionType.TRUE_FALSE &&
+                answer?.kind === "BOOLEAN" ? (
+                  <div className="mt-4 flex gap-4">
+                    {[
+                      { label: "正确", value: true },
+                      { label: "错误", value: false },
+                    ].map((item) => (
+                      <label
+                        className="flex items-center gap-2 rounded-md border px-4 py-3 text-sm"
+                        key={item.label}
+                      >
+                        <input
+                          checked={answer.value === item.value}
+                          name={question.id}
+                          onChange={() =>
+                            setAnswers((current) => ({
+                              ...current,
+                              [question.id]: {
+                                kind: "BOOLEAN",
+                                value: item.value,
+                              },
+                            }))
+                          }
+                          type="radio"
+                        />
+                        {item.label}
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+                {(question.type === QuestionType.FILL_BLANK ||
+                  question.type === QuestionType.SHORT_ANSWER) &&
+                answer?.kind === "TEXT" ? (
+                  <textarea
+                    className="mt-4 min-h-28 w-full rounded-md border p-3 text-sm"
+                    onChange={(event) =>
+                      setAnswers((current) => ({
+                        ...current,
+                        [question.id]: {
+                          kind: "TEXT",
+                          value: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder={
+                      question.type === QuestionType.FILL_BLANK
+                        ? "请输入答案"
+                        : "请输入作答内容"
+                    }
+                    value={answer.value}
+                  />
+                ) : null}
+              </article>
+            );
+          })()
+        : null}
+
+      <div className="flex items-center justify-between gap-3">
+        <button
+          className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
+          disabled={activeQuestionIndex === 0}
+          onClick={() => selectQuestion(activeQuestionIndex - 1)}
+          type="button"
+        >
+          上一题
+        </button>
+        <span className="text-sm text-gray-500">
+          {submission.questions.length === 0 ? 0 : activeQuestionIndex + 1} /{" "}
+          {submission.questions.length}
+        </span>
+        <button
+          className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
+          disabled={activeQuestionIndex >= submission.questions.length - 1}
+          onClick={() => selectQuestion(activeQuestionIndex + 1)}
+          type="button"
+        >
+          下一题
+        </button>
+      </div>
     </section>
   );
 }

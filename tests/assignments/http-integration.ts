@@ -263,18 +263,78 @@ async function main(): Promise<void> {
       .filter((option) => option.isCorrectSnapshot)
       .map((option) => option.id)
       .reverse();
+    const omittedTimingSave = await requestJson(
+      `/api/student/submissions/${attempt.data.id}/answers`,
+      studentCookie,
+      "PUT",
+      {
+        version: attempt.data.version,
+        answers: [
+          {
+            assignmentQuestionId: multiSnapshot.id,
+            kind: "CHOICE",
+            optionIds: correctOptionIds,
+          },
+        ],
+      },
+    );
+    assert.equal(omittedTimingSave.status, 200);
+    const omittedTimingBody = (await omittedTimingSave.json()) as ApiSuccess<{
+      version: number;
+    }>;
+    const omittedTimingAnswer = await prisma.studentAnswer.findUniqueOrThrow({
+      where: {
+        submissionId_assignmentQuestionId: {
+          submissionId: attempt.data.id,
+          assignmentQuestionId: multiSnapshot.id,
+        },
+      },
+    });
+    assert.equal(omittedTimingAnswer.responseTimeMs, null);
+
+    for (const responseTimeMs of [-1, 86_400_001]) {
+      const invalidTiming = await requestJson(
+        `/api/student/submissions/${attempt.data.id}/answers`,
+        studentCookie,
+        "PUT",
+        {
+          version: omittedTimingBody.data.version,
+          answers: [
+            {
+              assignmentQuestionId: multiSnapshot.id,
+              kind: "CHOICE",
+              optionIds: correctOptionIds,
+              responseTimeMs,
+            },
+          ],
+        },
+      );
+      assert.equal(invalidTiming.status, 400);
+    }
+    const unchangedTimingAnswer = await prisma.studentAnswer.findUniqueOrThrow({
+      where: {
+        submissionId_assignmentQuestionId: {
+          submissionId: attempt.data.id,
+          assignmentQuestionId: multiSnapshot.id,
+        },
+      },
+    });
+    assert.equal(unchangedTimingAnswer.responseTimeMs, null);
+
     const saveBody = {
-      version: attempt.data.version,
+      version: omittedTimingBody.data.version,
       answers: [
         {
           assignmentQuestionId: multiSnapshot.id,
           kind: "CHOICE",
           optionIds: correctOptionIds,
+          responseTimeMs: 0,
         },
         {
           assignmentQuestionId: fillSnapshot.id,
           kind: "TEXT",
           value: "  4.0  ",
+          responseTimeMs: 12_345,
         },
       ],
     };
@@ -299,6 +359,23 @@ async function main(): Promise<void> {
         )
       ).status,
       409,
+    );
+    const storedTimings = await prisma.studentAnswer.findMany({
+      where: { submissionId: attempt.data.id },
+      orderBy: { assignmentQuestionId: "asc" },
+      select: { assignmentQuestionId: true, responseTimeMs: true },
+    });
+    assert.deepEqual(
+      new Map(
+        storedTimings.map((answer) => [
+          answer.assignmentQuestionId,
+          answer.responseTimeMs,
+        ]),
+      ),
+      new Map([
+        [multiSnapshot.id, 0],
+        [fillSnapshot.id, 12_345],
+      ]),
     );
 
     const [submitOne, submitTwo] = await Promise.all([

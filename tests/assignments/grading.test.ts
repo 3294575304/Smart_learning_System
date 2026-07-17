@@ -70,6 +70,29 @@ test("case-sensitive fill blanks retain letter case", () => {
   assert.equal(result.isCorrect, false);
 });
 
+test("response time metadata does not change grading", () => {
+  const question = {
+    type: QuestionType.TRUE_FALSE,
+    points: 5,
+    correctBoolean: true,
+    acceptableAnswers: [],
+    isCaseSensitive: false,
+    options: [],
+  };
+  const withoutTiming = gradeAnswer(question, {
+    assignmentQuestionId: "q",
+    kind: "BOOLEAN",
+    value: true,
+  });
+  const withTiming = gradeAnswer(question, {
+    assignmentQuestionId: "q",
+    kind: "BOOLEAN",
+    value: true,
+    responseTimeMs: 86_400_000,
+  });
+  assert.deepEqual(withTiming, withoutTiming);
+});
+
 test("short answers are explicitly queued for manual review", () => {
   const result = gradeAnswer(
     {
