@@ -57,6 +57,7 @@ export const startAttemptSchema = z.object({
 });
 
 const answerBase = z.object({
+  responseTimeMs: z.number().int().min(0).max(86_400_000).optional(),
   assignmentQuestionId: z.string().cuid("作业题目 ID 格式无效"),
 });
 

@@ -1,7 +1,6 @@
 # AI Smart Learning Platform 数据库设计
 
-本文档对应 [`prisma/schema.prisma`](../prisma/schema.prisma) 和迁移
-`prisma/migrations/20260714043000_add_learning_domain_models/migration.sql`。
+本文档对应 [`prisma/schema.prisma`](../prisma/schema.prisma) 及 `prisma/migrations/` 下的版本化迁移。
 
 ## 1. 设计原则
 
@@ -10,6 +9,9 @@
 - 教师资源显式保存 `teacherId` 或 `creatorId`，学生数据显式保存 `studentId`，API 查询必须同时校验角色和资源归属。
 - 分数、权重和掌握度使用定点 `Decimal`，避免浮点误差。
 - 已发布作业保存题目、选项、标准答案、解析和知识点快照，题库后续修改不影响历史作答。
+- `StudentAnswer.responseTimeMs` 保存经范围校验的单题作答耗时，仅用于学情分析，不参与评分。
+- `AIAnalysis.requestKey` 使用匿名化输入和提示词版本生成的数据指纹，数据库唯一约束防止同批数据重复分析。
+- AI 输入仅包含匿名学生标识和必要学习数据；经过 Zod 校验的结构化输出保存在 `rawResponse`，模型、提示词版本和完成时间分别保存在 `model`、`promptVersion`、`completedAt`。
 - AI 结果拆为可查询字段和明细表；JSON 只保存输入指标、扩展配置及原始响应审计副本。
 - 有教学历史的数据优先关闭、停用、归档或撤回，不物理删除。
 

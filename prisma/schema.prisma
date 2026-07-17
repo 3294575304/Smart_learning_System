@@ -452,6 +452,7 @@ model StudentAnswer {
   score                Decimal?      @db.Decimal(8, 2)
   maxScore             Decimal       @db.Decimal(8, 2)
   isCorrect            Boolean?
+  responseTimeMs       Int?
   teacherFeedback      String?       @db.Text
   gradedAt             DateTime?
   createdAt            DateTime      @default(now())

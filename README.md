@@ -2,6 +2,13 @@
 
 AI 驱动的智能教学平台。平台面向管理员、教师和学生，已提供账号密码认证、数据库会话、角色路由保护和资源归属校验基础，后续将继续实现题库、作业、成绩分析、AI 答疑和个性化练习推荐等能力。
 
+## AI 学情分析
+
+- `POST /api/student/submissions/:submissionId/analysis` 为当前已批改作答生成或复用学情分析。
+- `GET /api/student/submissions/:submissionId/analysis` 读取与当前数据指纹匹配的已有分析。
+- 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。
+- 模型输出会经过严格 Zod 校验，失败最多重试一次；仍失败时返回基于正确率的规则结果。分析接口独立于交卷和成绩接口，AI 故障不会影响成绩查看。
+
 ## 技术栈
 
 - Next.js（App Router）

@@ -57,3 +57,30 @@ test("autosave validation rejects duplicate selected options", () => {
   });
   assert.equal(parsed.success, false);
 });
+
+test("autosave validates the optional per-question response time", () => {
+  const valid = autosaveAnswersSchema.safeParse({
+    version: 0,
+    answers: [
+      {
+        assignmentQuestionId: questionId,
+        kind: "BOOLEAN",
+        value: true,
+        responseTimeMs: 30_000,
+      },
+    ],
+  });
+  const invalid = autosaveAnswersSchema.safeParse({
+    version: 0,
+    answers: [
+      {
+        assignmentQuestionId: questionId,
+        kind: "BOOLEAN",
+        value: true,
+        responseTimeMs: 86_400_001,
+      },
+    ],
+  });
+  assert.equal(valid.success, true);
+  assert.equal(invalid.success, false);
+});

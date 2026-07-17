@@ -819,6 +819,7 @@ export async function saveStudentAnswers(
         update: {
           textAnswer: answer.kind === "TEXT" ? answer.value : null,
           booleanAnswer: answer.kind === "BOOLEAN" ? answer.value : null,
+          responseTimeMs: answer.responseTimeMs,
           gradingStatus: GradingStatus.UNGRADED,
           score: null,
           isCorrect: null,
@@ -829,6 +830,7 @@ export async function saveStudentAnswers(
           assignmentQuestionId: answer.assignmentQuestionId,
           textAnswer: answer.kind === "TEXT" ? answer.value : null,
           booleanAnswer: answer.kind === "BOOLEAN" ? answer.value : null,
+          responseTimeMs: answer.responseTimeMs,
           maxScore: question.points,
         },
         select: { id: true },
