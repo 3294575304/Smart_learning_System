@@ -62,6 +62,7 @@ export async function createPersonalizedRecommendations(
   const now = options.now ?? new Date();
   const context = await loadRecommendationStudentContext(actor, request);
   const cycleKey = createRecommendationCycleKey(request, context.version, now);
+  await expireStudentRecommendations(request.studentId, now);
   const activeRecommendationQuestionIds =
     await loadActiveRecommendationQuestionIds(request.studentId, cycleKey, now);
   const excludedQuestionIds = [

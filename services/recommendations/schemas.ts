@@ -1,6 +1,8 @@
 import { QuestionType, RecommendationStatus } from "@prisma/client";
 import { z } from "zod";
 
+export const MAX_RECOMMENDATION_CANDIDATE_IDS = 1_000;
+
 export const recommendationResourceIdSchema = z.string().trim().min(1).max(128);
 
 export const teacherPracticeScopeSchema = z
@@ -8,7 +10,7 @@ export const teacherPracticeScopeSchema = z
     candidateQuestionIds: z
       .array(recommendationResourceIdSchema)
       .min(1)
-      .max(1_000)
+      .max(MAX_RECOMMENDATION_CANDIDATE_IDS)
       .transform((ids) => [...new Set(ids)]),
     knowledgePointIds: z
       .array(recommendationResourceIdSchema)

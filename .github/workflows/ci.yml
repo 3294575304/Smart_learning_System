@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: smart_learning_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/smart_learning_build?schema=public
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/smart_learning_test?schema=public
+      AI_PROVIDER: mock
+      AI_PSEUDONYM_SALT: ci-pseudonym-salt-change-me
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Create build database
+        run: psql "postgresql://postgres:postgres@127.0.0.1:5432/postgres" -c "CREATE DATABASE smart_learning_build"
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build

@@ -24,6 +24,7 @@ import {
 import type { AuthenticatedUser } from "@/services/auth/types";
 import { RecommendationOperationError } from "@/services/recommendations/errors";
 import { assertCanRecommendForStudent } from "@/services/recommendations/policy";
+import { MAX_RECOMMENDATION_CANDIDATE_IDS } from "@/services/recommendations/schemas";
 import type {
   RecommendationGenerationApiInput,
   RecommendationListQuery,
@@ -174,6 +175,7 @@ export async function buildRecommendationRequest(
       ],
     },
     orderBy: { id: "asc" },
+    take: MAX_RECOMMENDATION_CANDIDATE_IDS,
     select: { id: true },
   });
   if (candidateQuestions.length === 0) {
