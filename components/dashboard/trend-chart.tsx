@@ -23,7 +23,7 @@ export function TrendChart({ points, emptyMessage }: TrendChartProps) {
       {points.map((point, index) => (
         <div className="flex min-w-12 flex-1 flex-col items-center" key={`${point.label}-${index}`}>
           <span className="mb-2 text-xs font-medium">{point.value}%</span>
-          <div className="flex h-32 w-full items-end rounded-md bg-gray-100 px-1">
+          <div className="flex h-32 w-10 items-end rounded-md bg-gray-100 px-1 sm:w-12">
             <div
               className="w-full rounded-sm bg-gray-800 transition-[height]"
               style={{ height: `${Math.max(4, Math.min(100, point.value))}%` }}
