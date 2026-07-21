@@ -242,13 +242,25 @@ export async function listTeacherAssignments(
   const where: Prisma.AssignmentWhereInput = {
     teacherId,
     ...(query.status ? { status: query.status } : {}),
+    ...(query.classroomId ? { classroomId: query.classroomId } : {}),
+    ...(query.keyword
+      ? { title: { contains: query.keyword, mode: "insensitive" } }
+      : {}),
   };
+  const orderBy: Prisma.AssignmentOrderByWithRelationInput[] =
+    query.sort === "PUBLISHED_DESC"
+      ? [{ publishedAt: "desc" }, { id: "desc" }]
+      : query.sort === "DUE_ASC"
+        ? [{ dueAt: "asc" }, { id: "asc" }]
+        : query.sort === "DUE_DESC"
+          ? [{ dueAt: "desc" }, { id: "desc" }]
+          : [{ createdAt: "desc" }, { id: "desc" }];
   const [total, assignments] = await prisma.$transaction([
     prisma.assignment.count({ where }),
     prisma.assignment.findMany({
       where,
       include: teacherAssignmentInclude,
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      orderBy,
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
     }),

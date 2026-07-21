@@ -24,6 +24,9 @@ export function QuestionList({ items }: { items: QuestionListItem[] }) {
                 <span>
                   {question.visibility === "PUBLIC" ? "公开" : "私有"}
                 </span>
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
+                  {question.status === "ACTIVE" ? "使用中" : question.status}
+                </span>
                 <span>创建者：{question.creator.displayName}</span>
               </div>
               <Link

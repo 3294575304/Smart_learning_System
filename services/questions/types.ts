@@ -1,4 +1,8 @@
-import type { QuestionType, QuestionVisibility } from "@prisma/client";
+import type {
+  QuestionStatus,
+  QuestionType,
+  QuestionVisibility,
+} from "@prisma/client";
 
 export type QuestionScope = "OWNED" | "PUBLIC";
 
@@ -36,6 +40,7 @@ export interface QuestionListItem {
   content: string;
   type: QuestionType;
   difficulty: number;
+  status: QuestionStatus;
   visibility: QuestionVisibility;
   tags: string[];
   creator: QuestionCreatorData;

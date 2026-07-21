@@ -2,6 +2,7 @@
 
 import { QuestionType } from "@prisma/client";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import type { QuestionListQuery } from "@/services/questions/schemas";
@@ -17,11 +18,13 @@ export function QuestionFilters({
   knowledgePoints,
 }: QuestionFiltersProps) {
   const router = useRouter();
+  const [keyword, setKeyword] = useState(query.keyword ?? "");
 
   function update(name: string, value: string) {
     const params = new URLSearchParams();
     params.set("scope", query.scope);
     params.set("pageSize", String(query.pageSize));
+    if (query.keyword) params.set("keyword", query.keyword);
     if (query.type) params.set("type", query.type);
     if (query.difficulty) params.set("difficulty", String(query.difficulty));
     if (query.knowledgePointId)
@@ -32,8 +35,31 @@ export function QuestionFilters({
     router.push(`/teacher/questions?${params.toString()}`);
   }
 
+  function submitSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    update("keyword", keyword.trim());
+  }
+
   return (
     <div className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <form className="flex gap-2 sm:col-span-2 lg:col-span-4" onSubmit={submitSearch}>
+        <label className="min-w-0 flex-1 space-y-1">
+          <span className="text-xs font-medium">搜索题目</span>
+          <input
+            className="w-full rounded-md border px-3 py-2 text-sm"
+            maxLength={120}
+            onChange={(event) => setKeyword(event.target.value)}
+            placeholder="输入标题、题干或完整标签"
+            value={keyword}
+          />
+        </label>
+        <button
+          className="mt-5 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+          type="submit"
+        >
+          搜索
+        </button>
+      </form>
       <label className="space-y-1">
         <span className="text-xs font-medium">题库范围</span>
         <select

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { QuestionType, QuestionVisibility } from "@prisma/client";
 
-import { questionUpsertSchema } from "@/services/questions/schemas";
+import {
+  questionListQuerySchema,
+  questionUpsertSchema,
+} from "@/services/questions/schemas";
 
 const knowledgePointId = "cmath00000000000000000001";
 
@@ -128,6 +131,16 @@ test("难度、知识点、标签和填空答案执行边界校验", () => {
         caseSensitive: false,
       },
     }).success,
+    false,
+  );
+});
+
+test("题库查询支持关键词并限制搜索长度", () => {
+  const valid = questionListQuerySchema.safeParse({ keyword: "  方程  " });
+  assert.equal(valid.success, true);
+  if (valid.success) assert.equal(valid.data.keyword, "方程");
+  assert.equal(
+    questionListQuerySchema.safeParse({ keyword: "题".repeat(121) }).success,
     false,
   );
 });

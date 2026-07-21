@@ -1,6 +1,8 @@
 import { Role } from "@prisma/client";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 
+import { PageHeader } from "@/components/dashboard/page-header";
 import { QuestionFilters } from "@/components/questions/question-filters";
 import { QuestionList } from "@/components/questions/question-list";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -31,6 +33,7 @@ function pageHref(query: QuestionListQuery, page: number): string {
     page: String(page),
     pageSize: String(query.pageSize),
   });
+  if (query.keyword) params.set("keyword", query.keyword);
   if (query.type) params.set("type", query.type);
   if (query.difficulty) params.set("difficulty", String(query.difficulty));
   if (query.knowledgePointId)
@@ -55,26 +58,19 @@ export default async function QuestionsPage({
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      <PageHeader
+        actions={
           <Link
-            className="text-sm text-gray-500 hover:underline"
-            href="/teacher"
+            className="flex items-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+            href="/teacher/questions/new"
           >
-            ← 返回教师工作台
+            <Plus className="h-4 w-4" />
+            创建题目
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold">教师题库</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            管理自己的题目，或从公共题库复制后再编辑。
-          </p>
-        </div>
-        <Link
-          className="rounded-md bg-black px-4 py-2 text-white"
-          href="/teacher/questions/new"
-        >
-          创建题目
-        </Link>
-      </div>
+        }
+        description="搜索和筛选自己的题目，或从公共题库复制后再编辑。"
+        title="教师题库"
+      />
       <QuestionFilters knowledgePoints={knowledgePoints} query={query} />
       <div className="flex items-center justify-between text-sm text-gray-500">
         <span>共 {questions.pagination.total} 道题</span>

@@ -50,6 +50,11 @@ export const assignmentListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
   status: z.nativeEnum(AssignmentStatus).optional(),
+  classroomId: z.string().cuid("班级 ID 格式无效").optional(),
+  keyword: z.string().trim().max(120, "搜索关键词不能超过 120 个字符").optional(),
+  sort: z
+    .enum(["CREATED_DESC", "PUBLISHED_DESC", "DUE_ASC", "DUE_DESC"])
+    .default("CREATED_DESC"),
 });
 
 export const startAttemptSchema = z.object({

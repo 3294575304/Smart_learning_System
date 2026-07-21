@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  assignmentListQuerySchema,
   assignmentUpsertSchema,
   autosaveAnswersSchema,
 } from "../../services/assignments/schemas";
@@ -122,4 +123,23 @@ test("autosave rejects negative, fractional, and over-limit response times", () 
     });
     assert.equal(parsed.success, false);
   }
+});
+
+test("作业列表查询校验筛选、排序与分页参数", () => {
+  const parsed = assignmentListQuerySchema.safeParse({
+    keyword: "  单元测试  ",
+    classroomId,
+    sort: "DUE_ASC",
+    page: "2",
+  });
+  assert.equal(parsed.success, true);
+  if (parsed.success) {
+    assert.equal(parsed.data.keyword, "单元测试");
+    assert.equal(parsed.data.page, 2);
+    assert.equal(parsed.data.sort, "DUE_ASC");
+  }
+  assert.equal(
+    assignmentListQuerySchema.safeParse({ sort: "UNKNOWN" }).success,
+    false,
+  );
 });

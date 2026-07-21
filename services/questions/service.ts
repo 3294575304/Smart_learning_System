@@ -91,6 +91,7 @@ function listItemFromRecord(
     content: question.content,
     type: question.type,
     difficulty: question.difficulty,
+    status: question.status,
     visibility: question.visibility,
     tags: question.tags,
     creator: {
@@ -244,6 +245,15 @@ export async function listTeacherQuestions(
     ...(query.scope === "OWNED"
       ? { creatorId: teacherId }
       : { visibility: QuestionVisibility.PUBLIC }),
+    ...(query.keyword
+      ? {
+          OR: [
+            { title: { contains: query.keyword, mode: "insensitive" } },
+            { content: { contains: query.keyword, mode: "insensitive" } },
+            { tags: { has: query.keyword } },
+          ],
+        }
+      : {}),
     ...(query.type ? { type: query.type } : {}),
     ...(query.difficulty ? { difficulty: query.difficulty } : {}),
     ...(query.knowledgePointId
