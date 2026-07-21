@@ -6,6 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 import {
+  QuestionAnswerInput,
+  type QuestionAnswerState,
+} from "@/components/assignments/question-answer-input";
+import {
   bindQuestionTimingLifecycle,
   QuestionTimingTracker,
 } from "@/components/assignments/question-timing";
@@ -48,12 +52,7 @@ interface Props {
   };
 }
 
-type AnswerState =
-  | { kind: "CHOICE"; optionIds: string[] }
-  | { kind: "BOOLEAN"; value: boolean | null }
-  | { kind: "TEXT"; value: string };
-
-type AnswerMap = Record<string, AnswerState>;
+type AnswerMap = Record<string, QuestionAnswerState>;
 type SaveState = "idle" | "saving" | "saved" | "failed";
 
 function initialAnswers(
@@ -291,24 +290,6 @@ export function AnswerSheet({ submission }: Props) {
     void persist(latestAnswersRef.current);
   }
 
-  function setChoice(
-    question: DraftQuestion,
-    optionId: string,
-    checked: boolean,
-  ) {
-    setAnswers((current) => {
-      const existing = current[question.id];
-      const selected = existing?.kind === "CHOICE" ? existing.optionIds : [];
-      const optionIds =
-        question.type === QuestionType.SINGLE_CHOICE
-          ? [optionId]
-          : checked
-            ? [...new Set([...selected, optionId])]
-            : selected.filter((id) => id !== optionId);
-      return { ...current, [question.id]: { kind: "CHOICE", optionIds } };
-    });
-  }
-
   return (
     <section className="space-y-6">
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white/95 p-4 shadow-sm backdrop-blur">
@@ -400,88 +381,16 @@ export function AnswerSheet({ submission }: Props) {
                 <p className="mt-4 text-sm whitespace-pre-wrap">
                   {question.content}
                 </p>
-                {(question.type === QuestionType.SINGLE_CHOICE ||
-                  question.type === QuestionType.MULTIPLE_CHOICE) &&
-                answer?.kind === "CHOICE" ? (
-                  <div className="mt-4 space-y-2">
-                    {question.options.map((option) => (
-                      <label
-                        className="flex cursor-pointer items-start gap-3 rounded-md border p-3"
-                        key={option.id}
-                      >
-                        <input
-                          checked={answer.optionIds.includes(option.id)}
-                          name={
-                            question.type === QuestionType.SINGLE_CHOICE
-                              ? question.id
-                              : undefined
-                          }
-                          onChange={(event) =>
-                            setChoice(question, option.id, event.target.checked)
-                          }
-                          type={
-                            question.type === QuestionType.SINGLE_CHOICE
-                              ? "radio"
-                              : "checkbox"
-                          }
-                        />
-                        <span className="text-sm">
-                          <strong>{option.label}.</strong> {option.content}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                ) : null}
-                {question.type === QuestionType.TRUE_FALSE &&
-                answer?.kind === "BOOLEAN" ? (
-                  <div className="mt-4 flex gap-4">
-                    {[
-                      { label: "正确", value: true },
-                      { label: "错误", value: false },
-                    ].map((item) => (
-                      <label
-                        className="flex items-center gap-2 rounded-md border px-4 py-3 text-sm"
-                        key={item.label}
-                      >
-                        <input
-                          checked={answer.value === item.value}
-                          name={question.id}
-                          onChange={() =>
-                            setAnswers((current) => ({
-                              ...current,
-                              [question.id]: {
-                                kind: "BOOLEAN",
-                                value: item.value,
-                              },
-                            }))
-                          }
-                          type="radio"
-                        />
-                        {item.label}
-                      </label>
-                    ))}
-                  </div>
-                ) : null}
-                {(question.type === QuestionType.FILL_BLANK ||
-                  question.type === QuestionType.SHORT_ANSWER) &&
-                answer?.kind === "TEXT" ? (
-                  <textarea
-                    className="mt-4 min-h-28 w-full rounded-md border p-3 text-sm"
-                    onChange={(event) =>
+                {answer ? (
+                  <QuestionAnswerInput
+                    answer={answer}
+                    onChange={(nextAnswer) =>
                       setAnswers((current) => ({
                         ...current,
-                        [question.id]: {
-                          kind: "TEXT",
-                          value: event.target.value,
-                        },
+                        [question.id]: nextAnswer,
                       }))
                     }
-                    placeholder={
-                      question.type === QuestionType.FILL_BLANK
-                        ? "请输入答案"
-                        : "请输入作答内容"
-                    }
-                    value={answer.value}
+                    question={question}
                   />
                 ) : null}
               </article>

@@ -12,15 +12,26 @@ export default async function StudentPage() {
 
   return (
     <section>
-      <Link
-        className="mb-6 block rounded-xl border bg-white p-5 transition-colors hover:bg-gray-50"
-        href="/student/assignments"
-      >
-        <h2 className="font-semibold">我的作业</h2>
-        <p className="text-muted-foreground mt-2 text-sm">
-          查看已发布作业、在线作答并查看提交结果。
-        </p>
-      </Link>
+      <nav aria-label="学习快捷入口" className="mb-6 grid gap-4 sm:grid-cols-2">
+        <Link
+          className="block min-w-0 rounded-xl border bg-white p-5 transition-colors hover:bg-gray-50"
+          href="/student/assignments"
+        >
+          <h2 className="font-semibold">我的作业</h2>
+          <p className="text-muted-foreground mt-2 text-sm leading-6">
+            查看已发布作业、在线作答并查看提交结果。
+          </p>
+        </Link>
+        <Link
+          className="block min-w-0 rounded-xl border bg-white p-5 transition-colors hover:bg-gray-50"
+          href="/student/recommendations"
+        >
+          <h2 className="font-semibold">推荐练习</h2>
+          <p className="text-muted-foreground mt-2 text-sm leading-6">
+            根据近期答题情况和知识点掌握度进行针对性练习。
+          </p>
+        </Link>
+      </nav>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div>
           <h1 className="text-2xl font-semibold">我的班级</h1>
