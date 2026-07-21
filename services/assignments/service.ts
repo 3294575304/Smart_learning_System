@@ -425,6 +425,7 @@ export async function listStudentAssignments(
     },
     include: {
       classroom: { select: { name: true } },
+      _count: { select: { questions: true } },
       submissions: {
         where: { studentId, status: { not: SubmissionStatus.WITHDRAWN } },
         orderBy: { attemptNumber: "desc" },
@@ -448,6 +449,7 @@ export async function listStudentAssignments(
         description: assignment.description ?? "",
         classroomName: assignment.classroom.name,
         totalPoints: assignment.totalPoints.toNumber(),
+        questionCount: assignment._count.questions,
         publishedAt: assignment.publishedAt,
         dueAt: assignment.dueAt,
         allowResubmission: assignment.allowResubmission,

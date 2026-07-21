@@ -35,6 +35,7 @@ export interface StudentAssignmentListItem {
   description: string;
   classroomName: string;
   totalPoints: number;
+  questionCount: number;
   publishedAt: Date;
   dueAt: Date;
   allowResubmission: boolean;

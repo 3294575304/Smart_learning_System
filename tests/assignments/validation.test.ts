@@ -5,6 +5,8 @@ import {
   assignmentListQuerySchema,
   assignmentUpsertSchema,
   autosaveAnswersSchema,
+  studentAssignmentListQuerySchema,
+  studentResultsQuerySchema,
 } from "../../services/assignments/schemas";
 
 const classroomId = "cm12345678901234567890123";
@@ -140,6 +142,37 @@ test("作业列表查询校验筛选、排序与分页参数", () => {
   }
   assert.equal(
     assignmentListQuerySchema.safeParse({ sort: "UNKNOWN" }).success,
+    false,
+  );
+});
+
+test("学生成绩列表查询限制分页范围", () => {
+  assert.deepEqual(studentResultsQuerySchema.parse({}), {
+    page: 1,
+    pageSize: 10,
+  });
+  assert.equal(
+    studentResultsQuerySchema.safeParse({ page: "2", pageSize: "30" }).success,
+    true,
+  );
+  assert.equal(
+    studentResultsQuerySchema.safeParse({ pageSize: 31 }).success,
+    false,
+  );
+});
+
+test("学生作业列表查询校验状态筛选", () => {
+  assert.deepEqual(studentAssignmentListQuerySchema.parse({}), {
+    page: 1,
+    status: "ALL",
+  });
+  assert.equal(
+    studentAssignmentListQuerySchema.safeParse({ status: "IN_PROGRESS" })
+      .success,
+    true,
+  );
+  assert.equal(
+    studentAssignmentListQuerySchema.safeParse({ status: "UNKNOWN" }).success,
     false,
   );
 });

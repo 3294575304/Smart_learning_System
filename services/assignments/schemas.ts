@@ -57,6 +57,18 @@ export const assignmentListQuerySchema = z.object({
     .default("CREATED_DESC"),
 });
 
+export const studentResultsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(30).default(10),
+});
+
+export const studentAssignmentListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  status: z
+    .enum(["ALL", "PENDING", "IN_PROGRESS", "SUBMITTED", "EXPIRED"])
+    .default("ALL"),
+});
+
 export const startAttemptSchema = z.object({
   idempotencyKey: z.string().uuid("幂等键格式无效"),
 });
@@ -91,5 +103,9 @@ export const autosaveAnswersSchema = z.object({
 
 export type AssignmentUpsertData = z.output<typeof assignmentUpsertSchema>;
 export type AssignmentListQuery = z.output<typeof assignmentListQuerySchema>;
+export type StudentResultsQuery = z.output<typeof studentResultsQuerySchema>;
+export type StudentAssignmentListQuery = z.output<
+  typeof studentAssignmentListQuerySchema
+>;
 export type AutosaveAnswersData = z.output<typeof autosaveAnswersSchema>;
 export type SavedAnswerInput = z.output<typeof answerSchema>;
