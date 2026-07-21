@@ -4,19 +4,31 @@ import { createHash } from "node:crypto";
 
 import {
   AIRecordStatus,
+  ClassroomStatus,
+  MembershipStatus,
   Prisma,
   QuestionStatus,
   QuestionVisibility,
   RecommendationSource,
   RecommendationStatus,
+  Role,
   SubmissionStatus,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { studentAnalysisOutputSchema } from "@/services/ai/schemas";
+import {
+  AuthorizationError,
+  ResourceNotFoundError,
+} from "@/services/auth/policy";
 import type { AuthenticatedUser } from "@/services/auth/types";
+import { RecommendationOperationError } from "@/services/recommendations/errors";
 import { assertCanRecommendForStudent } from "@/services/recommendations/policy";
-import type { RecommendationRequest } from "@/services/recommendations/schemas";
+import type {
+  RecommendationGenerationApiInput,
+  RecommendationListQuery,
+  RecommendationRequest,
+} from "@/services/recommendations/schemas";
 import type {
   KnowledgeMasteryInput,
   RecommendationCandidate,
@@ -28,6 +40,50 @@ import type {
 const RECENT_ANSWER_LIMIT = 100;
 const RECOMMENDATION_EXPIRY_DAYS = 7;
 
+const recommendationViewSelect =
+  Prisma.validator<Prisma.PersonalizedRecommendationSelect>()({
+    id: true,
+    studentId: true,
+    cycleKey: true,
+    source: true,
+    status: true,
+    reason: true,
+    createdAt: true,
+    expiresAt: true,
+    startedAt: true,
+    question: {
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        type: true,
+        difficulty: true,
+        status: true,
+        deletedAt: true,
+        options: {
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            label: true,
+            content: true,
+            sortOrder: true,
+          },
+        },
+        knowledgePointLinks: {
+          orderBy: { knowledgePointId: "asc" },
+          select: {
+            knowledgePoint: { select: { id: true, name: true } },
+          },
+        },
+      },
+    },
+  });
+
+export type RecommendationViewRecord =
+  Prisma.PersonalizedRecommendationGetPayload<{
+    select: typeof recommendationViewSelect;
+  }>;
+
 export interface RecommendationStudentContext {
   teacherId: string;
   knowledgeMasteries: KnowledgeMasteryInput[];
@@ -38,6 +94,104 @@ export interface RecommendationStudentContext {
   consecutiveWrong: number;
   analysisId: string | null;
   version: string;
+}
+
+export async function buildRecommendationRequest(
+  actor: AuthenticatedUser,
+  input: RecommendationGenerationApiInput,
+): Promise<RecommendationRequest> {
+  if (actor.role === Role.ADMIN) {
+    throw new AuthorizationError("当前角色不能生成学生练习推荐");
+  }
+
+  const selectForStudent = {
+    teacherId: true,
+    status: true,
+    memberships: {
+      where: { studentId: input.studentId },
+      take: 1,
+      select: { status: true },
+    },
+  } satisfies Prisma.ClassroomSelect;
+
+  let classroom: {
+    id: string;
+    teacherId: string;
+    status: ClassroomStatus;
+    memberships: Array<{ status: MembershipStatus }>;
+  } | null;
+
+  if (input.classroomId) {
+    classroom = await prisma.classroom.findUnique({
+      where: { id: input.classroomId },
+      select: { id: true, ...selectForStudent },
+    });
+  } else {
+    if (actor.role === Role.STUDENT && actor.id !== input.studentId) {
+      throw new ResourceNotFoundError("学生或班级不存在");
+    }
+    const classrooms = await prisma.classroom.findMany({
+      where: {
+        status: ClassroomStatus.ACTIVE,
+        ...(actor.role === Role.TEACHER ? { teacherId: actor.id } : {}),
+        memberships: {
+          some: {
+            studentId: input.studentId,
+            status: MembershipStatus.ACTIVE,
+          },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: 2,
+      select: { id: true, ...selectForStudent },
+    });
+    if (classrooms.length > 1) {
+      throw new RecommendationOperationError(
+        "学生属于多个有效班级，请指定 classroomId",
+        400,
+      );
+    }
+    classroom = classrooms[0] ?? null;
+  }
+
+  const access = classroom
+    ? {
+        teacherId: classroom.teacherId,
+        status: classroom.status,
+        membershipStatus: classroom.memberships[0]?.status ?? null,
+      }
+    : null;
+  assertCanRecommendForStudent(actor, input.studentId, access);
+  if (!classroom) throw new ResourceNotFoundError("班级不存在");
+
+  const candidateQuestions = await prisma.question.findMany({
+    where: {
+      status: QuestionStatus.ACTIVE,
+      deletedAt: null,
+      OR: [
+        { creatorId: classroom.teacherId },
+        { visibility: QuestionVisibility.PUBLIC },
+      ],
+    },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
+  if (candidateQuestions.length === 0) {
+    throw new RecommendationOperationError("当前没有可用于推荐的题目", 422);
+  }
+
+  return {
+    studentId: input.studentId,
+    classroomId: classroom.id,
+    recommendedDifficulty: input.recommendedDifficulty,
+    count: input.limit,
+    teacherScope: {
+      candidateQuestionIds: candidateQuestions.map((question) => question.id),
+      knowledgePointIds: [],
+      types: [],
+      tags: [],
+    },
+  };
 }
 
 function weaknessSeverity(masteryScore: number): number {
@@ -390,4 +544,91 @@ export async function persistRecommendations(input: {
     }
   }
   return [];
+}
+
+export async function loadRecommendationsByCycle(
+  studentId: string,
+  cycleKey: string,
+): Promise<RecommendationViewRecord[]> {
+  return prisma.personalizedRecommendation.findMany({
+    where: { studentId, cycleKey },
+    orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: recommendationViewSelect,
+  });
+}
+
+export async function expireStudentRecommendations(
+  studentId: string,
+  now: Date,
+): Promise<void> {
+  await prisma.personalizedRecommendation.updateMany({
+    where: {
+      studentId,
+      status: {
+        in: [RecommendationStatus.PENDING, RecommendationStatus.STARTED],
+      },
+      expiresAt: { lte: now },
+    },
+    data: { status: RecommendationStatus.EXPIRED },
+  });
+}
+
+export async function recommendationCursorBelongsToStudent(
+  studentId: string,
+  cursor: string,
+): Promise<boolean> {
+  return (
+    (await prisma.personalizedRecommendation.count({
+      where: { id: cursor, studentId },
+    })) === 1
+  );
+}
+
+export async function loadRecommendationPage(
+  studentId: string,
+  query: RecommendationListQuery,
+): Promise<RecommendationViewRecord[]> {
+  return prisma.personalizedRecommendation.findMany({
+    where: {
+      studentId,
+      ...(query.status ? { status: query.status } : {}),
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    take: query.limit + 1,
+    select: recommendationViewSelect,
+  });
+}
+
+export async function loadRecommendationById(
+  recommendationId: string,
+): Promise<RecommendationViewRecord | null> {
+  return prisma.personalizedRecommendation.findUnique({
+    where: { id: recommendationId },
+    select: recommendationViewSelect,
+  });
+}
+
+export async function startPendingRecommendation(input: {
+  recommendationId: string;
+  studentId: string;
+  now: Date;
+}): Promise<boolean> {
+  const updated = await prisma.personalizedRecommendation.updateMany({
+    where: {
+      id: input.recommendationId,
+      studentId: input.studentId,
+      status: RecommendationStatus.PENDING,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: input.now } }],
+      question: {
+        status: QuestionStatus.ACTIVE,
+        deletedAt: null,
+      },
+    },
+    data: {
+      status: RecommendationStatus.STARTED,
+      startedAt: input.now,
+    },
+  });
+  return updated.count === 1;
 }

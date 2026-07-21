@@ -1,9 +1,21 @@
-export class RecommendationOperationError extends Error {
-  readonly status: number;
+import { getErrorStatus, getSafeErrorMessage } from "@/services/auth/policy";
 
-  constructor(message: string, status = 400) {
+export class RecommendationOperationError extends Error {
+  constructor(
+    message: string,
+    readonly status: 400 | 409 | 422 = 400,
+  ) {
     super(message);
     this.name = "RecommendationOperationError";
-    this.status = status;
   }
+}
+
+export function getRecommendationErrorStatus(error: unknown): number {
+  if (error instanceof RecommendationOperationError) return error.status;
+  return getErrorStatus(error);
+}
+
+export function getRecommendationSafeErrorMessage(error: unknown): string {
+  if (error instanceof RecommendationOperationError) return error.message;
+  return getSafeErrorMessage(error);
 }

@@ -37,3 +37,13 @@ export function assertCanRecommendForStudent(
     throw new RecommendationOperationError("只能在有效班级中生成练习推荐");
   }
 }
+
+/** Recommendation records are student-owned practice resources. */
+export function assertCanAccessRecommendation(
+  actor: AuthenticatedUser,
+  studentId: string,
+): void {
+  if (actor.role !== Role.STUDENT || actor.id !== studentId) {
+    throw new AuthorizationError("无权访问该推荐记录");
+  }
+}

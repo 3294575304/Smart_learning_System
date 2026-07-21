@@ -8,7 +8,10 @@ import {
   ResourceNotFoundError,
 } from "../../services/auth/policy";
 import { RecommendationOperationError } from "../../services/recommendations/errors";
-import { assertCanRecommendForStudent } from "../../services/recommendations/policy";
+import {
+  assertCanAccessRecommendation,
+  assertCanRecommendForStudent,
+} from "../../services/recommendations/policy";
 
 const activeClassroom = {
   teacherId: "teacher-1",
@@ -85,5 +88,30 @@ test("admin and inactive classrooms cannot use the recommendation workflow", () 
         { ...activeClassroom, status: ClassroomStatus.CLOSED },
       ),
     RecommendationOperationError,
+  );
+});
+
+test("recommendation records are accessible only to the owning student", () => {
+  assert.doesNotThrow(() =>
+    assertCanAccessRecommendation(
+      actor("student-1", Role.STUDENT),
+      "student-1",
+    ),
+  );
+  assert.throws(
+    () =>
+      assertCanAccessRecommendation(
+        actor("student-2", Role.STUDENT),
+        "student-1",
+      ),
+    AuthorizationError,
+  );
+  assert.throws(
+    () =>
+      assertCanAccessRecommendation(
+        actor("teacher-1", Role.TEACHER),
+        "student-1",
+      ),
+    AuthorizationError,
   );
 });

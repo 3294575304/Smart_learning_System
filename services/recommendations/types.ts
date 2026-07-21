@@ -3,6 +3,7 @@ import type {
   QuestionType,
   QuestionVisibility,
   RecommendationSource,
+  RecommendationStatus,
 } from "@prisma/client";
 
 export type RecentErrorType =
@@ -118,4 +119,51 @@ export interface PersonalizedRecommendationResult extends RecommendationAlgorith
   targetDifficulty: number;
   source: RecommendationSource;
   generatedAt: Date;
+}
+
+export interface RecommendationKnowledgePointView {
+  id: string;
+  name: string;
+}
+
+export interface RecommendationListItemView {
+  id: string;
+  questionId: string;
+  title: string;
+  content: string;
+  type: QuestionType;
+  difficulty: number;
+  knowledgePoints: RecommendationKnowledgePointView[];
+  reason: string;
+  status: RecommendationStatus;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
+export interface RecommendationDetailView extends RecommendationListItemView {
+  options: Array<{
+    id: string;
+    label: string;
+    content: string;
+    sortOrder: number;
+  }>;
+  startedAt: string | null;
+}
+
+export interface RecommendationListResult {
+  items: RecommendationListItemView[];
+  pagination: {
+    limit: number;
+    nextCursor: string | null;
+  };
+}
+
+export interface RecommendationGenerationResult {
+  cycleKey: string;
+  studentId: string;
+  targetDifficulty: number;
+  source: RecommendationSource;
+  generatedAt: string;
+  items: RecommendationListItemView[];
+  metadata: RecommendationMetadata;
 }
