@@ -1,5 +1,7 @@
 import {
+  AssignmentStatus,
   GradingStatus,
+  MembershipStatus,
   Prisma,
   QuestionType,
   SubmissionStatus,
@@ -8,7 +10,10 @@ import {
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { assertTeacherOwnsAssignment } from "@/services/assignment-results/policy";
-import type { AssignmentResultsQuery } from "@/services/assignment-results/schemas";
+import type {
+  AssignmentResultsQuery,
+  TeacherResultsOverviewQuery,
+} from "@/services/assignment-results/schemas";
 import {
   calculateAccuracy,
   selectFrequentWrongQuestions,
@@ -22,6 +27,7 @@ import type {
   StudentAnswerDetail,
   StudentAttemptSummary,
   StudentScoreRow,
+  TeacherResultsOverview,
 } from "@/services/assignment-results/types";
 
 const EFFECTIVE_SUBMISSION_STATUSES: SubmissionStatus[] = [
@@ -30,6 +36,115 @@ const EFFECTIVE_SUBMISSION_STATUSES: SubmissionStatus[] = [
   SubmissionStatus.GRADED,
   SubmissionStatus.PUBLISHED,
 ];
+
+function roundedAverage(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return (
+    Math.round(
+      (values.reduce((sum, value) => sum + value, 0) / values.length) * 100,
+    ) / 100
+  );
+}
+
+export async function listTeacherResultsOverview(
+  teacherId: string,
+  query: TeacherResultsOverviewQuery,
+): Promise<TeacherResultsOverview> {
+  const where: Prisma.AssignmentWhereInput = {
+    teacherId,
+    status: { in: [AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED] },
+    ...(query.classroomId ? { classroomId: query.classroomId } : {}),
+  };
+  const [total, assignments] = await prisma.$transaction([
+    prisma.assignment.count({ where }),
+    prisma.assignment.findMany({
+      where,
+      orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        dueAt: true,
+        classroom: {
+          select: {
+            id: true,
+            name: true,
+            _count: {
+              select: {
+                memberships: { where: { status: MembershipStatus.ACTIVE } },
+              },
+            },
+          },
+        },
+        submissions: {
+          where: { status: { in: EFFECTIVE_SUBMISSION_STATUSES } },
+          orderBy: [{ attemptNumber: "desc" }, { id: "desc" }],
+          select: {
+            studentId: true,
+            status: true,
+            score: true,
+            percentage: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  return {
+    items: assignments.map((assignment) => {
+      const latestByStudent = new Map<
+        string,
+        (typeof assignment.submissions)[number]
+      >();
+      for (const submission of assignment.submissions) {
+        if (!latestByStudent.has(submission.studentId)) {
+          latestByStudent.set(submission.studentId, submission);
+        }
+      }
+      const latest = [...latestByStudent.values()];
+      const finalized = latest.filter(
+        (submission) =>
+          submission.status === SubmissionStatus.GRADED ||
+          submission.status === SubmissionStatus.PUBLISHED,
+      );
+      const scores = finalized.flatMap((submission) =>
+        submission.score === null ? [] : [submission.score.toNumber()],
+      );
+      const percentages = finalized.flatMap((submission) =>
+        submission.percentage === null
+          ? []
+          : [submission.percentage.toNumber()],
+      );
+      return {
+        id: assignment.id,
+        title: assignment.title,
+        status: assignment.status,
+        classroom: {
+          id: assignment.classroom.id,
+          name: assignment.classroom.name,
+        },
+        dueAt: assignment.dueAt,
+        studentCount: assignment.classroom._count.memberships,
+        submittedCount: latest.length,
+        pendingReviewCount: latest.filter(
+          (submission) => submission.status === SubmissionStatus.PENDING_REVIEW,
+        ).length,
+        averageScore: roundedAverage(scores),
+        averagePercentage: roundedAverage(percentages),
+        highestScore: scores.length === 0 ? null : Math.max(...scores),
+        lowestScore: scores.length === 0 ? null : Math.min(...scores),
+      };
+    }),
+    pagination: {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.ceil(total / query.pageSize),
+    },
+  };
+}
 
 interface SummaryDatabaseRow {
   studentCount: bigint;

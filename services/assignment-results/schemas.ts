@@ -15,3 +15,13 @@ export const assignmentResultsQuerySchema = z
 export type AssignmentResultsQuery = z.output<
   typeof assignmentResultsQuerySchema
 >;
+
+export const teacherResultsOverviewQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(30).default(10),
+  classroomId: z.string().cuid("班级 ID 格式无效").optional(),
+});
+
+export type TeacherResultsOverviewQuery = z.output<
+  typeof teacherResultsOverviewQuerySchema
+>;

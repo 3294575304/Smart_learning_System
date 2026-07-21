@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { assignmentResultsQuerySchema } from "../../services/assignment-results/schemas";
+import {
+  assignmentResultsQuerySchema,
+  teacherResultsOverviewQuerySchema,
+} from "../../services/assignment-results/schemas";
 
 const studentId = "cm12345678901234567890123";
 
@@ -31,6 +34,24 @@ test("results query rejects invalid pagination and identifiers", () => {
   );
   assert.equal(
     assignmentResultsQuerySchema.safeParse({ submissionId: studentId }).success,
+    false,
+  );
+});
+
+test("teacher results overview query validates classroom pagination", () => {
+  assert.deepEqual(teacherResultsOverviewQuerySchema.parse({}), {
+    page: 1,
+    pageSize: 10,
+  });
+  assert.equal(
+    teacherResultsOverviewQuerySchema.safeParse({
+      classroomId: studentId,
+      pageSize: 30,
+    }).success,
+    true,
+  );
+  assert.equal(
+    teacherResultsOverviewQuerySchema.safeParse({ pageSize: 31 }).success,
     false,
   );
 });

@@ -5,6 +5,31 @@ import type {
   SubmissionStatus,
 } from "@prisma/client";
 
+export interface TeacherResultOverviewItem {
+  id: string;
+  title: string;
+  status: AssignmentStatus;
+  classroom: { id: string; name: string };
+  dueAt: Date | null;
+  studentCount: number;
+  submittedCount: number;
+  pendingReviewCount: number;
+  averageScore: number | null;
+  averagePercentage: number | null;
+  highestScore: number | null;
+  lowestScore: number | null;
+}
+
+export interface TeacherResultsOverview {
+  items: TeacherResultOverviewItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export interface ScoreSummary {
   averageScore: number | null;
   highestScore: number | null;
