@@ -30,6 +30,8 @@ import {
 } from "@/services/ai/schemas";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getSystemConfigValue } from "@/services/system-config/service";
+import { notifyLearningAnalysisReady } from "@/services/notifications/events/learning-analysis";
+import { logNotificationFailure } from "@/services/notifications/logging";
 
 function configuredTimeoutMs(): number {
   const parsed = Number(process.env.AI_TIMEOUT_MS);
@@ -263,6 +265,14 @@ export async function createStudentAnalysis(
   const stored = await existingAnalysis(requestKey);
   if (!stored) {
     throw new AIAnalysisOperationError("学情分析结果保存失败", 500);
+  }
+  try {
+    await notifyLearningAnalysisReady({
+      recipientId: studentId,
+      analysisId: analysis.id,
+    });
+  } catch {
+    logNotificationFailure("learning_analysis_ready", analysis.id);
   }
   return stored;
 }

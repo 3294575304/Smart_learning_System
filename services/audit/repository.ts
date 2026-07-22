@@ -84,6 +84,35 @@ interface WriteSystemConfigAuditInput {
   context: AuditRequestContext;
 }
 
+interface WriteAnnouncementAuditInput {
+  actorId: string;
+  action: AuditAction;
+  targetId: string;
+  summary: string;
+  beforeData: AuditConfigSnapshot | null;
+  afterData: AuditConfigSnapshot | null;
+  context: AuditRequestContext;
+}
+
+export async function writeAnnouncementAuditLog(
+  transaction: Prisma.TransactionClient,
+  input: WriteAnnouncementAuditInput,
+): Promise<void> {
+  await transaction.auditLog.create({
+    data: {
+      actorId: input.actorId,
+      action: input.action,
+      targetType: AuditTargetType.ANNOUNCEMENT,
+      targetId: input.targetId,
+      summary: input.summary,
+      ...(input.beforeData ? { beforeData: input.beforeData } : {}),
+      ...(input.afterData ? { afterData: input.afterData } : {}),
+      ipAddress: input.context.ipAddress,
+      userAgent: input.context.userAgent,
+    },
+  });
+}
+
 export async function writeSystemConfigAuditLog(
   transaction: Prisma.TransactionClient,
   input: WriteSystemConfigAuditInput,

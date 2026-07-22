@@ -10,6 +10,7 @@ import {
   GraduationCap,
   Home,
   Menu,
+  Megaphone,
   School,
   ScrollText,
   ShieldCheck,
@@ -24,6 +25,7 @@ import type { ComponentType, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import { LogoutButton } from "@/components/auth/logout-button";
+import { NotificationIndicator } from "@/components/notifications/notification-indicator";
 import { cn } from "@/lib/utils";
 import type { AuthenticatedUser } from "@/services/auth/types";
 
@@ -53,6 +55,7 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
     { href: "/admin", label: "平台概览", icon: ShieldCheck },
     { href: "/admin/users", label: "用户管理", icon: Users },
     { href: "/admin/audit-logs", label: "审计日志", icon: ScrollText },
+    { href: "/admin/announcements", label: "系统公告", icon: Megaphone },
     { href: "/admin/system-config", label: "系统配置", icon: Settings },
   ],
   TEACHER: [
@@ -76,6 +79,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   users: "用户管理",
   "audit-logs": "审计日志",
   "system-config": "系统配置",
+  announcements: "系统公告",
   teacher: "教师工作台",
   student: "学习主页",
   classrooms: "班级管理",
@@ -87,6 +91,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   result: "提交结果",
   analytics: "学情分析",
   recommendations: "推荐练习",
+  notifications: "通知中心",
   practice: "练习",
   answer: "在线答题",
   new: "新建",
@@ -318,6 +323,7 @@ export function DashboardShell({
               <Breadcrumbs pathname={pathname} />
             </div>
             <div className="hidden items-center gap-4 sm:flex">
+              <NotificationIndicator />
               <div className="max-w-52 text-right text-sm">
                 <p className="truncate font-medium">{user.displayName}</p>
                 <p className="text-muted-foreground truncate text-xs">
@@ -325,6 +331,9 @@ export function DashboardShell({
                 </p>
               </div>
               <LogoutButton />
+            </div>
+            <div className="sm:hidden">
+              <NotificationIndicator />
             </div>
           </div>
         </header>

@@ -222,6 +222,8 @@ async function upsertAnalysisInsight(input: {
 }
 
 async function main(): Promise<void> {
+  // Notifications and published announcements are intentionally not seeded.
+  // They must always be created by a real business event or an explicit admin action.
   await prisma.authSession.deleteMany({
     where: { expiresAt: { lt: new Date() } },
   });

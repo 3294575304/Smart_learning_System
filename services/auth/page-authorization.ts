@@ -7,15 +7,11 @@ import { getCurrentUser } from "@/services/auth/session";
 import type { AuthenticatedUser } from "@/services/auth/types";
 import { getSystemConfig } from "@/services/system-config/service";
 
-export async function requirePageRole(role: Role): Promise<AuthenticatedUser> {
+export async function requireAuthenticatedPageUser(): Promise<AuthenticatedUser> {
   const user = await getCurrentUser();
 
   if (!user) {
     redirect("/login");
-  }
-
-  if (user.role !== role) {
-    redirect("/403");
   }
 
   const config = await getSystemConfig();
@@ -23,5 +19,11 @@ export async function requirePageRole(role: Role): Promise<AuthenticatedUser> {
     redirect("/maintenance");
   }
 
+  return user;
+}
+
+export async function requirePageRole(role: Role): Promise<AuthenticatedUser> {
+  const user = await requireAuthenticatedPageUser();
+  if (user.role !== role) redirect("/403");
   return user;
 }

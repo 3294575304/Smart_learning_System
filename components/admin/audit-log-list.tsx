@@ -55,14 +55,23 @@ function configSnapshotRows(
   const keys = [
     ...new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]),
   ];
+  const auditFieldLabels: Record<string, string> = {
+    title: "公告标题",
+    contentLength: "正文长度",
+    targetType: "目标用户",
+    status: "公告状态",
+    expiresAt: "过期时间",
+  };
   return keys.flatMap((key) => {
-    if (!(key in systemConfigDefinitions)) return [];
-    const configKey = key as SystemConfigKey;
     const left = before?.[key];
     const right = after?.[key];
-    return left === right
-      ? []
-      : [[systemConfigDefinitions[configKey].label, left, right] as const];
+    if (left === right) return [];
+    if (key in systemConfigDefinitions) {
+      const configKey = key as SystemConfigKey;
+      return [[systemConfigDefinitions[configKey].label, left, right] as const];
+    }
+    const label = auditFieldLabels[key];
+    return label ? [[label, left, right] as const] : [];
   });
 }
 

@@ -29,11 +29,60 @@ enum AuditAction {
   MAINTENANCE_MODE_DISABLED
   AI_FEATURE_ENABLED
   AI_FEATURE_DISABLED
+  ANNOUNCEMENT_CREATED
+  ANNOUNCEMENT_UPDATED
+  ANNOUNCEMENT_PUBLISHED
 }
 
 enum AuditTargetType {
   USER
   SYSTEM_CONFIG
+  ANNOUNCEMENT
+}
+
+enum NotificationType {
+  ASSIGNMENT_PUBLISHED
+  ASSIGNMENT_DUE_SOON
+  ASSIGNMENT_GRADED
+  LEARNING_ANALYSIS_READY
+  RECOMMENDATION_READY
+  SYSTEM_ANNOUNCEMENT
+}
+
+enum NotificationPriority {
+  NORMAL
+  IMPORTANT
+  URGENT
+}
+
+enum NotificationSourceType {
+  ASSIGNMENT
+  SUBMISSION
+  AI_ANALYSIS
+  RECOMMENDATION_CYCLE
+  ANNOUNCEMENT
+}
+
+enum AnnouncementTargetType {
+  ALL
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum NotificationJobType {
+  ASSIGNMENT_DUE_REMINDER
+}
+
+enum NotificationJobStatus {
+  SUCCEEDED
+  PARTIAL_FAILED
+  FAILED
 }
 
 enum ClassroomStatus {
@@ -174,25 +223,96 @@ model User {
   authSessions                AuthSession[]
   auditLogs                   AuditLog[]                   @relation("AuditActor")
   updatedSystemConfigs        SystemConfig[]               @relation("SystemConfigUpdater")
+  notifications               Notification[]               @relation("NotificationRecipient")
+  createdAnnouncements        Announcement[]               @relation("AnnouncementCreator")
+  publishedAnnouncements      Announcement[]               @relation("AnnouncementPublisher")
 
   @@index([role, status])
   @@index([createdAt])
 }
 
+model Notification {
+  id               String                 @id @default(cuid())
+  recipientId      String
+  type             NotificationType
+  title            String                 @db.VarChar(100)
+  content          String                 @db.Text
+  priority         NotificationPriority   @default(NORMAL)
+  actionUrl        String?                @db.VarChar(500)
+  sourceType       NotificationSourceType
+  sourceId         String                 @db.VarChar(128)
+  deduplicationKey String                 @db.VarChar(191)
+  readAt           DateTime?
+  expiresAt        DateTime?
+  metadata         Json?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  recipient User @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+
+  @@unique([recipientId, deduplicationKey])
+  @@index([recipientId, createdAt])
+  @@index([recipientId, readAt])
+  @@index([expiresAt])
+  @@index([sourceType, sourceId])
+}
+
+model Announcement {
+  id            String                 @id @default(cuid())
+  title         String                 @db.VarChar(100)
+  content       String                 @db.Text
+  targetType    AnnouncementTargetType
+  status        AnnouncementStatus     @default(DRAFT)
+  createdById   String
+  publishedById String?
+  publishedAt   DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  createdBy   User  @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  publishedBy User? @relation("AnnouncementPublisher", fields: [publishedById], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([targetType, status])
+  @@index([publishedAt])
+  @@index([expiresAt])
+  @@index([createdById])
+  @@index([publishedById])
+}
+
+model NotificationJobRun {
+  id           String                @id @default(cuid())
+  type         NotificationJobType
+  status       NotificationJobStatus
+  scannedCount Int                   @default(0)
+  createdCount Int                   @default(0)
+  skippedCount Int                   @default(0)
+  failedCount  Int                   @default(0)
+  errorSummary String?               @db.VarChar(500)
+  startedAt    DateTime              @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([type, startedAt])
+  @@index([status, startedAt])
+}
+
 model SystemConfig {
-  id                         String   @id @default(cuid())
-  singletonKey               String   @unique @default("default")
-  platformName               String   @default("智学课堂")
-  platformAnnouncement       String   @default("") @db.Text
-  maintenanceMode            Boolean  @default(false)
-  maintenanceMessage         String   @default("系统维护中，请稍后再试。")
-  allowSelfRegistration      Boolean  @default(true)
-  assignmentDefaultDueDays   Int      @default(7)
-  assignmentAutosaveDelayMs  Int      @default(900)
-  aiAnalysisEnabled          Boolean  @default(true)
-  updatedById                String?
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  id                        String   @id @default(cuid())
+  singletonKey              String   @unique @default("default")
+  platformName              String   @default("智学课堂")
+  platformAnnouncement      String   @default("") @db.Text
+  maintenanceMode           Boolean  @default(false)
+  maintenanceMessage        String   @default("系统维护中，请稍后再试。")
+  allowSelfRegistration     Boolean  @default(true)
+  assignmentDefaultDueDays  Int      @default(7)
+  assignmentAutosaveDelayMs Int      @default(900)
+  aiAnalysisEnabled         Boolean  @default(true)
+  updatedById               String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   updatedBy User? @relation("SystemConfigUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
 

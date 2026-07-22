@@ -18,6 +18,7 @@ import {
   createOrGetPersonalizedRecommendations,
   createPersonalizedRecommendations,
 } from "../../../services/recommendations/service";
+import { prisma } from "../../../lib/prisma";
 import { integrationPrisma } from "./database";
 import { RecommendationTestFactory } from "./factories";
 
@@ -436,5 +437,5 @@ test("server-owned candidate scope is deterministically capped at 1000 rows", as
 });
 
 test.after(async () => {
-  await integrationPrisma.$disconnect();
+  await Promise.all([integrationPrisma.$disconnect(), prisma.$disconnect()]);
 });

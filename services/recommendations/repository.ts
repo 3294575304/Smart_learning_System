@@ -475,7 +475,11 @@ export async function persistRecommendations(input: {
   analysisId: string | null;
   items: RecommendationItem[];
   now: Date;
-}): Promise<string[]> {
+}): Promise<{
+  questionIds: string[];
+  createdCount: number;
+  expiresAt: Date;
+}> {
   const expiresAt = new Date(input.now);
   expiresAt.setUTCDate(expiresAt.getUTCDate() + RECOMMENDATION_EXPIRY_DAYS);
 
@@ -504,6 +508,20 @@ export async function persistRecommendations(input: {
           );
           const acceptedItems = input.items.filter(
             (item) => !conflictingQuestionIds.has(item.questionId),
+          );
+          const existingInCycle =
+            await transaction.personalizedRecommendation.findMany({
+              where: {
+                studentId: input.studentId,
+                cycleKey: input.cycleKey,
+                questionId: {
+                  in: acceptedItems.map((item) => item.questionId),
+                },
+              },
+              select: { questionId: true },
+            });
+          const existingQuestionIds = new Set(
+            existingInCycle.map((record) => record.questionId),
           );
 
           for (const item of acceptedItems) {
@@ -534,7 +552,13 @@ export async function persistRecommendations(input: {
               },
             });
           }
-          return acceptedItems.map((item) => item.questionId);
+          return {
+            questionIds: acceptedItems.map((item) => item.questionId),
+            createdCount: acceptedItems.filter(
+              (item) => !existingQuestionIds.has(item.questionId),
+            ).length,
+            expiresAt,
+          };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
@@ -545,7 +569,7 @@ export async function persistRecommendations(input: {
       if (!isWriteConflict || attempt === 1) throw error;
     }
   }
-  return [];
+  return { questionIds: [], createdCount: 0, expiresAt };
 }
 
 export async function loadRecommendationsByCycle(

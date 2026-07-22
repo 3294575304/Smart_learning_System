@@ -16,6 +16,15 @@ AI 驱动的智能教学平台。平台面向管理员、教师和学生，已�
 - 维护模式会阻止教师和学生的受保护页面及业务 API，管理员仍可进入后台关闭维护模式。
 - 数据库连接、Session/Token 密钥、AI API Key、Provider、模型和服务地址仍由环境变量管理，不会通过配置 API 返回或修改。
 
+## 站内通知与系统公告
+
+- 登录用户可在 `/notifications` 查看自己的真实业务通知、筛选未读状态并批量标记已读；导航栏展示真实未读数量。
+- 当前支持作业发布、截止前 24 小时提醒、自动批改完成、学情分析完成、推荐周期更新和管理员系统公告。
+- 管理员在 `/admin/announcements` 创建草稿并显式发布公告。公告发布、批量通知和审计日志处于同一事务，重复发布不会重复通知。
+- 截止提醒由 `POST /api/internal/jobs/assignment-reminders` 执行，必须使用 `Authorization: Bearer <NOTIFICATION_JOB_SECRET>`。仓库没有内置调度器，生产环境需要由部署平台每小时调用一次。
+- 当前仅支持站内通知，不支持邮件、短信、微信、手机推送、WebSocket 或 SSE。
+- 完整触发规则、去重和部署说明见 [`docs/notifications.md`](docs/notifications.md)。
+
 ## 技术栈
 
 - Next.js（App Router）

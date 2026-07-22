@@ -7,6 +7,7 @@ import test from "node:test";
 
 import { RecommendationStatus } from "@prisma/client";
 
+import { prisma } from "../../../lib/prisma";
 import { integrationPrisma } from "./database";
 import { RecommendationTestFactory } from "./factories";
 
@@ -185,5 +186,5 @@ test("authenticated API executes through service and repository against PostgreS
 });
 
 test.after(async () => {
-  await integrationPrisma.$disconnect();
+  await Promise.all([integrationPrisma.$disconnect(), prisma.$disconnect()]);
 });

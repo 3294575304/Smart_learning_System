@@ -45,6 +45,8 @@ import type {
   RecommendationListItemView,
   RecommendationListResult,
 } from "@/services/recommendations/types";
+import { notifyRecommendationReady } from "@/services/notifications/events/recommendation";
+import { logNotificationFailure } from "@/services/notifications/logging";
 
 export interface RecommendationServiceOptions {
   now?: Date;
@@ -114,7 +116,7 @@ export async function createPersonalizedRecommendations(
     ? RecommendationSource.HYBRID
     : RecommendationSource.RULE;
 
-  const persistedQuestionIds = await persistRecommendations({
+  const persisted = await persistRecommendations({
     studentId: request.studentId,
     cycleKey,
     targetDifficulty: request.recommendedDifficulty,
@@ -123,7 +125,7 @@ export async function createPersonalizedRecommendations(
     items: enhanced.items,
     now,
   });
-  const persistedQuestionIdSet = new Set(persistedQuestionIds);
+  const persistedQuestionIdSet = new Set(persisted.questionIds);
   const persistedItems = enhanced.items.filter((item) =>
     persistedQuestionIdSet.has(item.questionId),
   );
@@ -138,6 +140,8 @@ export async function createPersonalizedRecommendations(
     targetDifficulty: request.recommendedDifficulty,
     source,
     generatedAt: now,
+    createdItemCount: persisted.createdCount,
+    expiresAt: persisted.expiresAt,
     items: persistedItems,
     metadata: {
       ...algorithmResult.metadata,
@@ -213,6 +217,18 @@ export async function createOrGetPersonalizedRecommendations(
     throw new RecommendationOperationError("当前无法生成有效推荐", 422);
   }
   const items = records.map(listItemFromRecord);
+  if (result.createdItemCount > 0) {
+    try {
+      await notifyRecommendationReady({
+        recipientId: result.studentId,
+        cycleKey: result.cycleKey,
+        count: result.createdItemCount,
+        expiresAt: result.expiresAt,
+      });
+    } catch {
+      logNotificationFailure("recommendation_ready", result.cycleKey);
+    }
+  }
   return {
     cycleKey: result.cycleKey,
     studentId: result.studentId,

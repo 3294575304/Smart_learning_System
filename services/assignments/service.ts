@@ -8,7 +8,9 @@ import {
   QuestionStatus,
   QuestionType,
   QuestionVisibility,
+  Role,
   SubmissionStatus,
+  UserStatus,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -35,6 +37,11 @@ import type {
   SubmissionResultView,
   TeacherAssignmentView,
 } from "@/services/assignments/types";
+import {
+  notifyAssignmentGraded,
+  notifyAssignmentPublished,
+} from "@/services/notifications/events/assignment";
+import { logNotificationFailure } from "@/services/notifications/logging";
 
 const teacherAssignmentInclude = {
   classroom: { select: { id: true, name: true } },
@@ -363,6 +370,26 @@ export async function publishAssignment(
     const assignment = await transaction.assignment.findUnique({
       where: { id: assignmentId },
       include: {
+        teacher: {
+          select: {
+            email: true,
+            profile: { select: { displayName: true } },
+          },
+        },
+        classroom: {
+          select: {
+            memberships: {
+              where: {
+                status: MembershipStatus.ACTIVE,
+                student: {
+                  role: Role.STUDENT,
+                  status: UserStatus.ACTIVE,
+                },
+              },
+              select: { studentId: true },
+            },
+          },
+        },
         questions: {
           orderBy: { sortOrder: "asc" },
           select: { questionId: true, sortOrder: true, points: true },
@@ -405,6 +432,19 @@ export async function publishAssignment(
       where: { id: assignmentId },
       data: { status: AssignmentStatus.PUBLISHED, totalPoints },
     });
+    await notifyAssignmentPublished(
+      {
+        assignmentId: assignment.id,
+        assignmentTitle: assignment.title,
+        teacherName:
+          assignment.teacher.profile?.displayName ?? assignment.teacher.email,
+        dueAt: assignment.dueAt,
+        recipientIds: assignment.classroom.memberships.map(
+          (membership) => membership.studentId,
+        ),
+      },
+      transaction,
+    );
   });
   return getTeacherAssignment(teacherId, assignmentId);
 }
@@ -1102,7 +1142,19 @@ export async function submitStudentAssignment(
       }
     }
   }
-  return getStudentSubmissionResult(studentId, submissionId);
+  const result = await getStudentSubmissionResult(studentId, submissionId);
+  if (result.status === SubmissionStatus.GRADED) {
+    try {
+      await notifyAssignmentGraded({
+        recipientId: studentId,
+        submissionId,
+        assignmentTitle: result.assignmentTitle,
+      });
+    } catch {
+      logNotificationFailure("assignment_graded", submissionId);
+    }
+  }
+  return result;
 }
 
 export async function getStudentSubmissionResult(

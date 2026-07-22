@@ -22,4 +22,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   MAINTENANCE_MODE_DISABLED: "关闭维护模式",
   AI_FEATURE_ENABLED: "开启 AI 功能",
   AI_FEATURE_DISABLED: "关闭 AI 功能",
+  ANNOUNCEMENT_CREATED: "创建公告",
+  ANNOUNCEMENT_UPDATED: "更新公告",
+  ANNOUNCEMENT_PUBLISHED: "发布公告",
 };

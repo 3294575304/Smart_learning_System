@@ -65,14 +65,29 @@ async function main(): Promise<void> {
     NODE_ENV: "test",
   };
   const prismaCli = resolve("node_modules/prisma/build/index.js");
-  const testFiles = [
+  const allTestFiles = [
     resolve(
       "tests/integration/recommendations/recommendation-service.integration.test.ts",
     ),
     resolve(
       "tests/integration/recommendations/recommendation-api.integration.test.ts",
     ),
+    resolve(
+      "tests/integration/notifications/notification-service.integration.test.ts",
+    ),
   ];
+  const requestedSuite = process.env.INTEGRATION_SUITE ?? "all";
+  if (!["all", "recommendations", "notifications"].includes(requestedSuite)) {
+    throw new Error(
+      "INTEGRATION_SUITE must be all, recommendations, or notifications.",
+    );
+  }
+  const testFiles =
+    requestedSuite === "notifications"
+      ? [allTestFiles[2]]
+      : requestedSuite === "recommendations"
+        ? allTestFiles.slice(0, 2)
+        : allTestFiles;
 
   try {
     run(process.execPath, [prismaCli, "migrate", "deploy"], environment);

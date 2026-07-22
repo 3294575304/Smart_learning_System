@@ -119,6 +119,8 @@ export interface PersonalizedRecommendationResult extends RecommendationAlgorith
   targetDifficulty: number;
   source: RecommendationSource;
   generatedAt: Date;
+  createdItemCount: number;
+  expiresAt: Date;
 }
 
 export interface RecommendationKnowledgePointView {
