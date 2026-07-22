@@ -586,22 +586,13 @@ async function main(): Promise<void> {
     }
   }
 
-  const existingSubmission = await prisma.submission.findFirst({
-    where: {
-      OR: [
-        { idempotencyKey: "seed-submit-student-1-assignment-1" },
-        {
-          assignmentId: assignment.id,
-          studentId: student.id,
-          status: { not: SubmissionStatus.WITHDRAWN },
-        },
-      ],
-    },
-    orderBy: { attemptNumber: "asc" },
+  const existingSubmission = await prisma.submission.findUnique({
+    where: { idempotencyKey: "seed-submit-student-1-assignment-1" },
   });
   const submissionData = {
     idempotencyKey: "seed-submit-student-1-assignment-1",
     status: SubmissionStatus.PUBLISHED,
+    startedAt: new Date("2026-07-14T01:30:00.000Z"),
     submittedAt: new Date("2026-07-14T02:00:00.000Z"),
     gradedAt: new Date("2026-07-14T02:10:00.000Z"),
     publishedAt: new Date("2026-07-14T02:15:00.000Z"),
@@ -612,6 +603,12 @@ async function main(): Promise<void> {
     saveVersion: 1,
     lastSavedAt: new Date("2026-07-14T01:55:00.000Z"),
   };
+  const latestAttempt = existingSubmission
+    ? null
+    : await prisma.submission.aggregate({
+        where: { assignmentId: assignment.id, studentId: student.id },
+        _max: { attemptNumber: true },
+      });
   const submission = existingSubmission
     ? await prisma.submission.update({
         where: { id: existingSubmission.id },
@@ -621,8 +618,7 @@ async function main(): Promise<void> {
         data: {
           assignmentId: assignment.id,
           studentId: student.id,
-          attemptNumber: 1,
-          startedAt: new Date("2026-07-14T01:30:00.000Z"),
+          attemptNumber: (latestAttempt?._max.attemptNumber ?? 0) + 1,
           ...submissionData,
         },
       });
