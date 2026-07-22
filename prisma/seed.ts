@@ -2,6 +2,8 @@ import {
   AIAnalysisScope,
   AIInsightType,
   AIRecordStatus,
+  AuditAction,
+  AuditTargetType,
   AssignmentStatus,
   ClassroomStatus,
   GradingStatus,
@@ -226,6 +228,34 @@ async function main(): Promise<void> {
 
   const users = await Promise.all(seedUsers.map(upsertUser));
   const [admin, teacher, teacherTwo, student, studentTwo, studentThree] = users;
+
+  const existingSeedAuditLog = await prisma.auditLog.findFirst({
+    where: {
+      actorId: admin.id,
+      action: AuditAction.USER_CREATED,
+      targetType: AuditTargetType.USER,
+      targetId: admin.id,
+      summary: "初始化管理员演示账号",
+    },
+    select: { id: true },
+  });
+  if (!existingSeedAuditLog) {
+    await prisma.auditLog.create({
+      data: {
+        actorId: admin.id,
+        action: AuditAction.USER_CREATED,
+        targetType: AuditTargetType.USER,
+        targetId: admin.id,
+        summary: "初始化管理员演示账号",
+        afterData: {
+          displayName: seedUsers[0].displayName,
+          email: admin.email,
+          role: admin.role,
+          status: admin.status,
+        },
+      },
+    });
+  }
 
   const classroom = await prisma.classroom.upsert({
     where: { joinCode: "MATH2026" },

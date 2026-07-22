@@ -11,6 +11,7 @@ import {
   Home,
   Menu,
   School,
+  ScrollText,
   ShieldCheck,
   Sparkles,
   Users,
@@ -47,6 +48,8 @@ const ROLE_LABELS: Record<Role, string> = {
 const NAVIGATION: Record<Role, NavigationItem[]> = {
   ADMIN: [
     { href: "/admin", label: "平台概览", icon: ShieldCheck },
+    { href: "/admin/users", label: "用户管理", icon: Users },
+    { href: "/admin/audit-logs", label: "审计日志", icon: ScrollText },
   ],
   TEACHER: [
     { href: "/teacher", label: "工作台", icon: Home },
@@ -66,6 +69,8 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
 
 const SEGMENT_LABELS: Record<string, string> = {
   admin: "平台概览",
+  users: "用户管理",
+  "audit-logs": "审计日志",
   teacher: "教师工作台",
   student: "学习主页",
   classrooms: "班级管理",
@@ -91,7 +96,8 @@ function isCurrentPath(pathname: string, href: string): boolean {
 }
 
 function pageTitle(pathname: string, items: NavigationItem[]): string {
-  const exactLabel = SEGMENT_LABELS[pathname.split("/").filter(Boolean).at(-1) ?? ""];
+  const exactLabel =
+    SEGMENT_LABELS[pathname.split("/").filter(Boolean).at(-1) ?? ""];
   if (exactLabel) return exactLabel;
 
   const match = [...items]
@@ -197,7 +203,10 @@ export function DashboardShell({ user, title, children }: DashboardShellProps) {
     <div className="bg-muted/40 min-h-screen">
       <aside className="bg-background fixed inset-y-0 left-0 z-30 hidden w-64 border-r lg:flex lg:flex-col">
         <div className="flex h-16 items-center border-b px-6">
-          <Link className="flex items-center gap-2 font-semibold" href="/dashboard">
+          <Link
+            className="flex items-center gap-2 font-semibold"
+            href="/dashboard"
+          >
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900 text-white">
               <GraduationCap className="h-5 w-5" />
             </span>
@@ -292,7 +301,9 @@ export function DashboardShell({ user, title, children }: DashboardShellProps) {
               <Menu className="h-5 w-5" />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{currentPageTitle}</p>
+              <p className="truncate text-sm font-semibold">
+                {currentPageTitle}
+              </p>
               <Breadcrumbs pathname={pathname} />
             </div>
             <div className="hidden items-center gap-4 sm:flex">

@@ -1,5 +1,6 @@
 import { Role } from "@prisma/client";
-import { School, Settings, ShieldCheck, UserCog, Users } from "lucide-react";
+import { School, ScrollText, Settings, UserCog, Users } from "lucide-react";
+import Link from "next/link";
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -48,42 +49,57 @@ export default async function AdminPage() {
       <section>
         <h2 className="font-semibold">管理模块</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          以下模块尚无对应的管理员服务端接口，当前不提供写操作。
+          用户与审计模块已经接入真实服务端数据；系统配置仍未开放。
         </p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {[
-            {
-              title: "用户与角色管理",
-              description: "管理用户状态、教师与学生信息。",
-              icon: ShieldCheck,
-            },
-            {
-              title: "系统配置",
-              description: "管理平台级参数与 AI 服务配置。",
-              icon: Settings,
-            },
-          ].map((module) => {
-            const Icon = module.icon;
-            return (
-              <article
-                className="bg-card rounded-xl border border-dashed p-6"
-                key={module.title}
-              >
-                <div className="flex items-start gap-4">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h3 className="font-medium">{module.title}</h3>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                      {module.description}
-                    </p>
-                    <p className="mt-3 text-sm font-medium">该模块暂未开放</p>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+          <Link
+            className="bg-card rounded-xl border p-6 transition-colors hover:border-gray-400"
+            href="/admin/users"
+          >
+            <div className="flex items-start gap-4">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-white">
+                <Users className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 className="font-medium">用户与角色管理</h3>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  查询、创建和维护用户资料、角色与状态。
+                </p>
+                <p className="mt-3 text-sm font-medium">进入用户管理</p>
+              </div>
+            </div>
+          </Link>
+          <Link
+            className="bg-card rounded-xl border p-6 transition-colors hover:border-gray-400"
+            href="/admin/audit-logs"
+          >
+            <div className="flex items-start gap-4">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-white">
+                <ScrollText className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 className="font-medium">管理操作审计</h3>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  查看用户创建、资料、角色和状态变更记录。
+                </p>
+                <p className="mt-3 text-sm font-medium">查看审计日志</p>
+              </div>
+            </div>
+          </Link>
+          <article className="bg-card rounded-xl border border-dashed p-6 md:col-span-2">
+            <div className="flex items-start gap-4">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+                <Settings className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 className="font-medium">系统配置</h3>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  管理平台级参数与 AI 服务配置。
+                </p>
+                <p className="mt-3 text-sm font-medium">该模块暂未开放</p>
+              </div>
+            </div>
+          </article>
         </div>
       </section>
     </section>

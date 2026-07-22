@@ -18,6 +18,18 @@ enum UserStatus {
   INACTIVE
 }
 
+enum AuditAction {
+  USER_CREATED
+  USER_UPDATED
+  USER_ROLE_CHANGED
+  USER_ENABLED
+  USER_DISABLED
+}
+
+enum AuditTargetType {
+  USER
+}
+
 enum ClassroomStatus {
   ACTIVE
   CLOSED
@@ -154,8 +166,31 @@ model User {
   personalizedRecommendations PersonalizedRecommendation[]
   aiTutoringRecords           AITutoringRecord[]
   authSessions                AuthSession[]
+  auditLogs                   AuditLog[]                   @relation("AuditActor")
 
   @@index([role, status])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String          @id @default(cuid())
+  actorId    String
+  action     AuditAction
+  targetType AuditTargetType
+  targetId   String
+  summary    String
+  beforeData Json?
+  afterData  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  actor User @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([actorId])
+  @@index([targetId])
+  @@index([action])
   @@index([createdAt])
 }
 
