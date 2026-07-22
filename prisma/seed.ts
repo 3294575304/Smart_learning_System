@@ -869,6 +869,7 @@ async function main(): Promise<void> {
       promptVersion: "student-analysis-v1",
       retryCount: 0,
       fallbackUsed: false,
+      latencyMs: 420,
       inputMetrics: {
         assignmentCount: 1,
         publishedSubmissionCount: 1,
@@ -894,6 +895,7 @@ async function main(): Promise<void> {
       promptVersion: "student-analysis-v1",
       retryCount: 0,
       fallbackUsed: false,
+      latencyMs: 420,
       inputMetrics: {
         assignmentCount: 1,
         publishedSubmissionCount: 1,
@@ -941,6 +943,7 @@ async function main(): Promise<void> {
       promptVersion: "class-analysis-v1",
       retryCount: 1,
       fallbackUsed: true,
+      latencyMs: 8_000,
       inputMetrics: { submittedStudents: 1, enrolledStudents: 2 },
       errorCode: "PROVIDER_TIMEOUT",
       completedAt: new Date("2026-07-14T02:25:00.000Z"),
@@ -957,6 +960,7 @@ async function main(): Promise<void> {
       promptVersion: "class-analysis-v1",
       retryCount: 1,
       fallbackUsed: true,
+      latencyMs: 8_000,
       inputMetrics: { submittedStudents: 1, enrolledStudents: 2 },
       errorCode: "PROVIDER_TIMEOUT",
       completedAt: new Date("2026-07-14T02:25:00.000Z"),

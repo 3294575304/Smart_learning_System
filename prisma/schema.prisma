@@ -403,6 +403,7 @@ model Assignment {
 
   @@index([classroomId, status, dueAt])
   @@index([teacherId, status, createdAt])
+  @@index([status, publishedAt])
 }
 
 model AssignmentQuestion {
@@ -501,6 +502,7 @@ model Submission {
   @@unique([assignmentId, studentId, attemptNumber])
   @@index([assignmentId, status, submittedAt])
   @@index([studentId, status, createdAt])
+  @@index([status, submittedAt])
 }
 
 model StudentAnswer {
@@ -529,6 +531,7 @@ model StudentAnswer {
   @@unique([submissionId, assignmentQuestionId])
   @@index([assignmentQuestionId, gradingStatus])
   @@index([graderId, gradedAt])
+  @@index([createdAt])
 }
 
 model StudentAnswerOption {
@@ -613,6 +616,7 @@ model AIAnalysis {
   inputMetrics  Json?
   rawResponse   Json?
   errorCode     String?
+  latencyMs     Int?
   completedAt   DateTime?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
@@ -627,6 +631,7 @@ model AIAnalysis {
   @@index([classroomId, status, createdAt])
   @@index([requestedById, createdAt])
   @@index([scope, riskLevel, createdAt])
+  @@index([status, createdAt])
 }
 
 model AIAnalysisInsight {
@@ -681,6 +686,7 @@ model PersonalizedRecommendation {
   @@index([studentId, status, priority, createdAt])
   @@index([knowledgePointId, status])
   @@index([analysisId])
+  @@index([createdAt])
 }
 
 model AITutoringRecord {

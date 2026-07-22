@@ -65,6 +65,25 @@ interface SystemConfigView {
   changedKeys?: string[];
 }
 
+interface DashboardOverviewView {
+  users: {
+    total: number;
+    byRole: Record<Role, number>;
+    byStatus: Record<UserStatus, number>;
+  };
+  teaching: { classroomTotal: number; questionTotal: number };
+  ai: { successRate: number | null };
+}
+
+interface DashboardTrendsView {
+  range: "7d" | "30d" | "90d";
+  points: Array<{ date: string; users: number; submissions: number }>;
+}
+
+interface DashboardDistributionsView {
+  roles: Array<{ key: Role; count: number }>;
+}
+
 const prisma = new PrismaClient();
 const port = 3107;
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -192,10 +211,134 @@ async function main(): Promise<void> {
       (await requestJson("/api/admin/audit-logs", teacherCookie)).status,
       403,
     );
+    const dashboardPaths = [
+      "/api/admin/dashboard/overview",
+      "/api/admin/dashboard/trends?range=7d",
+      "/api/admin/dashboard/distributions",
+      "/api/admin/dashboard/activities?limit=5&type=ALL",
+      "/api/admin/system-health",
+    ];
+    for (const path of dashboardPaths) {
+      assert.equal((await requestJson(path)).status, 401);
+      assert.equal((await requestJson(path, teacherCookie)).status, 403);
+      assert.equal((await requestJson(path, studentCookie)).status, 403);
+    }
     assert.equal(
       (await requestJson("/api/admin/users?page=0", adminCookie)).status,
       400,
     );
+    assert.equal(
+      (await requestJson("/api/admin/dashboard/trends?range=365d", adminCookie))
+        .status,
+      400,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          "/api/admin/dashboard/activities?limit=21",
+          adminCookie,
+        )
+      ).status,
+      400,
+    );
+
+    const inactiveAdmin = await prisma.user.create({
+      data: {
+        email: `inactive-dashboard-admin-${testSuffix}@example.com`,
+        passwordHash: admin.passwordHash,
+        role: Role.ADMIN,
+        status: UserStatus.INACTIVE,
+        profile: { create: { displayName: "禁用仪表盘管理员" } },
+      },
+      select: { id: true },
+    });
+    createdUserIds.push(inactiveAdmin.id);
+    const inactiveAdminCookie = await sessionCookie(inactiveAdmin.id);
+    assert.equal(
+      (await requestJson("/api/admin/dashboard/overview", inactiveAdminCookie))
+        .status,
+      401,
+    );
+
+    const overviewResponse = await requestJson(
+      "/api/admin/dashboard/overview",
+      adminCookie,
+    );
+    assert.equal(overviewResponse.status, 200);
+    const overview =
+      (await overviewResponse.json()) as ApiSuccess<DashboardOverviewView>;
+    const [databaseUserCount, databaseClassroomCount, databaseQuestionCount] =
+      await Promise.all([
+        prisma.user.count(),
+        prisma.classroom.count(),
+        prisma.question.count({ where: { deletedAt: null } }),
+      ]);
+    assert.equal(overview.data.users.total, databaseUserCount);
+    assert.equal(overview.data.teaching.classroomTotal, databaseClassroomCount);
+    assert.equal(overview.data.teaching.questionTotal, databaseQuestionCount);
+    assert.equal(
+      Object.values(overview.data.users.byRole).reduce(
+        (sum, count) => sum + count,
+        0,
+      ),
+      databaseUserCount,
+    );
+    const overviewJson = JSON.stringify(overview);
+    assert.equal(overviewJson.includes("passwordHash"), false);
+    assert.equal(overviewJson.includes("DATABASE_URL"), false);
+    assert.equal(overviewJson.includes("AI_API_KEY"), false);
+
+    const trendsResponse = await requestJson(
+      "/api/admin/dashboard/trends?range=7d",
+      adminCookie,
+    );
+    assert.equal(trendsResponse.status, 200);
+    const trends =
+      (await trendsResponse.json()) as ApiSuccess<DashboardTrendsView>;
+    assert.equal(trends.data.range, "7d");
+    assert.equal(trends.data.points.length, 7);
+    assert.deepEqual(
+      trends.data.points.map((point) => point.date),
+      [...trends.data.points.map((point) => point.date)].sort(),
+    );
+    assert.equal(
+      trends.data.points.every(
+        (point) => point.users >= 0 && point.submissions >= 0,
+      ),
+      true,
+    );
+
+    const distributionsResponse = await requestJson(
+      "/api/admin/dashboard/distributions",
+      adminCookie,
+    );
+    assert.equal(distributionsResponse.status, 200);
+    const distributions =
+      (await distributionsResponse.json()) as ApiSuccess<DashboardDistributionsView>;
+    assert.equal(
+      distributions.data.roles.reduce((sum, item) => sum + item.count, 0),
+      databaseUserCount,
+    );
+    assert.equal(
+      (
+        (await requestJson(
+          "/api/admin/dashboard/activities?limit=3&type=ALL",
+          adminCookie,
+        ).then((response) => response.json())) as ApiSuccess<{
+          items: unknown[];
+        }>
+      ).data.items.length <= 3,
+      true,
+    );
+    const healthResponse = await requestJson(
+      "/api/admin/system-health",
+      adminCookie,
+    );
+    assert.equal(healthResponse.status, 200);
+    const healthJson = JSON.stringify(await healthResponse.json());
+    assert.equal(healthJson.includes("localhost"), false);
+    assert.equal(healthJson.includes("DATABASE_URL"), false);
+    assert.equal(healthJson.includes("AI_API_KEY"), false);
 
     const configResponse = await requestJson(
       "/api/admin/system-config",
@@ -661,7 +804,7 @@ async function main(): Promise<void> {
     );
 
     console.info(
-      "Admin HTTP integration checks passed: authentication, role authorization, strict validation, database pagination and filters, safe DTOs, user creation/detail/update, unique conflicts, self/last-admin protections, session invalidation, transactional rollback/no-op behavior, and safe audit pagination/filters/order.",
+      "Admin HTTP integration checks passed: dashboard authorization and database-backed statistics, system health privacy, strict validation, user management, system configuration, and safe audit behavior.",
     );
   } finally {
     if (systemConfigTargetId) {

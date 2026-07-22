@@ -238,6 +238,7 @@ export async function createStudentAnalysis(
         fallbackUsed: execution.fallbackUsed,
         rawResponse: toJsonValue(execution.output),
         errorCode: execution.errorCode,
+        latencyMs: execution.latencyMs,
         completedAt,
         inputMetrics: {
           sampleSize: batch.sampleSize,
