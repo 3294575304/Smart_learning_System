@@ -5,6 +5,8 @@ import type { Role } from "@prisma/client";
 import { getCurrentUser } from "@/services/auth/session";
 import type { AuthenticatedUser } from "@/services/auth/types";
 import { assertRole, AuthenticationError } from "@/services/auth/policy";
+import { assertSystemAvailableForUser } from "@/services/system-config/policy";
+import { getSystemConfig } from "@/services/system-config/service";
 
 export {
   assertRole,
@@ -28,6 +30,8 @@ export async function requireAuthenticatedUser(
   if (allowedRoles) {
     assertRole(user, allowedRoles);
   }
+
+  assertSystemAvailableForUser(user, await getSystemConfig());
 
   return user;
 }

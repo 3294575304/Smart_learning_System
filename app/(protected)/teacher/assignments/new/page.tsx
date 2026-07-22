@@ -4,10 +4,14 @@ import Link from "next/link";
 import { AssignmentForm } from "@/components/assignments/assignment-form";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { getTeacherAssignmentEditorOptions } from "@/services/assignments/service";
+import { getSystemConfigValue } from "@/services/system-config/service";
 
 export default async function NewAssignmentPage() {
   const teacher = await requirePageRole(Role.TEACHER);
-  const options = await getTeacherAssignmentEditorOptions(teacher.id);
+  const [options, defaultDueDays] = await Promise.all([
+    getTeacherAssignmentEditorOptions(teacher.id),
+    getSystemConfigValue("assignmentDefaultDueDays"),
+  ]);
   return (
     <section className="space-y-6">
       <div>
@@ -24,7 +28,11 @@ export default async function NewAssignmentPage() {
           请先创建一个有效班级，再创建作业。
         </div>
       ) : (
-        <AssignmentForm mode="create" {...options} />
+        <AssignmentForm
+          defaultDueDays={defaultDueDays}
+          mode="create"
+          {...options}
+        />
       )}
     </section>
   );

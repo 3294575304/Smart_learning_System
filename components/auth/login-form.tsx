@@ -9,7 +9,11 @@ import { useForm } from "react-hook-form";
 import { loginAction } from "@/app/actions/auth";
 import { loginSchema, type LoginInput } from "@/services/auth/schemas";
 
-export function LoginForm() {
+export function LoginForm({
+  allowRegistration,
+}: {
+  allowRegistration: boolean;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -97,12 +101,14 @@ export function LoginForm() {
       >
         {isPending ? "正在登录…" : "登录"}
       </button>
-      <p className="text-muted-foreground text-center text-sm">
-        还没有学生账号？{" "}
-        <Link className="text-foreground underline" href="/register">
-          注册
-        </Link>
-      </p>
+      {allowRegistration ? (
+        <p className="text-muted-foreground text-center text-sm">
+          还没有学生账号？{" "}
+          <Link className="text-foreground underline" href="/register">
+            注册
+          </Link>
+        </p>
+      ) : null}
     </form>
   );
 }

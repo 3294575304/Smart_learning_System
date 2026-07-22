@@ -14,7 +14,7 @@ export default async function AdminPage() {
   return (
     <section className="space-y-7">
       <PageHeader
-        description="查看平台当前基础数据。管理功能将在对应服务端能力完成后开放。"
+        description="查看平台当前基础数据并进入用户、审计与系统配置管理。"
         eyebrow="Admin console"
         title="平台概览"
       />
@@ -49,7 +49,7 @@ export default async function AdminPage() {
       <section>
         <h2 className="font-semibold">管理模块</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          用户与审计模块已经接入真实服务端数据；系统配置仍未开放。
+          管理用户账号、审计重要操作并维护能够真实影响业务的系统参数。
         </p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <Link
@@ -86,20 +86,23 @@ export default async function AdminPage() {
               </div>
             </div>
           </Link>
-          <article className="bg-card rounded-xl border border-dashed p-6 md:col-span-2">
+          <Link
+            className="bg-card rounded-xl border p-6 transition-colors hover:border-gray-400 md:col-span-2"
+            href="/admin/system-config"
+          >
             <div className="flex items-start gap-4">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-white">
                 <Settings className="h-5 w-5" />
               </span>
               <div>
                 <h3 className="font-medium">系统配置</h3>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  管理平台级参数与 AI 服务配置。
+                  管理平台展示、维护、注册、作业默认值和 AI 增强分析开关。
                 </p>
-                <p className="mt-3 text-sm font-medium">该模块暂未开放</p>
+                <p className="mt-3 text-sm font-medium">进入系统配置</p>
               </div>
             </div>
-          </article>
+          </Link>
         </div>
       </section>
     </section>

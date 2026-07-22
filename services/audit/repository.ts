@@ -5,6 +5,7 @@ import { AuditTargetType, Prisma, type AuditAction } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AuditLogListQuery } from "@/services/audit/schemas";
 import type {
+  AuditConfigSnapshot,
   AuditRequestContext,
   AuditUserSnapshot,
 } from "@/services/audit/types";
@@ -67,6 +68,35 @@ export async function writeUserAuditLog(
         ? { beforeData: jsonSnapshot(input.beforeData) }
         : {}),
       ...(input.afterData ? { afterData: jsonSnapshot(input.afterData) } : {}),
+      ipAddress: input.context.ipAddress,
+      userAgent: input.context.userAgent,
+    },
+  });
+}
+
+interface WriteSystemConfigAuditInput {
+  actorId: string;
+  action: AuditAction;
+  targetId: string;
+  summary: string;
+  beforeData: AuditConfigSnapshot;
+  afterData: AuditConfigSnapshot;
+  context: AuditRequestContext;
+}
+
+export async function writeSystemConfigAuditLog(
+  transaction: Prisma.TransactionClient,
+  input: WriteSystemConfigAuditInput,
+): Promise<void> {
+  await transaction.auditLog.create({
+    data: {
+      actorId: input.actorId,
+      action: input.action,
+      targetType: AuditTargetType.SYSTEM_CONFIG,
+      targetId: input.targetId,
+      summary: input.summary,
+      beforeData: input.beforeData,
+      afterData: input.afterData,
       ipAddress: input.context.ipAddress,
       userAgent: input.context.userAgent,
     },

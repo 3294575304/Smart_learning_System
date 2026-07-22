@@ -1,18 +1,17 @@
 import "server-only";
 
-import { auditUserSnapshotSchema } from "@/services/audit/schemas";
+import { AuditTargetType } from "@prisma/client";
+
+import { auditSnapshotSchema } from "@/services/audit/schemas";
 import type { AuditLogListQuery } from "@/services/audit/schemas";
 import {
   loadAuditLogPage,
   loadAuditTargetUsers,
 } from "@/services/audit/repository";
-import type {
-  AuditLogListResult,
-  AuditUserSnapshot,
-} from "@/services/audit/types";
+import type { AuditLogListResult, AuditSnapshot } from "@/services/audit/types";
 
-function safeSnapshot(value: unknown): AuditUserSnapshot | null {
-  const parsed = auditUserSnapshotSchema.safeParse(value);
+function safeSnapshot(value: unknown): AuditSnapshot | null {
+  const parsed = auditSnapshotSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
@@ -21,7 +20,11 @@ export async function listAuditLogs(
 ): Promise<AuditLogListResult> {
   const { total, records } = await loadAuditLogPage(query);
   const targets = await loadAuditTargetUsers([
-    ...new Set(records.map((record) => record.targetId)),
+    ...new Set(
+      records
+        .filter((record) => record.targetType === AuditTargetType.USER)
+        .map((record) => record.targetId),
+    ),
   ]);
   const targetById = new Map(targets.map((target) => [target.id, target]));
 
@@ -51,6 +54,12 @@ export async function listAuditLogs(
               displayName: target.profile?.displayName ?? target.email,
             }
           : null,
+        targetLabel:
+          record.targetType === AuditTargetType.SYSTEM_CONFIG
+            ? "系统配置"
+            : (target?.profile?.displayName ??
+              target?.email ??
+              record.targetId),
       };
     }),
     pagination: {

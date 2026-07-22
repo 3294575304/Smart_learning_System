@@ -1,6 +1,10 @@
 import type { Role } from "@prisma/client";
 
 import type { AuthenticatedUser } from "@/services/auth/types";
+import {
+  MaintenanceModeError,
+  SelfRegistrationDisabledError,
+} from "@/services/system-config/errors";
 
 export class AuthenticationError extends Error {
   readonly status = 401;
@@ -42,7 +46,9 @@ export function getErrorStatus(error: unknown): number {
   if (
     error instanceof AuthenticationError ||
     error instanceof AuthorizationError ||
-    error instanceof ResourceNotFoundError
+    error instanceof ResourceNotFoundError ||
+    error instanceof MaintenanceModeError ||
+    error instanceof SelfRegistrationDisabledError
   ) {
     return error.status;
   }
@@ -54,7 +60,9 @@ export function getSafeErrorMessage(error: unknown): string {
   if (
     error instanceof AuthenticationError ||
     error instanceof AuthorizationError ||
-    error instanceof ResourceNotFoundError
+    error instanceof ResourceNotFoundError ||
+    error instanceof MaintenanceModeError ||
+    error instanceof SelfRegistrationDisabledError
   ) {
     return error.message;
   }

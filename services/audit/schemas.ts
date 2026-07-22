@@ -54,3 +54,12 @@ export const auditUserSnapshotSchema = z
     status: z.nativeEnum(UserStatus),
   })
   .strict();
+
+export const auditConfigSnapshotSchema = z.record(
+  z.union([z.string(), z.number(), z.boolean(), z.null()]),
+);
+
+export const auditSnapshotSchema = z.union([
+  auditUserSnapshotSchema,
+  auditConfigSnapshotSchema,
+]);

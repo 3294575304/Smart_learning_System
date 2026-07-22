@@ -229,6 +229,15 @@ async function main(): Promise<void> {
   const users = await Promise.all(seedUsers.map(upsertUser));
   const [admin, teacher, teacherTwo, student, studentTwo, studentThree] = users;
 
+  await prisma.systemConfig.upsert({
+    where: { singletonKey: "default" },
+    update: {},
+    create: {
+      singletonKey: "default",
+      updatedById: admin.id,
+    },
+  });
+
   const existingSeedAuditLog = await prisma.auditLog.findFirst({
     where: {
       actorId: admin.id,

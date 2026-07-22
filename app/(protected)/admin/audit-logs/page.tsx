@@ -51,7 +51,7 @@ export default async function AuditLogsPage({
   return (
     <section className="space-y-6">
       <PageHeader
-        description="查看管理员对用户账号执行的重要操作。日志仅提供查询，不提供修改或删除。"
+        description="查看管理员对用户账号和系统配置执行的重要操作。日志仅提供查询，不提供修改或删除。"
         title="管理操作审计"
       />
       <AuditLogFilters query={query} />

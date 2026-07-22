@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { requirePageRole } from "@/services/auth/page-authorization";
+import { getPublicSystemConfig } from "@/services/system-config/service";
 
 export default async function AdminLayout({
   children,
@@ -10,8 +11,14 @@ export default async function AdminLayout({
   children: ReactNode;
 }) {
   const user = await requirePageRole(Role.ADMIN);
+  const config = await getPublicSystemConfig();
   return (
-    <DashboardShell title="管理员工作台" user={user}>
+    <DashboardShell
+      platformAnnouncement={config.platformAnnouncement}
+      platformName={config.platformName}
+      title="管理员工作台"
+      user={user}
+    >
       {children}
     </DashboardShell>
   );

@@ -1,4 +1,9 @@
-import type { AuditAction, Role, UserStatus } from "@prisma/client";
+import type {
+  AuditAction,
+  AuditTargetType,
+  Role,
+  UserStatus,
+} from "@prisma/client";
 
 export interface AuditRequestContext {
   ipAddress: string | null;
@@ -12,6 +17,10 @@ export interface AuditUserSnapshot {
   status: UserStatus;
 }
 
+export type AuditConfigValue = string | number | boolean | null;
+export type AuditConfigSnapshot = Record<string, AuditConfigValue>;
+export type AuditSnapshot = AuditUserSnapshot | AuditConfigSnapshot;
+
 export interface AuditUserReference {
   id: string;
   displayName: string;
@@ -21,16 +30,17 @@ export interface AuditUserReference {
 export interface AuditLogView {
   id: string;
   action: AuditAction;
-  targetType: "USER";
+  targetType: AuditTargetType;
   targetId: string;
   summary: string;
-  beforeData: AuditUserSnapshot | null;
-  afterData: AuditUserSnapshot | null;
+  beforeData: AuditSnapshot | null;
+  afterData: AuditSnapshot | null;
   ipAddress: string | null;
   userAgent: string | null;
   createdAt: Date;
   actor: AuditUserReference;
   target: AuditUserReference | null;
+  targetLabel: string;
 }
 
 export interface AuditLogListResult {

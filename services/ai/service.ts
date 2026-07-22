@@ -9,14 +9,13 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { analyzeStudentPerformance } from "@/services/ai/analyzer";
 import {
   DEFAULT_AI_TIMEOUT_MS,
   MAX_AI_TIMEOUT_MS,
   STUDENT_ANALYSIS_PROMPT_VERSION,
 } from "@/services/ai/constants";
 import { AIAnalysisOperationError } from "@/services/ai/errors";
-import { generateRuleBasedAnalysis } from "@/services/ai/fallback";
+import { executeConfiguredStudentAnalysis } from "@/services/ai/configured-execution";
 import { buildStudentAnalysisInput } from "@/services/ai/input-builder";
 import {
   createLearningAnalysisMetadata,
@@ -30,6 +29,7 @@ import {
   type StudentAnalysisOutput,
 } from "@/services/ai/schemas";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { getSystemConfigValue } from "@/services/system-config/service";
 
 function configuredTimeoutMs(): number {
   const parsed = Number(process.env.AI_TIMEOUT_MS);
@@ -161,6 +161,7 @@ export async function createStudentAnalysis(
   );
   const reused = await existingAnalysis(requestKey);
   if (reused) return reused;
+  const aiAnalysisEnabled = await getSystemConfigValue("aiAnalysisEnabled");
 
   let analysis: { id: string };
   try {
@@ -203,10 +204,10 @@ export async function createStudentAnalysis(
     throw error;
   }
 
-  let provider: AIProvider | null = injectedProvider ?? null;
-  let execution:
-    Awaited<ReturnType<typeof analyzeStudentPerformance>> | undefined;
-  if (!provider) {
+  let provider: AIProvider | null = aiAnalysisEnabled
+    ? (injectedProvider ?? null)
+    : null;
+  if (aiAnalysisEnabled && !provider) {
     try {
       provider = createAIProvider();
     } catch {
@@ -214,21 +215,12 @@ export async function createStudentAnalysis(
     }
   }
 
-  if (provider) {
-    execution = await analyzeStudentPerformance(
-      provider,
-      batch.input,
-      configuredTimeoutMs(),
-    );
-  } else {
-    execution = {
-      output: generateRuleBasedAnalysis(batch.input),
-      retryCount: 0,
-      fallbackUsed: true,
-      errorCode: "PROVIDER_CONFIGURATION_ERROR",
-      latencyMs: 0,
-    };
-  }
+  const execution = await executeConfiguredStudentAnalysis(
+    aiAnalysisEnabled,
+    provider,
+    batch.input,
+    configuredTimeoutMs(),
+  );
 
   const completedAt = new Date();
   await prisma.$transaction(async (transaction) => {

@@ -24,10 +24,16 @@ enum AuditAction {
   USER_ROLE_CHANGED
   USER_ENABLED
   USER_DISABLED
+  SYSTEM_CONFIG_UPDATED
+  MAINTENANCE_MODE_ENABLED
+  MAINTENANCE_MODE_DISABLED
+  AI_FEATURE_ENABLED
+  AI_FEATURE_DISABLED
 }
 
 enum AuditTargetType {
   USER
+  SYSTEM_CONFIG
 }
 
 enum ClassroomStatus {
@@ -167,9 +173,30 @@ model User {
   aiTutoringRecords           AITutoringRecord[]
   authSessions                AuthSession[]
   auditLogs                   AuditLog[]                   @relation("AuditActor")
+  updatedSystemConfigs        SystemConfig[]               @relation("SystemConfigUpdater")
 
   @@index([role, status])
   @@index([createdAt])
+}
+
+model SystemConfig {
+  id                         String   @id @default(cuid())
+  singletonKey               String   @unique @default("default")
+  platformName               String   @default("智学课堂")
+  platformAnnouncement       String   @default("") @db.Text
+  maintenanceMode            Boolean  @default(false)
+  maintenanceMessage         String   @default("系统维护中，请稍后再试。")
+  allowSelfRegistration      Boolean  @default(true)
+  assignmentDefaultDueDays   Int      @default(7)
+  assignmentAutosaveDelayMs  Int      @default(900)
+  aiAnalysisEnabled          Boolean  @default(true)
+  updatedById                String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  updatedBy User? @relation("SystemConfigUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([updatedById])
 }
 
 model AuditLog {

@@ -1,8 +1,4 @@
-import {
-  AuthenticationError,
-  AuthorizationError,
-  ResourceNotFoundError,
-} from "@/services/auth/policy";
+import { getErrorStatus, getSafeErrorMessage } from "@/services/auth/policy";
 
 export class AIAnalysisOperationError extends Error {
   constructor(
@@ -15,25 +11,14 @@ export class AIAnalysisOperationError extends Error {
 }
 
 export function getAIAnalysisErrorStatus(error: unknown): number {
-  if (
-    error instanceof AuthenticationError ||
-    error instanceof AuthorizationError ||
-    error instanceof ResourceNotFoundError ||
-    error instanceof AIAnalysisOperationError
-  ) {
-    return error.status;
-  }
-  return 500;
+  if (error instanceof AIAnalysisOperationError) return error.status;
+  return getErrorStatus(error);
 }
 
 export function getAIAnalysisSafeErrorMessage(error: unknown): string {
-  if (
-    error instanceof AuthenticationError ||
-    error instanceof AuthorizationError ||
-    error instanceof ResourceNotFoundError ||
-    error instanceof AIAnalysisOperationError
-  ) {
-    return error.message;
-  }
-  return "学情分析服务暂时不可用，请稍后重试";
+  if (error instanceof AIAnalysisOperationError) return error.message;
+  const safeMessage = getSafeErrorMessage(error);
+  return getErrorStatus(error) === 500
+    ? "学情分析服务暂时不可用，请稍后重试"
+    : safeMessage;
 }

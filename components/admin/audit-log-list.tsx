@@ -4,7 +4,28 @@ import {
   USER_STATUS_LABELS,
 } from "@/components/admin/user-labels";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import type { AuditLogView, AuditUserSnapshot } from "@/services/audit/types";
+import type {
+  AuditConfigSnapshot,
+  AuditLogView,
+  AuditSnapshot,
+  AuditUserSnapshot,
+} from "@/services/audit/types";
+import {
+  systemConfigDefinitions,
+  type SystemConfigKey,
+} from "@/services/system-config/definitions";
+
+function isUserSnapshot(
+  snapshot: AuditSnapshot | null,
+): snapshot is AuditUserSnapshot {
+  return Boolean(snapshot && "email" in snapshot && "role" in snapshot);
+}
+
+function displayValue(value: string | number | boolean | null | undefined) {
+  if (value === undefined || value === null || value === "") return "—";
+  if (typeof value === "boolean") return value ? "开启" : "关闭";
+  return String(value);
+}
 
 function snapshotRows(
   before: AuditUserSnapshot | null,
@@ -24,7 +45,25 @@ function snapshotRows(
       after ? USER_STATUS_LABELS[after.status] : undefined,
     ],
   ] as const;
-  return fields.filter(([, left, right]) => left !== right && (left || right));
+  return fields.filter(([, left, right]) => left !== right);
+}
+
+function configSnapshotRows(
+  before: AuditConfigSnapshot | null,
+  after: AuditConfigSnapshot | null,
+) {
+  const keys = [
+    ...new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]),
+  ];
+  return keys.flatMap((key) => {
+    if (!(key in systemConfigDefinitions)) return [];
+    const configKey = key as SystemConfigKey;
+    const left = before?.[key];
+    const right = after?.[key];
+    return left === right
+      ? []
+      : [[systemConfigDefinitions[configKey].label, left, right] as const];
+  });
 }
 
 export function AuditLogList({ logs }: { logs: AuditLogView[] }) {
@@ -40,7 +79,13 @@ export function AuditLogList({ logs }: { logs: AuditLogView[] }) {
   return (
     <div className="space-y-3">
       {logs.map((log) => {
-        const changes = snapshotRows(log.beforeData, log.afterData);
+        const changes =
+          isUserSnapshot(log.beforeData) || isUserSnapshot(log.afterData)
+            ? snapshotRows(
+                isUserSnapshot(log.beforeData) ? log.beforeData : null,
+                isUserSnapshot(log.afterData) ? log.afterData : null,
+              )
+            : configSnapshotRows(log.beforeData, log.afterData);
         return (
           <article className="bg-card rounded-xl border p-4" key={log.id}>
             <div className="flex flex-col justify-between gap-2 sm:flex-row">
@@ -50,7 +95,7 @@ export function AuditLogList({ logs }: { logs: AuditLogView[] }) {
                 </p>
                 <p className="text-muted-foreground mt-1 text-sm">
                   操作人：{log.actor.displayName}（{log.actor.email}） ·
-                  操作对象：{log.target?.displayName ?? log.targetId}
+                  操作对象：{log.targetLabel}
                 </p>
               </div>
               <time className="text-muted-foreground shrink-0 text-sm">
@@ -70,7 +115,7 @@ export function AuditLogList({ logs }: { logs: AuditLogView[] }) {
                     >
                       <dt className="text-muted-foreground">{label}</dt>
                       <dd>
-                        {before ?? "—"} → {after ?? "—"}
+                        {displayValue(before)} → {displayValue(after)}
                       </dd>
                     </div>
                   ))}

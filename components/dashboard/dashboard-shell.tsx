@@ -14,6 +14,7 @@ import {
   ScrollText,
   ShieldCheck,
   Sparkles,
+  Settings,
   Users,
   X,
 } from "lucide-react";
@@ -29,6 +30,8 @@ import type { AuthenticatedUser } from "@/services/auth/types";
 interface DashboardShellProps {
   user: AuthenticatedUser;
   title: string;
+  platformName: string;
+  platformAnnouncement?: string;
   children: ReactNode;
 }
 
@@ -50,6 +53,7 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
     { href: "/admin", label: "平台概览", icon: ShieldCheck },
     { href: "/admin/users", label: "用户管理", icon: Users },
     { href: "/admin/audit-logs", label: "审计日志", icon: ScrollText },
+    { href: "/admin/system-config", label: "系统配置", icon: Settings },
   ],
   TEACHER: [
     { href: "/teacher", label: "工作台", icon: Home },
@@ -71,6 +75,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   admin: "平台概览",
   users: "用户管理",
   "audit-logs": "审计日志",
+  "system-config": "系统配置",
   teacher: "教师工作台",
   student: "学习主页",
   classrooms: "班级管理",
@@ -179,7 +184,13 @@ function SidebarNavigation({
   );
 }
 
-export function DashboardShell({ user, title, children }: DashboardShellProps) {
+export function DashboardShell({
+  user,
+  title,
+  platformName,
+  platformAnnouncement = "",
+  children,
+}: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigationItems = NAVIGATION[user.role];
@@ -210,7 +221,7 @@ export function DashboardShell({ user, title, children }: DashboardShellProps) {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900 text-white">
               <GraduationCap className="h-5 w-5" />
             </span>
-            <span>智学课堂</span>
+            <span>{platformName}</span>
           </Link>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -254,7 +265,7 @@ export function DashboardShell({ user, title, children }: DashboardShellProps) {
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900 text-white">
                   <GraduationCap className="h-5 w-5" />
                 </span>
-                智学课堂
+                {platformName}
               </Link>
               <button
                 aria-label="关闭菜单"
@@ -318,6 +329,14 @@ export function DashboardShell({ user, title, children }: DashboardShellProps) {
           </div>
         </header>
         <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          {platformAnnouncement ? (
+            <div
+              className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+              role="status"
+            >
+              {platformAnnouncement}
+            </div>
+          ) : null}
           {children}
         </main>
       </div>

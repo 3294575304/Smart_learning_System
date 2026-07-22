@@ -40,6 +40,7 @@ interface SavedAnswer {
 }
 
 interface Props {
+  autosaveDelayMs: number;
   submission: {
     id: string;
     assignmentTitle: string;
@@ -122,7 +123,7 @@ function apiAnswers(
   });
 }
 
-export function AnswerSheet({ submission }: Props) {
+export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
   const router = useRouter();
   const storageKey = `assignment-draft:${submission.id}`;
   const [answers, setAnswers] = useState<AnswerMap>(() =>
@@ -255,9 +256,12 @@ export function AnswerSheet({ submission }: Props) {
     if (!hydratedRef.current) return;
     persistLocalDraft(answers, timingTracker.checkpoint());
     setSaveState("idle");
-    const timer = window.setTimeout(() => void persist(answers), 900);
+    const timer = window.setTimeout(
+      () => void persist(answers),
+      autosaveDelayMs,
+    );
     return () => window.clearTimeout(timer);
-  }, [answers, persist, persistLocalDraft, timingTracker]);
+  }, [answers, autosaveDelayMs, persist, persistLocalDraft, timingTracker]);
 
   async function submit() {
     if (!window.confirm("确认提交作业？提交后本次答案将不能修改。")) return;

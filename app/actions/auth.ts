@@ -16,6 +16,12 @@ import {
 } from "@/services/auth/session";
 import type { LoginInput, RegisterInput } from "@/services/auth/schemas";
 import type { ActionResult } from "@/types/action-result";
+import {
+  MaintenanceModeError,
+  SelfRegistrationDisabledError,
+} from "@/services/system-config/errors";
+import { assertRegistrationAvailable } from "@/services/system-config/policy";
+import { getSystemConfig } from "@/services/system-config/service";
 
 interface RedirectResult {
   redirectTo: string;
@@ -97,6 +103,7 @@ export async function registerAction(
   }
 
   try {
+    assertRegistrationAvailable(await getSystemConfig());
     const passwordHash = await hashPassword(parsed.data.password);
     const user = await prisma.$transaction(async (transaction) => {
       return transaction.user.create({
@@ -118,6 +125,12 @@ export async function registerAction(
       data: { redirectTo: roleHomePath(user.role) },
     };
   } catch (error: unknown) {
+    if (
+      error instanceof SelfRegistrationDisabledError ||
+      error instanceof MaintenanceModeError
+    ) {
+      return { success: false, error: error.message, status: error.status };
+    }
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"

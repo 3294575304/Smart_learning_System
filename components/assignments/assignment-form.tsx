@@ -40,6 +40,7 @@ interface AssignmentFormProps {
   classrooms: Array<{ id: string; name: string }>;
   questions: EditorQuestion[];
   assignment?: TeacherAssignmentView;
+  defaultDueDays?: number;
 }
 
 function datetimeLocal(date: Date | null | undefined): string {
@@ -54,6 +55,7 @@ export function AssignmentForm({
   classrooms,
   questions,
   assignment,
+  defaultDueDays = 7,
 }: AssignmentFormProps) {
   const router = useRouter();
   const [selected, setSelected] = useState<SelectedQuestion[]>(() =>
@@ -68,14 +70,18 @@ export function AssignmentForm({
   const [submittingAction, setSubmittingAction] = useState<
     "save" | "publish" | null
   >(null);
+  const defaultPublishedAt = assignment?.publishedAt ?? new Date();
+  const defaultDueAt =
+    assignment?.dueAt ??
+    new Date(defaultPublishedAt.getTime() + defaultDueDays * 86_400_000);
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: assignment?.title ?? "",
       description: assignment?.description ?? "",
       classroomId: assignment?.classroom.id ?? classrooms[0]?.id ?? "",
-      publishedAt: datetimeLocal(assignment?.publishedAt),
-      dueAt: datetimeLocal(assignment?.dueAt),
+      publishedAt: datetimeLocal(defaultPublishedAt),
+      dueAt: datetimeLocal(defaultDueAt),
       allowResubmission: assignment?.allowResubmission ?? false,
     },
   });

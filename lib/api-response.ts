@@ -14,7 +14,12 @@ export function apiError(
   fieldErrors?: Record<string, string[]>,
 ): NextResponse {
   return NextResponse.json(
-    { success: false, error, ...(fieldErrors ? { fieldErrors } : {}) },
+    {
+      success: false,
+      error,
+      ...(status === 503 ? { code: "SYSTEM_MAINTENANCE" } : {}),
+      ...(fieldErrors ? { fieldErrors } : {}),
+    },
     { status },
   );
 }

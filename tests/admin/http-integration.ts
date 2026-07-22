@@ -3,7 +3,14 @@ import { createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { resolve } from "node:path";
-import { AuditAction, PrismaClient, Role, UserStatus } from "@prisma/client";
+import {
+  AuditAction,
+  AuditTargetType,
+  PrismaClient,
+  Role,
+  type SystemConfig,
+  UserStatus,
+} from "@prisma/client";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
 
@@ -34,6 +41,7 @@ interface AuditListResult {
   items: Array<{
     id: string;
     action: AuditAction;
+    targetType: AuditTargetType;
     targetId: string;
     summary: string;
     beforeData: unknown;
@@ -41,6 +49,20 @@ interface AuditListResult {
     createdAt: string;
   }>;
   pagination: { total: number };
+}
+
+interface SystemConfigView {
+  values: {
+    platformName: string;
+    platformAnnouncement: string;
+    maintenanceMode: boolean;
+    maintenanceMessage: string;
+    allowSelfRegistration: boolean;
+    assignmentDefaultDueDays: number;
+    assignmentAutosaveDelayMs: number;
+    aiAnalysisEnabled: boolean;
+  };
+  changedKeys?: string[];
 }
 
 const prisma = new PrismaClient();
@@ -51,6 +73,9 @@ const sessionIds: string[] = [];
 const createdUserIds: string[] = [];
 const testSuffix = randomBytes(5).toString("hex");
 const createdEmail = `admin-user-it-${testSuffix}@example.com`;
+const integrationStartedAt = new Date();
+let originalSystemConfig: SystemConfig | null | undefined;
+let systemConfigTargetId: string | null = null;
 
 const server = spawn(
   process.execPath,
@@ -137,7 +162,12 @@ async function main(): Promise<void> {
       sessionCookie(student.id),
     ]);
 
+    originalSystemConfig = await prisma.systemConfig.findUnique({
+      where: { singletonKey: "default" },
+    });
+
     assert.equal((await requestJson("/api/admin/users")).status, 401);
+    assert.equal((await requestJson("/api/admin/system-config")).status, 401);
     assert.equal(
       (await requestJson("/api/admin/users", teacherCookie)).status,
       403,
@@ -147,12 +177,209 @@ async function main(): Promise<void> {
       403,
     );
     assert.equal(
+      (await requestJson("/api/admin/system-config", teacherCookie)).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson("/api/admin/system-config", studentCookie, "PATCH", {
+          updates: { platformName: "越权修改" },
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
       (await requestJson("/api/admin/audit-logs", teacherCookie)).status,
       403,
     );
     assert.equal(
       (await requestJson("/api/admin/users?page=0", adminCookie)).status,
       400,
+    );
+
+    const configResponse = await requestJson(
+      "/api/admin/system-config",
+      adminCookie,
+    );
+    assert.equal(configResponse.status, 200);
+    const initialConfig =
+      (await configResponse.json()) as ApiSuccess<SystemConfigView>;
+    assert.equal(typeof initialConfig.data.values.platformName, "string");
+    const initialConfigJson = JSON.stringify(initialConfig);
+    assert.equal(initialConfigJson.includes("AI_API_KEY"), false);
+    assert.equal(initialConfigJson.includes("DATABASE_URL"), false);
+    assert.equal(initialConfigJson.includes("apiKey"), false);
+    if (initialConfig.data.values.maintenanceMode) {
+      assert.equal(
+        (
+          await requestJson("/api/admin/system-config", adminCookie, "PATCH", {
+            updates: { maintenanceMode: false },
+          })
+        ).status,
+        200,
+      );
+    }
+    assert.equal(
+      (
+        await requestJson("/api/admin/system-config", adminCookie, "PATCH", {
+          updates: { apiKey: "forbidden" },
+        })
+      ).status,
+      422,
+    );
+    assert.equal(
+      (
+        await requestJson("/api/admin/system-config", adminCookie, "PATCH", {
+          updates: { assignmentAutosaveDelayMs: 100 },
+        })
+      ).status,
+      422,
+    );
+
+    const updatedPlatformName = `智学集成测试-${testSuffix}`;
+    const updateConfigResponse = await requestJson(
+      "/api/admin/system-config",
+      adminCookie,
+      "PATCH",
+      {
+        updates: {
+          platformName: updatedPlatformName,
+          assignmentDefaultDueDays: 14,
+        },
+      },
+      { "user-agent": "SystemConfigIntegration/1.0" },
+    );
+    assert.equal(updateConfigResponse.status, 200);
+    const updatedConfig =
+      (await updateConfigResponse.json()) as ApiSuccess<SystemConfigView>;
+    assert.equal(updatedConfig.data.values.platformName, updatedPlatformName);
+    assert.equal(updatedConfig.data.values.assignmentDefaultDueDays, 14);
+    systemConfigTargetId = (
+      await prisma.systemConfig.findUniqueOrThrow({
+        where: { singletonKey: "default" },
+        select: { id: true },
+      })
+    ).id;
+
+    const configAuditCount = await prisma.auditLog.count({
+      where: { targetId: systemConfigTargetId },
+    });
+    assert.equal(
+      (
+        await requestJson("/api/admin/system-config", adminCookie, "PATCH", {
+          updates: { platformName: updatedPlatformName },
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      await prisma.auditLog.count({
+        where: { targetId: systemConfigTargetId },
+      }),
+      configAuditCount,
+    );
+
+    const invalidBatch = await requestJson(
+      "/api/admin/system-config",
+      adminCookie,
+      "PATCH",
+      {
+        updates: {
+          platformName: "不应部分保存",
+          assignmentAutosaveDelayMs: 1,
+        },
+      },
+    );
+    assert.equal(invalidBatch.status, 422);
+    const afterInvalid = (await (
+      await requestJson("/api/admin/system-config", adminCookie)
+    ).json()) as ApiSuccess<SystemConfigView>;
+    assert.equal(afterInvalid.data.values.platformName, updatedPlatformName);
+
+    assert.equal(
+      (
+        await requestJson("/api/admin/system-config", adminCookie, "PATCH", {
+          updates: {
+            maintenanceMode: true,
+            maintenanceMessage: "系统配置集成测试维护中",
+          },
+        })
+      ).status,
+      200,
+    );
+    const maintenanceResponse = await requestJson(
+      "/api/teacher/classrooms",
+      teacherCookie,
+    );
+    assert.equal(maintenanceResponse.status, 503);
+    assert.equal(
+      ((await maintenanceResponse.json()) as { error: string }).error,
+      "系统配置集成测试维护中",
+    );
+    const maintenanceBody = (await requestJson(
+      "/api/teacher/classrooms",
+      teacherCookie,
+    ).then((response) => response.json())) as { code: string };
+    assert.equal(maintenanceBody.code, "SYSTEM_MAINTENANCE");
+    assert.equal(
+      (await requestJson("/api/admin/system-config", adminCookie)).status,
+      200,
+    );
+    assert.equal(
+      (
+        await requestJson("/api/admin/system-config", adminCookie, "PATCH", {
+          updates: { maintenanceMode: false },
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await prisma.auditLog.count({
+        where: {
+          targetId: systemConfigTargetId,
+          action: AuditAction.MAINTENANCE_MODE_ENABLED,
+        },
+      })) > 0,
+      true,
+    );
+    const configAuditResponse = await requestJson(
+      `/api/admin/audit-logs?action=MAINTENANCE_MODE_ENABLED&targetId=${systemConfigTargetId}`,
+      adminCookie,
+    );
+    assert.equal(configAuditResponse.status, 200);
+    const configAudits =
+      (await configAuditResponse.json()) as ApiSuccess<AuditListResult>;
+    assert.equal(configAudits.data.items.length > 0, true);
+    assert.equal(
+      configAudits.data.items.every(
+        (item) =>
+          item.action === AuditAction.MAINTENANCE_MODE_ENABLED &&
+          item.targetType === AuditTargetType.SYSTEM_CONFIG,
+      ),
+      true,
+    );
+    const configAuditJson = JSON.stringify(configAudits);
+    assert.equal(configAuditJson.includes("AI_API_KEY"), false);
+    assert.equal(configAuditJson.includes("DATABASE_URL"), false);
+
+    assert.equal(
+      (
+        await requestJson("/api/admin/system-config", adminCookie, "PATCH", {
+          updates: { allowSelfRegistration: false },
+        })
+      ).status,
+      200,
+    );
+    const closedRegistrationPage = await requestJson("/register");
+    assert.equal(closedRegistrationPage.status, 200);
+    assert.match(await closedRegistrationPage.text(), /未开放自主注册/);
+    assert.equal(
+      (
+        await requestJson("/api/admin/system-config", adminCookie, "PATCH", {
+          updates: { allowSelfRegistration: true },
+        })
+      ).status,
+      200,
     );
 
     const initialListResponse = await requestJson(
@@ -437,6 +664,37 @@ async function main(): Promise<void> {
       "Admin HTTP integration checks passed: authentication, role authorization, strict validation, database pagination and filters, safe DTOs, user creation/detail/update, unique conflicts, self/last-admin protections, session invalidation, transactional rollback/no-op behavior, and safe audit pagination/filters/order.",
     );
   } finally {
+    if (systemConfigTargetId) {
+      await prisma.auditLog.deleteMany({
+        where: {
+          targetType: AuditTargetType.SYSTEM_CONFIG,
+          targetId: systemConfigTargetId,
+          createdAt: { gte: integrationStartedAt },
+        },
+      });
+    }
+    if (originalSystemConfig === null) {
+      await prisma.systemConfig.deleteMany({
+        where: { singletonKey: "default" },
+      });
+    } else if (originalSystemConfig) {
+      await prisma.systemConfig.update({
+        where: { singletonKey: "default" },
+        data: {
+          platformName: originalSystemConfig.platformName,
+          platformAnnouncement: originalSystemConfig.platformAnnouncement,
+          maintenanceMode: originalSystemConfig.maintenanceMode,
+          maintenanceMessage: originalSystemConfig.maintenanceMessage,
+          allowSelfRegistration: originalSystemConfig.allowSelfRegistration,
+          assignmentDefaultDueDays:
+            originalSystemConfig.assignmentDefaultDueDays,
+          assignmentAutosaveDelayMs:
+            originalSystemConfig.assignmentAutosaveDelayMs,
+          aiAnalysisEnabled: originalSystemConfig.aiAnalysisEnabled,
+          updatedById: originalSystemConfig.updatedById,
+        },
+      });
+    }
     if (createdUserIds.length > 0) {
       await prisma.auditLog.deleteMany({
         where: { targetId: { in: createdUserIds } },

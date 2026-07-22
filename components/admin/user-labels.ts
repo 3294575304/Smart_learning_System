@@ -17,4 +17,9 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   USER_ROLE_CHANGED: "修改角色",
   USER_ENABLED: "启用用户",
   USER_DISABLED: "禁用用户",
+  SYSTEM_CONFIG_UPDATED: "更新系统配置",
+  MAINTENANCE_MODE_ENABLED: "开启维护模式",
+  MAINTENANCE_MODE_DISABLED: "关闭维护模式",
+  AI_FEATURE_ENABLED: "开启 AI 功能",
+  AI_FEATURE_DISABLED: "关闭 AI 功能",
 };
