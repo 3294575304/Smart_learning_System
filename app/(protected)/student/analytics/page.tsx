@@ -77,7 +77,8 @@ export default async function StudentAnalyticsPage() {
               </dl>
               <p className="text-muted-foreground mt-4 text-xs">
                 数据更新时间：
-                {overview.latestAnalysis.completedAt?.toLocaleString("zh-CN") ?? "未提供"}
+                {overview.latestAnalysis.completedAt?.toLocaleString("zh-CN") ??
+                  "未提供"}
               </p>
             </div>
           ) : (
@@ -107,16 +108,26 @@ export default async function StudentAnalyticsPage() {
               <article className="rounded-lg border p-4" key={mastery.id}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="truncate text-sm font-medium">{mastery.name}</h3>
-                    <p className="text-muted-foreground mt-1 text-xs">{mastery.code}</p>
+                    <h3 className="truncate text-sm font-medium">
+                      {mastery.name}
+                    </h3>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {mastery.code}
+                    </p>
                   </div>
-                  <span className="text-lg font-semibold">{mastery.masteryScore}%</span>
+                  <span className="text-lg font-semibold">
+                    {mastery.masteryScore}%
+                  </span>
                 </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
-                  <div className="h-full rounded-full bg-gray-800" style={{ width: `${mastery.masteryScore}%` }} />
+                  <div
+                    className="h-full rounded-full bg-gray-800"
+                    style={{ width: `${mastery.masteryScore}%` }}
+                  />
                 </div>
                 <p className="text-muted-foreground mt-2 text-xs">
-                  已答 {mastery.answeredCount} 题 · 正确 {mastery.correctCount} 题 · 趋势 {mastery.trend}
+                  已答 {mastery.answeredCount} 题 · 正确 {mastery.correctCount}{" "}
+                  题 · 趋势 {mastery.trend}
                 </p>
               </article>
             ))}
@@ -136,9 +147,13 @@ export default async function StudentAnalyticsPage() {
                     {INSIGHT_LABELS[insight.type]}
                   </span>
                 </div>
-                <p className="text-muted-foreground mt-2 text-sm leading-6">{insight.detail}</p>
+                <p className="text-muted-foreground mt-2 text-sm leading-6">
+                  {insight.detail}
+                </p>
                 {insight.recommendedAction ? (
-                  <p className="mt-3 rounded-md bg-gray-50 p-3 text-sm">{insight.recommendedAction}</p>
+                  <p className="mt-3 rounded-md bg-gray-50 p-3 text-sm">
+                    {insight.recommendedAction}
+                  </p>
                 ) : null}
               </article>
             ))}

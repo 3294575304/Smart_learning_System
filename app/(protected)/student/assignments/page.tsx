@@ -60,7 +60,8 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
   const now = new Date();
   const filtered = assignments.filter(
     (assignment) =>
-      query.status === "ALL" || assignmentState(assignment, now) === query.status,
+      query.status === "ALL" ||
+      assignmentState(assignment, now) === query.status,
   );
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const page = Math.min(query.page, Math.max(totalPages, 1));
@@ -73,7 +74,10 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
         title="我的作业"
       />
 
-      <nav aria-label="作业状态筛选" className="flex gap-2 overflow-x-auto pb-1">
+      <nav
+        aria-label="作业状态筛选"
+        className="flex gap-2 overflow-x-auto pb-1"
+      >
         {FILTERS.map((filter) => (
           <Link
             aria-current={query.status === filter.value ? "page" : undefined}

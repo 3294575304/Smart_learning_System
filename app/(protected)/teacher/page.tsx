@@ -101,7 +101,10 @@ export default async function TeacherPage() {
                 最近已完成批改的 8 次学生提交
               </p>
             </div>
-            <Link className="text-sm font-medium hover:underline" href="/teacher/results">
+            <Link
+              className="text-sm font-medium hover:underline"
+              href="/teacher/results"
+            >
               查看统计
             </Link>
           </div>
@@ -125,9 +128,12 @@ export default async function TeacherPage() {
               {dashboard.weakKnowledgePoints.map((knowledgePoint) => (
                 <div key={knowledgePoint.id}>
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="truncate font-medium">{knowledgePoint.name}</span>
+                    <span className="truncate font-medium">
+                      {knowledgePoint.name}
+                    </span>
                     <span className="text-muted-foreground shrink-0">
-                      {knowledgePoint.accuracy}% · {knowledgePoint.answeredCount} 题
+                      {knowledgePoint.accuracy}% ·{" "}
+                      {knowledgePoint.answeredCount} 题
                     </span>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
@@ -147,7 +153,10 @@ export default async function TeacherPage() {
         <section className="bg-card rounded-xl border p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold">最近作业</h2>
-            <Link className="text-sm font-medium hover:underline" href="/teacher/assignments">
+            <Link
+              className="text-sm font-medium hover:underline"
+              href="/teacher/assignments"
+            >
               全部作业
             </Link>
           </div>
@@ -155,7 +164,10 @@ export default async function TeacherPage() {
             <div className="mt-4">
               <EmptyState
                 action={
-                  <Link className="text-sm font-medium underline" href="/teacher/assignments/new">
+                  <Link
+                    className="text-sm font-medium underline"
+                    href="/teacher/assignments/new"
+                  >
                     创建第一份作业
                   </Link>
                 }
@@ -178,9 +190,12 @@ export default async function TeacherPage() {
                   key={assignment.id}
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{assignment.title}</p>
+                    <p className="truncate text-sm font-medium">
+                      {assignment.title}
+                    </p>
                     <p className="text-muted-foreground mt-1 truncate text-xs">
-                      {assignment.classroomName} · {assignment.submissionCount} 份提交
+                      {assignment.classroomName} · {assignment.submissionCount}{" "}
+                      份提交
                       {assignment.dueAt
                         ? ` · ${assignment.dueAt.toLocaleDateString("zh-CN")} 截止`
                         : ""}
@@ -200,7 +215,10 @@ export default async function TeacherPage() {
         <section className="bg-card rounded-xl border p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold">最近活跃班级</h2>
-            <Link className="text-sm font-medium hover:underline" href="/teacher/classrooms">
+            <Link
+              className="text-sm font-medium hover:underline"
+              href="/teacher/classrooms"
+            >
               班级管理
             </Link>
           </div>
@@ -208,7 +226,10 @@ export default async function TeacherPage() {
             <div className="mt-4">
               <EmptyState
                 action={
-                  <Link className="text-sm font-medium underline" href="/teacher/classrooms#new-classroom">
+                  <Link
+                    className="text-sm font-medium underline"
+                    href="/teacher/classrooms#new-classroom"
+                  >
                     创建第一个班级
                   </Link>
                 }
@@ -227,7 +248,9 @@ export default async function TeacherPage() {
                   key={classroom.id}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-medium">{classroom.name}</p>
+                    <p className="truncate text-sm font-medium">
+                      {classroom.name}
+                    </p>
                     <ArrowRight className="text-muted-foreground h-4 w-4 shrink-0" />
                   </div>
                   <p className="text-muted-foreground mt-2 flex items-center gap-1 text-xs">

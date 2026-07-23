@@ -85,7 +85,10 @@ export default async function StudentPage() {
                 越接近截止时间的作业排在越前
               </p>
             </div>
-            <Link className="text-sm font-medium hover:underline" href="/student/assignments">
+            <Link
+              className="text-sm font-medium hover:underline"
+              href="/student/assignments"
+            >
               全部作业
             </Link>
           </div>
@@ -112,9 +115,12 @@ export default async function StudentPage() {
                     key={assignment.id}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{assignment.title}</p>
+                      <p className="truncate text-sm font-medium">
+                        {assignment.title}
+                      </p>
                       <p className="text-muted-foreground mt-1 text-xs">
-                        {assignment.classroomName} · {assignment.questionCount} 题
+                        {assignment.classroomName} · {assignment.questionCount}{" "}
+                        题
                       </p>
                     </div>
                     <span
@@ -140,7 +146,10 @@ export default async function StudentPage() {
         <section className="bg-card rounded-xl border p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold">薄弱知识点</h2>
-            <Link className="text-sm font-medium hover:underline" href="/student/analytics">
+            <Link
+              className="text-sm font-medium hover:underline"
+              href="/student/analytics"
+            >
               查看学情
             </Link>
           </div>
@@ -153,7 +162,9 @@ export default async function StudentPage() {
               {dashboard.weakKnowledgePoints.map((knowledgePoint) => (
                 <div key={knowledgePoint.id}>
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="truncate font-medium">{knowledgePoint.name}</span>
+                    <span className="truncate font-medium">
+                      {knowledgePoint.name}
+                    </span>
                     <span className="text-muted-foreground shrink-0">
                       {knowledgePoint.masteryScore}%
                     </span>
@@ -175,7 +186,10 @@ export default async function StudentPage() {
         <section className="bg-card rounded-xl border p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold">学习趋势</h2>
-            <Link className="text-sm font-medium hover:underline" href="/student/results">
+            <Link
+              className="text-sm font-medium hover:underline"
+              href="/student/results"
+            >
               我的成绩
             </Link>
           </div>
@@ -193,7 +207,10 @@ export default async function StudentPage() {
                 推荐原因来自现有规则或 AI 分析
               </p>
             </div>
-            <Link className="text-sm font-medium hover:underline" href="/student/recommendations">
+            <Link
+              className="text-sm font-medium hover:underline"
+              href="/student/recommendations"
+            >
               全部推荐
             </Link>
           </div>
@@ -211,7 +228,9 @@ export default async function StudentPage() {
                   key={recommendation.id}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-medium">{recommendation.title}</p>
+                    <p className="text-sm font-medium">
+                      {recommendation.title}
+                    </p>
                     <span className="text-muted-foreground shrink-0 text-xs">
                       难度 {recommendation.difficulty}
                     </span>

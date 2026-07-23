@@ -238,7 +238,11 @@ export const questionListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
   scope: z.enum(["OWNED", "PUBLIC"]).default("OWNED"),
-  keyword: z.string().trim().max(120, "搜索关键词不能超过 120 个字符").optional(),
+  keyword: z
+    .string()
+    .trim()
+    .max(120, "搜索关键词不能超过 120 个字符")
+    .optional(),
   type: z.nativeEnum(QuestionType).optional(),
   difficulty: z.coerce.number().int().min(1).max(5).optional(),
   knowledgePointId: z.string().cuid("知识点 ID 格式无效").optional(),

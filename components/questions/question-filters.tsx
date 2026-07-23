@@ -42,7 +42,10 @@ export function QuestionFilters({
 
   return (
     <div className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
-      <form className="flex gap-2 sm:col-span-2 lg:col-span-4" onSubmit={submitSearch}>
+      <form
+        className="flex gap-2 sm:col-span-2 lg:col-span-4"
+        onSubmit={submitSearch}
+      >
         <label className="min-w-0 flex-1 space-y-1">
           <span className="text-xs font-medium">搜索题目</span>
           <input

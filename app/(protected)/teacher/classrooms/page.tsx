@@ -23,7 +23,9 @@ export default async function TeacherClassroomsPage() {
         <section>
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="font-semibold">全部班级</h2>
-            <span className="text-muted-foreground text-sm">共 {classrooms.length} 个</span>
+            <span className="text-muted-foreground text-sm">
+              共 {classrooms.length} 个
+            </span>
           </div>
           {classrooms.length === 0 ? (
             <EmptyState
@@ -41,7 +43,9 @@ export default async function TeacherClassroomsPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="truncate font-semibold">{classroom.name}</h3>
+                      <h3 className="truncate font-semibold">
+                        {classroom.name}
+                      </h3>
                       <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
                         {classroom.description ?? "暂无班级说明"}
                       </p>
@@ -53,7 +57,9 @@ export default async function TeacherClassroomsPage() {
                           : "bg-gray-100 text-gray-600"
                       }`}
                     >
-                      {classroom.status === ClassroomStatus.ACTIVE ? "开放" : "已关闭"}
+                      {classroom.status === ClassroomStatus.ACTIVE
+                        ? "开放"
+                        : "已关闭"}
                     </span>
                   </div>
                   <div className="text-muted-foreground mt-5 flex items-center justify-between text-xs">

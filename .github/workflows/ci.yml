@@ -26,18 +26,40 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/smart_learning_build?schema=public
       TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/smart_learning_test?schema=public
       AI_PROVIDER: mock
+      AI_MODEL: mock-student-analyzer-v1
       AI_PSEUDONYM_SALT: ci-pseudonym-salt-change-me
+      NOTIFICATION_JOB_SECRET: ci-notification-job-secret-change-me
+      SEED_ADMIN_EMAIL: admin@example.com
+      SEED_ADMIN_PASSWORD: Admin123!
+      SEED_TEACHER_EMAIL: teacher@example.com
+      SEED_TEACHER_PASSWORD: Teacher123!
+      SEED_STUDENT_EMAIL: student@example.com
+      SEED_STUDENT_PASSWORD: Student123!
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
+      - name: Check formatting
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Check PostgreSQL health
+        run: pg_isready -h 127.0.0.1 -p 5432 -U postgres -d smart_learning_test
       - name: Create build database
         run: psql "postgresql://postgres:postgres@127.0.0.1:5432/postgres" -c "CREATE DATABASE smart_learning_build"
-      - run: npm test
-      - run: npm run test:integration
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm run build
+      - name: Apply Prisma migrations to build database
+        run: npx prisma migrate deploy
+      - name: Database integration tests
+        run: npm run test:integration
+      - name: Build
+        run: npm run build
+      - name: HTTP integration tests
+        run: npm run test:http-integration

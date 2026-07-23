@@ -7,7 +7,9 @@ import { PrismaClient, UserStatus } from "@prisma/client";
 import { compare } from "bcryptjs";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
+import { assertIsolatedIntegrationEnvironment } from "../integration/database";
 
+assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
 const port = 3100;
 const baseUrl = `http://127.0.0.1:${port}`;

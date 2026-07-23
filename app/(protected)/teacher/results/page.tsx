@@ -135,7 +135,8 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                     {valueText(item.averagePercentage, "%")}
                   </td>
                   <td className="px-4 py-4">
-                    {valueText(item.highestScore)} / {valueText(item.lowestScore)}
+                    {valueText(item.highestScore)} /{" "}
+                    {valueText(item.lowestScore)}
                   </td>
                   <td className="px-4 py-4">
                     {item.pendingReviewCount > 0 ? (

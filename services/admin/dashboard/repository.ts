@@ -1,11 +1,6 @@
 import "server-only";
 
-import {
-  AIRecordStatus,
-  Prisma,
-  Role,
-  SubmissionStatus,
-} from "@prisma/client";
+import { AIRecordStatus, Prisma, Role, SubmissionStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import type { DashboardActivity } from "@/services/admin/dashboard/types";

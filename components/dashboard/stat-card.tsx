@@ -19,7 +19,9 @@ export function StatCard({ label, value, hint, icon: Icon }: StatCardProps) {
           <Icon className="h-5 w-5" />
         </span>
       </div>
-      {hint ? <p className="text-muted-foreground mt-3 text-xs">{hint}</p> : null}
+      {hint ? (
+        <p className="text-muted-foreground mt-3 text-xs">{hint}</p>
+      ) : null}
     </article>
   );
 }

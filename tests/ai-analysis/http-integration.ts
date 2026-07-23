@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
+import { assertIsolatedIntegrationEnvironment } from "../integration/database";
 
 interface ApiEnvelope {
   success: boolean;
@@ -17,6 +18,7 @@ interface ApiEnvelope {
   error?: string;
 }
 
+assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
 const port = 3105;
 const baseUrl = `http://127.0.0.1:${port}`;

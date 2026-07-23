@@ -175,7 +175,9 @@ export async function getTeacherDashboard(
   for (const answer of knowledgePointAnswers) {
     for (const knowledgePoint of answer.assignmentQuestion
       .knowledgePointSnapshots) {
-      const current = knowledgePointMap.get(knowledgePoint.knowledgePointId) ?? {
+      const current = knowledgePointMap.get(
+        knowledgePoint.knowledgePointId,
+      ) ?? {
         id: knowledgePoint.knowledgePointId,
         name: knowledgePoint.nameSnapshot,
         answeredCount: 0,
@@ -225,10 +227,11 @@ export async function getTeacherDashboard(
       latestAssignmentTitle: classroom.assignments[0]?.title ?? null,
     })),
     scoreTrend: recentSubmissions.reverse().map((submission) => ({
-      label: submission.submittedAt?.toLocaleDateString("zh-CN", {
-        month: "numeric",
-        day: "numeric",
-      }) ?? "—",
+      label:
+        submission.submittedAt?.toLocaleDateString("zh-CN", {
+          month: "numeric",
+          day: "numeric",
+        }) ?? "—",
       value: Math.round(submission.percentage?.toNumber() ?? 0),
       detail: submission.assignment.title,
     })),
