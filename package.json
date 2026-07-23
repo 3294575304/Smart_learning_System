@@ -14,8 +14,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
     "db:setup": "prisma migrate dev && prisma db seed",
-    "test": "tsx --test tests/auth/*.test.ts tests/admin/*.test.ts tests/classrooms/*.test.ts tests/questions/*.test.ts tests/assignments/*.test.ts tests/assignment-results/*.test.ts tests/ai-analysis/*.test.ts tests/recommendations/*.test.ts tests/notifications/*.test.ts",
-    "test:http-integration": "tsx tests/auth/http-integration.ts && tsx tests/admin/http-integration.ts && tsx tests/classrooms/http-integration.ts && tsx tests/questions/http-integration.ts && tsx tests/assignments/http-integration.ts && tsx tests/ai-analysis/http-integration.ts && tsx tests/recommendations/http-integration.ts && tsx tests/notifications/http-integration.ts",
+    "test": "tsx --test tests/auth/*.test.ts tests/admin/*.test.ts tests/classrooms/*.test.ts tests/questions/*.test.ts tests/assignments/*.test.ts tests/assignment-results/*.test.ts tests/ai-analysis/*.test.ts tests/recommendations/*.test.ts tests/notifications/*.test.ts tests/wrong-questions/*.test.ts",
+    "test:http-integration": "tsx tests/auth/http-integration.ts && tsx tests/admin/http-integration.ts && tsx tests/classrooms/http-integration.ts && tsx tests/questions/http-integration.ts && tsx tests/assignments/http-integration.ts && tsx tests/ai-analysis/http-integration.ts && tsx tests/recommendations/http-integration.ts && tsx tests/notifications/http-integration.ts && tsx tests/wrong-questions/http-integration.ts",
     "test:integration": "tsx tests/integration/recommendations/run.ts",
     "test:all": "npm test && npm run test:integration"
   },
