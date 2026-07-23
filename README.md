@@ -1,6 +1,8 @@
 # 智学课堂
 
-AI 驱动的智能教学平台。平台面向管理员、教师和学生，已提供账号密码认证、数据库会话、角色路由保护和资源归属校验基础，后续将继续实现题库、作业、成绩分析、AI 答疑和个性化练习推荐等能力。
+AI 驱动的智能教学平台。当前 MVP 已完成管理员治理、教师教学、学生作答、自动与人工批改、成绩发布、学情分析、个性化推荐练习和错题复习的核心业务闭环。
+
+完整功能状态、角色权限、环境配置、测试数据库、演示流程和已知限制见 [`docs/MVP-ACCEPTANCE.md`](docs/MVP-ACCEPTANCE.md)。
 
 ## AI 学情分析
 
@@ -124,9 +126,12 @@ seed 账号由 `.env` 中的 `SEED_*` 环境变量控制。模板中的密码仅
 ```bash
 npm run format:check
 npm run lint
+npm run typecheck
 npm test
-npm run test:integration
+npm run test:http-integration
 npm run build
+npx prisma validate
+npx prisma migrate status
 ```
 
-HTTP 集成测试要求本地 PostgreSQL 已完成迁移和 seed，并且已经执行一次 `npm run build`。
+HTTP 集成测试要求配置独立的 `TEST_DATABASE_URL`，数据库名必须包含 `test` 标记且不能与 `DATABASE_URL` 相同。测试会在该数据库内创建并清理隔离 Schema，不会修改开发库；运行前需要先执行一次 `npm run build`。
