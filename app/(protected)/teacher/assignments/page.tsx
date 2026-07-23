@@ -238,12 +238,20 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
                       编辑
                     </Link>
                   ) : (
-                    <Link
-                      className="text-sm font-medium underline"
-                      href={`/teacher/assignments/${assignment.id}/results`}
-                    >
-                      成绩统计
-                    </Link>
+                    <>
+                      <Link
+                        className="text-sm font-medium underline"
+                        href={`/teacher/assignments/${assignment.id}/submissions`}
+                      >
+                        批改提交
+                      </Link>
+                      <Link
+                        className="text-sm font-medium underline"
+                        href={`/teacher/assignments/${assignment.id}/results`}
+                      >
+                        成绩统计
+                      </Link>
+                    </>
                   )}
                 </div>
               </div>

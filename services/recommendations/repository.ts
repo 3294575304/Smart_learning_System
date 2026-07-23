@@ -262,9 +262,7 @@ export async function loadRecommendationStudentContext(
         isCorrect: { not: null },
         submission: {
           studentId: request.studentId,
-          status: {
-            in: [SubmissionStatus.GRADED, SubmissionStatus.PUBLISHED],
-          },
+          status: SubmissionStatus.PUBLISHED,
         },
       },
       orderBy: [{ gradedAt: "desc" }, { updatedAt: "desc" }, { id: "desc" }],

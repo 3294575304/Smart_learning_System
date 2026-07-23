@@ -5,8 +5,10 @@ import {
   assignmentListQuerySchema,
   assignmentUpsertSchema,
   autosaveAnswersSchema,
+  manualGradeAnswerSchema,
   studentAssignmentListQuerySchema,
   studentResultsQuerySchema,
+  teacherSubmissionListQuerySchema,
 } from "../../services/assignments/schemas";
 
 const classroomId = "cm12345678901234567890123";
@@ -173,6 +175,38 @@ test("学生作业列表查询校验状态筛选", () => {
   );
   assert.equal(
     studentAssignmentListQuerySchema.safeParse({ status: "UNKNOWN" }).success,
+    false,
+  );
+});
+
+test("人工评分只接受非负有限数字", () => {
+  assert.equal(
+    manualGradeAnswerSchema.safeParse({ score: 3.5, feedback: "继续努力" })
+      .success,
+    true,
+  );
+  for (const score of [-0.01, Number.POSITIVE_INFINITY, Number.NaN]) {
+    assert.equal(
+      manualGradeAnswerSchema.safeParse({ score, feedback: "" }).success,
+      false,
+    );
+  }
+});
+
+test("教师提交列表只接受可批改和已发布状态", () => {
+  assert.deepEqual(teacherSubmissionListQuerySchema.parse({}), {
+    page: 1,
+    pageSize: 20,
+  });
+  for (const status of ["PENDING_REVIEW", "GRADED", "PUBLISHED"]) {
+    assert.equal(
+      teacherSubmissionListQuerySchema.safeParse({ status }).success,
+      true,
+    );
+  }
+  assert.equal(
+    teacherSubmissionListQuerySchema.safeParse({ status: "IN_PROGRESS" })
+      .success,
     false,
   );
 });

@@ -17,6 +17,47 @@ export interface GradingResult {
   isCorrect: boolean | null;
 }
 
+export interface StoredGradingAnswer {
+  textAnswer: string | null;
+  booleanAnswer: boolean | null;
+  selectedOptions: Array<{ assignmentQuestionOptionId: string }>;
+}
+
+export function savedAnswerInput(
+  question: { id: string; type: QuestionType },
+  answer: StoredGradingAnswer | undefined,
+): SavedAnswerInput {
+  if (!answer) return { assignmentQuestionId: question.id, kind: "EMPTY" };
+  if (
+    question.type === QuestionType.SINGLE_CHOICE ||
+    question.type === QuestionType.MULTIPLE_CHOICE
+  ) {
+    return {
+      assignmentQuestionId: question.id,
+      kind: "CHOICE",
+      optionIds: answer.selectedOptions.map(
+        (selection) => selection.assignmentQuestionOptionId,
+      ),
+    };
+  }
+  if (question.type === QuestionType.TRUE_FALSE) {
+    return answer.booleanAnswer === null
+      ? { assignmentQuestionId: question.id, kind: "EMPTY" }
+      : {
+          assignmentQuestionId: question.id,
+          kind: "BOOLEAN",
+          value: answer.booleanAnswer,
+        };
+  }
+  return answer.textAnswer === null
+    ? { assignmentQuestionId: question.id, kind: "EMPTY" }
+    : {
+        assignmentQuestionId: question.id,
+        kind: "TEXT",
+        value: answer.textAnswer,
+      };
+}
+
 export function normalizeFillBlank(
   value: string,
   caseSensitive: boolean,

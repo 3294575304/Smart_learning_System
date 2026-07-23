@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ResultsPagination } from "@/components/assignment-results/pagination";
+import { PublishResultsButton } from "@/components/assignment-results/publish-results-button";
 import { ScoreDistribution } from "@/components/assignment-results/score-distribution";
 import { StudentAnswerDetail } from "@/components/assignment-results/student-answer-detail";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -95,9 +96,18 @@ export default async function AssignmentResultsPage({
                 {results.assignment.totalPoints} 分
               </p>
             </div>
-            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs">
-              基于每名学生最新有效提交
-            </span>
+            <div className="flex flex-col items-end gap-2">
+              <PublishResultsButton assignmentId={results.assignment.id} />
+              <Link
+                className="text-sm underline"
+                href={`/teacher/assignments/${results.assignment.id}/submissions`}
+              >
+                进入提交批改
+              </Link>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs">
+                基于每名学生最新有效提交
+              </span>
+            </div>
           </div>
         </header>
 

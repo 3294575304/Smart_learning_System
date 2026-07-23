@@ -14,9 +14,13 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import {
+  formatCorrectAnswer,
+  formatStudentAnswer,
+} from "@/services/assignments/answer-presentation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { AssignmentOperationError } from "@/services/assignments/errors";
-import { gradeAnswer } from "@/services/assignments/grading";
+import { gradeAnswer, savedAnswerInput } from "@/services/assignments/grading";
 import {
   assertActiveMembership,
   assertAssignmentAcceptsWork,
@@ -37,11 +41,7 @@ import type {
   SubmissionResultView,
   TeacherAssignmentView,
 } from "@/services/assignments/types";
-import {
-  notifyAssignmentGraded,
-  notifyAssignmentPublished,
-} from "@/services/notifications/events/assignment";
-import { logNotificationFailure } from "@/services/notifications/logging";
+import { notifyAssignmentPublished } from "@/services/notifications/events/assignment";
 
 const teacherAssignmentInclude = {
   classroom: { select: { id: true, name: true } },
@@ -965,47 +965,6 @@ const gradingSubmissionInclude = {
   },
 } satisfies Prisma.SubmissionInclude;
 
-function savedInputForQuestion(
-  question: { id: string; typeSnapshot: QuestionType },
-  answer:
-    | {
-        textAnswer: string | null;
-        booleanAnswer: boolean | null;
-        selectedOptions: Array<{ assignmentQuestionOptionId: string }>;
-      }
-    | undefined,
-): SavedAnswerInput {
-  if (!answer) return { assignmentQuestionId: question.id, kind: "EMPTY" };
-  if (
-    question.typeSnapshot === QuestionType.SINGLE_CHOICE ||
-    question.typeSnapshot === QuestionType.MULTIPLE_CHOICE
-  ) {
-    return {
-      assignmentQuestionId: question.id,
-      kind: "CHOICE",
-      optionIds: answer.selectedOptions.map(
-        (selection) => selection.assignmentQuestionOptionId,
-      ),
-    };
-  }
-  if (question.typeSnapshot === QuestionType.TRUE_FALSE) {
-    return answer.booleanAnswer === null
-      ? { assignmentQuestionId: question.id, kind: "EMPTY" }
-      : {
-          assignmentQuestionId: question.id,
-          kind: "BOOLEAN",
-          value: answer.booleanAnswer,
-        };
-  }
-  return answer.textAnswer === null
-    ? { assignmentQuestionId: question.id, kind: "EMPTY" }
-    : {
-        assignmentQuestionId: question.id,
-        kind: "TEXT",
-        value: answer.textAnswer,
-      };
-}
-
 export async function submitStudentAssignment(
   studentId: string,
   submissionId: string,
@@ -1050,7 +1009,10 @@ export async function submitStudentAssignment(
           let requiresManualReview = false;
           for (const question of submission.assignment.questions) {
             const currentAnswer = answerMap.get(question.id);
-            const savedInput = savedInputForQuestion(question, currentAnswer);
+            const savedInput = savedAnswerInput(
+              { id: question.id, type: question.typeSnapshot },
+              currentAnswer,
+            );
             const result = gradeAnswer(
               {
                 type: question.typeSnapshot,
@@ -1123,6 +1085,7 @@ export async function submitStudentAssignment(
                 ? SubmissionStatus.PENDING_REVIEW
                 : SubmissionStatus.GRADED,
               gradedAt: requiresManualReview ? null : now,
+              publishedAt: null,
               score: earned,
               maxScore,
               percentage,
@@ -1142,19 +1105,7 @@ export async function submitStudentAssignment(
       }
     }
   }
-  const result = await getStudentSubmissionResult(studentId, submissionId);
-  if (result.status === SubmissionStatus.GRADED) {
-    try {
-      await notifyAssignmentGraded({
-        recipientId: studentId,
-        submissionId,
-        assignmentTitle: result.assignmentTitle,
-      });
-    } catch {
-      logNotificationFailure("assignment_graded", submissionId);
-    }
-  }
-  return result;
+  return getStudentSubmissionResult(studentId, submissionId);
 }
 
 export async function getStudentSubmissionResult(
@@ -1179,8 +1130,21 @@ export async function getStudentSubmissionResult(
       answers: {
         orderBy: { assignmentQuestion: { sortOrder: "asc" } },
         include: {
+          selectedOptions: {
+            orderBy: { assignmentQuestionOption: { sortOrder: "asc" } },
+            select: {
+              assignmentQuestionOption: {
+                select: {
+                  labelSnapshot: true,
+                  contentSnapshot: true,
+                },
+              },
+            },
+          },
           assignmentQuestion: {
-            select: { titleSnapshot: true, sortOrder: true },
+            include: {
+              optionSnapshots: { orderBy: { sortOrder: "asc" } },
+            },
           },
         },
       },
@@ -1193,6 +1157,7 @@ export async function getStudentSubmissionResult(
   if (submission.status === SubmissionStatus.IN_PROGRESS) {
     throw new AssignmentOperationError("作业尚未提交", 409);
   }
+  const isPublished = submission.status === SubmissionStatus.PUBLISHED;
   return {
     id: submission.id,
     assignmentId: submission.assignmentId,
@@ -1200,17 +1165,30 @@ export async function getStudentSubmissionResult(
     attemptNumber: submission.attemptNumber,
     status: submission.status,
     submittedAt: submission.submittedAt,
-    score: decimalNumber(submission.score),
-    maxScore: decimalNumber(submission.maxScore),
-    percentage: decimalNumber(submission.percentage),
-    answers: submission.answers.map((answer) => ({
-      assignmentQuestionId: answer.assignmentQuestionId,
-      title: answer.assignmentQuestion.titleSnapshot,
-      sortOrder: answer.assignmentQuestion.sortOrder,
-      score: decimalNumber(answer.score),
-      maxScore: answer.maxScore.toNumber(),
-      isCorrect: answer.isCorrect,
-      gradingStatus: answer.gradingStatus,
-    })),
+    score: isPublished ? decimalNumber(submission.score) : null,
+    maxScore: isPublished ? decimalNumber(submission.maxScore) : null,
+    percentage: isPublished ? decimalNumber(submission.percentage) : null,
+    isPublished,
+    answers: isPublished
+      ? submission.answers.map((answer) => ({
+          id: answer.id,
+          assignmentQuestionId: answer.assignmentQuestionId,
+          title: answer.assignmentQuestion.titleSnapshot,
+          content: answer.assignmentQuestion.contentSnapshot,
+          type: answer.assignmentQuestion.typeSnapshot,
+          sortOrder: answer.assignmentQuestion.sortOrder,
+          score: decimalNumber(answer.score),
+          maxScore: answer.maxScore.toNumber(),
+          isCorrect: answer.isCorrect,
+          gradingStatus: answer.gradingStatus,
+          studentAnswer: formatStudentAnswer(
+            answer,
+            answer.assignmentQuestion.typeSnapshot,
+          ),
+          correctAnswer: formatCorrectAnswer(answer.assignmentQuestion),
+          explanation: answer.assignmentQuestion.explanationSnapshot,
+          teacherFeedback: answer.teacherFeedback,
+        }))
+      : [],
   };
 }

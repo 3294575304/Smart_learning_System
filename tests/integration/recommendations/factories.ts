@@ -317,10 +317,14 @@ export class RecommendationTestFactory {
         assignmentId: assignment.id,
         studentId: input.studentId,
         idempotencyKey: this.next("submission"),
-        status: input.status ?? SubmissionStatus.GRADED,
+        status: input.status ?? SubmissionStatus.PUBLISHED,
         startedAt: new Date("2026-07-01T00:00:00.000Z"),
         submittedAt: new Date("2026-07-10T00:00:00.000Z"),
         gradedAt: new Date("2026-07-10T00:00:00.000Z"),
+        publishedAt:
+          input.status === SubmissionStatus.WITHDRAWN
+            ? null
+            : new Date("2026-07-10T00:00:00.000Z"),
       },
     });
     return Promise.all(

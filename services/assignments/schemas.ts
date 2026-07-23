@@ -1,4 +1,4 @@
-import { AssignmentStatus } from "@prisma/client";
+import { AssignmentStatus, SubmissionStatus } from "@prisma/client";
 import { z } from "zod";
 
 const assignmentQuestionSchema = z.object({
@@ -45,13 +45,50 @@ export const assignmentUpsertSchema = z
 
 export const assignmentIdSchema = z.string().cuid("作业 ID 格式无效");
 export const submissionIdSchema = z.string().cuid("提交 ID 格式无效");
+export const studentAnswerIdSchema = z.string().cuid("答案 ID 格式无效");
+
+export const manualGradeAnswerSchema = z
+  .object({
+    score: z
+      .number({
+        required_error: "请输入人工得分",
+        invalid_type_error: "人工得分必须是数字",
+      })
+      .finite("人工得分必须是有限数字")
+      .min(0, "人工得分不能小于 0")
+      .max(10000, "人工得分超出允许范围"),
+    feedback: z
+      .string()
+      .trim()
+      .max(2000, "教师反馈不能超过 2000 个字符")
+      .default(""),
+  })
+  .strict();
+
+export const teacherSubmissionListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(20),
+    status: z
+      .enum([
+        SubmissionStatus.PENDING_REVIEW,
+        SubmissionStatus.GRADED,
+        SubmissionStatus.PUBLISHED,
+      ])
+      .optional(),
+  })
+  .strict();
 
 export const assignmentListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
   status: z.nativeEnum(AssignmentStatus).optional(),
   classroomId: z.string().cuid("班级 ID 格式无效").optional(),
-  keyword: z.string().trim().max(120, "搜索关键词不能超过 120 个字符").optional(),
+  keyword: z
+    .string()
+    .trim()
+    .max(120, "搜索关键词不能超过 120 个字符")
+    .optional(),
   sort: z
     .enum(["CREATED_DESC", "PUBLISHED_DESC", "DUE_ASC", "DUE_DESC"])
     .default("CREATED_DESC"),
@@ -109,3 +146,7 @@ export type StudentAssignmentListQuery = z.output<
 >;
 export type AutosaveAnswersData = z.output<typeof autosaveAnswersSchema>;
 export type SavedAnswerInput = z.output<typeof answerSchema>;
+export type ManualGradeAnswerData = z.output<typeof manualGradeAnswerSchema>;
+export type TeacherSubmissionListQuery = z.output<
+  typeof teacherSubmissionListQuerySchema
+>;

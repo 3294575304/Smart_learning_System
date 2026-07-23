@@ -25,4 +25,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   ANNOUNCEMENT_CREATED: "创建公告",
   ANNOUNCEMENT_UPDATED: "更新公告",
   ANNOUNCEMENT_PUBLISHED: "发布公告",
+  SUBMISSION_GRADING_COMPLETED: "完成提交批改",
+  ASSIGNMENT_RESULTS_PUBLISHED: "发布作业成绩",
 };

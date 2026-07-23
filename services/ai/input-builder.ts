@@ -127,11 +127,8 @@ export async function buildStudentAnalysisInput(
     },
   });
   if (!submission) throw new ResourceNotFoundError("作答记录不存在");
-  if (
-    submission.status !== SubmissionStatus.GRADED &&
-    submission.status !== SubmissionStatus.PUBLISHED
-  ) {
-    throw new AIAnalysisOperationError("作业完成批改后才能进行学情分析");
+  if (submission.status !== SubmissionStatus.PUBLISHED) {
+    throw new AIAnalysisOperationError("成绩正式发布后才能进行学情分析");
   }
 
   const usableAnswers = submission.answers.filter(

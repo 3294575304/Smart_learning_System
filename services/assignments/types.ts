@@ -69,13 +69,108 @@ export interface SubmissionResultView {
   score: number | null;
   maxScore: number | null;
   percentage: number | null;
+  isPublished: boolean;
   answers: Array<{
+    id: string;
     assignmentQuestionId: string;
     title: string;
+    content: string;
+    type: QuestionType;
     sortOrder: number;
     score: number | null;
     maxScore: number;
     isCorrect: boolean | null;
     gradingStatus: GradingStatus;
+    studentAnswer: string;
+    correctAnswer: string;
+    explanation: string;
+    teacherFeedback: string | null;
   }>;
+}
+
+export interface TeacherSubmissionListItem {
+  id: string;
+  student: {
+    id: string;
+    displayName: string;
+    email: string;
+    studentNo: string | null;
+  };
+  attemptNumber: number;
+  status: SubmissionStatus;
+  submittedAt: Date | null;
+  gradedAt: Date | null;
+  publishedAt: Date | null;
+  objectiveScore: number;
+  currentScore: number | null;
+  maxScore: number;
+  requiresManualReview: boolean;
+}
+
+export interface TeacherSubmissionListResult {
+  assignment: {
+    id: string;
+    title: string;
+    classroomName: string;
+    totalPoints: number;
+  };
+  items: TeacherSubmissionListItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface TeacherSubmissionAnswerView {
+  id: string;
+  assignmentQuestionId: string;
+  title: string;
+  content: string;
+  type: QuestionType;
+  sortOrder: number;
+  maxScore: number;
+  studentAnswer: string;
+  correctAnswer: string;
+  automaticScore: number | null;
+  manualScore: number | null;
+  isCorrect: boolean | null;
+  gradingStatus: GradingStatus;
+  teacherFeedback: string | null;
+  explanation: string;
+}
+
+export interface TeacherSubmissionDetail {
+  id: string;
+  status: SubmissionStatus;
+  attemptNumber: number;
+  submittedAt: Date | null;
+  gradedAt: Date | null;
+  publishedAt: Date | null;
+  score: number | null;
+  maxScore: number;
+  percentage: number | null;
+  assignment: {
+    id: string;
+    title: string;
+    classroomId: string;
+    classroomName: string;
+    totalPoints: number;
+  };
+  student: {
+    id: string;
+    displayName: string;
+    email: string;
+    studentNo: string | null;
+  };
+  answers: TeacherSubmissionAnswerView[];
+}
+
+export interface PublishAssignmentResultsResult {
+  assignmentId: string;
+  status: "PUBLISHED";
+  publishedCount: number;
+  alreadyPublishedCount: number;
+  publishedAt: Date | null;
 }

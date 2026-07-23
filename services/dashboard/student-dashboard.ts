@@ -10,10 +10,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import type { StudentResultsQuery } from "@/services/assignments/schemas";
 
-const FINALIZED_STATUSES: SubmissionStatus[] = [
-  SubmissionStatus.GRADED,
-  SubmissionStatus.PUBLISHED,
-];
+const FINALIZED_STATUSES: SubmissionStatus[] = [SubmissionStatus.PUBLISHED];
 
 const VISIBLE_RESULT_STATUSES: SubmissionStatus[] = [
   SubmissionStatus.SUBMITTED,
@@ -24,7 +21,11 @@ const VISIBLE_RESULT_STATUSES: SubmissionStatus[] = [
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
-  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100;
+  return (
+    Math.round(
+      (values.reduce((sum, value) => sum + value, 0) / values.length) * 100,
+    ) / 100
+  );
 }
 
 export async function getStudentDashboard(studentId: string) {
@@ -128,8 +129,8 @@ export async function getStudentDashboard(studentId: string) {
   return {
     metrics: {
       pendingCount: pendingAssignments.length,
-      dueSoonCount: pendingAssignments.filter(
-        (assignment) => Boolean(assignment.dueAt && assignment.dueAt <= soon),
+      dueSoonCount: pendingAssignments.filter((assignment) =>
+        Boolean(assignment.dueAt && assignment.dueAt <= soon),
       ).length,
       completedCount: latestResults.length,
       averageAccuracy: average(percentages),
@@ -222,18 +223,25 @@ export async function listStudentResults(
     }),
   ]);
   return {
-    items: submissions.map((submission) => ({
-      id: submission.id,
-      assignmentId: submission.assignment.id,
-      assignmentTitle: submission.assignment.title,
-      classroomName: submission.assignment.classroom.name,
-      attemptNumber: submission.attemptNumber,
-      status: submission.status,
-      submittedAt: submission.submittedAt,
-      score: submission.score?.toNumber() ?? null,
-      maxScore: submission.maxScore?.toNumber() ?? null,
-      percentage: submission.percentage?.toNumber() ?? null,
-    })),
+    items: submissions.map((submission) => {
+      const isPublished = submission.status === SubmissionStatus.PUBLISHED;
+      return {
+        id: submission.id,
+        assignmentId: submission.assignment.id,
+        assignmentTitle: submission.assignment.title,
+        classroomName: submission.assignment.classroom.name,
+        attemptNumber: submission.attemptNumber,
+        status: submission.status,
+        submittedAt: submission.submittedAt,
+        score: isPublished ? (submission.score?.toNumber() ?? null) : null,
+        maxScore: isPublished
+          ? (submission.maxScore?.toNumber() ?? null)
+          : null,
+        percentage: isPublished
+          ? (submission.percentage?.toNumber() ?? null)
+          : null,
+      };
+    }),
     pagination: {
       page: query.page,
       pageSize: query.pageSize,

@@ -132,6 +132,37 @@ export async function writeSystemConfigAuditLog(
   });
 }
 
+interface WriteTeachingAuditInput {
+  actorId: string;
+  action: AuditAction;
+  targetType:
+    typeof AuditTargetType.SUBMISSION | typeof AuditTargetType.ASSIGNMENT;
+  targetId: string;
+  summary: string;
+  beforeData: AuditConfigSnapshot | null;
+  afterData: AuditConfigSnapshot | null;
+  context: AuditRequestContext;
+}
+
+export async function writeTeachingAuditLog(
+  transaction: Prisma.TransactionClient,
+  input: WriteTeachingAuditInput,
+): Promise<void> {
+  await transaction.auditLog.create({
+    data: {
+      actorId: input.actorId,
+      action: input.action,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      summary: input.summary,
+      ...(input.beforeData ? { beforeData: input.beforeData } : {}),
+      ...(input.afterData ? { afterData: input.afterData } : {}),
+      ipAddress: input.context.ipAddress,
+      userAgent: input.context.userAgent,
+    },
+  });
+}
+
 export async function loadAuditLogPage(query: AuditLogListQuery): Promise<{
   total: number;
   records: AuditLogRecord[];

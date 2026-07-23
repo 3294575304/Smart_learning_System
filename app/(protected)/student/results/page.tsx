@@ -12,7 +12,7 @@ const STATUS_LABELS: Record<SubmissionStatus, string> = {
   IN_PROGRESS: "作答中",
   SUBMITTED: "已提交",
   PENDING_REVIEW: "待教师批改",
-  GRADED: "已批改",
+  GRADED: "待发布",
   PUBLISHED: "已发布",
   WITHDRAWN: "已撤回",
 };
@@ -28,7 +28,9 @@ export default async function StudentResultsPage({ searchParams }: Props) {
     page: typeof raw.page === "string" ? raw.page : undefined,
     pageSize: typeof raw.pageSize === "string" ? raw.pageSize : undefined,
   });
-  const query = parsed.success ? parsed.data : studentResultsQuerySchema.parse({});
+  const query = parsed.success
+    ? parsed.data
+    : studentResultsQuerySchema.parse({});
   const results = await listStudentResults(student.id, query);
 
   return (
@@ -40,7 +42,10 @@ export default async function StudentResultsPage({ searchParams }: Props) {
       {results.items.length === 0 ? (
         <EmptyState
           action={
-            <Link className="text-sm font-medium underline" href="/student/assignments">
+            <Link
+              className="text-sm font-medium underline"
+              href="/student/assignments"
+            >
               查看待完成作业
             </Link>
           }
@@ -75,7 +80,9 @@ export default async function StudentResultsPage({ searchParams }: Props) {
                   </td>
                   <td className="px-4 py-4 font-medium">
                     {result.score === null || result.maxScore === null
-                      ? "待批改"
+                      ? result.status === SubmissionStatus.GRADED
+                        ? "待发布"
+                        : "待批改"
                       : `${result.score} / ${result.maxScore}`}
                   </td>
                   <td className="px-4 py-4">
@@ -87,7 +94,10 @@ export default async function StudentResultsPage({ searchParams }: Props) {
                     </span>
                   </td>
                   <td className="px-5 py-4">
-                    <Link className="font-medium underline" href={`/student/submissions/${result.id}/result`}>
+                    <Link
+                      className="font-medium underline"
+                      href={`/student/submissions/${result.id}/result`}
+                    >
                       查看详情
                     </Link>
                   </td>
@@ -100,7 +110,10 @@ export default async function StudentResultsPage({ searchParams }: Props) {
       {results.pagination.totalPages > 1 ? (
         <nav aria-label="成绩分页" className="flex justify-center gap-3">
           {query.page > 1 ? (
-            <Link className="rounded-md border bg-white px-3 py-2 text-sm" href={`/student/results?page=${query.page - 1}&pageSize=${query.pageSize}`}>
+            <Link
+              className="rounded-md border bg-white px-3 py-2 text-sm"
+              href={`/student/results?page=${query.page - 1}&pageSize=${query.pageSize}`}
+            >
               上一页
             </Link>
           ) : null}
@@ -108,7 +121,10 @@ export default async function StudentResultsPage({ searchParams }: Props) {
             第 {query.page} / {results.pagination.totalPages} 页
           </span>
           {query.page < results.pagination.totalPages ? (
-            <Link className="rounded-md border bg-white px-3 py-2 text-sm" href={`/student/results?page=${query.page + 1}&pageSize=${query.pageSize}`}>
+            <Link
+              className="rounded-md border bg-white px-3 py-2 text-sm"
+              href={`/student/results?page=${query.page + 1}&pageSize=${query.pageSize}`}
+            >
               下一页
             </Link>
           ) : null}

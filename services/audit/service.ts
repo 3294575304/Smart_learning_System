@@ -59,9 +59,13 @@ export async function listAuditLogs(
             ? "系统配置"
             : record.targetType === AuditTargetType.ANNOUNCEMENT
               ? "系统公告"
-              : (target?.profile?.displayName ??
-                target?.email ??
-                record.targetId),
+              : record.targetType === AuditTargetType.SUBMISSION
+                ? `提交 ${record.targetId}`
+                : record.targetType === AuditTargetType.ASSIGNMENT
+                  ? `作业 ${record.targetId}`
+                  : (target?.profile?.displayName ??
+                    target?.email ??
+                    record.targetId),
       };
     }),
     pagination: {
