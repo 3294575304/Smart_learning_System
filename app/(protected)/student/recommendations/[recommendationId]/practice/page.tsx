@@ -21,7 +21,10 @@ export default async function RecommendationPracticePage({ params }: Props) {
       student,
       recommendationId,
     );
-    if (recommendation.status !== RecommendationStatus.STARTED) {
+    if (
+      recommendation.status !== RecommendationStatus.STARTED &&
+      recommendation.status !== RecommendationStatus.COMPLETED
+    ) {
       redirect(`/student/recommendations/${recommendationId}`);
     }
     return <RecommendationPractice recommendation={recommendation} />;

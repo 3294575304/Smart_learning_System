@@ -17,6 +17,17 @@ export interface GradingResult {
   isCorrect: boolean | null;
 }
 
+export const AUTO_GRADABLE_QUESTION_TYPES: QuestionType[] = [
+  QuestionType.SINGLE_CHOICE,
+  QuestionType.MULTIPLE_CHOICE,
+  QuestionType.TRUE_FALSE,
+  QuestionType.FILL_BLANK,
+];
+
+export function isAutoGradableQuestionType(type: QuestionType): boolean {
+  return AUTO_GRADABLE_QUESTION_TYPES.includes(type);
+}
+
 export interface StoredGradingAnswer {
   textAnswer: string | null;
   booleanAnswer: boolean | null;

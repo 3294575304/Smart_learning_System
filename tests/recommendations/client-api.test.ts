@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   generateRecommendations,
   recommendationStartApiPath,
+  recommendationSubmitApiPath,
   startRecommendationRequest,
+  submitRecommendationPracticeRequest,
 } from "../../lib/api/recommendations";
 
 function response(status: number, body: unknown): Response {
@@ -59,6 +61,42 @@ test("start client uses the real encoded start endpoint", async () => {
   assert.equal(requestUrl, "/api/recommendations/recommendation%2F1/start");
   assert.equal(requestUrl, recommendationStartApiPath("recommendation/1"));
   assert.equal(requestMethod, "POST");
+});
+
+test("practice submit client sends only answers and idempotency data", async () => {
+  let requestUrl = "";
+  let requestInit: RequestInit | undefined;
+  const input = {
+    idempotencyKey: "b4c870f0-0652-42f3-b24e-6fd159ea43ad",
+    answers: [
+      {
+        questionId: "question-1",
+        kind: "BOOLEAN" as const,
+        value: true,
+        responseTimeMs: 2500,
+      },
+    ],
+  };
+  const result = await submitRecommendationPracticeRequest(
+    "recommendation/1",
+    input,
+    {
+      fetchImplementation: async (request, init) => {
+        requestUrl = request.toString();
+        requestInit = init;
+        return response(200, {
+          success: true,
+          data: { status: "COMPLETED" },
+        });
+      },
+    },
+  );
+
+  assert.equal(result.success, true);
+  assert.equal(requestUrl, "/api/recommendations/recommendation%2F1/submit");
+  assert.equal(requestUrl, recommendationSubmitApiPath("recommendation/1"));
+  assert.equal(requestInit?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requestInit?.body)), input);
 });
 
 test("network and malformed responses produce friendly errors", async () => {

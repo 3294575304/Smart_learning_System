@@ -63,9 +63,70 @@ export const recommendationListQuerySchema = z
 
 export const recommendationIdSchema = recommendationResourceIdSchema;
 
+const recommendationPracticeAnswerBase = {
+  questionId: recommendationResourceIdSchema,
+  responseTimeMs: z.number().int().min(0).max(86_400_000).optional(),
+};
+
+export const recommendationPracticeAnswerSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...recommendationPracticeAnswerBase,
+      kind: z.literal("CHOICE"),
+      optionIds: z
+        .array(recommendationResourceIdSchema)
+        .min(1, "请至少选择一个选项")
+        .max(20)
+        .refine((items) => new Set(items).size === items.length, {
+          message: "选项不能重复",
+        }),
+    })
+    .strict(),
+  z
+    .object({
+      ...recommendationPracticeAnswerBase,
+      kind: z.literal("BOOLEAN"),
+      value: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      ...recommendationPracticeAnswerBase,
+      kind: z.literal("TEXT"),
+      value: z
+        .string()
+        .max(10000, "答案不能超过 10000 个字符")
+        .refine((text) => text.trim().length > 0, "请输入答案"),
+    })
+    .strict(),
+]);
+
+export const recommendationPracticeSubmitSchema = z
+  .object({
+    idempotencyKey: z.string().uuid("幂等标识格式无效"),
+    answers: z.array(recommendationPracticeAnswerSchema).min(1).max(50),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const questionIds = value.answers.map((answer) => answer.questionId);
+    if (new Set(questionIds).size !== questionIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["answers"],
+        message: "同一道推荐题不能重复提交答案",
+      });
+    }
+  });
+
 export type RecommendationGenerationApiInput = z.output<
   typeof recommendationGenerationApiSchema
 >;
 export type RecommendationListQuery = z.output<
   typeof recommendationListQuerySchema
+>;
+export type RecommendationPracticeAnswerInput = z.output<
+  typeof recommendationPracticeAnswerSchema
+>;
+export type RecommendationPracticeSubmitData = z.output<
+  typeof recommendationPracticeSubmitSchema
 >;

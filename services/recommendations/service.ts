@@ -11,11 +11,13 @@ import {
   enhanceRecommendationReasons,
   type RecommendationExplanationProvider,
 } from "@/services/ai/recommender";
+import { isAutoGradableQuestionType } from "@/services/assignments/grading";
 import type { AuthenticatedUser } from "@/services/auth/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { recommendQuestions } from "@/services/recommendations/algorithm";
 import { RecommendationOperationError } from "@/services/recommendations/errors";
 import { assertCanAccessRecommendation } from "@/services/recommendations/policy";
+import { practiceResultFromRecord } from "@/services/recommendations/practice-presentation";
 import {
   buildRecommendationRequest,
   createRecommendationCycleKey,
@@ -177,8 +179,15 @@ function detailFromRecord(
 ): RecommendationDetailView {
   return {
     ...listItemFromRecord(record),
-    options: record.question.options,
+    options: record.question.options.map((option) => ({
+      id: option.id,
+      label: option.label,
+      content: option.content,
+      sortOrder: option.sortOrder,
+    })),
     startedAt: record.startedAt?.toISOString() ?? null,
+    completedAt: record.completedAt?.toISOString() ?? null,
+    practiceResult: practiceResultFromRecord(record),
   };
 }
 
@@ -309,6 +318,9 @@ export async function startRecommendation(
     current.question.deletedAt !== null
   ) {
     throw new RecommendationOperationError("推荐题目当前不可用", 409);
+  }
+  if (!isAutoGradableQuestionType(current.question.type)) {
+    throw new RecommendationOperationError("当前题型暂不支持推荐练习", 409);
   }
 
   const started = await startPendingRecommendation({

@@ -1,8 +1,12 @@
 import type {
   RecommendationDetailView,
   RecommendationGenerationResult,
+  RecommendationPracticeResultView,
 } from "@/services/recommendations/types";
-import type { RecommendationGenerationApiInput } from "@/services/recommendations/schemas";
+import type {
+  RecommendationGenerationApiInput,
+  RecommendationPracticeSubmitData,
+} from "@/services/recommendations/schemas";
 import type { ActionResult } from "@/types/action-result";
 
 export const RECOMMENDATIONS_API_PATH = "/api/recommendations";
@@ -13,6 +17,10 @@ export function recommendationDetailApiPath(recommendationId: string): string {
 
 export function recommendationStartApiPath(recommendationId: string): string {
   return `${recommendationDetailApiPath(recommendationId)}/start`;
+}
+
+export function recommendationSubmitApiPath(recommendationId: string): string {
+  return `${recommendationDetailApiPath(recommendationId)}/submit`;
 }
 
 interface RequestOptions {
@@ -89,6 +97,22 @@ export function startRecommendationRequest(
   return requestRecommendationApi<RecommendationDetailView>(
     recommendationStartApiPath(recommendationId),
     { method: "POST" },
+    options,
+  );
+}
+
+export function submitRecommendationPracticeRequest(
+  recommendationId: string,
+  input: RecommendationPracticeSubmitData,
+  options: RequestOptions = {},
+): Promise<ActionResult<RecommendationPracticeResultView>> {
+  return requestRecommendationApi<RecommendationPracticeResultView>(
+    recommendationSubmitApiPath(recommendationId),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    },
     options,
   );
 }

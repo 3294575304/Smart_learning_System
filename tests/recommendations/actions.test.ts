@@ -115,6 +115,8 @@ test("starting a recommendation updates state before navigating to practice", as
           status: RecommendationStatus.STARTED,
           options: [],
           startedAt: "2026-07-21T08:10:00.000Z",
+          completedAt: null,
+          practiceResult: null,
         },
       };
     },

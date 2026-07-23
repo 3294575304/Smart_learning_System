@@ -146,7 +146,7 @@ export async function buildStudentAnalysisInput(
       orderBy: { knowledgePointId: "asc" },
     }),
     prisma.wrongQuestion.findMany({
-      where: { studentId },
+      where: { studentId, assignmentQuestionId: { not: null } },
       orderBy: { firstWrongAt: "desc" },
       take: MAX_RECENT_ERRORS,
       include: {
@@ -198,13 +198,20 @@ export async function buildStudentAnalysisInput(
           ? 0
           : mastery.correctCount / mastery.answeredCount,
     })),
-    recentErrors: recentErrors.map((error) => ({
-      knowledgePointIds: error.assignmentQuestion.knowledgePointSnapshots.map(
-        (item) => item.knowledgePointId,
-      ),
-      difficulty: error.assignmentQuestion.difficultySnapshot,
-      occurredAt: error.firstWrongAt.toISOString(),
-    })),
+    recentErrors: recentErrors.flatMap((error) =>
+      error.assignmentQuestion
+        ? [
+            {
+              knowledgePointIds:
+                error.assignmentQuestion.knowledgePointSnapshots.map(
+                  (item) => item.knowledgePointId,
+                ),
+              difficulty: error.assignmentQuestion.difficultySnapshot,
+              occurredAt: error.firstWrongAt.toISOString(),
+            },
+          ]
+        : [],
+    ),
     tutoringSummaries: tutoringRecords.flatMap((record) =>
       record.answer
         ? [scrubSensitiveText(record.answer, privateValues, 1_000)]

@@ -150,6 +150,33 @@ export interface RecommendationDetailView extends RecommendationListItemView {
     sortOrder: number;
   }>;
   startedAt: string | null;
+  completedAt: string | null;
+  practiceResult: RecommendationPracticeResultView | null;
+}
+
+export interface RecommendationPracticeAnswerResultView {
+  questionId: string;
+  title: string;
+  studentAnswer: string;
+  correctAnswer: string;
+  explanation: string;
+  recommendationReason: string;
+  isCorrect: boolean;
+  score: number;
+  maxScore: number;
+  responseTimeMs: number | null;
+}
+
+export interface RecommendationPracticeResultView {
+  recommendationId: string;
+  status: RecommendationStatus;
+  completedAt: string;
+  totalCount: number;
+  correctCount: number;
+  score: number;
+  maxScore: number;
+  percentage: number;
+  answers: RecommendationPracticeAnswerResultView[];
 }
 
 export interface RecommendationListResult {

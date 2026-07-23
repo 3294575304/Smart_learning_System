@@ -461,12 +461,14 @@ model Question {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  creator             User                         @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  options             QuestionOption[]
-  knowledgePointLinks QuestionKnowledgePoint[]
-  assignmentQuestions AssignmentQuestion[]
-  recommendations     PersonalizedRecommendation[]
-  aiTutoringRecords   AITutoringRecord[]
+  creator                      User                           @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  options                      QuestionOption[]
+  knowledgePointLinks          QuestionKnowledgePoint[]
+  assignmentQuestions          AssignmentQuestion[]
+  recommendations              PersonalizedRecommendation[]
+  practiceAnswers              RecommendationPracticeAnswer[] @relation("RecommendationPracticeQuestion")
+  recommendationWrongQuestions WrongQuestion[]                @relation("WrongQuestionSourceQuestion")
+  aiTutoringRecords            AITutoringRecord[]
 
   @@index([creatorId, status, deletedAt, createdAt])
   @@index([visibility, status, deletedAt, type, difficulty])
@@ -673,24 +675,32 @@ model StudentAnswerOption {
 }
 
 model WrongQuestion {
-  id                   String    @id @default(cuid())
-  studentId            String
-  studentAnswerId      String    @unique
-  assignmentQuestionId String
-  isResolved           Boolean   @default(false)
-  reviewCount          Int       @default(0)
-  firstWrongAt         DateTime  @default(now())
-  lastReviewedAt       DateTime?
-  resolvedAt           DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id                     String    @id @default(cuid())
+  studentId              String
+  studentAnswerId        String?   @unique
+  assignmentQuestionId   String?
+  recommendationAnswerId String?   @unique
+  questionId             String?
+  isResolved             Boolean   @default(false)
+  reviewCount            Int       @default(0)
+  wrongCount             Int       @default(1)
+  firstWrongAt           DateTime  @default(now())
+  lastWrongAt            DateTime  @default(now())
+  lastReviewedAt         DateTime?
+  resolvedAt             DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  student            User               @relation("WrongQuestionStudent", fields: [studentId], references: [id], onDelete: Restrict)
-  studentAnswer      StudentAnswer      @relation(fields: [studentAnswerId], references: [id], onDelete: Restrict)
-  assignmentQuestion AssignmentQuestion @relation(fields: [assignmentQuestionId], references: [id], onDelete: Restrict)
+  student              User                          @relation("WrongQuestionStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  studentAnswer        StudentAnswer?                @relation(fields: [studentAnswerId], references: [id], onDelete: Restrict)
+  assignmentQuestion   AssignmentQuestion?           @relation(fields: [assignmentQuestionId], references: [id], onDelete: Restrict)
+  recommendationAnswer RecommendationPracticeAnswer? @relation("RecommendationWrongAnswer", fields: [recommendationAnswerId], references: [id], onDelete: SetNull)
+  sourceQuestion       Question?                     @relation("WrongQuestionSourceQuestion", fields: [questionId], references: [id], onDelete: Restrict)
 
+  @@unique([studentId, questionId])
   @@index([studentId, isResolved, firstWrongAt])
   @@index([assignmentQuestionId])
+  @@index([questionId, isResolved])
 }
 
 model StudentKnowledgeMastery {
@@ -801,15 +811,39 @@ model PersonalizedRecommendation {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
-  student        User            @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  question       Question        @relation(fields: [questionId], references: [id], onDelete: Restrict)
-  knowledgePoint KnowledgePoint? @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
-  analysis       AIAnalysis?     @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  student        User                          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  question       Question                      @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  knowledgePoint KnowledgePoint?               @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+  analysis       AIAnalysis?                   @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  practiceAnswer RecommendationPracticeAnswer?
 
   @@unique([studentId, questionId, cycleKey])
   @@index([studentId, status, priority, createdAt])
   @@index([knowledgePointId, status])
   @@index([analysisId])
+  @@index([createdAt])
+}
+
+model RecommendationPracticeAnswer {
+  id                String   @id @default(cuid())
+  recommendationId  String   @unique
+  questionId        String
+  idempotencyKey    String   @unique
+  textAnswer        String?  @db.Text
+  booleanAnswer     Boolean?
+  selectedOptionIds String[] @default([])
+  responseTimeMs    Int?
+  score             Decimal  @db.Decimal(8, 2)
+  maxScore          Decimal  @db.Decimal(8, 2)
+  isCorrect         Boolean
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  recommendation PersonalizedRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  question       Question                   @relation("RecommendationPracticeQuestion", fields: [questionId], references: [id], onDelete: Restrict)
+  wrongQuestion  WrongQuestion?             @relation("RecommendationWrongAnswer")
+
+  @@index([questionId, isCorrect])
   @@index([createdAt])
 }
 

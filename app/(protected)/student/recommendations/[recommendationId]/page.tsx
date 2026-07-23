@@ -10,11 +10,13 @@ import {
   RECOMMENDATION_STATUS_STYLES,
 } from "@/components/recommendations/recommendation-presenters";
 import { StartRecommendationButton } from "@/components/recommendations/start-recommendation-button";
+import { recommendationPracticePath } from "@/components/recommendations/recommendation-actions";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
   AuthorizationError,
   ResourceNotFoundError,
 } from "@/services/auth/policy";
+import { isAutoGradableQuestionType } from "@/services/assignments/grading";
 import { getRecommendationDetail } from "@/services/recommendations/service";
 
 interface Props {
@@ -30,8 +32,9 @@ export default async function RecommendationDetailPage({ params }: Props) {
       recommendationId,
     );
     const canPractice =
-      recommendation.status === RecommendationStatus.PENDING ||
-      recommendation.status === RecommendationStatus.STARTED;
+      isAutoGradableQuestionType(recommendation.type) &&
+      (recommendation.status === RecommendationStatus.PENDING ||
+        recommendation.status === RecommendationStatus.STARTED);
 
     return (
       <section className="min-w-0 space-y-6">
@@ -116,7 +119,14 @@ export default async function RecommendationDetailPage({ params }: Props) {
           </div>
         </section>
 
-        {canPractice ? (
+        {recommendation.status === RecommendationStatus.COMPLETED ? (
+          <Link
+            className="inline-flex min-h-10 items-center justify-center rounded-md bg-black px-4 text-sm font-medium text-white"
+            href={recommendationPracticePath(recommendation.id)}
+          >
+            查看练习结果
+          </Link>
+        ) : canPractice ? (
           <StartRecommendationButton
             recommendationId={recommendation.id}
             status={recommendation.status}

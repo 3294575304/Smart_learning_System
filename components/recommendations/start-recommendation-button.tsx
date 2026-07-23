@@ -25,13 +25,16 @@ export function StartRecommendationButton({ recommendationId, status }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (status === RecommendationStatus.STARTED) {
+  if (
+    status === RecommendationStatus.STARTED ||
+    status === RecommendationStatus.COMPLETED
+  ) {
     return (
       <Link
         className="inline-flex min-h-10 items-center justify-center rounded-md bg-black px-4 text-sm font-medium text-white"
         href={recommendationPracticePath(recommendationId)}
       >
-        继续练习
+        {status === RecommendationStatus.COMPLETED ? "查看结果" : "继续练习"}
       </Link>
     );
   }

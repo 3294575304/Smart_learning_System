@@ -17,6 +17,7 @@ import {
 
 import { prisma } from "@/lib/prisma";
 import { studentAnalysisOutputSchema } from "@/services/ai/schemas";
+import { AUTO_GRADABLE_QUESTION_TYPES } from "@/services/assignments/grading";
 import {
   AuthorizationError,
   ResourceNotFoundError,
@@ -52,6 +53,23 @@ const recommendationViewSelect =
     createdAt: true,
     expiresAt: true,
     startedAt: true,
+    completedAt: true,
+    wasCorrect: true,
+    score: true,
+    maxScore: true,
+    practiceAnswer: {
+      select: {
+        id: true,
+        questionId: true,
+        textAnswer: true,
+        booleanAnswer: true,
+        selectedOptionIds: true,
+        responseTimeMs: true,
+        score: true,
+        maxScore: true,
+        isCorrect: true,
+      },
+    },
     question: {
       select: {
         id: true,
@@ -59,6 +77,11 @@ const recommendationViewSelect =
         content: true,
         type: true,
         difficulty: true,
+        explanation: true,
+        correctBoolean: true,
+        referenceAnswer: true,
+        acceptableAnswers: true,
+        isCaseSensitive: true,
         status: true,
         deletedAt: true,
         options: {
@@ -68,6 +91,7 @@ const recommendationViewSelect =
             label: true,
             content: true,
             sortOrder: true,
+            isCorrect: true,
           },
         },
         knowledgePointLinks: {
@@ -169,6 +193,7 @@ export async function buildRecommendationRequest(
     where: {
       status: QuestionStatus.ACTIVE,
       deletedAt: null,
+      type: { in: AUTO_GRADABLE_QUESTION_TYPES },
       OR: [
         { creatorId: classroom.teacherId },
         { visibility: QuestionVisibility.PUBLIC },
@@ -246,7 +271,12 @@ export async function loadRecommendationStudentContext(
     : null;
   assertCanRecommendForStudent(actor, request.studentId, access);
 
-  const [masteries, recentAnswers, latestAnalysis] = await Promise.all([
+  const [
+    masteries,
+    recentAssignmentAnswers,
+    recentRecommendationAnswers,
+    latestAnalysis,
+  ] = await Promise.all([
     prisma.studentKnowledgeMastery.findMany({
       where: { studentId: request.studentId },
       orderBy: { knowledgePointId: "asc" },
@@ -273,6 +303,16 @@ export async function loadRecommendationStudentContext(
         assignmentQuestion: { select: { questionId: true } },
       },
     }),
+    prisma.recommendationPracticeAnswer.findMany({
+      where: { recommendation: { studentId: request.studentId } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: RECENT_ANSWER_LIMIT,
+      select: {
+        questionId: true,
+        isCorrect: true,
+        updatedAt: true,
+      },
+    }),
     prisma.aIAnalysis.findFirst({
       where: {
         studentId: request.studentId,
@@ -286,6 +326,20 @@ export async function loadRecommendationStudentContext(
   const parsedAnalysis = studentAnalysisOutputSchema.safeParse(
     latestAnalysis?.rawResponse,
   );
+  const recentAnswers = [
+    ...recentAssignmentAnswers.map((answer) => ({
+      questionId: answer.assignmentQuestion.questionId,
+      isCorrect: answer.isCorrect,
+      updatedAt: answer.updatedAt,
+    })),
+    ...recentRecommendationAnswers,
+  ]
+    .sort(
+      (left, right) =>
+        right.updatedAt.getTime() - left.updatedAt.getTime() ||
+        left.questionId.localeCompare(right.questionId),
+    )
+    .slice(0, RECENT_ANSWER_LIMIT);
   const weaknessByKnowledgePoint = new Map<string, number>();
   for (const mastery of masteries) {
     const masteryScore = mastery.masteryScore.toNumber();
@@ -331,9 +385,7 @@ export async function loadRecommendationStudentContext(
           left.knowledgePointId.localeCompare(right.knowledgePointId),
       ),
     recentCompletedQuestionIds: [
-      ...new Set(
-        recentAnswers.map((answer) => answer.assignmentQuestion.questionId),
-      ),
+      ...new Set(recentAnswers.map((answer) => answer.questionId)),
     ],
     recentErrorTypes: parsedAnalysis.success
       ? parsedAnalysis.data.errorPatterns.map((pattern) => pattern.type)
@@ -396,6 +448,13 @@ export async function loadEligibleRecommendationCandidates(
 ): Promise<RecommendationCandidate[]> {
   const minimumDifficulty = Math.max(1, request.recommendedDifficulty - 1);
   const maximumDifficulty = Math.min(5, request.recommendedDifficulty + 1);
+  const allowedTypes =
+    request.teacherScope.types.length === 0
+      ? AUTO_GRADABLE_QUESTION_TYPES
+      : AUTO_GRADABLE_QUESTION_TYPES.filter((type) =>
+          request.teacherScope.types.includes(type),
+        );
+  if (allowedTypes.length === 0) return [];
   const questions = await prisma.question.findMany({
     where: {
       id: {
@@ -406,11 +465,9 @@ export async function loadEligibleRecommendationCandidates(
       },
       status: QuestionStatus.ACTIVE,
       deletedAt: null,
+      type: { in: allowedTypes },
       difficulty: { gte: minimumDifficulty, lte: maximumDifficulty },
       OR: [{ creatorId: teacherId }, { visibility: QuestionVisibility.PUBLIC }],
-      ...(request.teacherScope.types.length > 0
-        ? { type: { in: request.teacherScope.types } }
-        : {}),
       ...(request.teacherScope.knowledgePointIds.length > 0
         ? {
             knowledgePointLinks: {

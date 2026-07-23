@@ -6,6 +6,9 @@ import { resolve } from "node:path";
 import {
   MembershipStatus,
   PrismaClient,
+  QuestionStatus,
+  QuestionType,
+  QuestionVisibility,
   RecommendationSource,
   RecommendationStatus,
 } from "@prisma/client";
@@ -20,6 +23,7 @@ interface ApiSuccess<T> {
 interface RecommendationItemResponse {
   id: string;
   questionId: string;
+  type: QuestionType;
   status: RecommendationStatus;
   startedAt?: string | null;
 }
@@ -42,6 +46,8 @@ let membershipToRestore: {
   status: MembershipStatus;
   endedAt: Date | null;
 } | null = null;
+let practiceQuestionId: string | null = null;
+let practiceKnowledgePointId: string | null = null;
 
 const server = spawn(
   process.execPath,
@@ -239,6 +245,12 @@ async function main(): Promise<void> {
     const generated =
       (await generatedResponse.json()) as ApiSuccess<GenerationResponse>;
     assert.ok(generated.data.items.length > 0);
+    assert.equal(
+      generated.data.items.some(
+        (item) => item.type === QuestionType.SHORT_ANSWER,
+      ),
+      false,
+    );
     generatedCycles.push({
       studentId: student.id,
       cycleKey: generated.data.cycleKey,
@@ -326,6 +338,359 @@ async function main(): Promise<void> {
       (await repeatedStartResponse.json()) as ApiSuccess<RecommendationItemResponse>;
     assert.equal(repeatedStart.data.startedAt, started.data.startedAt);
 
+    const practiceKnowledgePoint = await prisma.knowledgePoint.create({
+      data: {
+        createdById: teacher.id,
+        code: `REC_HTTP_${randomBytes(5).toString("hex").toUpperCase()}`,
+        name: "推荐练习事务测试知识点",
+      },
+    });
+    practiceKnowledgePointId = practiceKnowledgePoint.id;
+    const practiceQuestion = await prisma.question.create({
+      data: {
+        creatorId: teacher.id,
+        title: "推荐练习提交测试题",
+        content: "请选择正确选项",
+        type: QuestionType.SINGLE_CHOICE,
+        difficulty: 3,
+        visibility: QuestionVisibility.PRIVATE,
+        status: QuestionStatus.ACTIVE,
+        explanation: "A 是本题正确答案。",
+        options: {
+          create: [
+            { label: "A", content: "正确选项", isCorrect: true, sortOrder: 1 },
+            { label: "B", content: "错误选项", isCorrect: false, sortOrder: 2 },
+          ],
+        },
+        knowledgePointLinks: {
+          create: {
+            knowledgePointId: practiceKnowledgePoint.id,
+            weight: 1,
+          },
+        },
+      },
+      include: { options: true },
+    });
+    practiceQuestionId = practiceQuestion.id;
+    const correctOption = practiceQuestion.options.find(
+      (option) => option.isCorrect,
+    );
+    const wrongOption = practiceQuestion.options.find(
+      (option) => !option.isCorrect,
+    );
+    assert.ok(correctOption);
+    assert.ok(wrongOption);
+
+    async function createStartedPractice(studentId: string, reason: string) {
+      const practice = await prisma.personalizedRecommendation.create({
+        data: {
+          studentId,
+          questionId: practiceQuestion.id,
+          knowledgePointId: practiceKnowledgePoint.id,
+          cycleKey: `integration-practice-${randomUUID()}`,
+          source: RecommendationSource.RULE,
+          status: RecommendationStatus.STARTED,
+          reason,
+          targetDifficulty: 3,
+          priority: 10,
+          startedAt: new Date(),
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+      createdRecommendationIds.push(practice.id);
+      return practice;
+    }
+
+    const correctPractice = await createStartedPractice(
+      student.id,
+      "验证正确判分与掌握度正向更新",
+    );
+    const submitPath = `/api/recommendations/${correctPractice.id}/submit`;
+    const correctIdempotencyKey = randomUUID();
+    const correctBody = {
+      idempotencyKey: correctIdempotencyKey,
+      answers: [
+        {
+          questionId: practiceQuestion.id,
+          kind: "CHOICE",
+          optionIds: [correctOption.id],
+          responseTimeMs: 12_000,
+        },
+      ],
+    };
+    assert.equal(
+      (await requestJson(submitPath, undefined, "POST", correctBody)).status,
+      401,
+    );
+    const outsiderPractice = await createStartedPractice(
+      outsider.id,
+      "验证学生资源隔离",
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/recommendations/${outsiderPractice.id}/submit`,
+          studentCookie,
+          "POST",
+          correctBody,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(submitPath, studentCookie, "POST", {
+          ...correctBody,
+          score: 100,
+          isCorrect: true,
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await requestJson(submitPath, studentCookie, "POST", {
+          idempotencyKey: randomUUID(),
+          answers: [
+            {
+              ...correctBody.answers[0],
+              questionId: "forged-question-id",
+            },
+          ],
+        })
+      ).status,
+      400,
+    );
+
+    const correctSubmitResponse = await requestJson(
+      submitPath,
+      studentCookie,
+      "POST",
+      correctBody,
+    );
+    assert.equal(correctSubmitResponse.status, 200);
+    const correctResult = (await correctSubmitResponse.json()) as ApiSuccess<{
+      status: RecommendationStatus;
+      correctCount: number;
+      totalCount: number;
+      score: number;
+      percentage: number;
+      answers: Array<{
+        isCorrect: boolean;
+        correctAnswer: string;
+        explanation: string;
+      }>;
+    }>;
+    assert.equal(correctResult.data.status, RecommendationStatus.COMPLETED);
+    assert.equal(correctResult.data.correctCount, 1);
+    assert.equal(correctResult.data.totalCount, 1);
+    assert.equal(correctResult.data.score, 1);
+    assert.equal(correctResult.data.percentage, 100);
+    assert.equal(correctResult.data.answers[0].isCorrect, true);
+    assert.match(correctResult.data.answers[0].correctAnswer, /A\. 正确选项/u);
+    assert.match(correctResult.data.answers[0].explanation, /正确答案/u);
+    assert.equal(
+      await prisma.wrongQuestion.count({
+        where: { studentId: student.id, questionId: practiceQuestion.id },
+      }),
+      0,
+    );
+    const masteryAfterCorrect =
+      await prisma.studentKnowledgeMastery.findUniqueOrThrow({
+        where: {
+          studentId_knowledgePointId: {
+            studentId: student.id,
+            knowledgePointId: practiceKnowledgePoint.id,
+          },
+        },
+      });
+    assert.equal(masteryAfterCorrect.answeredCount, 1);
+    assert.equal(masteryAfterCorrect.correctCount, 1);
+    assert.equal(masteryAfterCorrect.masteryScore.toNumber(), 100);
+
+    const refreshedResult = await requestJson(
+      `/api/recommendations/${correctPractice.id}`,
+      studentCookie,
+    );
+    assert.equal(refreshedResult.status, 200);
+    const refreshed = (await refreshedResult.json()) as ApiSuccess<{
+      practiceResult: { correctCount: number; answers: unknown[] } | null;
+    }>;
+    assert.equal(refreshed.data.practiceResult?.correctCount, 1);
+    assert.equal(refreshed.data.practiceResult?.answers.length, 1);
+
+    const repeatedSubmit = await requestJson(
+      submitPath,
+      studentCookie,
+      "POST",
+      {
+        idempotencyKey: randomUUID(),
+        answers: [
+          {
+            questionId: practiceQuestion.id,
+            kind: "CHOICE",
+            optionIds: [wrongOption.id],
+          },
+        ],
+      },
+    );
+    assert.equal(repeatedSubmit.status, 200);
+    assert.equal(
+      (
+        (await repeatedSubmit.json()) as ApiSuccess<{
+          correctCount: number;
+        }>
+      ).data.correctCount,
+      1,
+    );
+    assert.equal(
+      await prisma.recommendationPracticeAnswer.count({
+        where: { recommendationId: correctPractice.id },
+      }),
+      1,
+    );
+    assert.equal(
+      (
+        await prisma.studentKnowledgeMastery.findUniqueOrThrow({
+          where: {
+            studentId_knowledgePointId: {
+              studentId: student.id,
+              knowledgePointId: practiceKnowledgePoint.id,
+            },
+          },
+        })
+      ).answeredCount,
+      1,
+    );
+
+    const firstWrongPractice = await createStartedPractice(
+      student.id,
+      "验证错题首次写入",
+    );
+    const wrongBody = {
+      idempotencyKey: randomUUID(),
+      answers: [
+        {
+          questionId: practiceQuestion.id,
+          kind: "CHOICE",
+          optionIds: [wrongOption.id],
+        },
+      ],
+    };
+    assert.equal(
+      (
+        await requestJson(
+          `/api/recommendations/${firstWrongPractice.id}/submit`,
+          studentCookie,
+          "POST",
+          wrongBody,
+        )
+      ).status,
+      200,
+    );
+    const firstWrongRecord = await prisma.wrongQuestion.findUniqueOrThrow({
+      where: {
+        studentId_questionId: {
+          studentId: student.id,
+          questionId: practiceQuestion.id,
+        },
+      },
+    });
+    assert.equal(firstWrongRecord.wrongCount, 1);
+    const masteryAfterWrong =
+      await prisma.studentKnowledgeMastery.findUniqueOrThrow({
+        where: {
+          studentId_knowledgePointId: {
+            studentId: student.id,
+            knowledgePointId: practiceKnowledgePoint.id,
+          },
+        },
+      });
+    assert.equal(masteryAfterWrong.answeredCount, 2);
+    assert.equal(masteryAfterWrong.correctCount, 1);
+    assert.equal(masteryAfterWrong.masteryScore.toNumber(), 50);
+
+    const secondWrongPractice = await createStartedPractice(
+      student.id,
+      "验证错题去重更新",
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/recommendations/${secondWrongPractice.id}/submit`,
+          studentCookie,
+          "POST",
+          { ...wrongBody, idempotencyKey: randomUUID() },
+        )
+      ).status,
+      200,
+    );
+    const repeatedWrongRecord = await prisma.wrongQuestion.findUniqueOrThrow({
+      where: {
+        studentId_questionId: {
+          studentId: student.id,
+          questionId: practiceQuestion.id,
+        },
+      },
+    });
+    assert.equal(repeatedWrongRecord.id, firstWrongRecord.id);
+    assert.equal(repeatedWrongRecord.wrongCount, 2);
+    const masteryBeforeRollback =
+      await prisma.studentKnowledgeMastery.findUniqueOrThrow({
+        where: {
+          studentId_knowledgePointId: {
+            studentId: student.id,
+            knowledgePointId: practiceKnowledgePoint.id,
+          },
+        },
+      });
+    assert.equal(masteryBeforeRollback.answeredCount, 3);
+    assert.equal(masteryBeforeRollback.correctCount, 1);
+    assert.equal(masteryBeforeRollback.masteryScore.toNumber(), 33.33);
+
+    const rollbackPractice = await createStartedPractice(
+      student.id,
+      "验证事务失败完整回滚",
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/recommendations/${rollbackPractice.id}/submit`,
+          studentCookie,
+          "POST",
+          { ...wrongBody, idempotencyKey: correctIdempotencyKey },
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await prisma.personalizedRecommendation.findUniqueOrThrow({
+          where: { id: rollbackPractice.id },
+        })
+      ).status,
+      RecommendationStatus.STARTED,
+    );
+    assert.equal(
+      await prisma.recommendationPracticeAnswer.count({
+        where: { recommendationId: rollbackPractice.id },
+      }),
+      0,
+    );
+    assert.equal(
+      (
+        await prisma.studentKnowledgeMastery.findUniqueOrThrow({
+          where: {
+            studentId_knowledgePointId: {
+              studentId: student.id,
+              knowledgePointId: practiceKnowledgePoint.id,
+            },
+          },
+        })
+      ).answeredCount,
+      masteryBeforeRollback.answeredCount,
+    );
+
     const unusedQuestion = await prisma.question.findFirstOrThrow({
       where: {
         status: "ACTIVE",
@@ -411,9 +776,14 @@ async function main(): Promise<void> {
     );
 
     console.info(
-      "Recommendation HTTP integration checks passed: authentication, validation, student/teacher/admin isolation, generation, duplicate-cycle idempotency, safe list/detail DTOs, pagination, start idempotency, expiry conflicts, not-found handling, and empty-candidate fallback.",
+      "Recommendation HTTP integration checks passed: safe generation, ownership, submission validation, grading, result refresh, mastery, wrong-question deduplication, completion idempotency, and transaction rollback.",
     );
   } finally {
+    if (practiceQuestionId) {
+      await prisma.wrongQuestion.deleteMany({
+        where: { questionId: practiceQuestionId },
+      });
+    }
     if (createdRecommendationIds.length > 0) {
       await prisma.personalizedRecommendation.deleteMany({
         where: { id: { in: createdRecommendationIds } },
@@ -422,6 +792,19 @@ async function main(): Promise<void> {
     for (const generated of generatedCycles) {
       await prisma.personalizedRecommendation.deleteMany({
         where: generated,
+      });
+    }
+    if (practiceKnowledgePointId) {
+      await prisma.studentKnowledgeMastery.deleteMany({
+        where: { knowledgePointId: practiceKnowledgePointId },
+      });
+    }
+    if (practiceQuestionId) {
+      await prisma.question.delete({ where: { id: practiceQuestionId } });
+    }
+    if (practiceKnowledgePointId) {
+      await prisma.knowledgePoint.delete({
+        where: { id: practiceKnowledgePointId },
       });
     }
     if (createdMembershipId) {
