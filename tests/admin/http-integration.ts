@@ -6,7 +6,10 @@ import { resolve } from "node:path";
 import {
   AuditAction,
   AuditTargetType,
+  ClassroomStatus,
   PrismaClient,
+  QuestionStatus,
+  QuestionVisibility,
   Role,
   type SystemConfig,
   UserStatus,
@@ -95,6 +98,16 @@ const createdEmail = `admin-user-it-${testSuffix}@example.com`;
 const integrationStartedAt = new Date();
 let originalSystemConfig: SystemConfig | null | undefined;
 let systemConfigTargetId: string | null = null;
+let governanceQuestionOriginal: {
+  id: string;
+  visibility: QuestionVisibility;
+  status: QuestionStatus;
+} | null = null;
+let governanceClassroomOriginal: {
+  id: string;
+  status: ClassroomStatus;
+  closedAt: Date | null;
+} | null = null;
 
 const server = spawn(
   process.execPath,
@@ -803,10 +816,180 @@ async function main(): Promise<void> {
       true,
     );
 
+    const governanceQuestion = await prisma.question.findFirstOrThrow({
+      where: {
+        creatorId: teacher.id,
+        visibility: QuestionVisibility.PRIVATE,
+        status: QuestionStatus.ACTIVE,
+        deletedAt: null,
+        knowledgePointLinks: { some: {} },
+      },
+      select: { id: true, visibility: true, status: true },
+    });
+    governanceQuestionOriginal = governanceQuestion;
+    assert.equal(
+      (await requestJson("/api/admin/questions", teacherCookie)).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson("/api/admin/questions", studentCookie)).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/admin/questions/${governanceQuestion.id}/visibility`,
+          teacherCookie,
+          "PATCH",
+          { visibility: QuestionVisibility.PUBLIC },
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/admin/questions/${governanceQuestion.id}/visibility`,
+          adminCookie,
+          "PATCH",
+          { visibility: QuestionVisibility.PUBLIC },
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await prisma.question.findUniqueOrThrow({
+          where: { id: governanceQuestion.id },
+          select: { visibility: true },
+        })
+      ).visibility,
+      QuestionVisibility.PUBLIC,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/admin/questions/${governanceQuestion.id}/visibility`,
+          adminCookie,
+          "PATCH",
+          { visibility: QuestionVisibility.PRIVATE },
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      await prisma.auditLog.count({
+        where: {
+          targetId: governanceQuestion.id,
+          action: {
+            in: [
+              AuditAction.QUESTION_MADE_PUBLIC,
+              AuditAction.QUESTION_MADE_PRIVATE,
+            ],
+          },
+        },
+      }),
+      2,
+    );
+
+    const governanceClassroom = await prisma.classroom.findFirstOrThrow({
+      where: { teacherId: teacher.id, status: ClassroomStatus.ACTIVE },
+      select: { id: true, status: true, closedAt: true },
+    });
+    governanceClassroomOriginal = governanceClassroom;
+    const historyBefore = {
+      assignments: await prisma.assignment.count({
+        where: { classroomId: governanceClassroom.id },
+      }),
+      submissions: await prisma.submission.count({
+        where: { assignment: { classroomId: governanceClassroom.id } },
+      }),
+    };
+    assert.equal(
+      (
+        await requestJson(
+          `/api/admin/classrooms/${governanceClassroom.id}/close`,
+          teacherCookie,
+          "POST",
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/admin/classrooms/${governanceClassroom.id}/close`,
+          studentCookie,
+          "POST",
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/admin/classrooms/${governanceClassroom.id}/close`,
+          adminCookie,
+          "POST",
+        )
+      ).status,
+      200,
+    );
+    assert.deepEqual(
+      {
+        assignments: await prisma.assignment.count({
+          where: { classroomId: governanceClassroom.id },
+        }),
+        submissions: await prisma.submission.count({
+          where: { assignment: { classroomId: governanceClassroom.id } },
+        }),
+      },
+      historyBefore,
+    );
+    assert.equal(
+      await prisma.auditLog.count({
+        where: {
+          targetId: governanceClassroom.id,
+          action: AuditAction.CLASSROOM_CLOSED_BY_ADMIN,
+        },
+      }),
+      1,
+    );
+
     console.info(
-      "Admin HTTP integration checks passed: dashboard authorization and database-backed statistics, system health privacy, strict validation, user management, system configuration, and safe audit behavior.",
+      "Admin HTTP integration checks passed: dashboard, users, system configuration, question governance, class governance, authorization, history preservation, and audit behavior.",
     );
   } finally {
+    if (governanceQuestionOriginal) {
+      await prisma.question.update({
+        where: { id: governanceQuestionOriginal.id },
+        data: {
+          visibility: governanceQuestionOriginal.visibility,
+          status: governanceQuestionOriginal.status,
+        },
+      });
+      await prisma.auditLog.deleteMany({
+        where: {
+          targetId: governanceQuestionOriginal.id,
+          createdAt: { gte: integrationStartedAt },
+        },
+      });
+    }
+    if (governanceClassroomOriginal) {
+      await prisma.classroom.update({
+        where: { id: governanceClassroomOriginal.id },
+        data: {
+          status: governanceClassroomOriginal.status,
+          closedAt: governanceClassroomOriginal.closedAt,
+        },
+      });
+      await prisma.auditLog.deleteMany({
+        where: {
+          targetId: governanceClassroomOriginal.id,
+          createdAt: { gte: integrationStartedAt },
+        },
+      });
+    }
     if (systemConfigTargetId) {
       await prisma.auditLog.deleteMany({
         where: {

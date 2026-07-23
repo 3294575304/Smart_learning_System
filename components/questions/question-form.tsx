@@ -59,7 +59,7 @@ function initialQuestion(question?: QuestionDetail): QuestionUpsertData {
     explanation: question.explanation,
     knowledgePointIds: question.knowledgePoints.map(({ id }) => id),
     tags: question.tags,
-    visibility: question.visibility,
+    visibility: QuestionVisibility.PRIVATE,
   };
 }
 
@@ -414,7 +414,7 @@ export function QuestionForm({
         ) : null}
       </fieldset>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div>
         <label className="space-y-2">
           <span className="text-sm font-medium">标签（逗号分隔）</span>
           <input
@@ -431,16 +431,6 @@ export function QuestionForm({
               )
             }
           />
-        </label>
-        <label className="space-y-2">
-          <span className="text-sm font-medium">可见范围</span>
-          <select
-            className="w-full rounded-md border px-3 py-2"
-            {...form.register("visibility")}
-          >
-            <option value={QuestionVisibility.PRIVATE}>仅自己可见</option>
-            <option value={QuestionVisibility.PUBLIC}>公开给其他教师</option>
-          </select>
         </label>
       </div>
 

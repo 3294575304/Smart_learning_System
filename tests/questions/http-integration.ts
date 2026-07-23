@@ -184,6 +184,18 @@ async function main(): Promise<void> {
     assert.equal(
       (
         await requestJson(
+          "/api/teacher/questions",
+          teacherCookie,
+          "POST",
+          questionInput(knowledgePoint.id, QuestionVisibility.PUBLIC),
+        )
+      ).status,
+      403,
+    );
+
+    assert.equal(
+      (
+        await requestJson(
           `/api/teacher/questions/${created.data.id}`,
           teacherTwoCookie,
         )
@@ -201,7 +213,20 @@ async function main(): Promise<void> {
       "PATCH",
       { ...publicInput, title: created.data.title },
     );
-    assert.equal(updateResponse.status, 200);
+    assert.equal(updateResponse.status, 403);
+    assert.equal(
+      (
+        await prisma.question.findUniqueOrThrow({
+          where: { id: created.data.id },
+          select: { visibility: true },
+        })
+      ).visibility,
+      QuestionVisibility.PRIVATE,
+    );
+    await prisma.question.update({
+      where: { id: created.data.id },
+      data: { visibility: QuestionVisibility.PUBLIC },
+    });
     assert.equal(
       (
         await requestJson(

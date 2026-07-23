@@ -389,7 +389,9 @@ async function main(): Promise<void> {
     content: "下列哪些数是 12 的因数？",
     type: QuestionType.MULTIPLE_CHOICE,
     difficulty: 3,
-    visibility: QuestionVisibility.PRIVATE,
+    // Intentionally retained as a historical teacher-created public question
+    // so administrators can verify source labeling and revoke governance.
+    visibility: QuestionVisibility.PUBLIC,
     explanation: "能整除 12 的数是其因数。",
     tags: ["因数", "多选"],
     gradingConfig: { mode: "EXACT_SET" },

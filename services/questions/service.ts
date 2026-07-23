@@ -13,6 +13,10 @@ import {
   ResourceNotFoundError,
 } from "@/services/auth/policy";
 import { QuestionOperationError } from "@/services/questions/errors";
+import {
+  assertTeacherCanEditQuestion,
+  assertTeacherQuestionIsPrivate,
+} from "@/services/questions/policy";
 import type {
   DeleteQuestionResult,
   KnowledgePointOption,
@@ -103,8 +107,8 @@ function listItemFromRecord(
       ({ knowledgePoint }) => knowledgePoint,
     ),
     assignmentReferenceCount: question._count.assignmentQuestions,
-    canEdit: isOwner,
-    canDelete: isOwner,
+    canEdit: isOwner && question.visibility === QuestionVisibility.PRIVATE,
+    canDelete: isOwner && question.visibility === QuestionVisibility.PRIVATE,
     canCopy: true,
     createdAt: question.createdAt,
     updatedAt: question.updatedAt,
@@ -305,6 +309,7 @@ export async function createQuestion(
   teacherId: string,
   input: QuestionUpsertData,
 ): Promise<QuestionDetail> {
+  assertTeacherQuestionIsPrivate(input.visibility);
   const questionId = await prisma.$transaction(async (transaction) => {
     await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
     const question = await transaction.question.create({
@@ -331,7 +336,9 @@ export async function updateQuestion(
   questionId: string,
   input: QuestionUpsertData,
 ): Promise<QuestionDetail> {
-  await requireOwnedQuestion(teacherId, questionId);
+  assertTeacherQuestionIsPrivate(input.visibility);
+  const ownedQuestion = await requireOwnedQuestion(teacherId, questionId);
+  assertTeacherCanEditQuestion(ownedQuestion, teacherId);
   await prisma.$transaction(async (transaction) => {
     await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
     await transaction.questionOption.deleteMany({ where: { questionId } });
@@ -429,7 +436,8 @@ export async function deleteQuestion(
   teacherId: string,
   questionId: string,
 ): Promise<DeleteQuestionResult> {
-  await requireOwnedQuestion(teacherId, questionId);
+  const ownedQuestion = await requireOwnedQuestion(teacherId, questionId);
+  assertTeacherCanEditQuestion(ownedQuestion, teacherId);
   try {
     return await prisma.$transaction(async (transaction) => {
       const references = await referenceCounts(transaction, questionId);

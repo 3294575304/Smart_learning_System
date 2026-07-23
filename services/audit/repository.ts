@@ -144,6 +144,37 @@ interface WriteTeachingAuditInput {
   context: AuditRequestContext;
 }
 
+interface WriteGovernanceAuditInput {
+  actorId: string;
+  action: AuditAction;
+  targetType:
+    typeof AuditTargetType.QUESTION | typeof AuditTargetType.CLASSROOM;
+  targetId: string;
+  summary: string;
+  beforeData: AuditConfigSnapshot;
+  afterData: AuditConfigSnapshot;
+  context: AuditRequestContext;
+}
+
+export async function writeGovernanceAuditLog(
+  transaction: Prisma.TransactionClient,
+  input: WriteGovernanceAuditInput,
+): Promise<void> {
+  await transaction.auditLog.create({
+    data: {
+      actorId: input.actorId,
+      action: input.action,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      summary: input.summary,
+      beforeData: input.beforeData,
+      afterData: input.afterData,
+      ipAddress: input.context.ipAddress,
+      userAgent: input.context.userAgent,
+    },
+  });
+}
+
 export async function writeTeachingAuditLog(
   transaction: Prisma.TransactionClient,
   input: WriteTeachingAuditInput,

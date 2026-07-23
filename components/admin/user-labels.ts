@@ -27,4 +27,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   ANNOUNCEMENT_PUBLISHED: "发布公告",
   SUBMISSION_GRADING_COMPLETED: "完成提交批改",
   ASSIGNMENT_RESULTS_PUBLISHED: "发布作业成绩",
+  QUESTION_MADE_PUBLIC: "题目设为公共",
+  QUESTION_MADE_PRIVATE: "撤销题目公共状态",
+  QUESTION_DISABLED: "停用题目",
+  CLASSROOM_CLOSED_BY_ADMIN: "管理员关闭班级",
 };

@@ -54,6 +54,8 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
   ADMIN: [
     { href: "/admin", label: "平台概览", icon: ShieldCheck },
     { href: "/admin/users", label: "用户管理", icon: Users },
+    { href: "/admin/questions", label: "公共题库", icon: BookOpenCheck },
+    { href: "/admin/classrooms", label: "班级治理", icon: School },
     { href: "/admin/audit-logs", label: "审计日志", icon: ScrollText },
     { href: "/admin/announcements", label: "系统公告", icon: Megaphone },
     { href: "/admin/system-config", label: "系统配置", icon: Settings },
