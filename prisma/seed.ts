@@ -24,6 +24,8 @@ import {
 } from "@prisma/client";
 import { hash } from "bcryptjs";
 
+import { assertSafeSeedDatabase } from "./seed-safety";
+
 const prisma = new PrismaClient();
 
 interface SeedUser {
@@ -2501,6 +2503,8 @@ async function seedUniversityDemo(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  assertSafeSeedDatabase();
+
   // Notifications and published announcements are intentionally not seeded.
   // They must always be created by a real business event or an explicit admin action.
   await prisma.authSession.deleteMany({

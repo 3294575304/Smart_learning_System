@@ -13,6 +13,7 @@ import {
   isolatedDatabaseUrl,
   validateTestDatabaseUrl,
 } from "./database";
+import { assertSafeSeedDatabase } from "../../prisma/seed-safety";
 
 function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
   const result = spawnSync(command, args, {
@@ -28,6 +29,59 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
     );
   }
 }
+
+test("demo seed refuses production and unsafe remote targets", () => {
+  assert.throws(
+    () =>
+      assertSafeSeedDatabase({
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/app",
+        NODE_ENV: "production",
+      }),
+    /production environment/u,
+  );
+  assert.throws(
+    () =>
+      assertSafeSeedDatabase({
+        DATABASE_URL:
+          "postgresql://postgres:postgres@localhost:5432/zhixue_production",
+      }),
+    /production or staging target/u,
+  );
+  assert.throws(
+    () =>
+      assertSafeSeedDatabase({
+        DATABASE_URL:
+          "postgresql://postgres:postgres@db.example.com:5432/zhixue",
+      }),
+    /remote database/u,
+  );
+});
+
+test("demo seed allows local, dev, test, and demo targets", () => {
+  assert.doesNotThrow(() =>
+    assertSafeSeedDatabase({
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/zhixue",
+    }),
+  );
+  assert.doesNotThrow(() =>
+    assertSafeSeedDatabase({
+      DATABASE_URL:
+        "postgresql://postgres:postgres@db.example.com:5432/zhixue_dev",
+    }),
+  );
+  assert.doesNotThrow(() =>
+    assertSafeSeedDatabase({
+      DATABASE_URL:
+        "postgresql://postgres:postgres@db.example.com:5432/zhixue_test",
+    }),
+  );
+  assert.doesNotThrow(() =>
+    assertSafeSeedDatabase({
+      DATABASE_URL:
+        "postgresql://postgres:postgres@db.example.com:5432/zhixue_demo",
+    }),
+  );
+});
 
 async function captureUniversityDemoSnapshot(
   client: PrismaClient,
