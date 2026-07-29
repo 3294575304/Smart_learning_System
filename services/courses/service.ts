@@ -1,0 +1,650 @@
+import {
+  AuditAction,
+  AuditTargetType,
+  ClassroomStatus,
+  CourseStatus,
+  MembershipStatus,
+  Prisma,
+} from "@prisma/client";
+
+import { prisma } from "@/lib/prisma";
+import { ResourceNotFoundError } from "@/services/auth/policy";
+import { writeGovernanceAuditLog } from "@/services/audit/repository";
+import type {
+  AuditConfigSnapshot,
+  AuditRequestContext,
+} from "@/services/audit/types";
+import { CourseOperationError } from "@/services/courses/errors";
+import {
+  findActiveCourseTemplateById,
+  findCourseTemplateById,
+  findTeacherClassroomById,
+  findTeacherCourseById,
+  loadCourseTemplates,
+  loadTeacherClassroomsForCourseLink,
+  loadTeacherCourses,
+  type CourseTemplateRecord,
+  type TeacherCourseClassroomRecord,
+  type TeacherCourseRecord,
+} from "@/services/courses/repository";
+import type {
+  CreateCourseData,
+  CreateCourseTemplateData,
+  UpdateCourseData,
+  UpdateCourseTemplateData,
+} from "@/services/courses/schemas";
+import type {
+  CourseTemplateView,
+  TeacherCourseClassroomView,
+  TeacherCourseDetail,
+  TeacherCourseListItem,
+} from "@/services/courses/types";
+
+function isKnownPrismaError(error: unknown, code: string): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === code
+  );
+}
+
+function templateSnapshot(template: CourseTemplateRecord): AuditConfigSnapshot {
+  return {
+    code: template.code,
+    name: template.name,
+    description: template.description,
+    version: template.version,
+    isBuiltin: template.isBuiltin,
+    isActive: template.isActive,
+    courseCount: template._count.courses,
+  };
+}
+
+function courseSnapshot(item: TeacherCourseListItem): AuditConfigSnapshot {
+  return {
+    templateCode: item.template.code,
+    templateName: item.template.name,
+    courseNo: item.courseNo,
+    term: item.term,
+    name: item.name,
+    description: item.description,
+    status: item.status,
+    classroomCount: item.classroomCount,
+    activeClassroomCount: item.activeClassroomCount,
+    activeStudentCount: item.activeStudentCount,
+  };
+}
+
+function classroomAssociationSnapshot(
+  classroom: TeacherCourseClassroomRecord,
+): AuditConfigSnapshot {
+  return {
+    classroomName: classroom.name,
+    classroomStatus: classroom.status,
+    classroomId: classroom.id,
+    currentCourseId: classroom.course?.id ?? null,
+    currentCourseName: classroom.course?.name ?? null,
+    currentCourseNo: classroom.course?.courseNo ?? null,
+    currentCourseTerm: classroom.course?.term ?? null,
+  };
+}
+
+function classroomViewFromRecord(
+  classroom: TeacherCourseClassroomRecord,
+): TeacherCourseClassroomView {
+  return {
+    id: classroom.id,
+    name: classroom.name,
+    description: classroom.description,
+    status: classroom.status,
+    allowStudentLeave: classroom.allowStudentLeave,
+    studentCount: classroom._count.memberships,
+    currentCourse: classroom.course
+      ? {
+          id: classroom.course.id,
+          name: classroom.course.name,
+          courseNo: classroom.course.courseNo,
+          term: classroom.course.term,
+          status: classroom.course.status,
+        }
+      : null,
+    createdAt: classroom.createdAt,
+    updatedAt: classroom.updatedAt,
+  };
+}
+
+function templateViewFromRecord(
+  template: CourseTemplateRecord,
+): CourseTemplateView {
+  return {
+    id: template.id,
+    code: template.code,
+    name: template.name,
+    description: template.description,
+    version: template.version,
+    isBuiltin: template.isBuiltin,
+    isActive: template.isActive,
+    courseCount: template._count.courses,
+    createdAt: template.createdAt,
+    updatedAt: template.updatedAt,
+  };
+}
+
+function courseItemFromRecord(record: TeacherCourseRecord): TeacherCourseListItem {
+  const classroomCount = record.classrooms.length;
+  const activeClassroomCount = record.classrooms.filter(
+    (classroom) => classroom.status === ClassroomStatus.ACTIVE,
+  ).length;
+  const activeStudentCount = record.classrooms.reduce(
+    (sum, classroom) => sum + classroom._count.memberships,
+    0,
+  );
+
+  return {
+    id: record.id,
+    template: {
+      id: record.template.id,
+      code: record.template.code,
+      name: record.template.name,
+      description: null,
+      version: record.template.version,
+      isBuiltin: record.template.isBuiltin,
+    },
+    courseNo: record.courseNo,
+    term: record.term,
+    name: record.name,
+    description: record.description,
+    status: record.status,
+    publishedAt: record.publishedAt,
+    archivedAt: record.archivedAt,
+    classroomCount,
+    activeClassroomCount,
+    activeStudentCount,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function courseDetailFromRecords(
+  course: TeacherCourseRecord,
+  classrooms: TeacherCourseClassroomRecord[],
+): TeacherCourseDetail {
+  const item = courseItemFromRecord(course);
+  return {
+    ...item,
+    linkedClassrooms: classrooms
+      .filter((classroom) => classroom.courseId === course.id)
+      .map(classroomViewFromRecord),
+    classrooms: classrooms.map(classroomViewFromRecord),
+  };
+}
+
+function courseUpdateSnapshot(
+  course: TeacherCourseListItem,
+): AuditConfigSnapshot {
+  return {
+    ...courseSnapshot(course),
+    templateCode: course.template.code,
+    templateName: course.template.name,
+  };
+}
+
+function throwIfUniqueConstraintError(error: unknown, message: string): never {
+  if (isKnownPrismaError(error, "P2002")) {
+    throw new CourseOperationError(message);
+  }
+  throw error;
+}
+
+export async function listAdminCourseTemplates(): Promise<CourseTemplateView[]> {
+  return (await loadCourseTemplates()).map(templateViewFromRecord);
+}
+
+export async function getAdminCourseTemplate(
+  templateId: string,
+): Promise<CourseTemplateView> {
+  const template = await findCourseTemplateById(templateId);
+  if (!template) {
+    throw new ResourceNotFoundError("课程模板不存在");
+  }
+  return templateViewFromRecord(template);
+}
+
+export async function createAdminCourseTemplate(
+  actorId: string,
+  input: CreateCourseTemplateData,
+  context: AuditRequestContext,
+): Promise<CourseTemplateView> {
+  try {
+    return await prisma.$transaction(async (transaction) => {
+      const template = await transaction.courseTemplate.create({
+        data: {
+          code: input.code,
+          name: input.name,
+          description: input.description,
+          version: input.version,
+          isBuiltin: false,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          description: true,
+          version: true,
+          isBuiltin: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: { select: { courses: true } },
+        },
+      });
+
+      await writeGovernanceAuditLog(transaction, {
+        actorId,
+        action: AuditAction.COURSE_TEMPLATE_CREATED,
+        targetType: AuditTargetType.COURSE_TEMPLATE,
+        targetId: template.id,
+        summary: `创建课程模板：${template.name}`,
+        beforeData: null,
+        afterData: templateSnapshot(template),
+        context,
+      });
+
+      return templateViewFromRecord(template);
+    });
+  } catch (error: unknown) {
+    throwIfUniqueConstraintError(error, "课程模板编码已存在");
+  }
+}
+
+export async function updateAdminCourseTemplate(
+  actorId: string,
+  templateId: string,
+  input: UpdateCourseTemplateData,
+  context: AuditRequestContext,
+): Promise<CourseTemplateView> {
+  return prisma.$transaction(async (transaction) => {
+    const before = await findCourseTemplateById(templateId, transaction);
+    if (!before) {
+      throw new ResourceNotFoundError("课程模板不存在");
+    }
+
+    const nextName = input.name;
+    const nextDescription = input.description;
+    const nextVersion = input.version;
+    const changed =
+      nextName !== before.name ||
+      nextDescription !== before.description ||
+      nextVersion !== before.version;
+
+    if (!changed) {
+      return templateViewFromRecord(before);
+    }
+
+    const after = await transaction.courseTemplate.update({
+      where: { id: templateId },
+      data: {
+        name: nextName,
+        description: nextDescription,
+        version: nextVersion,
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        version: true,
+        isBuiltin: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { courses: true } },
+      },
+    });
+
+    await writeGovernanceAuditLog(transaction, {
+      actorId,
+      action: AuditAction.COURSE_TEMPLATE_UPDATED,
+      targetType: AuditTargetType.COURSE_TEMPLATE,
+      targetId: templateId,
+      summary: `更新课程模板：${after.name}`,
+      beforeData: templateSnapshot(before),
+      afterData: templateSnapshot(after),
+      context,
+    });
+
+    return templateViewFromRecord(after);
+  });
+}
+
+export async function setAdminCourseTemplateActive(
+  actorId: string,
+  templateId: string,
+  isActive: boolean,
+  context: AuditRequestContext,
+): Promise<CourseTemplateView> {
+  return prisma.$transaction(async (transaction) => {
+    const before = await findCourseTemplateById(templateId, transaction);
+    if (!before) {
+      throw new ResourceNotFoundError("课程模板不存在");
+    }
+
+    if (before.isActive === isActive) {
+      return templateViewFromRecord(before);
+    }
+
+    const after = await transaction.courseTemplate.update({
+      where: { id: templateId },
+      data: { isActive },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        version: true,
+        isBuiltin: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { courses: true } },
+      },
+    });
+
+    await writeGovernanceAuditLog(transaction, {
+      actorId,
+      action: isActive
+        ? AuditAction.COURSE_TEMPLATE_ENABLED
+        : AuditAction.COURSE_TEMPLATE_DISABLED,
+      targetType: AuditTargetType.COURSE_TEMPLATE,
+      targetId: templateId,
+      summary: `${isActive ? "启用" : "停用"}课程模板：${after.name}`,
+      beforeData: templateSnapshot(before),
+      afterData: templateSnapshot(after),
+      context,
+    });
+
+    return templateViewFromRecord(after);
+  });
+}
+
+export async function listTeacherCourseTemplates(): Promise<CourseTemplateView[]> {
+  return (await loadCourseTemplates(prisma, true)).map(templateViewFromRecord);
+}
+
+export async function listTeacherCourses(
+  teacherId: string,
+): Promise<TeacherCourseListItem[]> {
+  return (await loadTeacherCourses(teacherId)).map(courseItemFromRecord);
+}
+
+export async function getTeacherCourse(
+  teacherId: string,
+  courseId: string,
+): Promise<TeacherCourseDetail> {
+  const course = await findTeacherCourseById(teacherId, courseId);
+  if (!course) {
+    throw new ResourceNotFoundError("课程不存在");
+  }
+
+  const classrooms = await loadTeacherClassroomsForCourseLink(teacherId);
+  return courseDetailFromRecords(course, classrooms);
+}
+
+export async function createTeacherCourse(
+  teacherId: string,
+  input: CreateCourseData,
+  context: AuditRequestContext,
+): Promise<TeacherCourseDetail> {
+  const template = await findActiveCourseTemplateById(input.templateId);
+  if (!template) {
+    throw new ResourceNotFoundError("课程模板不存在或已停用");
+  }
+
+  try {
+    const course = await prisma.$transaction(async (transaction) => {
+      const created = await transaction.course.create({
+        data: {
+          templateId: template.id,
+          teacherId,
+          courseNo: input.courseNo,
+          term: input.term,
+          name: input.name,
+          description: input.description,
+          status: CourseStatus.ACTIVE,
+        },
+        select: {
+          id: true,
+          templateId: true,
+          teacherId: true,
+          courseNo: true,
+          term: true,
+          name: true,
+          description: true,
+          status: true,
+          publishedAt: true,
+          archivedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          template: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              version: true,
+              isBuiltin: true,
+            },
+          },
+          classrooms: {
+            select: {
+              id: true,
+              status: true,
+              _count: {
+                select: {
+                  memberships: {
+                    where: {
+                      status: MembershipStatus.ACTIVE,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const createdView = courseItemFromRecord(created);
+      await writeGovernanceAuditLog(transaction, {
+        actorId: teacherId,
+        action: AuditAction.COURSE_CREATED,
+        targetType: AuditTargetType.COURSE,
+        targetId: created.id,
+        summary: `创建课程：${created.name}（${created.courseNo} / ${created.term}）`,
+        beforeData: null,
+        afterData: courseUpdateSnapshot(createdView),
+        context,
+      });
+
+      return created.id;
+    });
+
+    return getTeacherCourse(teacherId, course);
+  } catch (error: unknown) {
+    throwIfUniqueConstraintError(
+      error,
+      "同一教师在同一学期下已经存在相同课程号的课程",
+    );
+  }
+}
+
+export async function updateTeacherCourse(
+  teacherId: string,
+  courseId: string,
+  input: UpdateCourseData,
+  context: AuditRequestContext,
+): Promise<TeacherCourseDetail> {
+  return prisma.$transaction(async (transaction) => {
+    const before = await findTeacherCourseById(teacherId, courseId, transaction);
+    if (!before) {
+      throw new ResourceNotFoundError("课程不存在");
+    }
+
+    const beforeView = courseItemFromRecord(before);
+    const changed =
+      input.courseNo !== before.courseNo ||
+      input.term !== before.term ||
+      input.name !== before.name ||
+      input.description !== before.description;
+
+    if (!changed) {
+      const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+      return courseDetailFromRecords(before, classrooms);
+    }
+
+    try {
+      await transaction.course.update({
+        where: { id: courseId },
+        data: {
+          courseNo: input.courseNo,
+          term: input.term,
+          name: input.name,
+          description: input.description,
+        },
+      });
+    } catch (error: unknown) {
+      throwIfUniqueConstraintError(
+        error,
+        "同一教师在同一学期下已经存在相同课程号的课程",
+      );
+    }
+
+    const after = await findTeacherCourseById(teacherId, courseId, transaction);
+    if (!after) {
+      throw new ResourceNotFoundError("课程不存在");
+    }
+
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: AuditAction.COURSE_UPDATED,
+      targetType: AuditTargetType.COURSE,
+      targetId: courseId,
+      summary: `更新课程：${after.name}（${after.courseNo} / ${after.term}）`,
+      beforeData: courseSnapshot(beforeView),
+      afterData: courseSnapshot(courseItemFromRecord(after)),
+      context,
+    });
+
+    const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+    return courseDetailFromRecords(after, classrooms);
+  });
+}
+
+export async function linkTeacherClassroomToCourse(
+  teacherId: string,
+  courseId: string,
+  classroomId: string,
+  context: AuditRequestContext,
+): Promise<TeacherCourseDetail> {
+  return prisma.$transaction(async (transaction) => {
+    const course = await findTeacherCourseById(teacherId, courseId, transaction);
+    if (!course) {
+      throw new ResourceNotFoundError("课程不存在");
+    }
+
+    const classroom = await findTeacherClassroomById(
+      teacherId,
+      classroomId,
+      transaction,
+    );
+    if (!classroom) {
+      throw new ResourceNotFoundError("班级不存在");
+    }
+
+    if (classroom.courseId === courseId) {
+      const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+      return courseDetailFromRecords(course, classrooms);
+    }
+
+    await transaction.classroom.update({
+      where: { id: classroomId },
+      data: { courseId },
+    });
+
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: AuditAction.COURSE_CLASSROOM_LINKED,
+      targetType: AuditTargetType.CLASSROOM,
+      targetId: classroomId,
+      summary: `将班级 ${classroom.name} 关联到课程 ${course.name}`,
+      beforeData: classroomAssociationSnapshot(classroom),
+      afterData: classroomAssociationSnapshot({
+        ...classroom,
+        courseId,
+        course: {
+          id: course.id,
+          name: course.name,
+          courseNo: course.courseNo,
+          term: course.term,
+          status: course.status,
+        },
+      }),
+      context,
+    });
+
+    const nextCourse = await findTeacherCourseById(teacherId, courseId, transaction);
+    if (!nextCourse) {
+      throw new ResourceNotFoundError("课程不存在");
+    }
+    const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+    return courseDetailFromRecords(nextCourse, classrooms);
+  });
+}
+
+export async function unlinkTeacherClassroomFromCourse(
+  teacherId: string,
+  courseId: string,
+  classroomId: string,
+  context: AuditRequestContext,
+): Promise<TeacherCourseDetail> {
+  return prisma.$transaction(async (transaction) => {
+    const course = await findTeacherCourseById(teacherId, courseId, transaction);
+    if (!course) {
+      throw new ResourceNotFoundError("课程不存在");
+    }
+
+    const classroom = await findTeacherClassroomById(
+      teacherId,
+      classroomId,
+      transaction,
+    );
+    if (!classroom || classroom.courseId !== courseId) {
+      throw new ResourceNotFoundError("班级关联不存在");
+    }
+
+    await transaction.classroom.update({
+      where: { id: classroomId },
+      data: { courseId: null },
+    });
+
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: AuditAction.COURSE_CLASSROOM_UNLINKED,
+      targetType: AuditTargetType.CLASSROOM,
+      targetId: classroomId,
+      summary: `将班级 ${classroom.name} 从课程 ${course.name} 中解除关联`,
+      beforeData: classroomAssociationSnapshot(classroom),
+      afterData: classroomAssociationSnapshot({
+        ...classroom,
+        courseId: null,
+        course: null,
+      }),
+      context,
+    });
+
+    const nextCourse = await findTeacherCourseById(teacherId, courseId, transaction);
+    if (!nextCourse) {
+      throw new ResourceNotFoundError("课程不存在");
+    }
+    const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+    return courseDetailFromRecords(nextCourse, classrooms);
+  });
+}

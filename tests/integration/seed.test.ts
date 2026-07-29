@@ -90,6 +90,7 @@ async function captureUniversityDemoSnapshot(
     userCount,
     classroomCount,
     courseTemplateCount,
+    pythonTemplateAvailableCount,
     courseCount,
     knowledgePointCount,
     questionCount,
@@ -103,6 +104,13 @@ async function captureUniversityDemoSnapshot(
       }),
       client.courseTemplate.count({
         where: { code: "python-programming-v1" },
+      }),
+      client.courseTemplate.count({
+        where: {
+          code: "python-programming-v1",
+          isActive: true,
+          isBuiltin: true,
+        },
       }),
       client.course.count({
         where: {
@@ -195,6 +203,7 @@ async function captureUniversityDemoSnapshot(
     userCount,
     classroomCount,
     courseTemplateCount,
+    pythonTemplateAvailableCount,
     courseCount,
     knowledgePointCount,
     questionCount,
@@ -231,6 +240,7 @@ test("university demo seed is repeatable and complete", async () => {
       userCount: 4,
       classroomCount: 1,
       courseTemplateCount: 1,
+      pythonTemplateAvailableCount: 1,
       courseCount: 1,
       knowledgePointCount: 8,
       questionCount: 15,

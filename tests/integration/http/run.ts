@@ -39,6 +39,7 @@ async function main(): Promise<void> {
     "tests/auth/http-integration.ts",
     "tests/admin/http-integration.ts",
     "tests/classrooms/http-integration.ts",
+    "tests/courses/http-integration.ts",
     "tests/questions/http-integration.ts",
     "tests/assignments/http-integration.ts",
     "tests/ai-analysis/http-integration.ts",

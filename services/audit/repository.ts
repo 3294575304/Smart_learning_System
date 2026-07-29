@@ -1,5 +1,3 @@
-import "server-only";
-
 import { AuditTargetType, Prisma, type AuditAction } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -148,11 +146,14 @@ interface WriteGovernanceAuditInput {
   actorId: string;
   action: AuditAction;
   targetType:
-    typeof AuditTargetType.QUESTION | typeof AuditTargetType.CLASSROOM;
+    | typeof AuditTargetType.QUESTION
+    | typeof AuditTargetType.CLASSROOM
+    | typeof AuditTargetType.COURSE
+    | typeof AuditTargetType.COURSE_TEMPLATE;
   targetId: string;
   summary: string;
-  beforeData: AuditConfigSnapshot;
-  afterData: AuditConfigSnapshot;
+  beforeData: AuditConfigSnapshot | null;
+  afterData: AuditConfigSnapshot | null;
   context: AuditRequestContext;
 }
 
@@ -167,8 +168,8 @@ export async function writeGovernanceAuditLog(
       targetType: input.targetType,
       targetId: input.targetId,
       summary: input.summary,
-      beforeData: input.beforeData,
-      afterData: input.afterData,
+      ...(input.beforeData ? { beforeData: input.beforeData } : {}),
+      ...(input.afterData ? { afterData: input.afterData } : {}),
       ipAddress: input.context.ipAddress,
       userAgent: input.context.userAgent,
     },
