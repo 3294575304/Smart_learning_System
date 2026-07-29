@@ -3,7 +3,7 @@ import { getErrorStatus, getSafeErrorMessage } from "@/services/auth/policy";
 export class CourseOperationError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 409 = 409,
+    readonly status: 400 | 409 | 413 | 500 = 409,
   ) {
     super(message);
     this.name = "CourseOperationError";

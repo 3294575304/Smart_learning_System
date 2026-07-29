@@ -149,7 +149,8 @@ interface WriteGovernanceAuditInput {
     | typeof AuditTargetType.QUESTION
     | typeof AuditTargetType.CLASSROOM
     | typeof AuditTargetType.COURSE
-    | typeof AuditTargetType.COURSE_TEMPLATE;
+    | typeof AuditTargetType.COURSE_TEMPLATE
+    | typeof AuditTargetType.COURSE_FILE;
   targetId: string;
   summary: string;
   beforeData: AuditConfigSnapshot | null;

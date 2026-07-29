@@ -296,6 +296,7 @@ model User {
   createdAnnouncements        Announcement[]               @relation("AnnouncementCreator")
   publishedAnnouncements      Announcement[]               @relation("AnnouncementPublisher")
   uploadedCourseFiles         CourseFileVersion[]          @relation("CourseFileUploadedBy")
+  uploadedCourseSyllabi       CourseSyllabus[]             @relation("CourseSyllabusUploadedBy")
   createdStudentImportBatches StudentImportBatch[]         @relation("StudentImportBatchCreatedBy")
   matchedStudentImportRows    StudentImportRow[]           @relation("StudentImportMatchedUser")
   createdStudentImportRows    StudentImportRow[]           @relation("StudentImportCreatedUser")
@@ -480,6 +481,7 @@ model Course {
   teacher              User                 @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
   classrooms           Classroom[]          @relation("ClassroomCourse")
   courseFileVersions   CourseFileVersion[]  @relation("CourseFileCourse")
+  syllabus             CourseSyllabus?      @relation("CourseSyllabusCourse")
   studentImportBatches StudentImportBatch[] @relation("StudentImportCourse")
 
   @@unique([teacherId, courseNo, term])
@@ -513,6 +515,23 @@ model CourseFileVersion {
   @@unique([courseId, fileKind, fileKey, versionNumber])
   @@index([courseId, fileKind, createdAt])
   @@index([courseId, uploadedById, createdAt])
+}
+
+model CourseSyllabus {
+  id           String   @id @default(cuid())
+  courseId     String   @unique
+  uploadedById String
+  originalName String   @db.VarChar(255)
+  mimeType     String   @db.VarChar(100)
+  sizeBytes    Int
+  storageKey   String   @unique @db.VarChar(191)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  course     Course @relation("CourseSyllabusCourse", fields: [courseId], references: [id], onDelete: Cascade)
+  uploadedBy User   @relation("CourseSyllabusUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([uploadedById])
 }
 
 model Classroom {

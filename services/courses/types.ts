@@ -1,3 +1,4 @@
+import type { Buffer } from "node:buffer";
 import type { ClassroomStatus, CourseStatus } from "@prisma/client";
 
 export interface CourseTemplateView {
@@ -60,4 +61,23 @@ export interface TeacherCourseListItem {
 export interface TeacherCourseDetail extends TeacherCourseListItem {
   linkedClassrooms: TeacherCourseClassroomView[];
   classrooms: TeacherCourseClassroomView[];
+}
+
+export interface CourseSyllabusView {
+  id: string;
+  courseId: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: Date;
+  uploadedBy: {
+    id: string;
+    displayName: string | null;
+    email: string | null;
+  };
+}
+
+export interface CourseSyllabusDownload {
+  syllabus: CourseSyllabusView;
+  data: Buffer;
 }

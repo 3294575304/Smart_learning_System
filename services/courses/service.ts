@@ -6,6 +6,8 @@ import {
   MembershipStatus,
   Prisma,
 } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -18,11 +20,15 @@ import { CourseOperationError } from "@/services/courses/errors";
 import {
   findActiveCourseTemplateById,
   findCourseTemplateById,
+  findCourseSyllabusByCourseId,
   findTeacherClassroomById,
   findTeacherCourseById,
+  findTeacherCourseSyllabus,
   loadCourseTemplates,
   loadTeacherClassroomsForCourseLink,
   loadTeacherCourses,
+  upsertCourseSyllabusRecord,
+  type CourseSyllabusRecord,
   type CourseTemplateRecord,
   type TeacherCourseClassroomRecord,
   type TeacherCourseRecord,
@@ -35,16 +41,103 @@ import type {
 } from "@/services/courses/schemas";
 import type {
   CourseTemplateView,
+  CourseSyllabusDownload,
+  CourseSyllabusView,
   TeacherCourseClassroomView,
   TeacherCourseDetail,
   TeacherCourseListItem,
 } from "@/services/courses/types";
+import { getStorageService } from "@/services/storage";
+import type { StorageService } from "@/services/storage/types";
 
 function isKnownPrismaError(error: unknown, code: string): boolean {
   return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === code
+    error instanceof Prisma.PrismaClientKnownRequestError && error.code === code
   );
+}
+
+const SYLLABUS_MAX_SIZE_BYTES = 20 * 1024 * 1024;
+const PDF_MIME_TYPE = "application/pdf";
+const PDF_HEADER = Buffer.from("%PDF-");
+
+export interface CourseSyllabusUploadFile {
+  name: string;
+  type: string;
+  size: number;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+export interface CourseSyllabusUploadDependencies {
+  storage?: StorageService;
+  storageKeyFactory?: () => string;
+  logger?: Pick<Console, "error">;
+}
+
+interface ValidatedSyllabusFile {
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: Buffer;
+}
+
+function generatedSyllabusStorageKey(): string {
+  return `course-syllabi/${randomUUID()}.pdf`;
+}
+
+function originalFileBaseName(name: string): string {
+  return path.basename(name.replace(/\\/gu, "/")).trim();
+}
+
+async function validatedSyllabusFile(
+  file: CourseSyllabusUploadFile | null | undefined,
+): Promise<ValidatedSyllabusFile> {
+  if (!file) {
+    throw new CourseOperationError("请上传教学大纲 PDF。", 400);
+  }
+
+  const originalName = originalFileBaseName(file.name);
+  if (!originalName) {
+    throw new CourseOperationError("教学大纲文件名不能为空。", 400);
+  }
+
+  if (!originalName.toLowerCase().endsWith(".pdf")) {
+    throw new CourseOperationError("教学大纲仅支持 PDF 文件。", 400);
+  }
+
+  if (file.type !== PDF_MIME_TYPE) {
+    throw new CourseOperationError(
+      "教学大纲文件 MIME 类型必须为 application/pdf。",
+      400,
+    );
+  }
+
+  if (!Number.isSafeInteger(file.size) || file.size <= 0) {
+    throw new CourseOperationError("教学大纲文件不能为空。", 400);
+  }
+
+  if (file.size > SYLLABUS_MAX_SIZE_BYTES) {
+    throw new CourseOperationError("教学大纲文件不能超过 20 MB。", 413);
+  }
+
+  const data = Buffer.from(await file.arrayBuffer());
+  if (data.length === 0) {
+    throw new CourseOperationError("教学大纲文件不能为空。", 400);
+  }
+
+  if (data.length > SYLLABUS_MAX_SIZE_BYTES) {
+    throw new CourseOperationError("教学大纲文件不能超过 20 MB。", 413);
+  }
+
+  if (!data.subarray(0, PDF_HEADER.length).equals(PDF_HEADER)) {
+    throw new CourseOperationError("教学大纲文件内容不是合法 PDF。", 400);
+  }
+
+  return {
+    originalName,
+    mimeType: PDF_MIME_TYPE,
+    sizeBytes: data.length,
+    data,
+  };
 }
 
 function templateSnapshot(template: CourseTemplateRecord): AuditConfigSnapshot {
@@ -71,6 +164,17 @@ function courseSnapshot(item: TeacherCourseListItem): AuditConfigSnapshot {
     classroomCount: item.classroomCount,
     activeClassroomCount: item.activeClassroomCount,
     activeStudentCount: item.activeStudentCount,
+  };
+}
+
+function syllabusSnapshot(syllabus: CourseSyllabusRecord): AuditConfigSnapshot {
+  return {
+    courseId: syllabus.courseId,
+    originalName: syllabus.originalName,
+    mimeType: syllabus.mimeType,
+    sizeBytes: syllabus.sizeBytes,
+    uploadedById: syllabus.uploadedById,
+    uploadedAt: syllabus.updatedAt.toISOString(),
   };
 }
 
@@ -129,7 +233,9 @@ function templateViewFromRecord(
   };
 }
 
-function courseItemFromRecord(record: TeacherCourseRecord): TeacherCourseListItem {
+function courseItemFromRecord(
+  record: TeacherCourseRecord,
+): TeacherCourseListItem {
   const classroomCount = record.classrooms.length;
   const activeClassroomCount = record.classrooms.filter(
     (classroom) => classroom.status === ClassroomStatus.ACTIVE,
@@ -164,6 +270,24 @@ function courseItemFromRecord(record: TeacherCourseRecord): TeacherCourseListIte
   };
 }
 
+function syllabusViewFromRecord(
+  record: CourseSyllabusRecord,
+): CourseSyllabusView {
+  return {
+    id: record.id,
+    courseId: record.courseId,
+    originalName: record.originalName,
+    mimeType: record.mimeType,
+    sizeBytes: record.sizeBytes,
+    uploadedAt: record.updatedAt,
+    uploadedBy: {
+      id: record.uploadedBy.id,
+      displayName: record.uploadedBy.profile?.displayName ?? null,
+      email: record.uploadedBy.email,
+    },
+  };
+}
+
 function courseDetailFromRecords(
   course: TeacherCourseRecord,
   classrooms: TeacherCourseClassroomRecord[],
@@ -195,7 +319,9 @@ function throwIfUniqueConstraintError(error: unknown, message: string): never {
   throw error;
 }
 
-export async function listAdminCourseTemplates(): Promise<CourseTemplateView[]> {
+export async function listAdminCourseTemplates(): Promise<
+  CourseTemplateView[]
+> {
   return (await loadCourseTemplates()).map(templateViewFromRecord);
 }
 
@@ -367,7 +493,9 @@ export async function setAdminCourseTemplateActive(
   });
 }
 
-export async function listTeacherCourseTemplates(): Promise<CourseTemplateView[]> {
+export async function listTeacherCourseTemplates(): Promise<
+  CourseTemplateView[]
+> {
   return (await loadCourseTemplates(prisma, true)).map(templateViewFromRecord);
 }
 
@@ -388,6 +516,162 @@ export async function getTeacherCourse(
 
   const classrooms = await loadTeacherClassroomsForCourseLink(teacherId);
   return courseDetailFromRecords(course, classrooms);
+}
+
+export async function getTeacherCourseSyllabus(
+  teacherId: string,
+  courseId: string,
+): Promise<CourseSyllabusView | null> {
+  const course = await findTeacherCourseById(teacherId, courseId);
+  if (!course) {
+    throw new ResourceNotFoundError("课程不存在。");
+  }
+
+  const syllabus = await findTeacherCourseSyllabus(teacherId, courseId);
+  return syllabus ? syllabusViewFromRecord(syllabus) : null;
+}
+
+async function cleanupSavedSyllabusFile(
+  storage: StorageService,
+  storageKey: string,
+  logger: Pick<Console, "error">,
+): Promise<void> {
+  try {
+    await storage.delete(storageKey);
+  } catch (cleanupError: unknown) {
+    logger.error("Failed to clean course syllabus file", cleanupError);
+  }
+}
+
+export async function uploadTeacherCourseSyllabus(
+  teacherId: string,
+  courseId: string,
+  file: CourseSyllabusUploadFile | null | undefined,
+  context: AuditRequestContext,
+  dependencies: CourseSyllabusUploadDependencies = {},
+): Promise<CourseSyllabusView> {
+  const course = await findTeacherCourseById(teacherId, courseId);
+  if (!course) {
+    throw new ResourceNotFoundError("课程不存在。");
+  }
+
+  const upload = await validatedSyllabusFile(file);
+  const storage = dependencies.storage ?? getStorageService();
+  const logger = dependencies.logger ?? console;
+  const storageKey =
+    dependencies.storageKeyFactory?.() ?? generatedSyllabusStorageKey();
+
+  try {
+    await storage.save(storageKey, upload.data);
+  } catch (error: unknown) {
+    logger.error("Failed to save course syllabus file", error);
+    throw new CourseOperationError("教学大纲文件保存失败，请稍后重试。", 500);
+  }
+
+  let transactionResult: {
+    savedSyllabus: CourseSyllabusRecord;
+    previousStorageKey: string | null;
+  };
+
+  try {
+    transactionResult = await prisma.$transaction(async (transaction) => {
+      const currentCourse = await findTeacherCourseById(
+        teacherId,
+        courseId,
+        transaction,
+      );
+      if (!currentCourse) {
+        throw new ResourceNotFoundError("课程不存在。");
+      }
+
+      const previousSyllabus = await findCourseSyllabusByCourseId(
+        courseId,
+        transaction,
+      );
+      const nextSyllabus = await upsertCourseSyllabusRecord(
+        {
+          courseId,
+          uploadedById: teacherId,
+          originalName: upload.originalName,
+          mimeType: upload.mimeType,
+          sizeBytes: upload.sizeBytes,
+          storageKey,
+        },
+        transaction,
+      );
+
+      await writeGovernanceAuditLog(transaction, {
+        actorId: teacherId,
+        action: AuditAction.COURSE_UPDATED,
+        targetType: AuditTargetType.COURSE_FILE,
+        targetId: nextSyllabus.id,
+        summary: previousSyllabus
+          ? `替换教学大纲：${currentCourse.name}`
+          : `首次上传教学大纲：${currentCourse.name}`,
+        beforeData: previousSyllabus
+          ? syllabusSnapshot(previousSyllabus)
+          : null,
+        afterData: syllabusSnapshot(nextSyllabus),
+        context,
+      });
+
+      return {
+        savedSyllabus: nextSyllabus,
+        previousStorageKey: previousSyllabus?.storageKey ?? null,
+      };
+    });
+  } catch (error: unknown) {
+    await cleanupSavedSyllabusFile(storage, storageKey, logger);
+    throw error;
+  }
+
+  if (
+    transactionResult.previousStorageKey &&
+    transactionResult.previousStorageKey !==
+      transactionResult.savedSyllabus.storageKey
+  ) {
+    await cleanupSavedSyllabusFile(
+      storage,
+      transactionResult.previousStorageKey,
+      logger,
+    );
+  }
+
+  return syllabusViewFromRecord(transactionResult.savedSyllabus);
+}
+
+export async function downloadTeacherCourseSyllabus(
+  teacherId: string,
+  courseId: string,
+  dependencies: Pick<
+    CourseSyllabusUploadDependencies,
+    "storage" | "logger"
+  > = {},
+): Promise<CourseSyllabusDownload> {
+  const syllabus = await getTeacherCourseSyllabus(teacherId, courseId);
+  if (!syllabus) {
+    throw new ResourceNotFoundError("教学大纲不存在。");
+  }
+
+  const storage = dependencies.storage ?? getStorageService();
+  const logger = dependencies.logger ?? console;
+  const record = await findTeacherCourseSyllabus(teacherId, courseId);
+  if (!record) {
+    throw new ResourceNotFoundError("教学大纲不存在。");
+  }
+
+  try {
+    return {
+      syllabus,
+      data: await storage.read(record.storageKey),
+    };
+  } catch (error: unknown) {
+    logger.error("Failed to read course syllabus file", error);
+    throw new CourseOperationError(
+      "教学大纲文件暂时无法下载，请稍后重试。",
+      500,
+    );
+  }
 }
 
 export async function createTeacherCourse(
@@ -483,7 +767,11 @@ export async function updateTeacherCourse(
   context: AuditRequestContext,
 ): Promise<TeacherCourseDetail> {
   return prisma.$transaction(async (transaction) => {
-    const before = await findTeacherCourseById(teacherId, courseId, transaction);
+    const before = await findTeacherCourseById(
+      teacherId,
+      courseId,
+      transaction,
+    );
     if (!before) {
       throw new ResourceNotFoundError("课程不存在");
     }
@@ -496,7 +784,10 @@ export async function updateTeacherCourse(
       input.description !== before.description;
 
     if (!changed) {
-      const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+      const classrooms = await loadTeacherClassroomsForCourseLink(
+        teacherId,
+        transaction,
+      );
       return courseDetailFromRecords(before, classrooms);
     }
 
@@ -533,7 +824,10 @@ export async function updateTeacherCourse(
       context,
     });
 
-    const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+    const classrooms = await loadTeacherClassroomsForCourseLink(
+      teacherId,
+      transaction,
+    );
     return courseDetailFromRecords(after, classrooms);
   });
 }
@@ -545,7 +839,11 @@ export async function linkTeacherClassroomToCourse(
   context: AuditRequestContext,
 ): Promise<TeacherCourseDetail> {
   return prisma.$transaction(async (transaction) => {
-    const course = await findTeacherCourseById(teacherId, courseId, transaction);
+    const course = await findTeacherCourseById(
+      teacherId,
+      courseId,
+      transaction,
+    );
     if (!course) {
       throw new ResourceNotFoundError("课程不存在");
     }
@@ -560,7 +858,10 @@ export async function linkTeacherClassroomToCourse(
     }
 
     if (classroom.courseId === courseId) {
-      const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+      const classrooms = await loadTeacherClassroomsForCourseLink(
+        teacherId,
+        transaction,
+      );
       return courseDetailFromRecords(course, classrooms);
     }
 
@@ -590,11 +891,18 @@ export async function linkTeacherClassroomToCourse(
       context,
     });
 
-    const nextCourse = await findTeacherCourseById(teacherId, courseId, transaction);
+    const nextCourse = await findTeacherCourseById(
+      teacherId,
+      courseId,
+      transaction,
+    );
     if (!nextCourse) {
       throw new ResourceNotFoundError("课程不存在");
     }
-    const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+    const classrooms = await loadTeacherClassroomsForCourseLink(
+      teacherId,
+      transaction,
+    );
     return courseDetailFromRecords(nextCourse, classrooms);
   });
 }
@@ -606,7 +914,11 @@ export async function unlinkTeacherClassroomFromCourse(
   context: AuditRequestContext,
 ): Promise<TeacherCourseDetail> {
   return prisma.$transaction(async (transaction) => {
-    const course = await findTeacherCourseById(teacherId, courseId, transaction);
+    const course = await findTeacherCourseById(
+      teacherId,
+      courseId,
+      transaction,
+    );
     if (!course) {
       throw new ResourceNotFoundError("课程不存在");
     }
@@ -640,11 +952,18 @@ export async function unlinkTeacherClassroomFromCourse(
       context,
     });
 
-    const nextCourse = await findTeacherCourseById(teacherId, courseId, transaction);
+    const nextCourse = await findTeacherCourseById(
+      teacherId,
+      courseId,
+      transaction,
+    );
     if (!nextCourse) {
       throw new ResourceNotFoundError("课程不存在");
     }
-    const classrooms = await loadTeacherClassroomsForCourseLink(teacherId, transaction);
+    const classrooms = await loadTeacherClassroomsForCourseLink(
+      teacherId,
+      transaction,
+    );
     return courseDetailFromRecords(nextCourse, classrooms);
   });
 }

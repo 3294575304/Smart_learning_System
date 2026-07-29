@@ -67,40 +67,78 @@ export type TeacherCourseRecord = Prisma.CourseGetPayload<{
   select: typeof teacherCourseSelect;
 }>;
 
-const teacherCourseClassroomSelect = Prisma.validator<Prisma.ClassroomSelect>()({
-  id: true,
-  name: true,
-  description: true,
-  status: true,
-  allowStudentLeave: true,
-  createdAt: true,
-  updatedAt: true,
-  courseId: true,
-  course: {
-    select: {
-      id: true,
-      name: true,
-      courseNo: true,
-      term: true,
-      status: true,
+const teacherCourseClassroomSelect = Prisma.validator<Prisma.ClassroomSelect>()(
+  {
+    id: true,
+    name: true,
+    description: true,
+    status: true,
+    allowStudentLeave: true,
+    createdAt: true,
+    updatedAt: true,
+    courseId: true,
+    course: {
+      select: {
+        id: true,
+        name: true,
+        courseNo: true,
+        term: true,
+        status: true,
+      },
+    },
+    _count: {
+      select: {
+        memberships: {
+          where: {
+            status: MembershipStatus.ACTIVE,
+          },
+        },
+      },
     },
   },
-  _count: {
+);
+
+export type TeacherCourseClassroomRecord = Prisma.ClassroomGetPayload<{
+  select: typeof teacherCourseClassroomSelect;
+}>;
+
+const courseSyllabusSelect = Prisma.validator<Prisma.CourseSyllabusSelect>()({
+  id: true,
+  courseId: true,
+  uploadedById: true,
+  originalName: true,
+  mimeType: true,
+  sizeBytes: true,
+  storageKey: true,
+  createdAt: true,
+  updatedAt: true,
+  uploadedBy: {
     select: {
-      memberships: {
-        where: {
-          status: MembershipStatus.ACTIVE,
+      id: true,
+      email: true,
+      profile: {
+        select: {
+          displayName: true,
         },
       },
     },
   },
 });
 
-export type TeacherCourseClassroomRecord = Prisma.ClassroomGetPayload<{
-  select: typeof teacherCourseClassroomSelect;
+export type CourseSyllabusRecord = Prisma.CourseSyllabusGetPayload<{
+  select: typeof courseSyllabusSelect;
 }>;
 
 type DatabaseClient = typeof prisma | Prisma.TransactionClient;
+
+interface UpsertCourseSyllabusData {
+  courseId: string;
+  uploadedById: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storageKey: string;
+}
 
 export async function loadCourseTemplates(
   client: DatabaseClient = prisma,
@@ -189,5 +227,47 @@ export function findTeacherClassroomById(
   return client.classroom.findFirst({
     where: { id: classroomId, teacherId },
     select: teacherCourseClassroomSelect,
+  });
+}
+
+export function findTeacherCourseSyllabus(
+  teacherId: string,
+  courseId: string,
+  client: DatabaseClient = prisma,
+): Promise<CourseSyllabusRecord | null> {
+  return client.courseSyllabus.findFirst({
+    where: {
+      courseId,
+      course: { teacherId },
+    },
+    select: courseSyllabusSelect,
+  });
+}
+
+export function findCourseSyllabusByCourseId(
+  courseId: string,
+  client: DatabaseClient = prisma,
+): Promise<CourseSyllabusRecord | null> {
+  return client.courseSyllabus.findUnique({
+    where: { courseId },
+    select: courseSyllabusSelect,
+  });
+}
+
+export function upsertCourseSyllabusRecord(
+  data: UpsertCourseSyllabusData,
+  client: DatabaseClient = prisma,
+): Promise<CourseSyllabusRecord> {
+  return client.courseSyllabus.upsert({
+    where: { courseId: data.courseId },
+    create: data,
+    update: {
+      uploadedById: data.uploadedById,
+      originalName: data.originalName,
+      mimeType: data.mimeType,
+      sizeBytes: data.sizeBytes,
+      storageKey: data.storageKey,
+    },
+    select: courseSyllabusSelect,
   });
 }

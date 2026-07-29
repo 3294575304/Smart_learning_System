@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { resolve } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
@@ -17,11 +19,15 @@ assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
 const port = 3111;
 const baseUrl = `http://127.0.0.1:${port}`;
+const pdfA = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
+const pdfB = Buffer.from("%PDF-1.5\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
 const serverOutput: string[] = [];
 const sessionIds: string[] = [];
 const createdTemplateIds: string[] = [];
 const createdCourseIds: string[] = [];
 const createdClassroomIds: string[] = [];
+const createdSyllabusIds: string[] = [];
+const uploadRoot = mkdtempSync(join(tmpdir(), "zhixue-http-syllabus-"));
 
 const server = spawn(
   process.execPath,
@@ -35,7 +41,7 @@ const server = spawn(
   ],
   {
     cwd: process.cwd(),
-    env: process.env,
+    env: { ...process.env, LOCAL_UPLOAD_ROOT: uploadRoot },
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   },
@@ -90,6 +96,29 @@ async function requestJson(
   });
 }
 
+async function requestMultipart(
+  path: string,
+  cookie: string | undefined,
+  fileName: string,
+  mimeType: string,
+  data: Buffer,
+): Promise<Response> {
+  const formData = new FormData();
+  formData.set(
+    "file",
+    new Blob([new Uint8Array(data)], { type: mimeType }),
+    fileName,
+  );
+
+  return fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: {
+      ...(cookie ? { cookie } : {}),
+    },
+    body: formData,
+  });
+}
+
 async function main(): Promise<void> {
   try {
     await waitForServer();
@@ -101,7 +130,9 @@ async function main(): Promise<void> {
       prisma.user.findUniqueOrThrow({
         where: { email: "teacher2@example.com" },
       }),
-      prisma.user.findUniqueOrThrow({ where: { email: "student@example.com" } }),
+      prisma.user.findUniqueOrThrow({
+        where: { email: "student@example.com" },
+      }),
     ]);
     const [adminCookie, teacherCookie, teacherTwoCookie, studentCookie] =
       await Promise.all([
@@ -111,7 +142,10 @@ async function main(): Promise<void> {
         sessionCookie(student.id),
       ]);
 
-    assert.equal((await requestJson("/api/admin/course-templates")).status, 401);
+    assert.equal(
+      (await requestJson("/api/admin/course-templates")).status,
+      401,
+    );
     assert.equal(
       (await requestJson("/api/admin/course-templates", teacherCookie)).status,
       403,
@@ -170,17 +204,12 @@ async function main(): Promise<void> {
 
     assert.equal(
       (
-        await requestJson(
-          "/api/admin/course-templates",
-          adminCookie,
-          "POST",
-          {
-            code: templateCode,
-            name: "重复模板",
-            description: "重复",
-            version: "1.0",
-          },
-        )
+        await requestJson("/api/admin/course-templates", adminCookie, "POST", {
+          code: templateCode,
+          name: "重复模板",
+          description: "重复",
+          version: "1.0",
+        })
       ).status,
       409,
     );
@@ -237,14 +266,17 @@ async function main(): Promise<void> {
     );
     assert.equal(activeTemplatesResponse.status, 200);
     const activeTemplates =
-      (await activeTemplatesResponse.json()) as ApiSuccess<Array<{ id: string }>>;
+      (await activeTemplatesResponse.json()) as ApiSuccess<
+        Array<{ id: string }>
+      >;
     assert.equal(
       activeTemplates.data.some((item) => item.id === createdTemplate.data.id),
       true,
     );
 
     assert.equal(
-      (await requestJson("/api/teacher/courses/not-a-cuid", teacherCookie)).status,
+      (await requestJson("/api/teacher/courses/not-a-cuid", teacherCookie))
+        .status,
       400,
     );
     assert.equal(
@@ -271,24 +303,170 @@ async function main(): Promise<void> {
       },
     );
     assert.equal(createCourseResponse.status, 201);
-    const createdCourse =
-      (await createCourseResponse.json()) as ApiSuccess<{ id: string }>;
+    const createdCourse = (await createCourseResponse.json()) as ApiSuccess<{
+      id: string;
+    }>;
     createdCourseIds.push(createdCourse.data.id);
+
+    const syllabusPath = `/api/teacher/courses/${createdCourse.data.id}/syllabus`;
+    const syllabusDownloadPath = `${syllabusPath}/download`;
+    assert.equal(
+      (
+        await requestMultipart(
+          syllabusPath,
+          undefined,
+          "unauthorized.pdf",
+          "application/pdf",
+          pdfA,
+        )
+      ).status,
+      401,
+    );
+    assert.equal(
+      (
+        await requestMultipart(
+          syllabusPath,
+          studentCookie,
+          "student.pdf",
+          "application/pdf",
+          pdfA,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestMultipart(
+          syllabusPath,
+          adminCookie,
+          "admin.pdf",
+          "application/pdf",
+          pdfA,
+        )
+      ).status,
+      403,
+    );
+
+    const uploadSyllabusResponse = await requestMultipart(
+      syllabusPath,
+      teacherCookie,
+      "python-syllabus.pdf",
+      "application/pdf",
+      pdfA,
+    );
+    assert.equal(uploadSyllabusResponse.status, 200);
+    const uploadedSyllabus =
+      (await uploadSyllabusResponse.json()) as ApiSuccess<{
+        id: string;
+        originalName: string;
+        sizeBytes: number;
+      }>;
+    createdSyllabusIds.push(uploadedSyllabus.data.id);
+    assert.equal(uploadedSyllabus.data.originalName, "python-syllabus.pdf");
+    assert.equal(uploadedSyllabus.data.sizeBytes, pdfA.length);
 
     assert.equal(
       (
-        await requestJson(
-          "/api/teacher/courses",
-          teacherCookie,
-          "POST",
-          {
-            templateId: createdTemplate.data.id,
-            courseNo,
-            term: "2026-2027-1",
-            name: "重复课程",
-            description: "重复课程",
-          },
+        await requestMultipart(
+          syllabusPath,
+          teacherTwoCookie,
+          "foreign.pdf",
+          "application/pdf",
+          pdfA,
         )
+      ).status,
+      404,
+    );
+
+    const syllabusInfoResponse = await requestJson(syllabusPath, teacherCookie);
+    assert.equal(syllabusInfoResponse.status, 200);
+    const syllabusInfo = (await syllabusInfoResponse.json()) as ApiSuccess<{
+      originalName: string;
+      sizeBytes: number;
+      storageKey?: string;
+    } | null>;
+    assert.equal(syllabusInfo.data?.originalName, "python-syllabus.pdf");
+    assert.equal(syllabusInfo.data?.sizeBytes, pdfA.length);
+    assert.equal(syllabusInfo.data?.storageKey, undefined);
+
+    const downloadResponse = await fetch(`${baseUrl}${syllabusDownloadPath}`, {
+      headers: { cookie: teacherCookie },
+    });
+    assert.equal(downloadResponse.status, 200);
+    assert.match(
+      downloadResponse.headers.get("content-type") ?? "",
+      /application\/pdf/u,
+    );
+    assert.match(
+      downloadResponse.headers.get("content-disposition") ?? "",
+      /attachment/u,
+    );
+    assert.equal(
+      Buffer.from(await downloadResponse.arrayBuffer()).equals(pdfA),
+      true,
+    );
+    assert.equal(
+      (
+        await fetch(`${baseUrl}${syllabusDownloadPath}`, {
+          headers: { cookie: teacherTwoCookie },
+        })
+      ).status,
+      404,
+    );
+
+    const invalidSyllabusResponse = await requestMultipart(
+      syllabusPath,
+      teacherCookie,
+      "fake.pdf",
+      "application/pdf",
+      Buffer.from("not a pdf"),
+    );
+    assert.equal(invalidSyllabusResponse.status, 400);
+    const invalidSyllabus = (await invalidSyllabusResponse.json()) as {
+      success: false;
+      error: string;
+    };
+    assert.equal(invalidSyllabus.success, false);
+    assert.equal(invalidSyllabus.error.includes(uploadRoot), false);
+    assert.equal(invalidSyllabus.error.includes("Prisma"), false);
+
+    const replaceSyllabusResponse = await requestMultipart(
+      syllabusPath,
+      teacherCookie,
+      "python-syllabus-v2.pdf",
+      "application/pdf",
+      pdfB,
+    );
+    assert.equal(replaceSyllabusResponse.status, 200);
+    const replacedSyllabus =
+      (await replaceSyllabusResponse.json()) as ApiSuccess<{
+        id: string;
+        originalName: string;
+        sizeBytes: number;
+      }>;
+    assert.equal(replacedSyllabus.data.id, uploadedSyllabus.data.id);
+    assert.equal(replacedSyllabus.data.originalName, "python-syllabus-v2.pdf");
+    assert.equal(replacedSyllabus.data.sizeBytes, pdfB.length);
+    const replacedDownloadResponse = await fetch(
+      `${baseUrl}${syllabusDownloadPath}`,
+      {
+        headers: { cookie: teacherCookie },
+      },
+    );
+    assert.equal(
+      Buffer.from(await replacedDownloadResponse.arrayBuffer()).equals(pdfB),
+      true,
+    );
+
+    assert.equal(
+      (
+        await requestJson("/api/teacher/courses", teacherCookie, "POST", {
+          templateId: createdTemplate.data.id,
+          courseNo,
+          term: "2026-2027-1",
+          name: "重复课程",
+          description: "重复课程",
+        })
       ).status,
       409,
     );
@@ -298,8 +476,9 @@ async function main(): Promise<void> {
       teacherCookie,
     );
     assert.equal(teacherCoursesResponse.status, 200);
-    const teacherCourses =
-      (await teacherCoursesResponse.json()) as ApiSuccess<Array<{ id: string }>>;
+    const teacherCourses = (await teacherCoursesResponse.json()) as ApiSuccess<
+      Array<{ id: string }>
+    >;
     assert.equal(
       teacherCourses.data.some((item) => item.id === createdCourse.data.id),
       true,
@@ -424,6 +603,11 @@ async function main(): Promise<void> {
       await prisma.auditLog.deleteMany({
         where: { targetId: { in: createdCourseIds } },
       });
+      if (createdSyllabusIds.length > 0) {
+        await prisma.auditLog.deleteMany({
+          where: { targetId: { in: createdSyllabusIds } },
+        });
+      }
       await prisma.course.deleteMany({
         where: { id: { in: createdCourseIds } },
       });
@@ -452,6 +636,7 @@ async function main(): Promise<void> {
       once(server, "exit"),
       new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000)),
     ]);
+    rmSync(uploadRoot, { recursive: true, force: true });
   }
 }
 

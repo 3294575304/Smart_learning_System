@@ -19,6 +19,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# local uploaded files
+/.data
+
 # editor and operating system files
 .DS_Store
 Thumbs.db
