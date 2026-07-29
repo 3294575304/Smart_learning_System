@@ -46,6 +46,8 @@ enum AuditAction {
   COURSE_UPDATED
   COURSE_CLASSROOM_LINKED
   COURSE_CLASSROOM_UNLINKED
+  COURSE_FILE_UPLOADED
+  COURSE_FILE_DOWNLOADED
 }
 
 enum AuditTargetType {
@@ -492,7 +494,8 @@ model Course {
 
 model CourseFileVersion {
   id               String         @id @default(cuid())
-  courseId         String
+  courseId         String?
+  classroomId      String?
   uploadedById     String
   fileKind         CourseFileKind
   fileKey          String         @db.VarChar(100)
@@ -507,14 +510,19 @@ model CourseFileVersion {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  course                  Course               @relation("CourseFileCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  course                  Course?              @relation("CourseFileCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  classroom               Classroom?           @relation("CourseFileClassroom", fields: [classroomId], references: [id], onDelete: Restrict)
   uploadedBy              User                 @relation("CourseFileUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
   sourceImportBatches     StudentImportBatch[] @relation("StudentImportSourceFile")
   accountSheetImportBatch StudentImportBatch?  @relation("StudentImportAccountSheet")
 
   @@unique([courseId, fileKind, fileKey, versionNumber])
+  @@unique([classroomId, fileKind, fileKey, versionNumber])
   @@index([courseId, fileKind, createdAt])
   @@index([courseId, uploadedById, createdAt])
+  @@index([classroomId, fileKind, createdAt])
+  @@index([classroomId, uploadedById, createdAt])
+  @@index([checksumSha256])
 }
 
 model CourseSyllabus {
@@ -553,6 +561,7 @@ model Classroom {
   memberships          ClassMembership[]
   assignments          Assignment[]
   aiAnalyses           AIAnalysis[]
+  courseFileVersions   CourseFileVersion[]  @relation("CourseFileClassroom")
   studentImportBatches StudentImportBatch[] @relation("StudentImportBatchClassroom")
 
   @@index([teacherId, status])

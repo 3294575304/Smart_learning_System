@@ -21,12 +21,28 @@ const port = 3111;
 const baseUrl = `http://127.0.0.1:${port}`;
 const pdfA = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
 const pdfB = Buffer.from("%PDF-1.5\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
+const rosterCsvA = Buffer.from(
+  [
+    "学年学期(文本),课程号(文本),学号(文本),姓名(文本),班级(文本),成绩标识(文本),期末成绩(100.0%)(文本),特殊原因(文本),等级成绩类型(文本),备注(文本)",
+    "2026-2027-1,HTTP-PY,20260001,学生一,软件1班,,,,,",
+    "2026-2027-1,HTTP-PY,20260002,学生二,软件1班,,,,,",
+  ].join("\n"),
+  "utf8",
+);
+const rosterCsvB = Buffer.from(
+  [
+    "学年学期(文本),课程号(文本),学号(文本),姓名(文本),班级(文本),成绩标识(文本),期末成绩(100.0%)(文本),特殊原因(文本),等级成绩类型(文本),备注(文本)",
+    "2026-2027-1,HTTP-PY,20260003,学生三,软件2班,,,,,",
+  ].join("\n"),
+  "utf8",
+);
 const serverOutput: string[] = [];
 const sessionIds: string[] = [];
 const createdTemplateIds: string[] = [];
 const createdCourseIds: string[] = [];
 const createdClassroomIds: string[] = [];
 const createdSyllabusIds: string[] = [];
+const createdCourseFileIds: string[] = [];
 const uploadRoot = mkdtempSync(join(tmpdir(), "zhixue-http-syllabus-"));
 
 const server = spawn(
@@ -458,6 +474,199 @@ async function main(): Promise<void> {
       true,
     );
 
+    const rosterPath = `/api/teacher/courses/${createdCourse.data.id}/files/student-roster`;
+    assert.equal(
+      (
+        await requestMultipart(
+          rosterPath,
+          undefined,
+          "students.csv",
+          "text/csv",
+          rosterCsvA,
+        )
+      ).status,
+      401,
+    );
+    assert.equal(
+      (
+        await requestMultipart(
+          rosterPath,
+          studentCookie,
+          "students.csv",
+          "text/csv",
+          rosterCsvA,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestMultipart(
+          rosterPath,
+          adminCookie,
+          "students.csv",
+          "text/csv",
+          rosterCsvA,
+        )
+      ).status,
+      403,
+    );
+
+    const uploadRosterResponse = await requestMultipart(
+      rosterPath,
+      teacherCookie,
+      "students.csv",
+      "text/csv",
+      rosterCsvA,
+    );
+    assert.equal(uploadRosterResponse.status, 201);
+    const uploadedRoster = (await uploadRosterResponse.json()) as ApiSuccess<{
+      id: string;
+      versionNumber: number;
+      originalFileName: string;
+      checksumSha256: string;
+      storageKey?: string;
+    }>;
+    createdCourseFileIds.push(uploadedRoster.data.id);
+    assert.equal(uploadedRoster.data.versionNumber, 1);
+    assert.equal(uploadedRoster.data.originalFileName, "students.csv");
+    assert.equal(uploadedRoster.data.storageKey, undefined);
+
+    assert.equal(
+      (
+        await requestMultipart(
+          rosterPath,
+          teacherTwoCookie,
+          "foreign.csv",
+          "text/csv",
+          rosterCsvA,
+        )
+      ).status,
+      404,
+    );
+
+    const rosterListResponse = await requestJson(rosterPath, teacherCookie);
+    assert.equal(rosterListResponse.status, 200);
+    const rosterList = (await rosterListResponse.json()) as ApiSuccess<
+      Array<{ id: string; versionNumber: number; storageKey?: string }>
+    >;
+    assert.deepEqual(
+      rosterList.data.map((item) => item.versionNumber),
+      [1],
+    );
+    assert.equal(rosterList.data[0]?.storageKey, undefined);
+
+    const rosterDownloadPath = `/api/teacher/course-files/${uploadedRoster.data.id}/download`;
+    const rosterDownloadResponse = await fetch(
+      `${baseUrl}${rosterDownloadPath}`,
+      {
+        headers: { cookie: teacherCookie },
+      },
+    );
+    assert.equal(rosterDownloadResponse.status, 200);
+    assert.match(
+      rosterDownloadResponse.headers.get("content-type") ?? "",
+      /text\/csv/u,
+    );
+    assert.equal(
+      Buffer.from(await rosterDownloadResponse.arrayBuffer()).equals(
+        rosterCsvA,
+      ),
+      true,
+    );
+    assert.equal(
+      (
+        await fetch(`${baseUrl}${rosterDownloadPath}`, {
+          headers: { cookie: teacherTwoCookie },
+        })
+      ).status,
+      404,
+    );
+    const adminRosterDownloadResponse = await fetch(
+      `${baseUrl}/api/admin/course-files/${uploadedRoster.data.id}/download`,
+      { headers: { cookie: adminCookie } },
+    );
+    assert.equal(adminRosterDownloadResponse.status, 200);
+    assert.equal(
+      Buffer.from(await adminRosterDownloadResponse.arrayBuffer()).equals(
+        rosterCsvA,
+      ),
+      true,
+    );
+    assert.equal(
+      (
+        await fetch(
+          `${baseUrl}/api/teacher/course-files/cm12345678901234567890123/download`,
+          { headers: { cookie: teacherCookie } },
+        )
+      ).status,
+      404,
+    );
+
+    const duplicateRosterResponse = await requestMultipart(
+      rosterPath,
+      teacherCookie,
+      "students-again.csv",
+      "text/csv",
+      rosterCsvA,
+    );
+    assert.equal(duplicateRosterResponse.status, 201);
+    const duplicateRoster =
+      (await duplicateRosterResponse.json()) as ApiSuccess<{
+        id: string;
+        versionNumber: number;
+        checksumSha256: string;
+      }>;
+    createdCourseFileIds.push(duplicateRoster.data.id);
+    assert.equal(duplicateRoster.data.versionNumber, 2);
+    assert.equal(
+      duplicateRoster.data.checksumSha256,
+      uploadedRoster.data.checksumSha256,
+    );
+
+    const nextRosterResponse = await requestMultipart(
+      rosterPath,
+      teacherCookie,
+      "students-v3.csv",
+      "text/csv",
+      rosterCsvB,
+    );
+    assert.equal(nextRosterResponse.status, 201);
+    const nextRoster = (await nextRosterResponse.json()) as ApiSuccess<{
+      id: string;
+      versionNumber: number;
+    }>;
+    createdCourseFileIds.push(nextRoster.data.id);
+    assert.equal(nextRoster.data.versionNumber, 3);
+
+    const firstRosterDownloadAfterNewVersion = await fetch(
+      `${baseUrl}${rosterDownloadPath}`,
+      {
+        headers: { cookie: teacherCookie },
+      },
+    );
+    assert.equal(
+      Buffer.from(
+        await firstRosterDownloadAfterNewVersion.arrayBuffer(),
+      ).equals(rosterCsvA),
+      true,
+    );
+    const invalidRosterResponse = await requestMultipart(
+      rosterPath,
+      teacherCookie,
+      "fake.xlsx",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      Buffer.from("not a workbook"),
+    );
+    assert.equal(invalidRosterResponse.status, 400);
+    const invalidRoster = (await invalidRosterResponse.json()) as {
+      success: false;
+      error: string;
+    };
+    assert.equal(invalidRoster.success, false);
+    assert.equal(invalidRoster.error.includes(uploadRoot), false);
+    assert.equal(invalidRoster.error.includes("Prisma"), false);
+
     assert.equal(
       (
         await requestJson("/api/teacher/courses", teacherCookie, "POST", {
@@ -515,6 +724,51 @@ async function main(): Promise<void> {
       select: { id: true },
     });
     createdClassroomIds.push(classroom.id);
+
+    const classroomRosterPath = `/api/teacher/classrooms/${classroom.id}/files/student-roster`;
+    const classroomRosterResponse = await requestMultipart(
+      classroomRosterPath,
+      teacherCookie,
+      "classroom-students.csv",
+      "text/csv",
+      rosterCsvA,
+    );
+    assert.equal(classroomRosterResponse.status, 201);
+    const classroomRoster =
+      (await classroomRosterResponse.json()) as ApiSuccess<{
+        id: string;
+        resource: { type: "CLASSROOM"; id: string };
+        versionNumber: number;
+      }>;
+    createdCourseFileIds.push(classroomRoster.data.id);
+    assert.equal(classroomRoster.data.resource.type, "CLASSROOM");
+    assert.equal(classroomRoster.data.resource.id, classroom.id);
+    assert.equal(classroomRoster.data.versionNumber, 1);
+    assert.equal(
+      (
+        await requestMultipart(
+          classroomRosterPath,
+          teacherTwoCookie,
+          "foreign-class.csv",
+          "text/csv",
+          rosterCsvA,
+        )
+      ).status,
+      404,
+    );
+    const classroomRosterListResponse = await requestJson(
+      classroomRosterPath,
+      teacherCookie,
+    );
+    assert.equal(classroomRosterListResponse.status, 200);
+    const classroomRosterList =
+      (await classroomRosterListResponse.json()) as ApiSuccess<
+        Array<{ id: string; versionNumber: number }>
+      >;
+    assert.deepEqual(
+      classroomRosterList.data.map((item) => item.versionNumber),
+      [1],
+    );
 
     assert.equal(
       (
@@ -591,9 +845,17 @@ async function main(): Promise<void> {
     );
 
     console.info(
-      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation, duplicate protection, ownership isolation, classroom linking, unlinking, and invalid input handling.",
+      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation, file upload versioning, protected downloads, duplicate protection, ownership isolation, classroom linking, unlinking, and invalid input handling.",
     );
   } finally {
+    if (createdCourseFileIds.length > 0) {
+      await prisma.auditLog.deleteMany({
+        where: { targetId: { in: createdCourseFileIds } },
+      });
+      await prisma.courseFileVersion.deleteMany({
+        where: { id: { in: createdCourseFileIds } },
+      });
+    }
     if (createdClassroomIds.length > 0) {
       await prisma.classroom.deleteMany({
         where: { id: { in: createdClassroomIds } },
