@@ -5,8 +5,8 @@ import type {
 
 export interface AnnouncementUserReference {
   id: string;
-  displayName: string;
-  email: string;
+  displayName: string | null;
+  email: string | null;
 }
 
 export interface AnnouncementView {

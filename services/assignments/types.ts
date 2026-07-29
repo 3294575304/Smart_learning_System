@@ -92,8 +92,8 @@ export interface TeacherSubmissionListItem {
   id: string;
   student: {
     id: string;
-    displayName: string;
-    email: string;
+    displayName: string | null;
+    email: string | null;
     studentNo: string | null;
   };
   attemptNumber: number;
@@ -160,8 +160,8 @@ export interface TeacherSubmissionDetail {
   };
   student: {
     id: string;
-    displayName: string;
-    email: string;
+    displayName: string | null;
+    email: string | null;
     studentNo: string | null;
   };
   answers: TeacherSubmissionAnswerView[];

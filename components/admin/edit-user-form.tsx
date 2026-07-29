@@ -38,8 +38,8 @@ export function EditUserForm({
   } = useForm<UpdateAdminUserInput, unknown, UpdateAdminUserData>({
     resolver: zodResolver(updateAdminUserSchema),
     defaultValues: {
-      displayName: user.displayName,
-      email: user.email,
+      displayName: user.displayName ?? "",
+      email: user.email ?? "",
       role: user.role,
       status: user.status,
     },
@@ -50,7 +50,7 @@ export function EditUserForm({
       user.status === UserStatus.ACTIVE &&
       input.status === UserStatus.INACTIVE &&
       !window.confirm(
-        `确认禁用“${user.displayName}”吗？该用户的现有登录会话会立即失效。`,
+        `确认禁用“${user.displayName ?? user.email ?? user.id}”吗？该用户的现有登录会话会立即失效。`,
       )
     ) {
       return;

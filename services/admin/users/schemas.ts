@@ -19,6 +19,18 @@ const displayNameSchema = z
   .min(2, "姓名至少需要 2 个字符")
   .max(50, "姓名长度不能超过 50 个字符");
 
+const optionalDisplayNameSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim().length === 0 ? undefined : value,
+  displayNameSchema.optional(),
+);
+
+const optionalNormalizedEmailSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim().length === 0 ? undefined : value,
+  normalizedEmailSchema.optional(),
+);
+
 const initialPasswordSchema = z
   .string()
   .min(8, "初始密码至少需要 8 个字符")
@@ -64,8 +76,8 @@ export const createAdminUserSchema = z
 
 export const updateAdminUserSchema = z
   .object({
-    displayName: displayNameSchema.optional(),
-    email: normalizedEmailSchema.optional(),
+    displayName: optionalDisplayNameSchema,
+    email: optionalNormalizedEmailSchema,
     role: z.nativeEnum(Role).optional(),
     status: z.nativeEnum(UserStatus).optional(),
   })

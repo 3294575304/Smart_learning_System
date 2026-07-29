@@ -87,7 +87,7 @@ export function UserList({
                       编辑
                     </Link>
                     <UserStatusAction
-                      displayName={user.displayName}
+                      displayName={user.displayName ?? user.email ?? user.id}
                       isSelf={isSelf}
                       status={user.status}
                       userId={user.id}

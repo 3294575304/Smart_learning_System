@@ -59,17 +59,25 @@ export async function listAuditLogs(
             ? "系统配置"
             : record.targetType === AuditTargetType.ANNOUNCEMENT
               ? "系统公告"
-              : record.targetType === AuditTargetType.QUESTION
-                ? `题目 ${record.targetId}`
-                : record.targetType === AuditTargetType.CLASSROOM
-                  ? `班级 ${record.targetId}`
-                  : record.targetType === AuditTargetType.SUBMISSION
-                    ? `提交 ${record.targetId}`
-                    : record.targetType === AuditTargetType.ASSIGNMENT
-                      ? `作业 ${record.targetId}`
-                      : (target?.profile?.displayName ??
-                        target?.email ??
-                        record.targetId),
+              : record.targetType === AuditTargetType.COURSE
+                ? `课程 ${record.targetId}`
+                : record.targetType === AuditTargetType.COURSE_TEMPLATE
+                  ? `课程模板 ${record.targetId}`
+                  : record.targetType === AuditTargetType.COURSE_FILE
+                    ? `课程文件 ${record.targetId}`
+                    : record.targetType === AuditTargetType.STUDENT_IMPORT_BATCH
+                      ? `导入批次 ${record.targetId}`
+                      : record.targetType === AuditTargetType.QUESTION
+                        ? `题目 ${record.targetId}`
+                        : record.targetType === AuditTargetType.CLASSROOM
+                          ? `班级 ${record.targetId}`
+                          : record.targetType === AuditTargetType.SUBMISSION
+                            ? `提交 ${record.targetId}`
+                            : record.targetType === AuditTargetType.ASSIGNMENT
+                              ? `作业 ${record.targetId}`
+                              : (target?.profile?.displayName ??
+                                  target?.email ??
+                                  record.targetId),
       };
     }),
     pagination: {

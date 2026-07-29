@@ -247,15 +247,22 @@ export function DashboardShell({
         </div>
         <div className="border-t p-4">
           <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
+            {(() => {
+              const displayName = user.displayName ?? user.email ?? "用户";
+              return (
+                <>
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold shadow-sm">
-              {user.displayName.slice(0, 1).toUpperCase()}
+              {displayName.slice(0, 1).toUpperCase()}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{user.displayName}</p>
+              <p className="truncate text-sm font-medium">{displayName}</p>
               <p className="text-muted-foreground truncate text-xs">
                 {ROLE_LABELS[user.role]}
               </p>
             </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </aside>

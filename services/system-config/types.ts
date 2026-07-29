@@ -25,7 +25,7 @@ export interface SystemConfigAdminView {
   values: SystemConfigValues;
   categories: SystemConfigCategoryView[];
   updatedAt: Date | null;
-  updatedBy: { id: string; displayName: string; email: string } | null;
+  updatedBy: { id: string; displayName: string | null; email: string | null } | null;
 }
 
 export interface SystemConfigUpdateResult extends SystemConfigAdminView {

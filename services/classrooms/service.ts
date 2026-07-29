@@ -28,8 +28,8 @@ export interface TeacherClassroomListItem {
 export interface ClassroomStudent {
   membershipId: string;
   studentId: string;
-  displayName: string;
-  email: string;
+  displayName: string | null;
+  email: string | null;
   studentNo: string | null;
   joinedAt: Date;
 }
@@ -45,7 +45,7 @@ export interface StudentClassroomListItem {
   name: string;
   description: string | null;
   status: ClassroomStatus;
-  teacherName: string;
+  teacherName: string | null;
   allowStudentLeave: boolean;
   joinedAt: Date;
 }

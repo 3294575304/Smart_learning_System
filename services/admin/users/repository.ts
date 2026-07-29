@@ -97,9 +97,10 @@ export function findAdminUserById(
 
 export async function findUserWithEmail(
   client: DatabaseClient,
-  email: string,
+  email: string | null,
   excludeUserId?: string,
 ): Promise<{ id: string } | null> {
+  if (!email) return null;
   return client.user.findFirst({
     where: {
       email: { equals: email, mode: "insensitive" },
@@ -134,8 +135,8 @@ export async function updateAdminManagedUser(
   transaction: Prisma.TransactionClient,
   userId: string,
   input: {
-    displayName?: string;
-    email?: string;
+    displayName?: string | null;
+    email?: string | null;
     role?: Role;
     status?: UserStatus;
   },

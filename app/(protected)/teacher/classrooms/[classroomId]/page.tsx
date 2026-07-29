@@ -111,7 +111,12 @@ export default async function TeacherClassroomPage({
                         <RemoveStudentButton
                           classroomId={classroom.id}
                           membershipId={student.membershipId}
-                          studentName={student.displayName}
+                          studentName={
+                            student.displayName ??
+                            student.email ??
+                            student.studentNo ??
+                            student.studentId
+                          }
                         />
                       </td>
                     </tr>

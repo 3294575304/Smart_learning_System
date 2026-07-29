@@ -48,8 +48,8 @@ export type AuditLogListQuery = z.output<typeof auditLogListQuerySchema>;
 
 export const auditUserSnapshotSchema = z
   .object({
-    displayName: z.string().max(50),
-    email: z.string().max(254),
+    displayName: z.string().max(50).nullable(),
+    email: z.string().max(254).nullable(),
     role: z.nativeEnum(Role),
     status: z.nativeEnum(UserStatus),
   })

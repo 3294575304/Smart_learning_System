@@ -1,9 +1,10 @@
-import {
+﻿import {
   AIAnalysisScope,
   AIInsightType,
   AIRecordStatus,
   AuditAction,
   AuditTargetType,
+  CourseStatus,
   AssignmentStatus,
   ClassroomStatus,
   GradingStatus,
@@ -380,10 +381,10 @@ async function seedUniversityDemo(): Promise<void> {
     string,
     Awaited<ReturnType<typeof upsertUser>>
   >();
-  networkUsersByEmail.set(networkTeacher.email, networkTeacher);
-  networkUsersByEmail.set(networkStudentA.email, networkStudentA);
-  networkUsersByEmail.set(networkStudentB.email, networkStudentB);
-  networkUsersByEmail.set(networkStudentC.email, networkStudentC);
+  networkUsersByEmail.set(networkTeacher.email!, networkTeacher);
+  networkUsersByEmail.set(networkStudentA.email!, networkStudentA);
+  networkUsersByEmail.set(networkStudentB.email!, networkStudentB);
+  networkUsersByEmail.set(networkStudentC.email!, networkStudentC);
 
   const networkClassroom = await prisma.classroom.upsert({
     where: { joinCode: "CNSE2024" },
@@ -1092,7 +1093,7 @@ async function seedUniversityDemo(): Promise<void> {
     {
       key: "network-a-architecture",
       assignmentKey: "network-architecture",
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       idempotencyKey: "seed-network-a-architecture",
       startedAt: new Date("2026-07-22T01:10:00.000Z"),
       submittedAt: new Date("2026-07-22T01:45:00.000Z"),
@@ -1172,7 +1173,7 @@ async function seedUniversityDemo(): Promise<void> {
     {
       key: "network-b-architecture",
       assignmentKey: "network-architecture",
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       idempotencyKey: "seed-network-b-architecture",
       startedAt: new Date("2026-07-22T02:00:00.000Z"),
       submittedAt: new Date("2026-07-22T02:34:00.000Z"),
@@ -1253,7 +1254,7 @@ async function seedUniversityDemo(): Promise<void> {
     {
       key: "network-c-architecture",
       assignmentKey: "network-architecture",
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       idempotencyKey: "seed-network-c-architecture",
       startedAt: new Date("2026-07-22T02:20:00.000Z"),
       submittedAt: new Date("2026-07-22T02:48:00.000Z"),
@@ -1333,7 +1334,7 @@ async function seedUniversityDemo(): Promise<void> {
     {
       key: "network-a-transport",
       assignmentKey: "network-transport",
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       idempotencyKey: "seed-network-a-transport",
       startedAt: new Date("2026-07-23T01:05:00.000Z"),
       submittedAt: new Date("2026-07-23T01:38:00.000Z"),
@@ -1406,7 +1407,7 @@ async function seedUniversityDemo(): Promise<void> {
     {
       key: "network-b-transport",
       assignmentKey: "network-transport",
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       idempotencyKey: "seed-network-b-transport",
       startedAt: new Date("2026-07-23T01:20:00.000Z"),
       submittedAt: new Date("2026-07-23T01:58:00.000Z"),
@@ -1478,7 +1479,7 @@ async function seedUniversityDemo(): Promise<void> {
     {
       key: "network-c-transport",
       assignmentKey: "network-transport",
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       idempotencyKey: "seed-network-c-transport",
       startedAt: new Date("2026-07-23T02:00:00.000Z"),
       submittedAt: new Date("2026-07-23T02:34:00.000Z"),
@@ -1738,8 +1739,8 @@ async function seedUniversityDemo(): Promise<void> {
       }
     }
 
-    submissionPercentagesByStudentEmail.set(student.email, [
-      ...(submissionPercentagesByStudentEmail.get(student.email) ?? []),
+    submissionPercentagesByStudentEmail.set(student.email!, [
+      ...(submissionPercentagesByStudentEmail.get(student.email!) ?? []),
       percentage,
     ]);
     allSubmissionPercentages.push(percentage);
@@ -1747,7 +1748,7 @@ async function seedUniversityDemo(): Promise<void> {
 
   const masterySeeds: NetworkMasterySeed[] = [
     {
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       knowledgePointCode: "CN-OSI-TCPIP",
       level: MasteryLevel.MASTERED,
       trend: MasteryTrend.UP,
@@ -1759,7 +1760,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       knowledgePointCode: "CN-HTTP-HTTPS",
       level: MasteryLevel.MASTERED,
       trend: MasteryTrend.UP,
@@ -1771,7 +1772,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       knowledgePointCode: "CN-DNS-DHCP-ARP",
       level: MasteryLevel.PROFICIENT,
       trend: MasteryTrend.UP,
@@ -1783,7 +1784,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       knowledgePointCode: "CN-TCP-UDP",
       level: MasteryLevel.PROFICIENT,
       trend: MasteryTrend.UP,
@@ -1795,7 +1796,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       knowledgePointCode: "CN-TCP-HANDSHAKE",
       level: MasteryLevel.PROFICIENT,
       trend: MasteryTrend.UP,
@@ -1807,7 +1808,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       knowledgePointCode: "CN-IP-SUBNET",
       level: MasteryLevel.DEVELOPING,
       trend: MasteryTrend.DOWN,
@@ -1819,7 +1820,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       knowledgePointCode: "CN-ROUTING-FORWARDING",
       level: MasteryLevel.PROFICIENT,
       trend: MasteryTrend.UP,
@@ -1831,7 +1832,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       knowledgePointCode: "CN-CONGESTION",
       level: MasteryLevel.PROFICIENT,
       trend: MasteryTrend.UP,
@@ -1843,7 +1844,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       knowledgePointCode: "CN-OSI-TCPIP",
       level: MasteryLevel.PROFICIENT,
       trend: MasteryTrend.UP,
@@ -1855,7 +1856,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       knowledgePointCode: "CN-HTTP-HTTPS",
       level: MasteryLevel.MASTERED,
       trend: MasteryTrend.UP,
@@ -1867,7 +1868,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       knowledgePointCode: "CN-DNS-DHCP-ARP",
       level: MasteryLevel.PROFICIENT,
       trend: MasteryTrend.UP,
@@ -1879,7 +1880,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       knowledgePointCode: "CN-TCP-UDP",
       level: MasteryLevel.BEGINNER,
       trend: MasteryTrend.DOWN,
@@ -1891,7 +1892,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       knowledgePointCode: "CN-TCP-HANDSHAKE",
       level: MasteryLevel.BEGINNER,
       trend: MasteryTrend.DOWN,
@@ -1903,7 +1904,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       knowledgePointCode: "CN-IP-SUBNET",
       level: MasteryLevel.PROFICIENT,
       trend: MasteryTrend.UP,
@@ -1915,7 +1916,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       knowledgePointCode: "CN-ROUTING-FORWARDING",
       level: MasteryLevel.DEVELOPING,
       trend: MasteryTrend.STABLE,
@@ -1927,7 +1928,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       knowledgePointCode: "CN-CONGESTION",
       level: MasteryLevel.DEVELOPING,
       trend: MasteryTrend.DOWN,
@@ -1939,7 +1940,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       knowledgePointCode: "CN-OSI-TCPIP",
       level: MasteryLevel.BEGINNER,
       trend: MasteryTrend.DOWN,
@@ -1951,7 +1952,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       knowledgePointCode: "CN-HTTP-HTTPS",
       level: MasteryLevel.BEGINNER,
       trend: MasteryTrend.DOWN,
@@ -1963,7 +1964,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       knowledgePointCode: "CN-DNS-DHCP-ARP",
       level: MasteryLevel.BEGINNER,
       trend: MasteryTrend.STABLE,
@@ -1975,7 +1976,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       knowledgePointCode: "CN-TCP-UDP",
       level: MasteryLevel.BEGINNER,
       trend: MasteryTrend.DOWN,
@@ -1987,7 +1988,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       knowledgePointCode: "CN-TCP-HANDSHAKE",
       level: MasteryLevel.BEGINNER,
       trend: MasteryTrend.DOWN,
@@ -1999,7 +2000,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       knowledgePointCode: "CN-IP-SUBNET",
       level: MasteryLevel.BEGINNER,
       trend: MasteryTrend.DOWN,
@@ -2011,7 +2012,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       knowledgePointCode: "CN-ROUTING-FORWARDING",
       level: MasteryLevel.DEVELOPING,
       trend: MasteryTrend.UP,
@@ -2023,7 +2024,7 @@ async function seedUniversityDemo(): Promise<void> {
       calculatedAt: new Date("2026-07-23T03:10:00.000Z"),
     },
     {
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       knowledgePointCode: "CN-CONGESTION",
       level: MasteryLevel.BEGINNER,
       trend: MasteryTrend.DOWN,
@@ -2087,15 +2088,15 @@ async function seedUniversityDemo(): Promise<void> {
   const analysisSeeds: NetworkAnalysisSeed[] = [
     {
       requestKey: "seed-network-student-a-analysis",
-      requestedByEmail: networkStudentA.email,
-      studentEmail: networkStudentA.email,
+      requestedByEmail: networkStudentA.email!,
+      studentEmail: networkStudentA.email!,
       classroomScoped: false,
       scope: AIAnalysisScope.STUDENT,
       status: AIRecordStatus.SUCCEEDED,
       riskLevel: RiskLevel.LOW,
       summary: "应用层协议表现优秀，子网划分是需要单独巩固的薄弱点。",
       overallScore:
-        studentAverageByEmail.get(networkStudentA.email)?.toFixed(2) ?? "0.00",
+        studentAverageByEmail.get(networkStudentA.email!)?.toFixed(2) ?? "0.00",
       sampleSize: 15,
       basedOnFrom: new Date("2026-07-20T00:00:00.000Z"),
       basedOnTo: new Date("2026-07-23T23:59:59.000Z"),
@@ -2138,15 +2139,15 @@ async function seedUniversityDemo(): Promise<void> {
     },
     {
       requestKey: "seed-network-student-b-analysis",
-      requestedByEmail: networkStudentB.email,
-      studentEmail: networkStudentB.email,
+      requestedByEmail: networkStudentB.email!,
+      studentEmail: networkStudentB.email!,
       classroomScoped: false,
       scope: AIAnalysisScope.STUDENT,
       status: AIRecordStatus.SUCCEEDED,
       riskLevel: RiskLevel.MEDIUM,
       summary: "应用层稳定，但 TCP 建连、拥塞控制和重传机制较薄弱。",
       overallScore:
-        studentAverageByEmail.get(networkStudentB.email)?.toFixed(2) ?? "0.00",
+        studentAverageByEmail.get(networkStudentB.email!)?.toFixed(2) ?? "0.00",
       sampleSize: 15,
       basedOnFrom: new Date("2026-07-20T00:00:00.000Z"),
       basedOnTo: new Date("2026-07-23T23:59:59.000Z"),
@@ -2190,15 +2191,15 @@ async function seedUniversityDemo(): Promise<void> {
     },
     {
       requestKey: "seed-network-student-c-analysis",
-      requestedByEmail: networkStudentC.email,
-      studentEmail: networkStudentC.email,
+      requestedByEmail: networkStudentC.email!,
+      studentEmail: networkStudentC.email!,
       classroomScoped: false,
       scope: AIAnalysisScope.STUDENT,
       status: AIRecordStatus.SUCCEEDED,
       riskLevel: RiskLevel.HIGH,
       summary: "基础概念偏弱，需要先补分层、地址和 TCP 机制的入门练习。",
       overallScore:
-        studentAverageByEmail.get(networkStudentC.email)?.toFixed(2) ?? "0.00",
+        studentAverageByEmail.get(networkStudentC.email!)?.toFixed(2) ?? "0.00",
       sampleSize: 15,
       basedOnFrom: new Date("2026-07-20T00:00:00.000Z"),
       basedOnTo: new Date("2026-07-23T23:59:59.000Z"),
@@ -2242,7 +2243,7 @@ async function seedUniversityDemo(): Promise<void> {
     },
     {
       requestKey: "seed-network-class-analysis",
-      requestedByEmail: networkTeacher.email,
+      requestedByEmail: networkTeacher.email!,
       classroomScoped: true,
       scope: AIAnalysisScope.CLASSROOM,
       status: AIRecordStatus.SUCCEEDED,
@@ -2394,7 +2395,7 @@ async function seedUniversityDemo(): Promise<void> {
 
   const recommendationSeeds: NetworkRecommendationSeed[] = [
     {
-      studentEmail: networkStudentA.email,
+      studentEmail: networkStudentA.email!,
       questionKey: "subnet-prefix",
       knowledgePointCode: "CN-IP-SUBNET",
       analysisRequestKey: "seed-network-student-a-analysis",
@@ -2407,7 +2408,7 @@ async function seedUniversityDemo(): Promise<void> {
       expiresAt: new Date("2026-12-31T00:00:00.000Z"),
     },
     {
-      studentEmail: networkStudentB.email,
+      studentEmail: networkStudentB.email!,
       questionKey: "tcp-handshake",
       knowledgePointCode: "CN-TCP-HANDSHAKE",
       analysisRequestKey: "seed-network-student-b-analysis",
@@ -2420,7 +2421,7 @@ async function seedUniversityDemo(): Promise<void> {
       expiresAt: new Date("2026-12-31T00:00:00.000Z"),
     },
     {
-      studentEmail: networkStudentC.email,
+      studentEmail: networkStudentC.email!,
       questionKey: "osi-tcpip-layer",
       knowledgePointCode: "CN-OSI-TCPIP",
       analysisRequestKey: "seed-network-student-c-analysis",
@@ -2543,13 +2544,60 @@ async function main(): Promise<void> {
         summary: "初始化管理员演示账号",
         afterData: {
           displayName: seedUsers[0].displayName,
-          email: admin.email,
+          email: admin.email!,
           role: admin.role,
           status: admin.status,
         },
       },
     });
   }
+
+  const pythonCourseTemplate = await prisma.courseTemplate.upsert({
+    where: { code: "python-programming-v1" },
+    update: {
+      name: "Python 程序设计",
+      description: "V1.0 Python 程序设计课程模板，用于课程与导入基础建设。",
+      version: "1.0",
+      isBuiltin: true,
+      isActive: true,
+    },
+    create: {
+      code: "python-programming-v1",
+      name: "Python 程序设计",
+      description: "V1.0 Python 程序设计课程模板，用于课程与导入基础建设。",
+      version: "1.0",
+      isBuiltin: true,
+      isActive: true,
+    },
+  });
+
+  await prisma.course.upsert({
+    where: {
+      teacherId_courseNo_term: {
+        teacherId: teacher.id,
+        courseNo: "PYTHON-2026",
+        term: "2026-2027-1",
+      },
+    },
+    update: {
+      templateId: pythonCourseTemplate.id,
+      name: "Python 程序设计",
+      description: "V1.0 Python 课程模板示例课程。",
+      status: CourseStatus.ACTIVE,
+      publishedAt: new Date("2026-09-01T00:00:00.000Z"),
+      archivedAt: null,
+    },
+    create: {
+      templateId: pythonCourseTemplate.id,
+      teacherId: teacher.id,
+      courseNo: "PYTHON-2026",
+      term: "2026-2027-1",
+      name: "Python 程序设计",
+      description: "V1.0 Python 课程模板示例课程。",
+      status: CourseStatus.ACTIVE,
+      publishedAt: new Date("2026-09-01T00:00:00.000Z"),
+    },
+  });
 
   const classroom = await prisma.classroom.upsert({
     where: { joinCode: "MATH2026" },
@@ -3428,7 +3476,7 @@ async function main(): Promise<void> {
   console.info(
     `Seeded ${users.length} users, classroom ${classroom.name}, assignment ${assignment.title}, and AI records ${studentAnalysis.id}/${classAnalysis.id}.`,
   );
-  console.info(`Unenrolled permission-test student: ${studentThree.email}`);
+  console.info(`Unenrolled permission-test student: ${studentThree.email!}`);
 
   await seedUniversityDemo();
 }

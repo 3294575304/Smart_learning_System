@@ -68,8 +68,8 @@ export interface KnowledgePointAccuracy {
 
 export interface StudentScoreRow {
   studentId: string;
-  displayName: string;
-  email: string;
+  displayName: string | null;
+  email: string | null;
   studentNo: string | null;
   submissionId: string | null;
   attemptNumber: number | null;
@@ -111,8 +111,8 @@ export interface StudentAnswerDetail {
 export interface SelectedStudentDetail {
   student: {
     id: string;
-    displayName: string;
-    email: string;
+    displayName: string | null;
+    email: string | null;
     studentNo: string | null;
   };
   attempts: StudentAttemptSummary[];

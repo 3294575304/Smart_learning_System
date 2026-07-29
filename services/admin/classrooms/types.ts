@@ -11,8 +11,8 @@ export interface AdminClassroomView {
   closedAt: Date | null;
   teacher: {
     id: string;
-    displayName: string;
-    email: string;
+    displayName: string | null;
+    email: string | null;
   };
   activeStudentCount: number;
   assignmentCount: number;

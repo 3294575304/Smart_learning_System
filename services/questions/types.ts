@@ -31,7 +31,7 @@ export interface QuestionKnowledgePointData {
 
 export interface QuestionCreatorData {
   id: string;
-  displayName: string;
+  displayName: string | null;
 }
 
 export interface QuestionListItem {

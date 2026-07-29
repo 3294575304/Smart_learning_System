@@ -48,6 +48,10 @@ enum AuditTargetType {
   ASSIGNMENT
   QUESTION
   CLASSROOM
+  COURSE
+  COURSE_TEMPLATE
+  COURSE_FILE
+  STUDENT_IMPORT_BATCH
 }
 
 enum NotificationType {
@@ -99,6 +103,50 @@ enum ClassroomStatus {
   ACTIVE
   CLOSED
   ARCHIVED
+}
+
+enum CourseStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum CourseFileKind {
+  SYLLABUS
+  MATERIAL
+  PRACTICE_GUIDE
+  REPORT_TEMPLATE
+  IMPORT_SOURCE
+  ACCOUNT_SHEET
+  OTHER
+}
+
+enum StudentImportBatchStatus {
+  UPLOADED
+  PREVIEW_READY
+  CONFIRMED
+  PROCESSING
+  SUCCEEDED
+  PARTIAL_FAILED
+  FAILED
+  CANCELLED
+}
+
+enum StudentImportPreviewStatus {
+  PENDING
+  NEW_USER
+  EXISTING_USER
+  ALREADY_ENROLLED
+  COURSE_MISMATCH
+  INVALID
+  DUPLICATE
+}
+
+enum StudentImportExecutionStatus {
+  PENDING
+  APPLIED
+  FAILED
+  SKIPPED
 }
 
 enum MembershipStatus {
@@ -207,17 +255,20 @@ enum RecommendationStatus {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  role         Role
-  status       UserStatus @default(ACTIVE)
-  lastLoginAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                 String     @id @default(cuid())
+  email              String?    @unique
+  passwordHash       String
+  role               Role
+  status             UserStatus @default(ACTIVE)
+  mustChangePassword Boolean    @default(false)
+  passwordChangedAt  DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
   profile                     UserProfile?
   taughtClassrooms            Classroom[]                  @relation("ClassroomTeacher")
+  taughtCourses               Course[]                     @relation("CourseTeacher")
   classMemberships            ClassMembership[]            @relation("ClassMembershipStudent")
   createdQuestions            Question[]                   @relation("QuestionCreator")
   createdKnowledgePoints      KnowledgePoint[]             @relation("KnowledgePointCreator")
@@ -236,8 +287,13 @@ model User {
   notifications               Notification[]               @relation("NotificationRecipient")
   createdAnnouncements        Announcement[]               @relation("AnnouncementCreator")
   publishedAnnouncements      Announcement[]               @relation("AnnouncementPublisher")
+  uploadedCourseFiles         CourseFileVersion[]          @relation("CourseFileUploadedBy")
+  createdStudentImportBatches StudentImportBatch[]         @relation("StudentImportBatchCreatedBy")
+  matchedStudentImportRows    StudentImportRow[]           @relation("StudentImportMatchedUser")
+  createdStudentImportRows    StudentImportRow[]           @relation("StudentImportCreatedUser")
 
   @@index([role, status])
+  @@index([mustChangePassword])
   @@index([createdAt])
 }
 
@@ -382,9 +438,79 @@ model UserProfile {
   @@index([displayName])
 }
 
+model CourseTemplate {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?  @db.Text
+  version     String   @default("1.0")
+  isBuiltin   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  courses Course[]
+
+  @@index([name, isActive])
+}
+
+model Course {
+  id          String       @id @default(cuid())
+  templateId  String
+  teacherId   String
+  courseNo    String       @db.VarChar(50)
+  term        String       @db.VarChar(50)
+  name        String       @db.VarChar(100)
+  description String?      @db.Text
+  status      CourseStatus @default(DRAFT)
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  template             CourseTemplate       @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  teacher              User                 @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  classrooms           Classroom[]          @relation("ClassroomCourse")
+  courseFileVersions   CourseFileVersion[]  @relation("CourseFileCourse")
+  studentImportBatches StudentImportBatch[] @relation("StudentImportCourse")
+
+  @@unique([teacherId, courseNo, term])
+  @@index([templateId, status, createdAt])
+  @@index([teacherId, status, createdAt])
+  @@index([term, courseNo])
+}
+
+model CourseFileVersion {
+  id               String         @id @default(cuid())
+  courseId         String
+  uploadedById     String
+  fileKind         CourseFileKind
+  fileKey          String         @db.VarChar(100)
+  title            String         @db.VarChar(120)
+  versionNumber    Int            @default(1)
+  originalFileName String         @db.VarChar(255)
+  storageKey       String         @unique @db.VarChar(191)
+  mimeType         String         @db.VarChar(100)
+  sizeBytes        Int
+  checksumSha256   String         @db.Char(64)
+  metadata         Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  course                  Course               @relation("CourseFileCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  uploadedBy              User                 @relation("CourseFileUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  sourceImportBatches     StudentImportBatch[] @relation("StudentImportSourceFile")
+  accountSheetImportBatch StudentImportBatch?  @relation("StudentImportAccountSheet")
+
+  @@unique([courseId, fileKind, fileKey, versionNumber])
+  @@index([courseId, fileKind, createdAt])
+  @@index([courseId, uploadedById, createdAt])
+}
+
 model Classroom {
   id                String          @id @default(cuid())
   teacherId         String
+  courseId          String?
   name              String
   description       String?         @db.Text
   joinCode          String          @unique
@@ -395,12 +521,15 @@ model Classroom {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  teacher     User              @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
-  memberships ClassMembership[]
-  assignments Assignment[]
-  aiAnalyses  AIAnalysis[]
+  teacher              User                 @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  course               Course?              @relation("ClassroomCourse", fields: [courseId], references: [id], onDelete: SetNull)
+  memberships          ClassMembership[]
+  assignments          Assignment[]
+  aiAnalyses           AIAnalysis[]
+  studentImportBatches StudentImportBatch[] @relation("StudentImportBatchClassroom")
 
   @@index([teacherId, status])
+  @@index([courseId, status])
   @@index([status, createdAt])
 }
 
@@ -414,12 +543,103 @@ model ClassMembership {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Restrict)
-  student   User      @relation("ClassMembershipStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  classroom                Classroom          @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  student                  User               @relation("ClassMembershipStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  matchedStudentImportRows StudentImportRow[] @relation("StudentImportMatchedMembership")
+  createdStudentImportRows StudentImportRow[] @relation("StudentImportCreatedMembership")
 
   @@unique([classroomId, studentId])
   @@index([studentId, status])
   @@index([classroomId, status])
+}
+
+model StudentImportBatch {
+  id                        String                   @id @default(cuid())
+  courseId                  String
+  classroomId               String?
+  createdById               String
+  sourceFileVersionId       String
+  accountSheetVersionId     String?                  @unique
+  status                    StudentImportBatchStatus @default(UPLOADED)
+  idempotencyKey            String                   @db.VarChar(191)
+  sourceFileName            String                   @db.VarChar(255)
+  sourceFileChecksum        String                   @db.Char(64)
+  sourceFileMimeType        String                   @db.VarChar(100)
+  sourceFileSizeBytes       Int
+  sourceSheetName           String?                  @db.VarChar(100)
+  mappingConfig             Json
+  previewSummary            Json?
+  totalRows                 Int                      @default(0)
+  previewRows               Int                      @default(0)
+  newUserRows               Int                      @default(0)
+  existingUserRows          Int                      @default(0)
+  alreadyEnrolledRows       Int                      @default(0)
+  courseMismatchRows        Int                      @default(0)
+  invalidRows               Int                      @default(0)
+  duplicateRows             Int                      @default(0)
+  importedRows              Int                      @default(0)
+  failedRows                Int                      @default(0)
+  previewedAt               DateTime?
+  confirmedAt               DateTime?
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  accountSheetDownloadedAt  DateTime?
+  accountSheetDownloadCount Int                      @default(0)
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+
+  course              Course             @relation("StudentImportCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  classroom           Classroom?         @relation("StudentImportBatchClassroom", fields: [classroomId], references: [id], onDelete: SetNull)
+  createdBy           User               @relation("StudentImportBatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  sourceFileVersion   CourseFileVersion  @relation("StudentImportSourceFile", fields: [sourceFileVersionId], references: [id], onDelete: Restrict)
+  accountSheetVersion CourseFileVersion? @relation("StudentImportAccountSheet", fields: [accountSheetVersionId], references: [id], onDelete: SetNull)
+  rows                StudentImportRow[]
+
+  @@unique([courseId, idempotencyKey])
+  @@index([courseId, status, createdAt])
+  @@index([classroomId, status, createdAt])
+  @@index([createdById, createdAt])
+  @@index([sourceFileVersionId])
+}
+
+model StudentImportRow {
+  id                  String                       @id @default(cuid())
+  batchId             String
+  rowNumber           Int
+  previewStatus       StudentImportPreviewStatus   @default(PENDING)
+  executionStatus     StudentImportExecutionStatus @default(PENDING)
+  rowKey              String                       @db.VarChar(191)
+  sourceRow           Json
+  academicTerm        String                       @db.VarChar(50)
+  courseNo            String                       @db.VarChar(50)
+  studentNo           String                       @db.VarChar(50)
+  studentName         String                       @db.VarChar(100)
+  className           String                       @db.VarChar(100)
+  errorCode           String?                      @db.VarChar(100)
+  errorDetail         Json?
+  matchedUserId       String?
+  matchedMembershipId String?
+  createdUserId       String?
+  createdMembershipId String?
+  processedAt         DateTime?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+
+  batch             StudentImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  matchedUser       User?              @relation("StudentImportMatchedUser", fields: [matchedUserId], references: [id], onDelete: SetNull)
+  matchedMembership ClassMembership?   @relation("StudentImportMatchedMembership", fields: [matchedMembershipId], references: [id], onDelete: SetNull)
+  createdUser       User?              @relation("StudentImportCreatedUser", fields: [createdUserId], references: [id], onDelete: SetNull)
+  createdMembership ClassMembership?   @relation("StudentImportCreatedMembership", fields: [createdMembershipId], references: [id], onDelete: SetNull)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, previewStatus])
+  @@index([batchId, executionStatus])
+  @@index([batchId, studentNo])
+  @@index([batchId, rowKey])
+  @@index([matchedUserId])
+  @@index([matchedMembershipId])
+  @@index([createdUserId])
+  @@index([createdMembershipId])
 }
 
 model KnowledgePoint {

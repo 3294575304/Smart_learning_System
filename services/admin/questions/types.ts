@@ -23,8 +23,8 @@ export interface AdminQuestionView {
   updatedAt: Date;
   creator: {
     id: string;
-    displayName: string;
-    email: string;
+    displayName: string | null;
+    email: string | null;
     role: Role;
   };
   source: "ADMIN" | "TEACHER_HISTORY";
@@ -51,7 +51,7 @@ export interface AdminQuestionListResult {
 
 export interface AdminQuestionCreatorOption {
   id: string;
-  displayName: string;
-  email: string;
+  displayName: string | null;
+  email: string | null;
   role: Role;
 }

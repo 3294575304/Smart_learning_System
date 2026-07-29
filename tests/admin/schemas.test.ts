@@ -63,6 +63,13 @@ test("更新用户只接受白名单字段且至少包含一个字段", () => {
     updateAdminUserSchema.safeParse({ status: UserStatus.INACTIVE }).success,
     true,
   );
+  const blankFields = updateAdminUserSchema.parse({
+    displayName: "   ",
+    email: "\t",
+    status: UserStatus.ACTIVE,
+  });
+  assert.equal(blankFields.displayName, undefined);
+  assert.equal(blankFields.email, undefined);
 });
 
 test("审计查询校验操作类型、时间范围和分页", () => {

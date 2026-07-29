@@ -165,12 +165,12 @@ export async function buildStudentAnalysisInput(
     }),
   ]);
 
-  const privateValues = [
-    submission.student.email,
+  const privateValues: string[] = [
+    submission.student.email ?? "",
     submission.student.profile?.displayName ?? "",
     submission.student.profile?.phone ?? "",
     submission.student.profile?.studentNo ?? "",
-  ];
+  ].filter((value) => value.length > 0);
   const input = studentAnalysisInputSchema.parse({
     anonymousStudentId: createAnonymousStudentId(studentId, pseudonymSalt()),
     answers: usableAnswers.map((answer) => ({

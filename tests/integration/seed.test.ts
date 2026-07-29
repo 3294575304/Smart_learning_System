@@ -86,13 +86,29 @@ test("demo seed allows local, dev, test, and demo targets", () => {
 async function captureUniversityDemoSnapshot(
   client: PrismaClient,
 ): Promise<Record<string, number>> {
-  const [userCount, classroomCount, knowledgePointCount, questionCount] =
+  const [
+    userCount,
+    classroomCount,
+    courseTemplateCount,
+    courseCount,
+    knowledgePointCount,
+    questionCount,
+  ] =
     await Promise.all([
       client.user.count({
         where: { email: { startsWith: "net-" } },
       }),
       client.classroom.count({
         where: { joinCode: "CNSE2024" },
+      }),
+      client.courseTemplate.count({
+        where: { code: "python-programming-v1" },
+      }),
+      client.course.count({
+        where: {
+          courseNo: "PYTHON-2026",
+          term: "2026-2027-1",
+        },
       }),
       client.knowledgePoint.count({
         where: { code: { startsWith: "CN-" } },
@@ -178,6 +194,8 @@ async function captureUniversityDemoSnapshot(
   return {
     userCount,
     classroomCount,
+    courseTemplateCount,
+    courseCount,
     knowledgePointCount,
     questionCount,
     questionOptionCount,
@@ -212,6 +230,8 @@ test("university demo seed is repeatable and complete", async () => {
     assert.deepEqual(first, {
       userCount: 4,
       classroomCount: 1,
+      courseTemplateCount: 1,
+      courseCount: 1,
       knowledgePointCount: 8,
       questionCount: 15,
       questionOptionCount: 24,

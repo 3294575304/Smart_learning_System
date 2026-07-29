@@ -11,8 +11,8 @@ export interface AuditRequestContext {
 }
 
 export interface AuditUserSnapshot {
-  displayName: string;
-  email: string;
+  displayName: string | null;
+  email: string | null;
   role: Role;
   status: UserStatus;
 }
@@ -23,8 +23,8 @@ export type AuditSnapshot = AuditUserSnapshot | AuditConfigSnapshot;
 
 export interface AuditUserReference {
   id: string;
-  displayName: string;
-  email: string;
+  displayName: string | null;
+  email: string | null;
 }
 
 export interface AuditLogView {

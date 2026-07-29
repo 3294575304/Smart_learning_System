@@ -437,7 +437,9 @@ export async function publishAssignment(
         assignmentId: assignment.id,
         assignmentTitle: assignment.title,
         teacherName:
-          assignment.teacher.profile?.displayName ?? assignment.teacher.email,
+          assignment.teacher.profile?.displayName ??
+          assignment.teacher.email ??
+          "",
         dueAt: assignment.dueAt,
         recipientIds: assignment.classroom.memberships.map(
           (membership) => membership.studentId,

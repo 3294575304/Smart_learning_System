@@ -10,8 +10,8 @@ export interface AdminUserRoleSummary {
 
 export interface AdminUserView {
   id: string;
-  displayName: string;
-  email: string;
+  displayName: string | null;
+  email: string | null;
   role: Role;
   status: UserStatus;
   lastLoginAt: Date | null;
