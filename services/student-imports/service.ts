@@ -49,12 +49,14 @@ import {
   stableStudentImportFields,
   studentImportFieldLabels,
   type StudentImportBatchView,
+  type StudentImportAccountSheetDownloadMark,
   type StudentImportExecutionAction,
   type StudentImportExecutionResult,
   type StudentImportExecutionRowResult,
   type StudentImportExecutionSummary,
   type StudentImportField,
   type StudentImportFieldMapping,
+  type StudentInitialCredential,
   type StudentImportIssue,
   type StudentImportMappingConfig,
   type StudentImportPreviewPage,
@@ -338,6 +340,15 @@ const SERIALIZABLE_RETRY_LIMIT = 3;
 
 function generateInitialPassword(): string {
   return `Zx${randomBytes(12).toString("base64url")}7a`;
+}
+
+function contactForInitialCredential(
+  mappedValues: Partial<Record<StudentImportField, string>>,
+): string | null {
+  const values = [mappedValues.email, mappedValues.phone]
+    .map((value) => normalizeFieldValue(value ?? ""))
+    .filter(Boolean);
+  return values.length > 0 ? values.join(" / ") : null;
 }
 
 function isRetryablePrismaError(error: unknown): boolean {
@@ -1661,6 +1672,7 @@ function summarizeExecutionRows(
 function executionResultFromRecords(
   batch: StudentImportExecutionBatchRecord,
   rows: readonly StudentImportRowRecord[],
+  initialCredentials: readonly StudentInitialCredential[] = [],
 ): StudentImportExecutionResult {
   const rowResults = rows.map(executionRowResultFromRecord);
   return {
@@ -1670,6 +1682,7 @@ function executionResultFromRecords(
     retryable: executionFailureFromBatch(batch)?.retryable ?? false,
     summary: summarizeExecutionRows(rowResults),
     rows: rowResults,
+    initialCredentials: [...initialCredentials],
     startedAt: batch.startedAt,
     completedAt: batch.completedAt,
   };
@@ -2031,7 +2044,7 @@ async function applyExecutableImportRow(
       "passwordGenerator" | "passwordHasher"
     >
   >,
-): Promise<void> {
+): Promise<StudentInitialCredential | null> {
   if (row.previewStatus === StudentImportPreviewStatus.PENDING) {
     await transaction.studentImportRow.update({
       where: { id: row.id },
@@ -2041,7 +2054,7 @@ async function applyExecutableImportRow(
         processedAt: now,
       },
     });
-    return;
+    return null;
   }
 
   if (
@@ -2114,7 +2127,7 @@ async function applyExecutableImportRow(
         processedAt: now,
       },
     });
-    return;
+    return null;
   }
 
   if (byEmail) {
@@ -2125,9 +2138,8 @@ async function applyExecutableImportRow(
     });
   }
 
-  const passwordHash = await dependencies.passwordHasher(
-    dependencies.passwordGenerator(),
-  );
+  const initialPassword = dependencies.passwordGenerator();
+  const passwordHash = await dependencies.passwordHasher(initialPassword);
   const user = await transaction.user.create({
     data: {
       email: email || null,
@@ -2161,6 +2173,15 @@ async function applyExecutableImportRow(
       processedAt: now,
     },
   });
+  return {
+    rowNumber: row.rowNumber,
+    studentName: row.studentName,
+    studentNo,
+    className: row.className,
+    loginAccount: email || studentNo,
+    initialPassword,
+    contact: contactForInitialCredential(mappedValues),
+  };
 }
 
 async function executeClaimedImportBatch(
@@ -2230,11 +2251,23 @@ async function executeClaimedImportBatch(
     allowProcessing: true,
   });
 
+  const initialCredentials: StudentInitialCredential[] = [];
   for (const row of rows) {
-    await applyExecutableImportRow(transaction, row, batch, now, dependencies);
+    const credential = await applyExecutableImportRow(
+      transaction,
+      row,
+      batch,
+      now,
+      dependencies,
+    );
+    if (credential) {
+      initialCredentials.push(credential);
+    }
   }
 
   const appliedRows = await loadExecutionRows(batchId, transaction);
+  const visibleInitialCredentials =
+    actor.role === Role.TEACHER ? initialCredentials : [];
   const appliedResult = executionResultFromRecords(
     {
       ...batch,
@@ -2243,6 +2276,7 @@ async function executeClaimedImportBatch(
       completedAt: now,
     },
     appliedRows,
+    visibleInitialCredentials,
   );
   const nextPreviewSummary = jsonObject(batch.previewSummary);
   delete nextPreviewSummary.executionFailure;
@@ -2267,7 +2301,11 @@ async function executeClaimedImportBatch(
     select: executionBatchSelect,
   });
   const finalRows = await loadExecutionRows(batchId, transaction);
-  const finalResult = executionResultFromRecords(updatedBatch, finalRows);
+  const finalResult = executionResultFromRecords(
+    updatedBatch,
+    finalRows,
+    visibleInitialCredentials,
+  );
 
   await writeGovernanceAuditLog(transaction, {
     actorId: actor.id,
@@ -2725,4 +2763,115 @@ export function executeAdminStudentImportBatch(
     context,
     dependencies,
   );
+}
+
+export async function markTeacherStudentImportAccountSheetDownloaded(
+  teacherId: string,
+  batchId: string,
+  context: AuditRequestContext,
+  dependencies: Pick<StudentImportExecutionDependencies, "now"> = {},
+): Promise<StudentImportAccountSheetDownloadMark> {
+  const now = dependencies.now?.() ?? new Date();
+
+  return prisma.$transaction(async (transaction) => {
+    const batch = await transaction.studentImportBatch.findFirst({
+      where: { id: batchId, course: { teacherId } },
+      select: {
+        id: true,
+        courseId: true,
+        classroomId: true,
+        status: true,
+        accountSheetDownloadCount: true,
+        accountSheetDownloadedAt: true,
+      },
+    });
+
+    if (!batch) {
+      throw new ResourceNotFoundError("导入批次不存在");
+    }
+
+    if (batch.status !== StudentImportBatchStatus.SUCCEEDED) {
+      throw new StudentImportOperationError(
+        "学生名单尚未成功导入，不能记录初始账号表下载。",
+        409,
+      );
+    }
+
+    if (batch.accountSheetDownloadCount > 0) {
+      throw new StudentImportOperationError(
+        "该批次的一次性初始账号表已记录下载，不能重复下载。",
+        409,
+      );
+    }
+
+    const createdUserRows = await transaction.studentImportRow.count({
+      where: { batchId, createdUserId: { not: null } },
+    });
+
+    if (createdUserRows === 0) {
+      throw new StudentImportOperationError(
+        "该批次没有新建学生账号，无需下载初始账号表。",
+        409,
+      );
+    }
+
+    const mark = await transaction.studentImportBatch.updateMany({
+      where: { id: batch.id, accountSheetDownloadCount: 0 },
+      data: {
+        accountSheetDownloadedAt: now,
+        accountSheetDownloadCount: { increment: 1 },
+      },
+    });
+
+    if (mark.count !== 1) {
+      throw new StudentImportOperationError(
+        "该批次的一次性初始账号表已记录下载，不能重复下载。",
+        409,
+      );
+    }
+
+    const updated = await transaction.studentImportBatch.findUniqueOrThrow({
+      where: { id: batch.id },
+      select: {
+        id: true,
+        courseId: true,
+        classroomId: true,
+        accountSheetDownloadedAt: true,
+        accountSheetDownloadCount: true,
+      },
+    });
+
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: AuditAction.STUDENT_IMPORT_ACCOUNT_SHEET_DOWNLOADED,
+      targetType: AuditTargetType.STUDENT_IMPORT_BATCH,
+      targetId: batch.id,
+      summary: `下载学生初始账号表：新建 ${createdUserRows} 人`,
+      beforeData: {
+        batchId: batch.id,
+        courseId: batch.courseId,
+        classroomId: batch.classroomId,
+        accountSheetDownloadCount: batch.accountSheetDownloadCount,
+        accountSheetDownloadedAt:
+          batch.accountSheetDownloadedAt?.toISOString() ?? null,
+      },
+      afterData: {
+        batchId: updated.id,
+        courseId: updated.courseId,
+        classroomId: updated.classroomId,
+        createdUserRows,
+        accountSheetDownloadCount: updated.accountSheetDownloadCount,
+        accountSheetDownloadedAt:
+          updated.accountSheetDownloadedAt?.toISOString() ?? null,
+      },
+      context,
+    });
+
+    return {
+      batchId: updated.id,
+      downloadedAt: updated.accountSheetDownloadedAt ?? now,
+      downloadCount: updated.accountSheetDownloadCount,
+      createdUserRows,
+    };
+  });
 }

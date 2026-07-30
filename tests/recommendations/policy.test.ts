@@ -20,7 +20,13 @@ const activeClassroom = {
 };
 
 function actor(id: string, role: Role) {
-  return { id, role, email: `${id}@example.com`, displayName: id };
+  return {
+    id,
+    role,
+    email: `${id}@example.com`,
+    displayName: id,
+    mustChangePassword: false,
+  };
 }
 
 test("student can request only their own recommendation", () => {

@@ -157,6 +157,16 @@ export interface StudentImportExecutionRowResult {
   errorCode: string | null;
 }
 
+export interface StudentInitialCredential {
+  rowNumber: number;
+  studentName: string;
+  studentNo: string;
+  className: string;
+  loginAccount: string;
+  initialPassword: string;
+  contact: string | null;
+}
+
 export interface StudentImportExecutionResult {
   batchId: string;
   status: StudentImportBatchStatus;
@@ -164,8 +174,16 @@ export interface StudentImportExecutionResult {
   retryable: boolean;
   summary: StudentImportExecutionSummary;
   rows: StudentImportExecutionRowResult[];
+  initialCredentials: StudentInitialCredential[];
   startedAt: Date | null;
   completedAt: Date | null;
+}
+
+export interface StudentImportAccountSheetDownloadMark {
+  batchId: string;
+  downloadedAt: Date;
+  downloadCount: number;
+  createdUserRows: number;
 }
 
 export interface StudentImportBatchView {

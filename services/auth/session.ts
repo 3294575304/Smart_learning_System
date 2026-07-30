@@ -81,6 +81,7 @@ export const getCurrentUser = cache(
       email: session.user.email,
       role: session.user.role,
       displayName: session.user.profile?.displayName ?? session.user.email,
+      mustChangePassword: session.user.mustChangePassword,
     };
   },
 );

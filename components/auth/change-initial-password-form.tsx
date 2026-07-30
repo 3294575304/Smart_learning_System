@@ -1,19 +1,29 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 
-import { loginAction } from "@/app/actions/auth";
-import { loginSchema, type LoginInput } from "@/services/auth/schemas";
+import { changeInitialPasswordAction } from "@/app/actions/auth";
+import {
+  changeInitialPasswordSchema,
+  type ChangeInitialPasswordInput,
+} from "@/services/auth/schemas";
 
-export function LoginForm({
-  allowRegistration,
-}: {
-  allowRegistration: boolean;
-}) {
+const passwordFields = [
+  "currentPassword",
+  "password",
+  "confirmPassword",
+] as const;
+
+function isPasswordField(
+  field: string,
+): field is (typeof passwordFields)[number] {
+  return passwordFields.includes(field as (typeof passwordFields)[number]);
+}
+
+export function ChangeInitialPasswordForm() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -22,15 +32,19 @@ export function LoginForm({
     handleSubmit,
     setError,
     formState: { errors },
-  } = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+  } = useForm<ChangeInitialPasswordInput>({
+    resolver: zodResolver(changeInitialPasswordSchema),
+    defaultValues: {
+      currentPassword: "",
+      password: "",
+      confirmPassword: "",
+    },
   });
 
   const onSubmit = handleSubmit((input) => {
     setServerError(null);
     startTransition(async () => {
-      const result = await loginAction(input);
+      const result = await changeInitialPasswordAction(input);
 
       if (!result.success) {
         setServerError(result.error);
@@ -38,7 +52,7 @@ export function LoginForm({
           result.fieldErrors ?? {},
         )) {
           const message = messages[0];
-          if (message && (field === "email" || field === "password")) {
+          if (message && isPasswordField(field)) {
             setError(field, { message });
           }
         }
@@ -53,29 +67,30 @@ export function LoginForm({
   return (
     <form className="mt-8 space-y-5" onSubmit={onSubmit} noValidate>
       <div>
-        <label className="text-sm font-medium" htmlFor="email">
-          登录账号
+        <label className="text-sm font-medium" htmlFor="currentPassword">
+          当前初始密码
         </label>
         <input
-          {...register("email")}
-          autoComplete="username"
+          {...register("currentPassword")}
+          autoComplete="current-password"
           className="border-input focus:ring-ring mt-2 w-full rounded-md border px-3 py-2 outline-none focus:ring-2"
-          id="email"
-          type="text"
+          id="currentPassword"
+          type="password"
         />
-        {errors.email?.message ? (
+        {errors.currentPassword?.message ? (
           <p className="text-destructive mt-1 text-sm">
-            {errors.email.message}
+            {errors.currentPassword.message}
           </p>
         ) : null}
       </div>
+
       <div>
         <label className="text-sm font-medium" htmlFor="password">
-          密码
+          新密码
         </label>
         <input
           {...register("password")}
-          autoComplete="current-password"
+          autoComplete="new-password"
           className="border-input focus:ring-ring mt-2 w-full rounded-md border px-3 py-2 outline-none focus:ring-2"
           id="password"
           type="password"
@@ -86,6 +101,25 @@ export function LoginForm({
           </p>
         ) : null}
       </div>
+
+      <div>
+        <label className="text-sm font-medium" htmlFor="confirmPassword">
+          确认新密码
+        </label>
+        <input
+          {...register("confirmPassword")}
+          autoComplete="new-password"
+          className="border-input focus:ring-ring mt-2 w-full rounded-md border px-3 py-2 outline-none focus:ring-2"
+          id="confirmPassword"
+          type="password"
+        />
+        {errors.confirmPassword?.message ? (
+          <p className="text-destructive mt-1 text-sm">
+            {errors.confirmPassword.message}
+          </p>
+        ) : null}
+      </div>
+
       {serverError ? (
         <p
           className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
@@ -94,21 +128,14 @@ export function LoginForm({
           {serverError}
         </p>
       ) : null}
+
       <button
         className="bg-primary text-primary-foreground w-full rounded-md px-4 py-2 font-medium disabled:opacity-60"
         disabled={isPending}
         type="submit"
       >
-        {isPending ? "正在登录…" : "登录"}
+        {isPending ? "正在修改..." : "修改密码"}
       </button>
-      {allowRegistration ? (
-        <p className="text-muted-foreground text-center text-sm">
-          还没有学生账号？{" "}
-          <Link className="text-foreground underline" href="/register">
-            注册
-          </Link>
-        </p>
-      ) : null}
     </form>
   );
 }

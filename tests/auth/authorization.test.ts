@@ -18,6 +18,7 @@ function userWithRole(role: Role): AuthenticatedUser {
     email: `${role.toLowerCase()}@example.com`,
     role,
     displayName: role,
+    mustChangePassword: false,
   };
 }
 

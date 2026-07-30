@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { resolve } from "node:path";
-import { PrismaClient, UserStatus } from "@prisma/client";
+import { PrismaClient, Role, UserStatus } from "@prisma/client";
 import { compare } from "bcryptjs";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
@@ -96,6 +96,7 @@ async function assertPageRedirect(
 
 async function main(): Promise<void> {
   const createdSessionIds: string[] = [];
+  const createdUserIds: string[] = [];
   let deactivatedStudentId: string | null = null;
 
   try {
@@ -125,6 +126,26 @@ async function main(): Promise<void> {
       teacherSession.id,
       studentSession.id,
     );
+
+    const forcedStudentNo = `HTTPFORCED${randomBytes(4).toString("hex")}`;
+    const forcedStudent = await prisma.user.create({
+      data: {
+        email: null,
+        passwordHash: student.passwordHash,
+        role: Role.STUDENT,
+        mustChangePassword: true,
+        profile: {
+          create: {
+            displayName: "HTTP 首次改密学生",
+            studentNo: forcedStudentNo,
+          },
+        },
+      },
+      select: { id: true },
+    });
+    createdUserIds.push(forcedStudent.id);
+    const forcedSession = await sessionCookie(forcedStudent.id);
+    createdSessionIds.push(forcedSession.id);
 
     const [ownedClassroom, otherClassroom] = await Promise.all([
       prisma.classroom.findFirstOrThrow({ where: { teacherId: teacher.id } }),
@@ -189,6 +210,104 @@ async function main(): Promise<void> {
     });
     await assertPageRedirect(studentOnTeacherPage, "/403");
 
+    const forcedStudentPage = await fetch(`${baseUrl}/student`, {
+      headers: { cookie: forcedSession.cookie },
+      redirect: "manual",
+    });
+    await assertPageRedirect(forcedStudentPage, "/change-initial-password");
+
+    const forcedBusinessApi = await fetch(`${baseUrl}/api/student/classrooms`, {
+      headers: { cookie: forcedSession.cookie },
+    });
+    assert.equal(forcedBusinessApi.status, 403);
+    assert.match(await forcedBusinessApi.text(), /请先修改初始密码/u);
+
+    const forcedAuthSession = await fetch(`${baseUrl}/api/auth/session`, {
+      headers: { cookie: forcedSession.cookie },
+    });
+    assert.equal(forcedAuthSession.status, 200);
+    assert.equal(
+      (
+        (await forcedAuthSession.json()) as {
+          data: { user: { mustChangePassword: boolean } };
+        }
+      ).data.user.mustChangePassword,
+      true,
+    );
+
+    const weakChange = await fetch(`${baseUrl}/api/auth/initial-password`, {
+      method: "POST",
+      headers: {
+        cookie: forcedSession.cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        currentPassword: "Student123!",
+        password: "weak",
+        confirmPassword: "weak",
+      }),
+    });
+    assert.equal(weakChange.status, 400);
+
+    const wrongCurrent = await fetch(`${baseUrl}/api/auth/initial-password`, {
+      method: "POST",
+      headers: {
+        cookie: forcedSession.cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        currentPassword: "Wrong123A",
+        password: "ChangedPass123",
+        confirmPassword: "ChangedPass123",
+      }),
+    });
+    assert.equal(wrongCurrent.status, 400);
+
+    const changeResponse = await fetch(`${baseUrl}/api/auth/initial-password`, {
+      method: "POST",
+      headers: {
+        cookie: forcedSession.cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        currentPassword: "Student123!",
+        password: "ChangedPass123",
+        confirmPassword: "ChangedPass123",
+      }),
+    });
+    assert.equal(changeResponse.status, 200);
+    const changed = await changeResponse.json();
+    assert.equal(changed.data.redirectTo, "/student");
+    const setCookie = changeResponse.headers.get("set-cookie") ?? "";
+    assert.match(setCookie, new RegExp(`${SESSION_COOKIE_NAME}=`));
+    const rotatedCookie = setCookie.split(";")[0] ?? "";
+
+    const forcedAfter = await prisma.user.findUniqueOrThrow({
+      where: { id: forcedStudent.id },
+      select: {
+        passwordHash: true,
+        mustChangePassword: true,
+        passwordChangedAt: true,
+      },
+    });
+    assert.equal(forcedAfter.mustChangePassword, false);
+    assert.notEqual(forcedAfter.passwordChangedAt, null);
+    assert.equal(
+      await compare("ChangedPass123", forcedAfter.passwordHash),
+      true,
+    );
+
+    const oldSessionAfterChange = await fetch(
+      `${baseUrl}/api/student/classrooms`,
+      { headers: { cookie: forcedSession.cookie } },
+    );
+    assert.equal(oldSessionAfterChange.status, 401);
+    const newSessionAfterChange = await fetch(
+      `${baseUrl}/api/student/classrooms`,
+      { headers: { cookie: rotatedCookie } },
+    );
+    assert.equal(newSessionAfterChange.status, 200);
+
     deactivatedStudentId = student.id;
     await prisma.user.update({
       where: { id: student.id },
@@ -213,6 +332,12 @@ async function main(): Promise<void> {
       await prisma.authSession.deleteMany({
         where: { id: { in: createdSessionIds } },
       });
+    }
+    if (createdUserIds.length > 0) {
+      await prisma.authSession.deleteMany({
+        where: { userId: { in: createdUserIds } },
+      });
+      await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     }
     await prisma.$disconnect();
     server.kill();

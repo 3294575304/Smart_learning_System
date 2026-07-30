@@ -87,6 +87,7 @@ test("学生和教师不能调用管理员治理能力", () => {
     email: `${role.toLowerCase()}@example.com`,
     displayName: role,
     role,
+    mustChangePassword: false,
   });
   assert.throws(
     () => assertRole(user(Role.STUDENT), [Role.ADMIN]),

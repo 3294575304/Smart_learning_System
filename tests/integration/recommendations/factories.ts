@@ -100,6 +100,7 @@ export class RecommendationTestFactory {
       email: user.email,
       role: user.role,
       displayName: user.email,
+      mustChangePassword: false,
     };
   }
 

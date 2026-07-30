@@ -20,6 +20,7 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/change-initial-password/:path*",
     "/admin/:path*",
     "/teacher/:path*",
     "/student/:path*",

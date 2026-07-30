@@ -5,4 +5,5 @@ export interface AuthenticatedUser {
   email: string | null;
   role: Role;
   displayName: string | null;
+  mustChangePassword: boolean;
 }

@@ -10,5 +10,9 @@ export default async function DashboardRedirectPage() {
     redirect("/login");
   }
 
+  if (user.mustChangePassword) {
+    redirect("/change-initial-password");
+  }
+
   redirect(roleHomePath(user.role));
 }

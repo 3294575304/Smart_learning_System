@@ -5,7 +5,11 @@ import { getCurrentUser } from "@/services/auth/session";
 
 export default async function ForbiddenPage() {
   const user = await getCurrentUser();
-  const target = user ? roleHomePath(user.role) : "/login";
+  const target = user
+    ? user.mustChangePassword
+      ? "/change-initial-password"
+      : roleHomePath(user.role)
+    : "/login";
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6">

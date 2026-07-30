@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { CourseClassroomManager } from "@/components/courses/course-classroom-manager";
 import { CourseForm } from "@/components/courses/course-form";
+import { CourseStudentRosterImportCard } from "@/components/courses/course-student-roster-import-card";
 import { CourseSyllabusCard } from "@/components/courses/course-syllabus-card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -129,6 +130,11 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
           </div>
 
           <CourseSyllabusCard courseId={course.id} />
+
+          <CourseStudentRosterImportCard
+            courseId={course.id}
+            linkedClassrooms={course.linkedClassrooms}
+          />
 
           <div className="bg-card rounded-xl border p-5">
             <h2 className="font-semibold">编辑课程基础信息</h2>

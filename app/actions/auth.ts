@@ -4,17 +4,30 @@ import { Prisma, Role, UserStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
+  getErrorStatus,
   getSafeErrorMessage,
   roleHomePath,
 } from "@/services/auth/authorization";
 import { hashPassword, verifyPassword } from "@/services/auth/password";
-import { loginSchema, registerSchema } from "@/services/auth/schemas";
+import {
+  changeInitialPasswordSchema,
+  loginSchema,
+  registerSchema,
+} from "@/services/auth/schemas";
 import {
   createSession,
   destroyCurrentSession,
   getCurrentUser,
 } from "@/services/auth/session";
-import type { LoginInput, RegisterInput } from "@/services/auth/schemas";
+import type {
+  ChangeInitialPasswordInput,
+  LoginInput,
+  RegisterInput,
+} from "@/services/auth/schemas";
+import {
+  changeInitialPassword,
+  ChangeInitialPasswordError,
+} from "@/services/auth/change-password";
 import type { ActionResult } from "@/types/action-result";
 import {
   MaintenanceModeError,
@@ -51,9 +64,13 @@ export async function loginAction(
     };
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: parsed.data.email },
-  });
+  const user = parsed.data.email.includes("@")
+    ? await prisma.user.findUnique({
+        where: { email: parsed.data.email },
+      })
+    : await prisma.user.findFirst({
+        where: { profile: { studentNo: parsed.data.email } },
+      });
   const passwordIsValid = await verifyPassword(
     parsed.data.password,
     user?.passwordHash ?? null,
@@ -76,7 +93,11 @@ export async function loginAction(
 
     return {
       success: true,
-      data: { redirectTo: roleHomePath(user.role) },
+      data: {
+        redirectTo: user.mustChangePassword
+          ? "/change-initial-password"
+          : roleHomePath(user.role),
+      },
     };
   } catch (error: unknown) {
     console.error("Failed to create login session", error);
@@ -148,6 +169,57 @@ export async function registerAction(
       success: false,
       error: "注册暂时失败，请稍后重试",
       status: 500,
+    };
+  }
+}
+
+export async function changeInitialPasswordAction(
+  input: ChangeInitialPasswordInput,
+): Promise<ActionResult<RedirectResult>> {
+  const parsed = changeInitialPasswordSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "请检查密码信息",
+      status: 400,
+      fieldErrors: fieldErrors(parsed.error.flatten().fieldErrors),
+    };
+  }
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    await destroyCurrentSession();
+    return { success: false, error: "请先登录", status: 401 };
+  }
+
+  try {
+    const result = await changeInitialPassword(currentUser.id, parsed.data);
+    if (result.changed) {
+      await createSession(currentUser.id);
+    }
+
+    return {
+      success: true,
+      data: { redirectTo: roleHomePath(result.role) },
+    };
+  } catch (error: unknown) {
+    if (error instanceof ChangeInitialPasswordError) {
+      return {
+        success: false,
+        error: error.message,
+        status: 400,
+        fieldErrors: error.fieldErrors,
+      };
+    }
+    const status = getErrorStatus(error);
+    if (status >= 500) {
+      console.error("Failed to change initial password", error);
+    }
+    return {
+      success: false,
+      error: getSafeErrorMessage(error),
+      status,
     };
   }
 }

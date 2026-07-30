@@ -9,7 +9,11 @@ export default async function RegisterPage() {
   const user = await getCurrentUser();
 
   if (user) {
-    redirect(roleHomePath(user.role));
+    redirect(
+      user.mustChangePassword
+        ? "/change-initial-password"
+        : roleHomePath(user.role),
+    );
   }
   const config = await getPublicSystemConfig();
   if (config.maintenanceMode) redirect("/maintenance");

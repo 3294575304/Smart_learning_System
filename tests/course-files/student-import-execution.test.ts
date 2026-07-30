@@ -19,14 +19,17 @@ import {
 import {
   executeAdminStudentImportBatch,
   executeTeacherStudentImportBatch,
+  markTeacherStudentImportAccountSheetDownloaded,
   previewTeacherStudentImportFromFile,
 } from "@/services/student-imports/service";
+import { buildInitialCredentialCsv } from "@/services/student-imports/credential-export";
 import { studentImportPreviewRequestSchema } from "@/services/student-imports/schemas";
 import type { StorageService } from "@/services/storage/types";
 import {
   buildCsvFixture,
   officialStudentRosterHeaders,
 } from "../helpers/student-import-fixtures";
+import { compare } from "bcryptjs";
 
 const prisma = new PrismaClient();
 const auditContext = {
@@ -370,6 +373,16 @@ test("正式导入创建账号、匹配账号、跳过已入班并保持审计�
       failedRows: 0,
       importedRows: 2,
     });
+    assert.equal(result.initialCredentials.length, 1);
+    assert.deepEqual(result.initialCredentials[0], {
+      rowNumber: 2,
+      studentName: "新建学生",
+      studentNo: `${context.studentNoPrefix}001`,
+      className: "软件1班",
+      loginAccount: `${context.studentNoPrefix}001`,
+      initialPassword: "ImportPass123A",
+      contact: null,
+    });
 
     const newUser = await prisma.user.findFirstOrThrow({
       where: { profile: { studentNo: `${context.studentNoPrefix}001` } },
@@ -379,6 +392,13 @@ test("正式导入创建账号、匹配账号、跳过已入班并保持审计�
     assert.equal(newUser.email, null);
     assert.equal(newUser.mustChangePassword, true);
     assert.equal(newUser.passwordHash.includes("ImportPass123A"), false);
+    assert.equal(
+      await compare(
+        result.initialCredentials[0].initialPassword,
+        newUser.passwordHash,
+      ),
+      true,
+    );
     assert.equal(newUser.profile?.displayName, "新建学生");
 
     const existingAfter = await prisma.user.findUniqueOrThrow({
@@ -405,6 +425,7 @@ test("正式导入创建账号、匹配账号、跳过已入班并保持审计�
       auditContext,
     );
     assert.deepEqual(repeat.summary, result.summary);
+    assert.equal(repeat.initialCredentials.length, 0);
     assert.equal(
       await prisma.auditLog.count({
         where: {
@@ -426,6 +447,62 @@ test("正式导入创建账号、匹配账号、跳过已入班并保持审计�
     assert.equal(auditJson.includes("ImportPass123A"), false);
     assert.equal(auditJson.includes("新建学生"), false);
     assert.equal(auditJson.includes(`${context.studentNoPrefix}001`), false);
+    const persistedBatch = await prisma.studentImportBatch.findUniqueOrThrow({
+      where: { id: preview.batch.id },
+      select: { previewSummary: true, mappingConfig: true },
+    });
+    const persistedRows = await prisma.studentImportRow.findMany({
+      where: { batchId: preview.batch.id },
+      select: { sourceRow: true, errorDetail: true },
+    });
+    assert.equal(
+      JSON.stringify({ persistedBatch, persistedRows }).includes(
+        "ImportPass123A",
+      ),
+      false,
+    );
+
+    const csv = buildInitialCredentialCsv(result.initialCredentials);
+    assert.match(csv, /姓名,?|"姓名"/u);
+    assert.match(csv, /ImportPass123A/u);
+    assert.doesNotMatch(csv, /passwordHash|createdUserId|matchedUserId/u);
+
+    const mark = await markTeacherStudentImportAccountSheetDownloaded(
+      context.teacherId,
+      preview.batch.id,
+      auditContext,
+    );
+    assert.equal(mark.downloadCount, 1);
+    assert.equal(mark.createdUserRows, 1);
+    await assert.rejects(
+      () =>
+        markTeacherStudentImportAccountSheetDownloaded(
+          context.teacherId,
+          preview.batch.id,
+          auditContext,
+        ),
+      /不能重复下载/u,
+    );
+    await assert.rejects(
+      () =>
+        markTeacherStudentImportAccountSheetDownloaded(
+          context.teacherTwoId,
+          preview.batch.id,
+          auditContext,
+        ),
+      /导入批次不存在/u,
+    );
+    const downloadAudit = await prisma.auditLog.findFirstOrThrow({
+      where: {
+        targetId: preview.batch.id,
+        action: AuditAction.STUDENT_IMPORT_ACCOUNT_SHEET_DOWNLOADED,
+      },
+      select: { afterData: true },
+    });
+    assert.equal(
+      JSON.stringify(downloadAudit.afterData).includes("ImportPass123A"),
+      false,
+    );
 
     const secondFile = await createRosterFile(context, data);
     const secondPreview = await previewTeacherStudentImportFromFile(
@@ -689,6 +766,7 @@ test("管理员可以执行已确认导入批次", async () => {
     );
     assert.equal(result.status, StudentImportBatchStatus.SUCCEEDED);
     assert.equal(result.summary.createdUserRows, 1);
+    assert.equal(result.initialCredentials.length, 0);
   } finally {
     await cleanup(context);
   }
