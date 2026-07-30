@@ -54,9 +54,7 @@ const courseDescriptionSchema = z
   .max(1000, "课程描述不能超过 1000 个字符")
   .transform((value) => value || null);
 
-export const courseTemplateIdSchema = z
-  .string()
-  .cuid("课程模板 ID 格式无效");
+export const courseTemplateIdSchema = z.string().cuid("课程模板 ID 格式无效");
 
 export const courseIdSchema = z.string().cuid("课程 ID 格式无效");
 export const classroomIdSchema = z.string().cuid("班级 ID 格式无效");
@@ -97,10 +95,18 @@ export const updateCourseSchema = z
   })
   .strict();
 
-export type CreateCourseTemplateInput = z.input<typeof createCourseTemplateSchema>;
-export type CreateCourseTemplateData = z.output<typeof createCourseTemplateSchema>;
-export type UpdateCourseTemplateInput = z.input<typeof updateCourseTemplateSchema>;
-export type UpdateCourseTemplateData = z.output<typeof updateCourseTemplateSchema>;
+export type CreateCourseTemplateInput = z.input<
+  typeof createCourseTemplateSchema
+>;
+export type CreateCourseTemplateData = z.output<
+  typeof createCourseTemplateSchema
+>;
+export type UpdateCourseTemplateInput = z.input<
+  typeof updateCourseTemplateSchema
+>;
+export type UpdateCourseTemplateData = z.output<
+  typeof updateCourseTemplateSchema
+>;
 export type CreateCourseInput = z.input<typeof createCourseSchema>;
 export type CreateCourseData = z.output<typeof createCourseSchema>;
 export type UpdateCourseInput = z.input<typeof updateCourseSchema>;

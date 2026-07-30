@@ -94,41 +94,40 @@ async function captureUniversityDemoSnapshot(
     courseCount,
     knowledgePointCount,
     questionCount,
-  ] =
-    await Promise.all([
-      client.user.count({
-        where: { email: { startsWith: "net-" } },
-      }),
-      client.classroom.count({
-        where: { joinCode: "CNSE2024" },
-      }),
-      client.courseTemplate.count({
-        where: { code: "python-programming-v1" },
-      }),
-      client.courseTemplate.count({
-        where: {
-          code: "python-programming-v1",
-          isActive: true,
-          isBuiltin: true,
-        },
-      }),
-      client.course.count({
-        where: {
-          courseNo: "PYTHON-2026",
-          term: "2026-2027-1",
-        },
-      }),
-      client.knowledgePoint.count({
-        where: { code: { startsWith: "CN-" } },
-      }),
-      client.question.count({
-        where: {
-          creator: { email: "net-teacher@example.com" },
-          deletedAt: null,
-          status: "ACTIVE",
-        },
-      }),
-    ]);
+  ] = await Promise.all([
+    client.user.count({
+      where: { email: { startsWith: "net-" } },
+    }),
+    client.classroom.count({
+      where: { joinCode: "CNSE2024" },
+    }),
+    client.courseTemplate.count({
+      where: { code: "python-programming-v1" },
+    }),
+    client.courseTemplate.count({
+      where: {
+        code: "python-programming-v1",
+        isActive: true,
+        isBuiltin: true,
+      },
+    }),
+    client.course.count({
+      where: {
+        courseNo: "PYTHON-2026",
+        term: "2026-2027-1",
+      },
+    }),
+    client.knowledgePoint.count({
+      where: { code: { startsWith: "CN-" } },
+    }),
+    client.question.count({
+      where: {
+        creator: { email: "net-teacher@example.com" },
+        deletedAt: null,
+        status: "ACTIVE",
+      },
+    }),
+  ]);
 
   const [
     questionOptionCount,

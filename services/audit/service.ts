@@ -76,8 +76,8 @@ export async function listAuditLogs(
                             : record.targetType === AuditTargetType.ASSIGNMENT
                               ? `作业 ${record.targetId}`
                               : (target?.profile?.displayName ??
-                                  target?.email ??
-                                  record.targetId),
+                                target?.email ??
+                                record.targetId),
       };
     }),
     pagination: {

@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
-import {
-  ClassroomStatus,
-  CourseStatus,
-  PrismaClient,
-} from "@prisma/client";
+import { ClassroomStatus, CourseStatus, PrismaClient } from "@prisma/client";
 
-import { createAdminCourseTemplate, createTeacherCourse, getTeacherCourse, linkTeacherClassroomToCourse, listTeacherCourseTemplates, setAdminCourseTemplateActive, updateAdminCourseTemplate, updateTeacherCourse, unlinkTeacherClassroomFromCourse } from "@/services/courses/service";
+import {
+  createAdminCourseTemplate,
+  createTeacherCourse,
+  getTeacherCourse,
+  linkTeacherClassroomToCourse,
+  listTeacherCourseTemplates,
+  setAdminCourseTemplateActive,
+  updateAdminCourseTemplate,
+  updateTeacherCourse,
+  unlinkTeacherClassroomFromCourse,
+} from "@/services/courses/service";
 
 const prisma = new PrismaClient();
 

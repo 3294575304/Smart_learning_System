@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { studentImportFields } from "@/services/student-imports/types";
+import {
+  studentImportFields,
+  type StudentImportField,
+} from "@/services/student-imports/types";
 
 export const studentImportBatchIdSchema = z
   .string()
@@ -65,4 +68,72 @@ export type StudentImportPreviewRequestData = z.output<
 >;
 export type StudentImportPreviewPaginationData = z.output<
   typeof studentImportPreviewPaginationSchema
+>;
+
+const requiredMappingSelectionSchema = z
+  .string()
+  .min(1, "请选择对应的源文件列");
+const optionalMappingSelectionSchema = z.string();
+
+export const studentImportMappingFormSchema = z
+  .object({
+    academicTerm: requiredMappingSelectionSchema,
+    courseNo: requiredMappingSelectionSchema,
+    studentNo: requiredMappingSelectionSchema,
+    studentName: requiredMappingSelectionSchema,
+    className: requiredMappingSelectionSchema,
+    email: optionalMappingSelectionSchema,
+    phone: optionalMappingSelectionSchema,
+    gradeMark: optionalMappingSelectionSchema,
+    finalGrade: optionalMappingSelectionSchema,
+    specialReason: optionalMappingSelectionSchema,
+    gradeType: optionalMappingSelectionSchema,
+    remark: optionalMappingSelectionSchema,
+  })
+  .superRefine((input, context) => {
+    const selections = Object.entries(input).filter(
+      (entry): entry is [StudentImportField, string] => entry[1] !== "",
+    );
+    const usedColumns = new Map<string, StudentImportField>();
+
+    for (const [field, sourceColumnIndex] of selections) {
+      if (!/^\d+$/u.test(sourceColumnIndex)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: "源文件列格式无效",
+        });
+        continue;
+      }
+
+      const previousField = usedColumns.get(sourceColumnIndex);
+      if (previousField) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: "同一源文件列不能映射到多个字段",
+        });
+      } else {
+        usedColumns.set(sourceColumnIndex, field);
+      }
+    }
+  })
+  .transform((input) => ({
+    fieldMappings: Object.fromEntries(
+      Object.entries(input)
+        .filter(
+          (entry): entry is [StudentImportField, string] => entry[1] !== "",
+        )
+        .map(([field, sourceColumnIndex]) => [
+          field,
+          Number(sourceColumnIndex),
+        ]),
+    ) as Partial<Record<StudentImportField, number>>,
+  }));
+
+export type StudentImportMappingFormInput = z.input<
+  typeof studentImportMappingFormSchema
+>;
+export type StudentImportMappingFormData = z.output<
+  typeof studentImportMappingFormSchema
 >;

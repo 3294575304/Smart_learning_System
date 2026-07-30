@@ -14,9 +14,7 @@ import {
   type UpdateCourseData,
   type UpdateCourseInput,
 } from "@/services/courses/schemas";
-import type {
-  TeacherCourseTemplateOption,
-} from "@/services/courses/types";
+import type { TeacherCourseTemplateOption } from "@/services/courses/types";
 
 interface CreateCourseFormProps {
   mode: "create";
@@ -65,23 +63,27 @@ function CreateCourseForm({
     formState: { errors, isSubmitting },
   } = useForm<CreateCourseInput, unknown, CreateCourseData>({
     resolver: zodResolver(createCourseSchema),
-    defaultValues: defaultValues ?? buildTemplateDefaults(templates, defaultTemplateId),
+    defaultValues:
+      defaultValues ?? buildTemplateDefaults(templates, defaultTemplateId),
   });
 
   const onSubmit = handleSubmit(async (input) => {
     setServerError(null);
-    const result = await requestApi<{ id: string }>(
-      "/api/teacher/courses",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(input),
-      },
-    );
+    const result = await requestApi<{ id: string }>("/api/teacher/courses", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
 
     if (!result.success) {
       setServerError(result.error);
-      for (const field of ["templateId", "courseNo", "term", "name", "description"] as const) {
+      for (const field of [
+        "templateId",
+        "courseNo",
+        "term",
+        "name",
+        "description",
+      ] as const) {
         const message = result.fieldErrors?.[field]?.[0];
         if (message) {
           setError(field, { message });
@@ -145,7 +147,9 @@ function CreateCourseForm({
             placeholder="2026-2027-1"
           />
           {errors.term ? (
-            <p className="text-destructive mt-1 text-sm">{errors.term.message}</p>
+            <p className="text-destructive mt-1 text-sm">
+              {errors.term.message}
+            </p>
           ) : null}
         </div>
       </div>
@@ -223,7 +227,12 @@ function EditCourseForm({
 
     if (!result.success) {
       setServerError(result.error);
-      for (const field of ["courseNo", "term", "name", "description"] as const) {
+      for (const field of [
+        "courseNo",
+        "term",
+        "name",
+        "description",
+      ] as const) {
         const message = result.fieldErrors?.[field]?.[0];
         if (message) {
           setError(field, { message });
@@ -241,7 +250,9 @@ function EditCourseForm({
         <p className="font-medium">
           课程模板：{template.name} ({template.code})
         </p>
-        <p className="text-muted-foreground mt-1">{template.isBuiltin ? "内置模板" : "自定义模板"}</p>
+        <p className="text-muted-foreground mt-1">
+          {template.isBuiltin ? "内置模板" : "自定义模板"}
+        </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -269,7 +280,9 @@ function EditCourseForm({
             id="course-term"
           />
           {errors.term ? (
-            <p className="text-destructive mt-1 text-sm">{errors.term.message}</p>
+            <p className="text-destructive mt-1 text-sm">
+              {errors.term.message}
+            </p>
           ) : null}
         </div>
       </div>

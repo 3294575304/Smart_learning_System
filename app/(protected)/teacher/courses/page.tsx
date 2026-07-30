@@ -100,11 +100,15 @@ export default async function TeacherCoursesPage({}: PageProps) {
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs">关联班级</p>
-                      <p className="mt-1 font-medium">{course.classroomCount}</p>
+                      <p className="mt-1 font-medium">
+                        {course.classroomCount}
+                      </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs">学生人数</p>
-                      <p className="mt-1 font-medium">{course.activeStudentCount}</p>
+                      <p className="mt-1 font-medium">
+                        {course.activeStudentCount}
+                      </p>
                     </div>
                   </div>
 

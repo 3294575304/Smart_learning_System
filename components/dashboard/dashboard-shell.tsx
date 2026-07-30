@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Role } from "@prisma/client";
 import {
@@ -56,12 +56,14 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
     { href: "/admin/users", label: "用户管理", icon: Users },
     { href: "/admin/questions", label: "公共题库", icon: BookOpenCheck },
     { href: "/admin/classrooms", label: "班级治理", icon: School },
+    { href: "/admin/course-templates", label: "课程模板", icon: BookOpenCheck },
     { href: "/admin/audit-logs", label: "审计日志", icon: ScrollText },
     { href: "/admin/announcements", label: "系统公告", icon: Megaphone },
     { href: "/admin/system-config", label: "系统配置", icon: Settings },
   ],
   TEACHER: [
     { href: "/teacher", label: "工作台", icon: Home },
+    { href: "/teacher/courses", label: "课程管理", icon: BookOpenCheck },
     { href: "/teacher/classrooms", label: "班级管理", icon: School },
     { href: "/teacher/questions", label: "题库管理", icon: BookOpenCheck },
     { href: "/teacher/assignments", label: "作业管理", icon: ClipboardList },
@@ -87,6 +89,10 @@ const SEGMENT_LABELS: Record<string, string> = {
   "audit-logs": "审计日志",
   "system-config": "系统配置",
   announcements: "系统公告",
+  "course-templates": "课程模板",
+  courses: "课程管理",
+  students: "学生名单",
+  import: "导入",
   teacher: "教师工作台",
   student: "学习主页",
   classrooms: "班级管理",
@@ -251,15 +257,17 @@ export function DashboardShell({
               const displayName = user.displayName ?? user.email ?? "用户";
               return (
                 <>
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold shadow-sm">
-              {displayName.slice(0, 1).toUpperCase()}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{displayName}</p>
-              <p className="text-muted-foreground truncate text-xs">
-                {ROLE_LABELS[user.role]}
-              </p>
-            </div>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold shadow-sm">
+                    {displayName.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {displayName}
+                    </p>
+                    <p className="text-muted-foreground truncate text-xs">
+                      {ROLE_LABELS[user.role]}
+                    </p>
+                  </div>
                 </>
               );
             })()}

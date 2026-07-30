@@ -42,7 +42,10 @@ export default async function AdminCourseTemplatesPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {templates.map((template) => (
-            <article className="bg-card rounded-xl border p-5" key={template.id}>
+            <article
+              className="bg-card rounded-xl border p-5"
+              key={template.id}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="truncate font-semibold">{template.name}</h3>
@@ -58,7 +61,11 @@ export default async function AdminCourseTemplatesPage() {
                         : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    {STATUS_LABELS[String(template.isActive) as "true" | "false"]}
+                    {
+                      STATUS_LABELS[
+                        String(template.isActive) as "true" | "false"
+                      ]
+                    }
                   </span>
                   {template.isBuiltin ? (
                     <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700">

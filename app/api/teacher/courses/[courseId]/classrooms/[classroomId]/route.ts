@@ -4,10 +4,7 @@ import { apiError, apiSuccess } from "@/lib/api-response";
 import { courseApiError } from "@/lib/course-api";
 import { auditRequestContext } from "@/services/audit/request-context";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
-import {
-  classroomIdSchema,
-  courseIdSchema,
-} from "@/services/courses/schemas";
+import { classroomIdSchema, courseIdSchema } from "@/services/courses/schemas";
 import {
   linkTeacherClassroomToCourse,
   unlinkTeacherClassroomFromCourse,
