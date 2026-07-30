@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
+import { compare } from "bcryptjs";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
 import { assertIsolatedIntegrationEnvironment } from "../integration/database";
@@ -29,13 +30,16 @@ const rosterCsvA = Buffer.from(
   ].join("\n"),
   "utf8",
 );
-const rosterCsvB = Buffer.from(
-  [
-    "学年学期(文本),课程号(文本),学号(文本),姓名(文本),班级(文本),成绩标识(文本),期末成绩(100.0%)(文本),特殊原因(文本),等级成绩类型(文本),备注(文本)",
-    "2026-2027-1,HTTP-PY,20260003,学生三,软件2班,,,,,",
-  ].join("\n"),
-  "utf8",
-);
+function buildMatchingRosterCsv(courseNo: string): Buffer {
+  return Buffer.from(
+    [
+      "学年学期(文本),课程号(文本),学号(文本),姓名(文本),班级(文本),成绩标识(文本),期末成绩(100.0%)(文本),特殊原因(文本),等级成绩类型(文本),备注(文本)",
+      `2026-2027-1,${courseNo},20260003,学生三,软件2班,,,,,`,
+      `2026-2027-1,${courseNo},20260004,已注册学生,软件2班,,,,,`,
+    ].join("\n"),
+    "utf8",
+  );
+}
 const serverOutput: string[] = [];
 const sessionIds: string[] = [];
 const createdTemplateIds: string[] = [];
@@ -44,6 +48,7 @@ const createdClassroomIds: string[] = [];
 const createdSyllabusIds: string[] = [];
 const createdCourseFileIds: string[] = [];
 const createdStudentImportBatchIds: string[] = [];
+const createdImportUserIds: string[] = [];
 const uploadRoot = mkdtempSync(join(tmpdir(), "zhixue-http-syllabus-"));
 
 const server = spawn(
@@ -630,7 +635,7 @@ async function main(): Promise<void> {
       teacherCookie,
       "students-v3.csv",
       "text/csv",
-      rosterCsvB,
+      buildMatchingRosterCsv(courseNo),
     );
     assert.equal(nextRosterResponse.status, 201);
     const nextRoster = (await nextRosterResponse.json()) as ApiSuccess<{
@@ -872,6 +877,334 @@ async function main(): Promise<void> {
     );
     assert.equal((await requestJson(studentImportBatchPath)).status, 401);
 
+    const preservedPasswordHash = "preserved-http-password-hash";
+    const existingRosterStudent = await prisma.user.create({
+      data: {
+        email: "iteration-one-existing@example.test",
+        passwordHash: preservedPasswordHash,
+        role: "STUDENT",
+        mustChangePassword: false,
+        profile: {
+          create: {
+            displayName: "已注册学生原姓名",
+            studentNo: "20260004",
+          },
+        },
+      },
+      select: { id: true },
+    });
+    createdImportUserIds.push(existingRosterStudent.id);
+
+    const executionPreviewPath = `/api/teacher/course-files/${nextRoster.data.id}/student-import-preview`;
+    const executionPreviewResponse = await requestJson(
+      executionPreviewPath,
+      teacherCookie,
+      "POST",
+      {
+        classroomId: classroom.id,
+        confirmMapping: true,
+        page: 1,
+        pageSize: 20,
+      },
+    );
+    assert.equal(executionPreviewResponse.status, 200);
+    const executionPreview =
+      (await executionPreviewResponse.json()) as ApiSuccess<{
+        batch: {
+          id: string;
+          status: string;
+          summary: {
+            newUserRows: number;
+            existingUserRows: number;
+            errorCount: number;
+          };
+        };
+      }>;
+    createdStudentImportBatchIds.push(executionPreview.data.batch.id);
+    assert.equal(executionPreview.data.batch.status, "CONFIRMED");
+    assert.equal(executionPreview.data.batch.summary.newUserRows, 1);
+    assert.equal(executionPreview.data.batch.summary.existingUserRows, 1);
+    assert.equal(executionPreview.data.batch.summary.errorCount, 0);
+
+    const executePath = `/api/teacher/student-import-batches/${executionPreview.data.batch.id}/execute`;
+    assert.equal(
+      (await requestJson(executePath, undefined, "POST")).status,
+      401,
+    );
+    assert.equal(
+      (await requestJson(executePath, studentCookie, "POST")).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson(executePath, adminCookie, "POST")).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson(executePath, teacherTwoCookie, "POST")).status,
+      404,
+    );
+
+    const concurrentExecutionResponses = await Promise.all([
+      requestJson(executePath, teacherCookie, "POST"),
+      requestJson(executePath, teacherCookie, "POST"),
+    ]);
+    assert.deepEqual(
+      concurrentExecutionResponses.map((response) => response.status),
+      [200, 200],
+    );
+    const concurrentExecutionResults = (await Promise.all(
+      concurrentExecutionResponses.map(
+        async (response) =>
+          (await response.json()) as ApiSuccess<{
+            summary: {
+              createdUserRows: number;
+              matchedExistingUserRows: number;
+              alreadyEnrolledRows: number;
+              failedRows: number;
+            };
+            initialCredentials: Array<{
+              studentName: string;
+              studentNo: string;
+              initialPassword: string;
+            }>;
+          }>,
+      ),
+    )) as Array<
+      ApiSuccess<{
+        summary: {
+          createdUserRows: number;
+          matchedExistingUserRows: number;
+          alreadyEnrolledRows: number;
+          failedRows: number;
+        };
+        initialCredentials: Array<{
+          studentName: string;
+          studentNo: string;
+          initialPassword: string;
+        }>;
+      }>
+    >;
+    const initialCredentials = concurrentExecutionResults.flatMap(
+      (result) => result.data.initialCredentials,
+    );
+    assert.equal(initialCredentials.length, 1);
+    assert.equal(initialCredentials[0]?.studentNo, "20260003");
+    assert.equal(initialCredentials[0]?.studentName, "学生三");
+    assert.equal(
+      concurrentExecutionResults.every(
+        (result) =>
+          result.data.summary.createdUserRows === 1 &&
+          result.data.summary.matchedExistingUserRows === 1 &&
+          result.data.summary.alreadyEnrolledRows === 0 &&
+          result.data.summary.failedRows === 0,
+      ),
+      true,
+    );
+
+    const importedRosterStudent = await prisma.user.findFirstOrThrow({
+      where: { profile: { studentNo: "20260003" } },
+      select: {
+        id: true,
+        passwordHash: true,
+        mustChangePassword: true,
+        profile: { select: { displayName: true, studentNo: true } },
+      },
+    });
+    createdImportUserIds.push(importedRosterStudent.id);
+    assert.equal(importedRosterStudent.mustChangePassword, true);
+    assert.equal(importedRosterStudent.profile?.studentNo, "20260003");
+    assert.equal(importedRosterStudent.profile?.displayName, "学生三");
+    assert.equal(
+      await compare(
+        initialCredentials[0]?.initialPassword ?? "",
+        importedRosterStudent.passwordHash,
+      ),
+      true,
+    );
+    assert.equal(
+      importedRosterStudent.passwordHash.includes(
+        initialCredentials[0]?.initialPassword ?? "",
+      ),
+      false,
+    );
+
+    const existingRosterStudentAfter = await prisma.user.findUniqueOrThrow({
+      where: { id: existingRosterStudent.id },
+      select: {
+        passwordHash: true,
+        mustChangePassword: true,
+        profile: { select: { displayName: true } },
+      },
+    });
+    assert.equal(
+      existingRosterStudentAfter.passwordHash,
+      preservedPasswordHash,
+    );
+    assert.equal(existingRosterStudentAfter.mustChangePassword, false);
+    assert.equal(
+      existingRosterStudentAfter.profile?.displayName,
+      "已注册学生原姓名",
+    );
+    assert.equal(
+      await prisma.classMembership.count({
+        where: {
+          classroomId: classroom.id,
+          studentId: {
+            in: [existingRosterStudent.id, importedRosterStudent.id],
+          },
+        },
+      }),
+      2,
+    );
+
+    const replayExecutionResponse = await requestJson(
+      executePath,
+      teacherCookie,
+      "POST",
+    );
+    assert.equal(replayExecutionResponse.status, 200);
+    const replayExecution =
+      (await replayExecutionResponse.json()) as ApiSuccess<{
+        initialCredentials: unknown[];
+      }>;
+    assert.equal(replayExecution.data.initialCredentials.length, 0);
+
+    const persistedSensitiveData = await Promise.all([
+      prisma.studentImportBatch.findUniqueOrThrow({
+        where: { id: executionPreview.data.batch.id },
+        select: { mappingConfig: true, previewSummary: true },
+      }),
+      prisma.studentImportRow.findMany({
+        where: { batchId: executionPreview.data.batch.id },
+        select: { sourceRow: true, errorDetail: true },
+      }),
+      prisma.auditLog.findMany({
+        where: { targetId: executionPreview.data.batch.id },
+        select: {
+          summary: true,
+          beforeData: true,
+          afterData: true,
+        },
+      }),
+    ]);
+    assert.equal(
+      JSON.stringify(persistedSensitiveData).includes(
+        initialCredentials[0]?.initialPassword ?? "",
+      ),
+      false,
+    );
+
+    const accountSheetPath = `/api/teacher/student-import-batches/${executionPreview.data.batch.id}/account-sheet-downloads`;
+    assert.equal(
+      (await requestJson(accountSheetPath, undefined, "POST")).status,
+      401,
+    );
+    assert.equal(
+      (await requestJson(accountSheetPath, studentCookie, "POST")).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson(accountSheetPath, teacherTwoCookie, "POST")).status,
+      404,
+    );
+    assert.equal(
+      (await requestJson(accountSheetPath, teacherCookie, "POST")).status,
+      200,
+    );
+    assert.equal(
+      (await requestJson(accountSheetPath, teacherCookie, "POST")).status,
+      409,
+    );
+    const accountSheetState = await prisma.studentImportBatch.findUniqueOrThrow(
+      {
+        where: { id: executionPreview.data.batch.id },
+        select: {
+          accountSheetDownloadCount: true,
+          accountSheetDownloadedAt: true,
+        },
+      },
+    );
+    assert.equal(accountSheetState.accountSheetDownloadCount, 1);
+    assert.notEqual(accountSheetState.accountSheetDownloadedAt, null);
+
+    const repeatRosterUploadResponse = await requestMultipart(
+      rosterPath,
+      teacherCookie,
+      "students-v4-same-list.csv",
+      "text/csv",
+      buildMatchingRosterCsv(courseNo),
+    );
+    assert.equal(repeatRosterUploadResponse.status, 201);
+    const repeatRoster =
+      (await repeatRosterUploadResponse.json()) as ApiSuccess<{
+        id: string;
+        versionNumber: number;
+      }>;
+    createdCourseFileIds.push(repeatRoster.data.id);
+    assert.equal(repeatRoster.data.versionNumber, 4);
+
+    const repeatPreviewResponse = await requestJson(
+      `/api/teacher/course-files/${repeatRoster.data.id}/student-import-preview`,
+      teacherCookie,
+      "POST",
+      {
+        classroomId: classroom.id,
+        confirmMapping: true,
+      },
+    );
+    assert.equal(repeatPreviewResponse.status, 200);
+    const repeatPreview = (await repeatPreviewResponse.json()) as ApiSuccess<{
+      batch: { id: string; status: string };
+    }>;
+    createdStudentImportBatchIds.push(repeatPreview.data.batch.id);
+    assert.equal(repeatPreview.data.batch.status, "CONFIRMED");
+    const repeatExecutePath = `/api/teacher/student-import-batches/${repeatPreview.data.batch.id}/execute`;
+    const repeatImportResponse = await requestJson(
+      repeatExecutePath,
+      teacherCookie,
+      "POST",
+    );
+    assert.equal(repeatImportResponse.status, 200);
+    const repeatImport = (await repeatImportResponse.json()) as ApiSuccess<{
+      summary: {
+        createdUserRows: number;
+        matchedExistingUserRows: number;
+        alreadyEnrolledRows: number;
+      };
+      initialCredentials: unknown[];
+    }>;
+    assert.equal(repeatImport.data.summary.createdUserRows, 0);
+    assert.equal(repeatImport.data.summary.matchedExistingUserRows, 0);
+    assert.equal(repeatImport.data.summary.alreadyEnrolledRows, 2);
+    assert.equal(repeatImport.data.initialCredentials.length, 0);
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/student-import-batches/${repeatPreview.data.batch.id}/account-sheet-downloads`,
+          teacherCookie,
+          "POST",
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      await prisma.userProfile.count({
+        where: { studentNo: { in: ["20260003", "20260004"] } },
+      }),
+      2,
+    );
+    assert.equal(
+      await prisma.classMembership.count({
+        where: {
+          classroomId: classroom.id,
+          studentId: {
+            in: [existingRosterStudent.id, importedRosterStudent.id],
+          },
+        },
+      }),
+      2,
+    );
+
     assert.equal(
       (
         await requestJson(
@@ -922,7 +1255,7 @@ async function main(): Promise<void> {
     );
 
     console.info(
-      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation, file upload versioning, protected downloads, duplicate protection, ownership isolation, classroom linking, unlinking, and invalid input handling.",
+      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation, file upload versioning, protected downloads, roster preview and execution, concurrent and cross-batch idempotency, one-time credential handoff, ownership isolation, classroom linking, unlinking, and invalid input handling.",
     );
   } finally {
     if (createdStudentImportBatchIds.length > 0) {
@@ -934,6 +1267,14 @@ async function main(): Promise<void> {
       });
       await prisma.studentImportBatch.deleteMany({
         where: { id: { in: createdStudentImportBatchIds } },
+      });
+    }
+    if (createdImportUserIds.length > 0) {
+      await prisma.classMembership.deleteMany({
+        where: { studentId: { in: createdImportUserIds } },
+      });
+      await prisma.user.deleteMany({
+        where: { id: { in: createdImportUserIds } },
       });
     }
     if (createdCourseFileIds.length > 0) {

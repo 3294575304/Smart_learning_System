@@ -12,7 +12,10 @@ export const initialCredentialCsvHeaders = [
 
 function csvCell(value: string | number | null): string {
   const text = String(value ?? "");
-  return `"${text.replace(/"/gu, '""')}"`;
+  const spreadsheetSafeText = /^[\t\r\n ]*[=+\-@]/u.test(text)
+    ? `'${text}`
+    : text;
+  return `"${spreadsheetSafeText.replace(/"/gu, '""')}"`;
 }
 
 export function buildInitialCredentialCsv(

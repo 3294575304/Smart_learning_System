@@ -4,6 +4,8 @@ AI 驱动的智能教学平台。当前 MVP 已完成管理员治理、教师教
 
 完整功能状态、角色权限、环境配置、测试数据库、演示流程和已知限制见 [`docs/MVP-ACCEPTANCE.md`](docs/MVP-ACCEPTANCE.md)。
 
+V1.0“迭代一：课程模型与导入基础”已经完成综合验收。课程模板、名单格式、导入与幂等规则、一次性账号交付、首次改密、权限边界和手动演示步骤见 [`docs/ITERATION-ONE-ACCEPTANCE.md`](docs/ITERATION-ONE-ACCEPTANCE.md)。
+
 ## AI 学情分析
 
 - `POST /api/student/submissions/:submissionId/analysis` 为当前已批改作答生成或复用学情分析。
