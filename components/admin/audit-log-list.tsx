@@ -6,6 +6,7 @@ import {
 import { EmptyState } from "@/components/dashboard/empty-state";
 import type {
   AuditConfigSnapshot,
+  AuditConfigValue,
   AuditLogView,
   AuditSnapshot,
   AuditUserSnapshot,
@@ -21,9 +22,11 @@ function isUserSnapshot(
   return Boolean(snapshot && "email" in snapshot && "role" in snapshot);
 }
 
-function displayValue(value: string | number | boolean | null | undefined) {
+function displayValue(value: AuditConfigValue | undefined) {
   if (value === undefined || value === null || value === "") return "—";
   if (typeof value === "boolean") return value ? "开启" : "关闭";
+  if (Array.isArray(value)) return `${value.length} 项`;
+  if (typeof value === "object") return "已记录";
   return String(value);
 }
 

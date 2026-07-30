@@ -1,0 +1,1643 @@
+import {
+  AuditAction,
+  AuditTargetType,
+  ClassroomStatus,
+  CourseFileKind,
+  MembershipStatus,
+  Prisma,
+  Role,
+  StudentImportBatchStatus,
+  StudentImportExecutionStatus,
+  StudentImportPreviewStatus,
+} from "@prisma/client";
+import { createHash } from "node:crypto";
+import path from "node:path";
+
+import { prisma } from "@/lib/prisma";
+import { ResourceNotFoundError } from "@/services/auth/policy";
+import { writeGovernanceAuditLog } from "@/services/audit/repository";
+import type {
+  AuditConfigSnapshot,
+  AuditRequestContext,
+} from "@/services/audit/types";
+import { STUDENT_ROSTER_FILE_KEY } from "@/services/course-files/config";
+import {
+  findLatestCourseFileVersion,
+  findTeacherCourseFileVersionById,
+  type CourseFileVersionRecord,
+} from "@/services/course-files/repository";
+import type { StudentRosterExtension } from "@/services/course-files/config";
+import {
+  inferHeaderRow,
+  resolveStudentImportMappings,
+  sourceColumnsFromHeaderRow,
+} from "@/services/student-imports/mapping";
+import {
+  ParsedSpreadsheetCell,
+  ParsedSpreadsheetMergedRange,
+  ParsedSpreadsheetRow,
+  ParsedSpreadsheetSheet,
+  columnNameFromIndex,
+  parseSpreadsheetWorkbook,
+} from "@/services/student-imports/spreadsheet-parser";
+import { StudentImportOperationError } from "@/services/student-imports/errors";
+import type { StudentImportPreviewRequestData } from "@/services/student-imports/schemas";
+import {
+  STUDENT_IMPORT_MAPPING_VERSION,
+  requiredStudentImportFields,
+  stableStudentImportFields,
+  studentImportFieldLabels,
+  type StudentImportBatchView,
+  type StudentImportField,
+  type StudentImportFieldMapping,
+  type StudentImportIssue,
+  type StudentImportMappingConfig,
+  type StudentImportPreviewPage,
+  type StudentImportPreviewRowView,
+  type StudentImportSummary,
+} from "@/services/student-imports/types";
+import { getStorageService } from "@/services/storage";
+import type { StorageService } from "@/services/storage/types";
+
+const MAX_STORED_FIELD_LENGTHS: Record<
+  "academicTerm" | "className" | "courseNo" | "studentName" | "studentNo",
+  number
+> = {
+  academicTerm: 50,
+  courseNo: 50,
+  studentNo: 50,
+  studentName: 100,
+  className: 100,
+};
+
+const fieldMaxLengths: Partial<Record<StudentImportField, number>> = {
+  academicTerm: 50,
+  courseNo: 50,
+  studentNo: 50,
+  studentName: 100,
+  className: 100,
+  email: 254,
+  phone: 30,
+  gradeMark: 50,
+  finalGrade: 50,
+  specialReason: 100,
+  gradeType: 100,
+  remark: 500,
+};
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+const PHONE_PATTERN = /^\+?[\d\s\-()（）]{5,30}$/u;
+const SCIENTIFIC_NOTATION_PATTERN = /^[+-]?\d+(?:\.\d+)?e[+-]?\d+$/iu;
+
+const batchSelect = Prisma.validator<Prisma.StudentImportBatchSelect>()({
+  id: true,
+  courseId: true,
+  classroomId: true,
+  createdById: true,
+  sourceFileVersionId: true,
+  status: true,
+  sourceFileName: true,
+  sourceFileChecksum: true,
+  sourceFileMimeType: true,
+  sourceFileSizeBytes: true,
+  sourceSheetName: true,
+  mappingConfig: true,
+  previewSummary: true,
+  totalRows: true,
+  previewRows: true,
+  newUserRows: true,
+  existingUserRows: true,
+  alreadyEnrolledRows: true,
+  courseMismatchRows: true,
+  invalidRows: true,
+  duplicateRows: true,
+  previewedAt: true,
+  confirmedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+const rowSelect = Prisma.validator<Prisma.StudentImportRowSelect>()({
+  rowNumber: true,
+  previewStatus: true,
+  rowKey: true,
+  sourceRow: true,
+  academicTerm: true,
+  courseNo: true,
+  studentNo: true,
+  studentName: true,
+  className: true,
+  errorDetail: true,
+});
+
+const targetClassroomSelect = Prisma.validator<Prisma.ClassroomSelect>()({
+  id: true,
+  name: true,
+  teacherId: true,
+  courseId: true,
+  status: true,
+  course: {
+    select: {
+      id: true,
+      name: true,
+      courseNo: true,
+      term: true,
+      teacherId: true,
+    },
+  },
+});
+
+type StudentImportBatchRecord = Prisma.StudentImportBatchGetPayload<{
+  select: typeof batchSelect;
+}>;
+
+type StudentImportRowRecord = Prisma.StudentImportRowGetPayload<{
+  select: typeof rowSelect;
+}>;
+
+type TargetClassroomRecord = Prisma.ClassroomGetPayload<{
+  select: typeof targetClassroomSelect;
+}>;
+
+interface StudentImportPreviewDependencies {
+  storage?: StorageService;
+  logger?: Pick<Console, "error">;
+  now?: () => Date;
+}
+
+interface PreparedPreviewRow {
+  rowNumber: number;
+  rowKey: string;
+  previewStatus: StudentImportPreviewStatus;
+  academicTerm: string;
+  courseNo: string;
+  studentNo: string;
+  studentName: string;
+  className: string;
+  sourceRow: Prisma.InputJsonObject;
+  issues: StudentImportIssue[];
+  mappedValues: Partial<Record<StudentImportField, string>>;
+  matchedUserId: string | null;
+  matchedMembershipId: string | null;
+}
+
+interface ResolvedTarget {
+  course: {
+    id: string;
+    name: string;
+    courseNo: string;
+    term: string;
+  };
+  classroom: {
+    id: string;
+    name: string;
+  };
+}
+
+interface UserMatchRecord {
+  id: string;
+  role: Role;
+  email: string | null;
+  profile: {
+    studentNo: string | null;
+    phone: string | null;
+  } | null;
+  classMemberships: Array<{
+    id: string;
+    status: MembershipStatus;
+  }>;
+}
+
+const userMatchSelect = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
+  role: true,
+  email: true,
+  profile: { select: { studentNo: true, phone: true } },
+  classMemberships: {
+    select: { id: true, status: true },
+  },
+});
+
+type SelectedUserMatchRecord = Prisma.UserGetPayload<{
+  select: typeof userMatchSelect;
+}>;
+
+function sha256Text(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function sha256Buffer(value: Buffer): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
+  return `{${entries
+    .map(
+      ([key, entryValue]) => `${JSON.stringify(key)}:${stableJson(entryValue)}`,
+    )
+    .join(",")}}`;
+}
+
+function inputJsonObject(value: unknown): Prisma.InputJsonObject {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonObject;
+}
+
+function inputJsonValue(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function jsonObject(value: Prisma.JsonValue | null): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function issueArrayFromJson(
+  value: Prisma.JsonValue | null,
+): StudentImportIssue[] {
+  const object = jsonObject(value);
+  const issues = object.issues;
+  return Array.isArray(issues) ? (issues as StudentImportIssue[]) : [];
+}
+
+function mappedValuesFromJson(
+  value: Prisma.JsonValue | null,
+): Partial<Record<StudentImportField, string>> {
+  const object = jsonObject(value);
+  const mappedValues = object.mappedValues;
+  if (
+    !mappedValues ||
+    typeof mappedValues !== "object" ||
+    Array.isArray(mappedValues)
+  ) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(mappedValues as Record<string, unknown>).filter(
+      ([, entryValue]) => typeof entryValue === "string",
+    ),
+  ) as Partial<Record<StudentImportField, string>>;
+}
+
+function sourceValuesFromJson(
+  value: Prisma.JsonValue | null,
+): StudentImportPreviewRowView["sourceValues"] {
+  const object = jsonObject(value);
+  const cells = object.cells;
+  if (!Array.isArray(cells)) return [];
+  return cells
+    .filter((cell): cell is Record<string, unknown> => {
+      return cell !== null && typeof cell === "object" && !Array.isArray(cell);
+    })
+    .map((cell) => ({
+      columnIndex:
+        typeof cell.columnIndex === "number" &&
+        Number.isSafeInteger(cell.columnIndex)
+          ? cell.columnIndex
+          : 0,
+      columnName: typeof cell.columnName === "string" ? cell.columnName : "",
+      header: typeof cell.header === "string" ? cell.header : "",
+      value: typeof cell.value === "string" ? cell.value : "",
+      hasFormula: cell.hasFormula === true,
+    }));
+}
+
+function sourceFormatFromFile(
+  file: CourseFileVersionRecord,
+): StudentRosterExtension {
+  const metadata = jsonObject(file.metadata);
+  const detectedFormat = metadata.detectedFormat;
+  if (
+    detectedFormat === "csv" ||
+    detectedFormat === "xls" ||
+    detectedFormat === "xlsx"
+  ) {
+    return detectedFormat;
+  }
+
+  const extension = path.extname(file.originalFileName).toLowerCase();
+  if (extension === ".csv" || extension === ".xls" || extension === ".xlsx") {
+    return extension.slice(1) as StudentRosterExtension;
+  }
+
+  throw new StudentImportOperationError(
+    "学生名单仅支持 XLS、XLSX 或 CSV 文件。",
+    400,
+  );
+}
+
+async function readSourceFile(
+  file: CourseFileVersionRecord,
+  dependencies: StudentImportPreviewDependencies,
+): Promise<Buffer> {
+  const storage = dependencies.storage ?? getStorageService();
+  const logger = dependencies.logger ?? console;
+  try {
+    const data = await storage.read(file.storageKey);
+    const checksum = sha256Buffer(data);
+    if (checksum !== file.checksumSha256) {
+      throw new StudentImportOperationError(
+        "学生名单文件内容与版本记录不一致，请重新上传后再预览。",
+        409,
+      );
+    }
+    return data;
+  } catch (error: unknown) {
+    if (error instanceof StudentImportOperationError) {
+      throw error;
+    }
+    logger.error("Failed to read student import source file", {
+      fileId: file.id,
+      storageKey: file.storageKey,
+    });
+    throw new StudentImportOperationError(
+      "学生名单文件暂时无法读取，请稍后重试。",
+      500,
+    );
+  }
+}
+
+async function resolvePreviewTarget(
+  teacherId: string,
+  file: CourseFileVersionRecord,
+  requestedClassroomId?: string,
+): Promise<ResolvedTarget> {
+  if (
+    file.fileKind !== CourseFileKind.IMPORT_SOURCE ||
+    file.fileKey !== STUDENT_ROSTER_FILE_KEY
+  ) {
+    throw new ResourceNotFoundError("学生名单文件不存在");
+  }
+
+  if (file.classroom) {
+    if (requestedClassroomId && requestedClassroomId !== file.classroom.id) {
+      throw new StudentImportOperationError(
+        "目标班级与所选名单文件不一致。",
+        400,
+      );
+    }
+    const classroom = await prisma.classroom.findFirst({
+      where: { id: file.classroom.id, teacherId },
+      select: targetClassroomSelect,
+    });
+    return targetFromClassroom(classroom);
+  }
+
+  if (!file.course) {
+    throw new ResourceNotFoundError("学生名单文件不存在");
+  }
+
+  if (!requestedClassroomId) {
+    throw new StudentImportOperationError("请选择目标班级后再预览名单。", 400);
+  }
+
+  const classroom = await prisma.classroom.findFirst({
+    where: { id: requestedClassroomId, teacherId },
+    select: targetClassroomSelect,
+  });
+  const target = targetFromClassroom(classroom);
+  if (target.course.id !== file.course.id) {
+    throw new StudentImportOperationError(
+      "目标班级未关联到所选名单文件所属课程。",
+      400,
+    );
+  }
+  return target;
+}
+
+function targetFromClassroom(
+  classroom: TargetClassroomRecord | null,
+): ResolvedTarget {
+  if (!classroom) {
+    throw new ResourceNotFoundError("目标班级不存在");
+  }
+
+  if (classroom.status !== ClassroomStatus.ACTIVE) {
+    throw new StudentImportOperationError(
+      "目标班级已关闭，不能导入名单。",
+      409,
+    );
+  }
+
+  if (!classroom.course) {
+    throw new StudentImportOperationError(
+      "目标班级尚未关联课程，不能导入名单。",
+      409,
+    );
+  }
+
+  return {
+    course: {
+      id: classroom.course.id,
+      name: classroom.course.name,
+      courseNo: classroom.course.courseNo,
+      term: classroom.course.term,
+    },
+    classroom: {
+      id: classroom.id,
+      name: classroom.name,
+    },
+  };
+}
+
+function selectedSheetFromWorkbook(
+  sheets: readonly ParsedSpreadsheetSheet[],
+  sheetName?: string,
+): ParsedSpreadsheetSheet {
+  const sheet = sheetName
+    ? sheets.find((item) => item.name === sheetName)
+    : sheets.find((item) => !item.hidden);
+
+  if (!sheet) {
+    throw new StudentImportOperationError("所选工作表不存在或不受支持。", 400);
+  }
+
+  if (sheet.hidden) {
+    throw new StudentImportOperationError("不支持导入隐藏工作表。", 400);
+  }
+
+  if (sheet.rows.length === 0) {
+    throw new StudentImportOperationError(
+      "所选工作表没有可解析的数据行。",
+      400,
+    );
+  }
+
+  return sheet;
+}
+
+function normalizeFieldValue(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/\uFEFF/gu, "")
+    .trim();
+}
+
+function normalizeEmail(value: string): string {
+  return normalizeFieldValue(value).toLowerCase();
+}
+
+function normalizeCourseNo(value: string): string {
+  return normalizeFieldValue(value).toUpperCase();
+}
+
+function storageText(
+  value: string | undefined,
+  field: keyof typeof MAX_STORED_FIELD_LENGTHS,
+): string {
+  const normalized = normalizeFieldValue(value ?? "");
+  return normalized.slice(0, MAX_STORED_FIELD_LENGTHS[field]);
+}
+
+function cellByColumn(
+  row: ParsedSpreadsheetRow,
+): Map<number, ParsedSpreadsheetCell> {
+  return new Map(row.cells.map((cell) => [cell.columnIndex, cell]));
+}
+
+function mappedCell(
+  rowCells: Map<number, ParsedSpreadsheetCell>,
+  mapping: StudentImportFieldMapping,
+): ParsedSpreadsheetCell | null {
+  return rowCells.get(mapping.sourceColumnIndex) ?? null;
+}
+
+function isRowBlank(row: ParsedSpreadsheetRow): boolean {
+  return row.cells.every((cell) => normalizeFieldValue(cell.value) === "");
+}
+
+function mergedRangesForRow(
+  rowNumber: number,
+  ranges: readonly ParsedSpreadsheetMergedRange[],
+): ParsedSpreadsheetMergedRange[] {
+  return ranges.filter(
+    (range) => rowNumber >= range.startRow && rowNumber <= range.endRow,
+  );
+}
+
+function issue(
+  level: StudentImportIssue["level"],
+  code: string,
+  message: string,
+  options: Omit<StudentImportIssue, "code" | "level" | "message"> = {},
+): StudentImportIssue {
+  return { level, code, message, ...options };
+}
+
+function fieldMappingByField(
+  mappings: readonly StudentImportFieldMapping[],
+): Map<StudentImportField, StudentImportFieldMapping> {
+  return new Map(mappings.map((mapping) => [mapping.field, mapping]));
+}
+
+function buildMappedValues(
+  row: ParsedSpreadsheetRow,
+  mappings: readonly StudentImportFieldMapping[],
+): Partial<Record<StudentImportField, string>> {
+  const rowCells = cellByColumn(row);
+  const values: Partial<Record<StudentImportField, string>> = {};
+  for (const mapping of mappings) {
+    values[mapping.field] = normalizeFieldValue(
+      mappedCell(rowCells, mapping)?.value ?? "",
+    );
+  }
+  return values;
+}
+
+function rowFormulaIssues(
+  row: ParsedSpreadsheetRow,
+  mappings: readonly StudentImportFieldMapping[],
+): StudentImportIssue[] {
+  const mappingByColumn = new Map(
+    mappings.map((mapping) => [mapping.sourceColumnIndex, mapping]),
+  );
+  return row.cells
+    .filter((cell) => cell.hasFormula)
+    .map((cell) => {
+      const mapping = mappingByColumn.get(cell.columnIndex);
+      return issue(
+        "error",
+        "FORMULA_CELL",
+        `${cell.columnName}${row.rowNumber} 包含公式，请改为静态文本。`,
+        {
+          field: mapping?.field ?? "row",
+          sourceHeader: mapping?.sourceHeader,
+          sourceColumnIndex: cell.columnIndex,
+          sourceColumnName: cell.columnName,
+        },
+      );
+    });
+}
+
+function rowMergedCellIssues(
+  row: ParsedSpreadsheetRow,
+  ranges: readonly ParsedSpreadsheetMergedRange[],
+): StudentImportIssue[] {
+  return mergedRangesForRow(row.rowNumber, ranges).map((range) =>
+    issue(
+      "error",
+      "MERGED_CELL",
+      `第 ${row.rowNumber} 行位于合并单元格 ${range.ref} 内，请取消合并后重新上传。`,
+      { field: "row" },
+    ),
+  );
+}
+
+function validateMappedValues(
+  row: ParsedSpreadsheetRow,
+  mappedValues: Partial<Record<StudentImportField, string>>,
+  mappings: readonly StudentImportFieldMapping[],
+  target: ResolvedTarget,
+): StudentImportIssue[] {
+  const issues: StudentImportIssue[] = [];
+  const mappingByField = fieldMappingByField(mappings);
+  const rowCells = cellByColumn(row);
+
+  for (const field of requiredStudentImportFields) {
+    if (!mappedValues[field]) {
+      const mapping = mappingByField.get(field);
+      issues.push(
+        issue(
+          "error",
+          "MISSING_REQUIRED_FIELD",
+          `${studentImportFieldLabels[field]} 不能为空。`,
+          {
+            field,
+            sourceHeader: mapping?.sourceHeader,
+            sourceColumnIndex: mapping?.sourceColumnIndex,
+            sourceColumnName: mapping?.sourceColumnName,
+          },
+        ),
+      );
+    }
+  }
+
+  for (const mapping of mappings) {
+    const value = mappedValues[mapping.field] ?? "";
+    const maxLength = fieldMaxLengths[mapping.field];
+    if (maxLength && value.length > maxLength) {
+      issues.push(
+        issue(
+          "error",
+          "FIELD_TOO_LONG",
+          `${studentImportFieldLabels[mapping.field]} 不能超过 ${maxLength} 个字符。`,
+          {
+            field: mapping.field,
+            sourceHeader: mapping.sourceHeader,
+            sourceColumnIndex: mapping.sourceColumnIndex,
+            sourceColumnName: mapping.sourceColumnName,
+          },
+        ),
+      );
+    }
+
+    const cell = rowCells.get(mapping.sourceColumnIndex);
+    if (
+      mapping.field === "studentNo" &&
+      value &&
+      (cell?.type === "number" || SCIENTIFIC_NOTATION_PATTERN.test(value))
+    ) {
+      issues.push(
+        issue(
+          "error",
+          "STUDENT_NO_NOT_TEXT",
+          "学号必须按文本读取，不能使用数字或科学计数法。",
+          {
+            field: "studentNo",
+            sourceHeader: mapping.sourceHeader,
+            sourceColumnIndex: mapping.sourceColumnIndex,
+            sourceColumnName: mapping.sourceColumnName,
+          },
+        ),
+      );
+    }
+  }
+
+  const email = mappedValues.email ? normalizeEmail(mappedValues.email) : "";
+  if (email && !EMAIL_PATTERN.test(email)) {
+    const mapping = mappingByField.get("email");
+    issues.push(
+      issue("error", "INVALID_EMAIL", "邮箱格式无效。", {
+        field: "email",
+        sourceHeader: mapping?.sourceHeader,
+        sourceColumnIndex: mapping?.sourceColumnIndex,
+        sourceColumnName: mapping?.sourceColumnName,
+      }),
+    );
+  }
+
+  const phone = mappedValues.phone
+    ? normalizeFieldValue(mappedValues.phone)
+    : "";
+  if (phone && !PHONE_PATTERN.test(phone)) {
+    const mapping = mappingByField.get("phone");
+    issues.push(
+      issue("error", "INVALID_PHONE", "联系方式格式无效。", {
+        field: "phone",
+        sourceHeader: mapping?.sourceHeader,
+        sourceColumnIndex: mapping?.sourceColumnIndex,
+        sourceColumnName: mapping?.sourceColumnName,
+      }),
+    );
+  }
+
+  const term = mappedValues.academicTerm
+    ? normalizeFieldValue(mappedValues.academicTerm)
+    : "";
+  if (term && term !== target.course.term) {
+    issues.push(
+      issue(
+        "warning",
+        "COURSE_TERM_MISMATCH",
+        "学年学期与目标课程不一致，需要教师确认。",
+        { field: "academicTerm" },
+      ),
+    );
+  }
+
+  const courseNo = mappedValues.courseNo
+    ? normalizeCourseNo(mappedValues.courseNo)
+    : "";
+  if (courseNo && courseNo !== normalizeCourseNo(target.course.courseNo)) {
+    issues.push(
+      issue(
+        "warning",
+        "COURSE_NO_MISMATCH",
+        "课程号与目标课程不一致，需要教师确认。",
+        { field: "courseNo" },
+      ),
+    );
+  }
+
+  return issues;
+}
+
+function sourceRowPayload(
+  sheet: ParsedSpreadsheetSheet,
+  headerRow: ParsedSpreadsheetRow,
+  row: ParsedSpreadsheetRow,
+  mappings: readonly StudentImportFieldMapping[],
+  mappedValues: Partial<Record<StudentImportField, string>>,
+): Prisma.InputJsonObject {
+  const headerCells = cellByColumn(headerRow);
+  const rowCells = cellByColumn(row);
+  const maxColumnIndex = Math.max(
+    ...headerRow.cells.map((cell) => cell.columnIndex),
+    ...row.cells.map((cell) => cell.columnIndex),
+    0,
+  );
+  const mappedColumnIndexes = new Set(
+    mappings.map((mapping) => mapping.sourceColumnIndex),
+  );
+
+  const cells = Array.from({ length: maxColumnIndex + 1 }, (_, columnIndex) => {
+    const header = headerCells.get(columnIndex)?.value.trim() ?? "";
+    const cell = rowCells.get(columnIndex);
+    return {
+      columnIndex,
+      columnName: columnNameFromIndex(columnIndex),
+      header,
+      value: normalizeFieldValue(cell?.value ?? ""),
+      hasFormula: cell?.hasFormula ?? false,
+      mapped: mappedColumnIndexes.has(columnIndex),
+    };
+  });
+
+  return inputJsonObject({
+    version: 1,
+    sheetName: sheet.name,
+    sheetIndex: sheet.index,
+    rowNumber: row.rowNumber,
+    cells,
+    mappedValues,
+  });
+}
+
+function baseRowKey(
+  rowNumber: number,
+  mappedValues: Partial<Record<StudentImportField, string>>,
+  sourceRow: Prisma.InputJsonObject,
+): string {
+  const studentNo = mappedValues.studentNo
+    ? normalizeFieldValue(mappedValues.studentNo)
+    : "";
+  if (studentNo) {
+    return `studentNo:${sha256Text(studentNo)}`;
+  }
+  const email = mappedValues.email ? normalizeEmail(mappedValues.email) : "";
+  if (email) {
+    return `email:${sha256Text(email)}`;
+  }
+  return `row:${rowNumber}:${sha256Text(stableJson(sourceRow)).slice(0, 48)}`;
+}
+
+function duplicateIssuesForRows(
+  rows: PreparedPreviewRow[],
+): Map<number, StudentImportIssue[]> {
+  const issuesByRowNumber = new Map<number, StudentImportIssue[]>();
+
+  for (const field of stableStudentImportFields) {
+    const groups = new Map<string, PreparedPreviewRow[]>();
+    for (const row of rows) {
+      const value =
+        field === "email"
+          ? normalizeEmail(row.mappedValues.email ?? "")
+          : normalizeFieldValue(row.mappedValues[field] ?? "");
+      if (!value) continue;
+      const existing = groups.get(value) ?? [];
+      existing.push(row);
+      groups.set(value, existing);
+    }
+
+    for (const group of groups.values()) {
+      if (group.length <= 1) continue;
+      const relatedRows = group
+        .map((row) => row.rowNumber)
+        .sort((a, b) => a - b);
+      for (const row of group) {
+        const rowIssues = issuesByRowNumber.get(row.rowNumber) ?? [];
+        rowIssues.push(
+          issue(
+            "error",
+            field === "email"
+              ? "DUPLICATE_EMAIL_IN_FILE"
+              : "DUPLICATE_STUDENT_NO_IN_FILE",
+            `${studentImportFieldLabels[field]} 在同一文件内重复。`,
+            { field, relatedRows },
+          ),
+        );
+        issuesByRowNumber.set(row.rowNumber, rowIssues);
+      }
+    }
+  }
+
+  return issuesByRowNumber;
+}
+
+async function loadUserMatches(
+  rows: readonly PreparedPreviewRow[],
+  classroomId: string,
+): Promise<{
+  byStudentNo: Map<string, UserMatchRecord>;
+  byEmail: Map<string, UserMatchRecord>;
+}> {
+  const studentNos = Array.from(
+    new Set(
+      rows
+        .map((row) => normalizeFieldValue(row.mappedValues.studentNo ?? ""))
+        .filter(Boolean),
+    ),
+  );
+  const emails = Array.from(
+    new Set(
+      rows
+        .map((row) => normalizeEmail(row.mappedValues.email ?? ""))
+        .filter(Boolean),
+    ),
+  );
+
+  if (studentNos.length === 0 && emails.length === 0) {
+    return { byStudentNo: new Map(), byEmail: new Map() };
+  }
+
+  const matchConditions: Prisma.UserWhereInput[] = [];
+  if (studentNos.length > 0) {
+    matchConditions.push({
+      profile: { is: { studentNo: { in: studentNos } } },
+    });
+  }
+  if (emails.length > 0) {
+    matchConditions.push({ email: { in: emails } });
+  }
+
+  const users = await prisma.user.findMany({
+    where: { OR: matchConditions },
+    select: {
+      ...userMatchSelect,
+      classMemberships: {
+        where: { classroomId },
+        select: { id: true, status: true },
+      },
+    },
+  });
+
+  const byStudentNo = new Map<string, UserMatchRecord>();
+  const byEmail = new Map<string, UserMatchRecord>();
+  for (const user of users as SelectedUserMatchRecord[]) {
+    if (user.profile?.studentNo) {
+      byStudentNo.set(normalizeFieldValue(user.profile.studentNo), user);
+    }
+    if (user.email) {
+      byEmail.set(normalizeEmail(user.email), user);
+    }
+  }
+
+  return { byStudentNo, byEmail };
+}
+
+function applyUserMatches(
+  rows: PreparedPreviewRow[],
+  matches: {
+    byStudentNo: Map<string, UserMatchRecord>;
+    byEmail: Map<string, UserMatchRecord>;
+  },
+): PreparedPreviewRow[] {
+  return rows.map((row) => {
+    const studentNo = normalizeFieldValue(row.mappedValues.studentNo ?? "");
+    const email = normalizeEmail(row.mappedValues.email ?? "");
+    const byStudentNo = studentNo ? matches.byStudentNo.get(studentNo) : null;
+    const emailMatch = email ? matches.byEmail.get(email) : null;
+    const issues = [...row.issues];
+    let matchedUserId = row.matchedUserId;
+    let matchedMembershipId = row.matchedMembershipId;
+
+    if (byStudentNo) {
+      matchedUserId = byStudentNo.id;
+      if (byStudentNo.role !== Role.STUDENT) {
+        issues.push(
+          issue(
+            "error",
+            "STUDENT_NO_ACCOUNT_ROLE_CONFLICT",
+            "该学号已关联非学生账号，请先由管理员处理账号归属。",
+            { field: "studentNo" },
+          ),
+        );
+      }
+      const activeMembership = byStudentNo.classMemberships.find(
+        (membership) => membership.status === MembershipStatus.ACTIVE,
+      );
+      matchedMembershipId = activeMembership?.id ?? null;
+      if (activeMembership) {
+        issues.push(
+          issue(
+            "warning",
+            "ALREADY_ENROLLED",
+            "该学生已经在目标班级中，正式导入时会跳过。",
+            { field: "studentNo" },
+          ),
+        );
+      }
+      if (emailMatch && emailMatch.id !== byStudentNo.id) {
+        issues.push(
+          issue(
+            "error",
+            "EMAIL_ACCOUNT_CONFLICT",
+            "该邮箱已被系统账号使用，不能用于创建新的学生账号。",
+            { field: "email" },
+          ),
+        );
+      }
+    } else if (emailMatch) {
+      issues.push(
+        issue(
+          "error",
+          "EMAIL_ACCOUNT_CONFLICT",
+          "该邮箱已被系统账号使用，不能用于创建新的学生账号。",
+          { field: "email" },
+        ),
+      );
+    }
+
+    return {
+      ...row,
+      issues,
+      matchedUserId,
+      matchedMembershipId,
+    };
+  });
+}
+
+function previewStatusForRow(
+  row: PreparedPreviewRow,
+): StudentImportPreviewStatus {
+  if (row.issues.some((rowIssue) => rowIssue.code === "EMPTY_ROW")) {
+    return StudentImportPreviewStatus.PENDING;
+  }
+
+  const hasError = row.issues.some((rowIssue) => rowIssue.level === "error");
+  if (hasError) {
+    return row.issues.some((rowIssue) => rowIssue.code.startsWith("DUPLICATE_"))
+      ? StudentImportPreviewStatus.DUPLICATE
+      : StudentImportPreviewStatus.INVALID;
+  }
+
+  if (Object.keys(row.mappedValues).length === 0) {
+    return StudentImportPreviewStatus.PENDING;
+  }
+
+  if (
+    row.issues.some(
+      (rowIssue) =>
+        rowIssue.code === "COURSE_TERM_MISMATCH" ||
+        rowIssue.code === "COURSE_NO_MISMATCH",
+    )
+  ) {
+    return StudentImportPreviewStatus.COURSE_MISMATCH;
+  }
+
+  if (row.matchedMembershipId) {
+    return StudentImportPreviewStatus.ALREADY_ENROLLED;
+  }
+
+  if (row.matchedUserId) {
+    return StudentImportPreviewStatus.EXISTING_USER;
+  }
+
+  return StudentImportPreviewStatus.NEW_USER;
+}
+
+function prepareRows(
+  sheet: ParsedSpreadsheetSheet,
+  headerRow: ParsedSpreadsheetRow,
+  mappings: readonly StudentImportFieldMapping[],
+  target: ResolvedTarget,
+  mappingIssues: readonly StudentImportIssue[],
+): PreparedPreviewRow[] {
+  const rows = sheet.rows.filter((row) => row.rowNumber > headerRow.rowNumber);
+  const requiredMappingErrors = mappingIssues.filter(
+    (rowIssue) => rowIssue.level === "error",
+  );
+
+  const prepared = rows.map((row): PreparedPreviewRow => {
+    const rowIssues: StudentImportIssue[] = [];
+    if (isRowBlank(row)) {
+      rowIssues.push(
+        issue(
+          "warning",
+          "EMPTY_ROW",
+          `第 ${row.rowNumber} 行为空白行，正式导入时会跳过。`,
+          { field: "row" },
+        ),
+      );
+    }
+
+    rowIssues.push(...rowFormulaIssues(row, mappings));
+    rowIssues.push(...rowMergedCellIssues(row, sheet.mergedRanges));
+
+    const mappedValues = buildMappedValues(row, mappings);
+    const sourceRow = sourceRowPayload(
+      sheet,
+      headerRow,
+      row,
+      mappings,
+      mappedValues,
+    );
+    const validationIssues =
+      isRowBlank(row) || requiredMappingErrors.length > 0
+        ? []
+        : validateMappedValues(row, mappedValues, mappings, target);
+
+    return {
+      rowNumber: row.rowNumber,
+      rowKey: baseRowKey(row.rowNumber, mappedValues, sourceRow),
+      previewStatus: StudentImportPreviewStatus.PENDING,
+      academicTerm: storageText(mappedValues.academicTerm, "academicTerm"),
+      courseNo: storageText(mappedValues.courseNo, "courseNo"),
+      studentNo: storageText(mappedValues.studentNo, "studentNo"),
+      studentName: storageText(mappedValues.studentName, "studentName"),
+      className: storageText(mappedValues.className, "className"),
+      sourceRow,
+      issues: [
+        ...rowIssues,
+        ...requiredMappingErrors.map((rowIssue) => ({
+          ...rowIssue,
+          message: `${rowIssue.message} 当前行暂无法完成标准化预览。`,
+        })),
+        ...validationIssues,
+      ],
+      mappedValues,
+      matchedUserId: null,
+      matchedMembershipId: null,
+    };
+  });
+
+  const duplicateIssues = duplicateIssuesForRows(prepared);
+  return prepared.map((row) => {
+    const issues = [
+      ...row.issues,
+      ...(duplicateIssues.get(row.rowNumber) ?? []),
+    ];
+    const enriched = { ...row, issues };
+    return {
+      ...enriched,
+      previewStatus: previewStatusForRow(enriched),
+    };
+  });
+}
+
+function summarizeRows(
+  rows: readonly PreparedPreviewRow[],
+): StudentImportSummary {
+  const summary: StudentImportSummary = {
+    totalRows: rows.length,
+    previewRows: rows.length,
+    validRows: 0,
+    warningRows: 0,
+    errorRows: 0,
+    warningCount: 0,
+    errorCount: 0,
+    emptyRows: 0,
+    newUserRows: 0,
+    existingUserRows: 0,
+    alreadyEnrolledRows: 0,
+    courseMismatchRows: 0,
+    invalidRows: 0,
+    duplicateRows: 0,
+    canImport: true,
+  };
+
+  for (const row of rows) {
+    const warningCount = row.issues.filter(
+      (rowIssue) => rowIssue.level === "warning",
+    ).length;
+    const errorCount = row.issues.filter(
+      (rowIssue) => rowIssue.level === "error",
+    ).length;
+    summary.warningCount += warningCount;
+    summary.errorCount += errorCount;
+    if (warningCount > 0) summary.warningRows += 1;
+    if (errorCount > 0) summary.errorRows += 1;
+    if (row.issues.some((rowIssue) => rowIssue.code === "EMPTY_ROW")) {
+      summary.emptyRows += 1;
+    }
+    if (
+      errorCount === 0 &&
+      row.previewStatus !== StudentImportPreviewStatus.PENDING
+    ) {
+      summary.validRows += 1;
+    }
+
+    switch (row.previewStatus) {
+      case StudentImportPreviewStatus.NEW_USER:
+        summary.newUserRows += 1;
+        break;
+      case StudentImportPreviewStatus.EXISTING_USER:
+        summary.existingUserRows += 1;
+        break;
+      case StudentImportPreviewStatus.ALREADY_ENROLLED:
+        summary.alreadyEnrolledRows += 1;
+        break;
+      case StudentImportPreviewStatus.COURSE_MISMATCH:
+        summary.courseMismatchRows += 1;
+        break;
+      case StudentImportPreviewStatus.INVALID:
+        summary.invalidRows += 1;
+        break;
+      case StudentImportPreviewStatus.DUPLICATE:
+        summary.duplicateRows += 1;
+        break;
+      case StudentImportPreviewStatus.PENDING:
+        break;
+    }
+  }
+
+  summary.canImport = summary.errorRows === 0 && summary.validRows > 0;
+  return summary;
+}
+
+function batchIssuesForPreview(
+  sheet: ParsedSpreadsheetSheet,
+  headerRow: ParsedSpreadsheetRow,
+  mappingIssues: readonly StudentImportIssue[],
+  dataRows: readonly PreparedPreviewRow[],
+): StudentImportIssue[] {
+  const issues = [...mappingIssues];
+  if (
+    sheet.mergedRanges.some(
+      (range) =>
+        headerRow.rowNumber >= range.startRow &&
+        headerRow.rowNumber <= range.endRow,
+    )
+  ) {
+    issues.push(
+      issue(
+        "error",
+        "MERGED_HEADER_ROW",
+        "表头行包含合并单元格，请取消合并后重新预览。",
+        { field: "header" },
+      ),
+    );
+  }
+
+  if (headerRow.cells.some((cell) => cell.hasFormula)) {
+    issues.push(
+      issue(
+        "error",
+        "FORMULA_HEADER_ROW",
+        "表头行包含公式，请改为静态文本后重新预览。",
+        { field: "header" },
+      ),
+    );
+  }
+
+  if (dataRows.length === 0) {
+    issues.push(
+      issue("error", "NO_DATA_ROWS", "工作表没有可预览的数据行。", {
+        field: "sheet",
+      }),
+    );
+  }
+
+  return issues;
+}
+
+function previewMappingSignature(input: {
+  sheet: ParsedSpreadsheetSheet;
+  headerRow: ParsedSpreadsheetRow;
+  target: ResolvedTarget;
+  mappings: readonly StudentImportFieldMapping[];
+}): Prisma.InputJsonObject {
+  return inputJsonObject({
+    sheetName: input.sheet.name,
+    headerRowNumber: input.headerRow.rowNumber,
+    targetClassroomId: input.target.classroom.id,
+    fieldMappings: input.mappings.map((mapping) => ({
+      field: mapping.field,
+      sourceColumnIndex: mapping.sourceColumnIndex,
+      sourceHeader: mapping.sourceHeader,
+    })),
+  });
+}
+
+function previewMappingHash(input: {
+  sheet: ParsedSpreadsheetSheet;
+  headerRow: ParsedSpreadsheetRow;
+  target: ResolvedTarget;
+  mappings: readonly StudentImportFieldMapping[];
+}): string {
+  return sha256Text(stableJson(previewMappingSignature(input)));
+}
+
+function mappingConfigForPreview(input: {
+  file: CourseFileVersionRecord;
+  sheet: ParsedSpreadsheetSheet;
+  headerRow: ParsedSpreadsheetRow;
+  sourceColumns: ReturnType<typeof sourceColumnsFromHeaderRow>;
+  mappings: StudentImportFieldMapping[];
+  candidates: StudentImportMappingConfig["mappingCandidates"];
+  target: ResolvedTarget;
+  contentHash: string;
+  mappingHash: string;
+  now: Date;
+  confirmed: boolean;
+}): StudentImportMappingConfig {
+  return {
+    version: STUDENT_IMPORT_MAPPING_VERSION,
+    sourceFileVersionId: input.file.id,
+    sourceFileChecksum: input.file.checksumSha256,
+    sourceFileName: input.file.originalFileName,
+    sourceFileKind: input.file.fileKind,
+    sourceSheetName: input.sheet.name,
+    sourceSheetIndex: input.sheet.index,
+    targetCourseId: input.target.course.id,
+    targetClassroomId: input.target.classroom.id,
+    headerRowNumber: input.headerRow.rowNumber,
+    dataStartRowNumber: input.headerRow.rowNumber + 1,
+    sourceColumns: input.sourceColumns,
+    fieldMappings: input.mappings,
+    mappingCandidates: input.candidates,
+    mappingHash: input.mappingHash,
+    contentHash: input.contentHash,
+    generatedAt: input.now.toISOString(),
+    confirmedAt: input.confirmed ? input.now.toISOString() : null,
+  };
+}
+
+function rowCreateData(
+  batchId: string,
+  row: PreparedPreviewRow,
+): Prisma.StudentImportRowCreateManyInput {
+  const primaryError = row.issues.find(
+    (rowIssue) => rowIssue.level === "error",
+  );
+  return {
+    batchId,
+    rowNumber: row.rowNumber,
+    previewStatus: row.previewStatus,
+    executionStatus: StudentImportExecutionStatus.PENDING,
+    rowKey: row.rowKey,
+    sourceRow: row.sourceRow,
+    academicTerm: row.academicTerm,
+    courseNo: row.courseNo,
+    studentNo: row.studentNo,
+    studentName: row.studentName,
+    className: row.className,
+    errorCode: primaryError?.code ?? null,
+    errorDetail: inputJsonValue({ issues: row.issues }),
+    matchedUserId: row.matchedUserId,
+    matchedMembershipId: row.matchedMembershipId,
+  };
+}
+
+function summarySnapshot(input: {
+  batchId: string;
+  file: CourseFileVersionRecord;
+  mappingConfig: StudentImportMappingConfig;
+  summary: StudentImportSummary;
+  batchIssues: readonly StudentImportIssue[];
+}): AuditConfigSnapshot {
+  return {
+    batchId: input.batchId,
+    sourceFileVersionId: input.file.id,
+    sourceFileName: input.file.originalFileName,
+    sourceFileChecksum: input.file.checksumSha256,
+    sheetName: input.mappingConfig.sourceSheetName,
+    headerRowNumber: input.mappingConfig.headerRowNumber,
+    targetCourseId: input.mappingConfig.targetCourseId,
+    targetClassroomId: input.mappingConfig.targetClassroomId,
+    mappedFields: input.mappingConfig.fieldMappings.map((mapping) => ({
+      field: mapping.field,
+      sourceColumnIndex: mapping.sourceColumnIndex,
+      sourceHeader: mapping.sourceHeader,
+      autoDetected: mapping.autoDetected,
+    })),
+    summary: inputJsonObject(input.summary) as AuditConfigSnapshot,
+    issueCodes: input.batchIssues.map((item) => item.code),
+  };
+}
+
+function batchViewFromRecord(
+  record: StudentImportBatchRecord,
+): StudentImportBatchView {
+  const previewSummary = jsonObject(record.previewSummary);
+  const mappingConfig =
+    record.mappingConfig as unknown as StudentImportMappingConfig;
+  const summary = (previewSummary.summary ?? {
+    totalRows: record.totalRows,
+    previewRows: record.previewRows,
+    validRows: Math.max(
+      0,
+      record.previewRows - record.invalidRows - record.duplicateRows,
+    ),
+    warningRows: record.courseMismatchRows + record.alreadyEnrolledRows,
+    errorRows: record.invalidRows + record.duplicateRows,
+    warningCount: record.courseMismatchRows + record.alreadyEnrolledRows,
+    errorCount: record.invalidRows + record.duplicateRows,
+    emptyRows: 0,
+    newUserRows: record.newUserRows,
+    existingUserRows: record.existingUserRows,
+    alreadyEnrolledRows: record.alreadyEnrolledRows,
+    courseMismatchRows: record.courseMismatchRows,
+    invalidRows: record.invalidRows,
+    duplicateRows: record.duplicateRows,
+    canImport: record.invalidRows + record.duplicateRows === 0,
+  }) as StudentImportSummary;
+
+  const batchIssues = Array.isArray(previewSummary.batchIssues)
+    ? (previewSummary.batchIssues as StudentImportIssue[])
+    : [];
+
+  return {
+    id: record.id,
+    status: record.status,
+    sourceFileVersionId: record.sourceFileVersionId,
+    sourceFileName: record.sourceFileName,
+    sourceFileChecksum: record.sourceFileChecksum,
+    sourceSheetName: record.sourceSheetName,
+    courseId: record.courseId,
+    classroomId: record.classroomId,
+    mappingConfig,
+    summary,
+    batchIssues,
+    previewedAt: record.previewedAt,
+    confirmedAt: record.confirmedAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function rowViewFromRecord(
+  record: StudentImportRowRecord,
+): StudentImportPreviewRowView {
+  return {
+    rowNumber: record.rowNumber,
+    rowKey: record.rowKey,
+    previewStatus: record.previewStatus,
+    academicTerm: record.academicTerm,
+    courseNo: record.courseNo,
+    studentNo: record.studentNo,
+    studentName: record.studentName,
+    className: record.className,
+    mappedValues: mappedValuesFromJson(record.sourceRow),
+    sourceValues: sourceValuesFromJson(record.sourceRow),
+    issues: issueArrayFromJson(record.errorDetail),
+  };
+}
+
+async function getPreviewPageByBatchRecord(
+  batch: StudentImportBatchRecord,
+  page: number,
+  pageSize: number,
+): Promise<StudentImportPreviewPage> {
+  const totalRows = await prisma.studentImportRow.count({
+    where: { batchId: batch.id },
+  });
+  const rows = await prisma.studentImportRow.findMany({
+    where: { batchId: batch.id },
+    select: rowSelect,
+    orderBy: { rowNumber: "asc" },
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+  });
+
+  return {
+    batch: batchViewFromRecord(batch),
+    pagination: {
+      page,
+      pageSize,
+      totalRows,
+      totalPages: Math.max(1, Math.ceil(totalRows / pageSize)),
+    },
+    rows: rows.map(rowViewFromRecord),
+  };
+}
+
+async function currentLatestFileVersionId(
+  file: CourseFileVersionRecord,
+): Promise<string | null> {
+  if (file.course) {
+    const latest = await findLatestCourseFileVersion(
+      { type: "COURSE", courseId: file.course.id },
+      CourseFileKind.IMPORT_SOURCE,
+      STUDENT_ROSTER_FILE_KEY,
+    );
+    return latest?.id ?? null;
+  }
+
+  if (file.classroom) {
+    const latest = await findLatestCourseFileVersion(
+      { type: "CLASSROOM", classroomId: file.classroom.id },
+      CourseFileKind.IMPORT_SOURCE,
+      STUDENT_ROSTER_FILE_KEY,
+    );
+    return latest?.id ?? null;
+  }
+
+  return null;
+}
+
+export async function previewTeacherStudentImportFromFile(
+  teacherId: string,
+  fileId: string,
+  input: StudentImportPreviewRequestData,
+  context: AuditRequestContext,
+  dependencies: StudentImportPreviewDependencies = {},
+): Promise<StudentImportPreviewPage> {
+  const file = await findTeacherCourseFileVersionById(teacherId, fileId);
+  if (!file) {
+    throw new ResourceNotFoundError("学生名单文件不存在");
+  }
+
+  const target = await resolvePreviewTarget(teacherId, file, input.classroomId);
+  const data = await readSourceFile(file, dependencies);
+  const workbook = parseSpreadsheetWorkbook(sourceFormatFromFile(file), data);
+  const sheet = selectedSheetFromWorkbook(workbook.sheets, input.sheetName);
+  const headerRow = inferHeaderRow(sheet, input.headerRowNumber);
+  if (!headerRow) {
+    throw new StudentImportOperationError("未找到可识别的表头行。", 400);
+  }
+
+  const sourceColumns = sourceColumnsFromHeaderRow(headerRow);
+  const mappingResolution = resolveStudentImportMappings(
+    sourceColumns,
+    input.fieldMappings,
+  );
+  const rowsBeforeMatches = prepareRows(
+    sheet,
+    headerRow,
+    mappingResolution.fieldMappings,
+    target,
+    mappingResolution.issues,
+  );
+  const matchedRows = applyUserMatches(
+    rowsBeforeMatches,
+    await loadUserMatches(rowsBeforeMatches, target.classroom.id),
+  ).map((row) => {
+    const enriched = {
+      ...row,
+      previewStatus: previewStatusForRow(row),
+    };
+    return enriched;
+  });
+
+  const summary = summarizeRows(matchedRows);
+  const batchIssues = batchIssuesForPreview(
+    sheet,
+    headerRow,
+    mappingResolution.issues,
+    matchedRows,
+  );
+  if (batchIssues.some((rowIssue) => rowIssue.level === "error")) {
+    summary.canImport = false;
+  }
+  const now = dependencies.now?.() ?? new Date();
+  const mappingHash = previewMappingHash({
+    sheet,
+    headerRow,
+    target,
+    mappings: mappingResolution.fieldMappings,
+  });
+  const latestFileVersionId = await currentLatestFileVersionId(file);
+  const confirmed = input.confirmMapping && summary.canImport;
+  const contentHash = sha256Text(
+    stableJson({
+      fileId: file.id,
+      checksum: file.checksumSha256,
+      latestFileVersionId,
+      sheetName: sheet.name,
+      headerRowNumber: headerRow.rowNumber,
+    }),
+  );
+  const mappingConfig = mappingConfigForPreview({
+    file,
+    sheet,
+    headerRow,
+    sourceColumns,
+    mappings: mappingResolution.fieldMappings,
+    candidates: mappingResolution.mappingCandidates,
+    target,
+    contentHash,
+    mappingHash,
+    now,
+    confirmed,
+  });
+  const idempotencyKey = `student-roster-preview:${file.id}:${mappingHash}`;
+  const previewSummary = inputJsonObject({
+    version: 1,
+    summary,
+    batchIssues,
+    latestFileVersionId,
+    generatedAt: now.toISOString(),
+  });
+
+  const batch = await prisma.$transaction(async (transaction) => {
+    const saved = await transaction.studentImportBatch.upsert({
+      where: {
+        courseId_idempotencyKey: {
+          courseId: target.course.id,
+          idempotencyKey,
+        },
+      },
+      create: {
+        courseId: target.course.id,
+        classroomId: target.classroom.id,
+        createdById: teacherId,
+        sourceFileVersionId: file.id,
+        status: confirmed
+          ? StudentImportBatchStatus.CONFIRMED
+          : StudentImportBatchStatus.PREVIEW_READY,
+        idempotencyKey,
+        sourceFileName: file.originalFileName,
+        sourceFileChecksum: file.checksumSha256,
+        sourceFileMimeType: file.mimeType,
+        sourceFileSizeBytes: file.sizeBytes,
+        sourceSheetName: sheet.name,
+        mappingConfig: inputJsonObject(mappingConfig),
+        previewSummary,
+        totalRows: summary.totalRows,
+        previewRows: summary.previewRows,
+        newUserRows: summary.newUserRows,
+        existingUserRows: summary.existingUserRows,
+        alreadyEnrolledRows: summary.alreadyEnrolledRows,
+        courseMismatchRows: summary.courseMismatchRows,
+        invalidRows: summary.invalidRows,
+        duplicateRows: summary.duplicateRows,
+        importedRows: 0,
+        failedRows: 0,
+        previewedAt: now,
+        confirmedAt: confirmed ? now : null,
+      },
+      update: {
+        classroomId: target.classroom.id,
+        createdById: teacherId,
+        sourceFileVersionId: file.id,
+        status: confirmed
+          ? StudentImportBatchStatus.CONFIRMED
+          : StudentImportBatchStatus.PREVIEW_READY,
+        sourceFileName: file.originalFileName,
+        sourceFileChecksum: file.checksumSha256,
+        sourceFileMimeType: file.mimeType,
+        sourceFileSizeBytes: file.sizeBytes,
+        sourceSheetName: sheet.name,
+        mappingConfig: inputJsonObject(mappingConfig),
+        previewSummary,
+        totalRows: summary.totalRows,
+        previewRows: summary.previewRows,
+        newUserRows: summary.newUserRows,
+        existingUserRows: summary.existingUserRows,
+        alreadyEnrolledRows: summary.alreadyEnrolledRows,
+        courseMismatchRows: summary.courseMismatchRows,
+        invalidRows: summary.invalidRows,
+        duplicateRows: summary.duplicateRows,
+        importedRows: 0,
+        failedRows: 0,
+        previewedAt: now,
+        confirmedAt: confirmed ? now : null,
+      },
+      select: batchSelect,
+    });
+
+    await transaction.studentImportRow.deleteMany({
+      where: { batchId: saved.id },
+    });
+
+    if (matchedRows.length > 0) {
+      await transaction.studentImportRow.createMany({
+        data: matchedRows.map((row) => rowCreateData(saved.id, row)),
+      });
+    }
+
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: confirmed
+        ? AuditAction.STUDENT_IMPORT_MAPPING_CONFIRMED
+        : AuditAction.STUDENT_IMPORT_PREVIEWED,
+      targetType: AuditTargetType.STUDENT_IMPORT_BATCH,
+      targetId: saved.id,
+      summary: confirmed ? "确认学生名单导入字段映射" : "生成学生名单导入预览",
+      beforeData: null,
+      afterData: summarySnapshot({
+        batchId: saved.id,
+        file,
+        mappingConfig,
+        summary,
+        batchIssues,
+      }),
+      context,
+    });
+
+    return saved;
+  });
+
+  return getPreviewPageByBatchRecord(batch, input.page, input.pageSize);
+}
+
+export async function getTeacherStudentImportPreview(
+  teacherId: string,
+  batchId: string,
+  page: number,
+  pageSize: number,
+): Promise<StudentImportPreviewPage> {
+  const batch = await prisma.studentImportBatch.findFirst({
+    where: { id: batchId, course: { teacherId } },
+    select: batchSelect,
+  });
+
+  if (!batch) {
+    throw new ResourceNotFoundError("导入批次不存在");
+  }
+
+  return getPreviewPageByBatchRecord(batch, page, pageSize);
+}

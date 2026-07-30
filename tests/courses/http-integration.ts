@@ -43,6 +43,7 @@ const createdCourseIds: string[] = [];
 const createdClassroomIds: string[] = [];
 const createdSyllabusIds: string[] = [];
 const createdCourseFileIds: string[] = [];
+const createdStudentImportBatchIds: string[] = [];
 const uploadRoot = mkdtempSync(join(tmpdir(), "zhixue-http-syllabus-"));
 
 const server = spawn(
@@ -795,6 +796,82 @@ async function main(): Promise<void> {
       createdCourse.data.id,
     );
 
+    const studentImportPreviewPath = `/api/teacher/course-files/${uploadedRoster.data.id}/student-import-preview`;
+    assert.equal(
+      (
+        await requestJson(studentImportPreviewPath, undefined, "POST", {
+          classroomId: classroom.id,
+        })
+      ).status,
+      401,
+    );
+    assert.equal(
+      (
+        await requestJson(studentImportPreviewPath, adminCookie, "POST", {
+          classroomId: classroom.id,
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(studentImportPreviewPath, studentCookie, "POST", {
+          classroomId: classroom.id,
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(studentImportPreviewPath, teacherTwoCookie, "POST", {
+          classroomId: classroom.id,
+        })
+      ).status,
+      404,
+    );
+    const previewResponse = await requestJson(
+      studentImportPreviewPath,
+      teacherCookie,
+      "POST",
+      {
+        classroomId: classroom.id,
+        page: 1,
+        pageSize: 1,
+      },
+    );
+    assert.equal(previewResponse.status, 200);
+    const preview = (await previewResponse.json()) as ApiSuccess<{
+      batch: {
+        id: string;
+        summary: {
+          totalRows: number;
+          validRows: number;
+          warningCount: number;
+          errorCount: number;
+        };
+      };
+      pagination: { totalRows: number; pageSize: number };
+      rows: Array<{ rowNumber: number; issues: Array<{ code: string }> }>;
+    }>;
+    createdStudentImportBatchIds.push(preview.data.batch.id);
+    assert.equal(preview.data.batch.summary.totalRows, 2);
+    assert.equal(preview.data.batch.summary.validRows, 2);
+    assert.equal(preview.data.batch.summary.errorCount, 0);
+    assert.equal(preview.data.pagination.totalRows, 2);
+    assert.equal(preview.data.pagination.pageSize, 1);
+    assert.equal(preview.data.rows.length, 1);
+
+    const studentImportBatchPath = `/api/teacher/student-import-batches/${preview.data.batch.id}?page=1&pageSize=1`;
+    assert.equal(
+      (await requestJson(studentImportBatchPath, teacherCookie)).status,
+      200,
+    );
+    assert.equal(
+      (await requestJson(studentImportBatchPath, teacherTwoCookie)).status,
+      404,
+    );
+    assert.equal((await requestJson(studentImportBatchPath)).status, 401);
+
     assert.equal(
       (
         await requestJson(
@@ -848,6 +925,17 @@ async function main(): Promise<void> {
       "Course HTTP integration checks passed: template governance, teacher template visibility, course creation, file upload versioning, protected downloads, duplicate protection, ownership isolation, classroom linking, unlinking, and invalid input handling.",
     );
   } finally {
+    if (createdStudentImportBatchIds.length > 0) {
+      await prisma.auditLog.deleteMany({
+        where: { targetId: { in: createdStudentImportBatchIds } },
+      });
+      await prisma.studentImportRow.deleteMany({
+        where: { batchId: { in: createdStudentImportBatchIds } },
+      });
+      await prisma.studentImportBatch.deleteMany({
+        where: { id: { in: createdStudentImportBatchIds } },
+      });
+    }
     if (createdCourseFileIds.length > 0) {
       await prisma.auditLog.deleteMany({
         where: { targetId: { in: createdCourseFileIds } },

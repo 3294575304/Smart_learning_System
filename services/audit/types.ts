@@ -17,7 +17,13 @@ export interface AuditUserSnapshot {
   status: UserStatus;
 }
 
-export type AuditConfigValue = string | number | boolean | null;
+export type AuditConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | AuditConfigValue[]
+  | { [key: string]: AuditConfigValue };
 export type AuditConfigSnapshot = Record<string, AuditConfigValue>;
 export type AuditSnapshot = AuditUserSnapshot | AuditConfigSnapshot;
 

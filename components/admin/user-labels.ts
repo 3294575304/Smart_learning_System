@@ -41,4 +41,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   COURSE_CLASSROOM_UNLINKED: "解除班级关联",
   COURSE_FILE_UPLOADED: "上传课程文件",
   COURSE_FILE_DOWNLOADED: "下载课程文件",
+  STUDENT_IMPORT_PREVIEWED: "预览学生名单导入",
+  STUDENT_IMPORT_MAPPING_CONFIRMED: "确认学生名单映射",
 };
