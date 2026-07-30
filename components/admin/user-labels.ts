@@ -43,4 +43,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   COURSE_FILE_DOWNLOADED: "下载课程文件",
   STUDENT_IMPORT_PREVIEWED: "预览学生名单导入",
   STUDENT_IMPORT_MAPPING_CONFIRMED: "确认学生名单映射",
+  STUDENT_IMPORT_EXECUTED: "执行学生名单导入",
+  STUDENT_IMPORT_FAILED: "学生名单导入失败",
 };

@@ -10,11 +10,12 @@ import {
   StudentImportExecutionStatus,
   StudentImportPreviewStatus,
 } from "@prisma/client";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { hashPasswordCore } from "@/services/auth/password-core";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type {
   AuditConfigSnapshot,
@@ -48,6 +49,10 @@ import {
   stableStudentImportFields,
   studentImportFieldLabels,
   type StudentImportBatchView,
+  type StudentImportExecutionAction,
+  type StudentImportExecutionResult,
+  type StudentImportExecutionRowResult,
+  type StudentImportExecutionSummary,
   type StudentImportField,
   type StudentImportFieldMapping,
   type StudentImportIssue,
@@ -96,6 +101,7 @@ const batchSelect = Prisma.validator<Prisma.StudentImportBatchSelect>()({
   createdById: true,
   sourceFileVersionId: true,
   status: true,
+  idempotencyKey: true,
   sourceFileName: true,
   sourceFileChecksum: true,
   sourceFileMimeType: true,
@@ -111,15 +117,21 @@ const batchSelect = Prisma.validator<Prisma.StudentImportBatchSelect>()({
   courseMismatchRows: true,
   invalidRows: true,
   duplicateRows: true,
+  importedRows: true,
+  failedRows: true,
   previewedAt: true,
   confirmedAt: true,
+  startedAt: true,
+  completedAt: true,
   createdAt: true,
   updatedAt: true,
 });
 
 const rowSelect = Prisma.validator<Prisma.StudentImportRowSelect>()({
+  id: true,
   rowNumber: true,
   previewStatus: true,
+  executionStatus: true,
   rowKey: true,
   sourceRow: true,
   academicTerm: true,
@@ -127,7 +139,13 @@ const rowSelect = Prisma.validator<Prisma.StudentImportRowSelect>()({
   studentNo: true,
   studentName: true,
   className: true,
+  errorCode: true,
   errorDetail: true,
+  matchedUserId: true,
+  matchedMembershipId: true,
+  createdUserId: true,
+  createdMembershipId: true,
+  processedAt: true,
 });
 
 const targetClassroomSelect = Prisma.validator<Prisma.ClassroomSelect>()({
@@ -147,12 +165,78 @@ const targetClassroomSelect = Prisma.validator<Prisma.ClassroomSelect>()({
   },
 });
 
+const executionBatchSelect =
+  Prisma.validator<Prisma.StudentImportBatchSelect>()({
+    id: true,
+    courseId: true,
+    classroomId: true,
+    createdById: true,
+    sourceFileVersionId: true,
+    status: true,
+    idempotencyKey: true,
+    sourceFileName: true,
+    sourceFileChecksum: true,
+    sourceFileMimeType: true,
+    sourceFileSizeBytes: true,
+    sourceSheetName: true,
+    mappingConfig: true,
+    previewSummary: true,
+    totalRows: true,
+    previewRows: true,
+    newUserRows: true,
+    existingUserRows: true,
+    alreadyEnrolledRows: true,
+    courseMismatchRows: true,
+    invalidRows: true,
+    duplicateRows: true,
+    importedRows: true,
+    failedRows: true,
+    previewedAt: true,
+    confirmedAt: true,
+    startedAt: true,
+    completedAt: true,
+    createdAt: true,
+    updatedAt: true,
+    course: {
+      select: {
+        id: true,
+        teacherId: true,
+        courseNo: true,
+        term: true,
+        name: true,
+      },
+    },
+    classroom: {
+      select: {
+        id: true,
+        teacherId: true,
+        courseId: true,
+        status: true,
+        name: true,
+      },
+    },
+    sourceFileVersion: {
+      select: {
+        id: true,
+        courseId: true,
+        classroomId: true,
+        fileKind: true,
+        fileKey: true,
+        checksumSha256: true,
+      },
+    },
+  });
+
 type StudentImportBatchRecord = Prisma.StudentImportBatchGetPayload<{
   select: typeof batchSelect;
 }>;
 
 type StudentImportRowRecord = Prisma.StudentImportRowGetPayload<{
   select: typeof rowSelect;
+}>;
+
+type StudentImportExecutionBatchRecord = Prisma.StudentImportBatchGetPayload<{
+  select: typeof executionBatchSelect;
 }>;
 
 type TargetClassroomRecord = Prisma.ClassroomGetPayload<{
@@ -163,6 +247,34 @@ interface StudentImportPreviewDependencies {
   storage?: StorageService;
   logger?: Pick<Console, "error">;
   now?: () => Date;
+}
+
+interface StudentImportExecutionDependencies {
+  now?: () => Date;
+  passwordGenerator?: () => string;
+  passwordHasher?: (password: string) => Promise<string>;
+}
+
+type DatabaseClient = typeof prisma | Prisma.TransactionClient;
+
+interface StudentImportActor {
+  id: string;
+  role: typeof Role.ADMIN | typeof Role.TEACHER;
+}
+
+interface ImportExecutionFailure {
+  code: string;
+  message: string;
+  retryable: boolean;
+  rowNumber?: number;
+  status?: 400 | 409 | 500;
+}
+
+class StudentImportExecutionFailureError extends StudentImportOperationError {
+  constructor(readonly failure: ImportExecutionFailure) {
+    super(failure.message, failure.status ?? 409);
+    this.name = "StudentImportExecutionFailureError";
+  }
 }
 
 interface PreparedPreviewRow {
@@ -221,6 +333,50 @@ const userMatchSelect = Prisma.validator<Prisma.UserSelect>()({
 type SelectedUserMatchRecord = Prisma.UserGetPayload<{
   select: typeof userMatchSelect;
 }>;
+
+const SERIALIZABLE_RETRY_LIMIT = 3;
+
+function generateInitialPassword(): string {
+  return `Zx${randomBytes(12).toString("base64url")}7a`;
+}
+
+function isRetryablePrismaError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2034" || error.code === "P2028")
+  );
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  );
+}
+
+async function serializableImportTransaction<T>(
+  operation: (transaction: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  for (let attempt = 1; attempt <= SERIALIZABLE_RETRY_LIMIT; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error: unknown) {
+      if (isRetryablePrismaError(error) && attempt < SERIALIZABLE_RETRY_LIMIT) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new StudentImportExecutionFailureError({
+    code: "SERIALIZABLE_RETRY_EXHAUSTED",
+    message: "学生名单导入遇到并发写入冲突，请重试。",
+    retryable: true,
+    status: 409,
+  });
+}
 
 function sha256Text(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -859,7 +1015,11 @@ async function loadUserMatches(
     });
   }
   if (emails.length > 0) {
-    matchConditions.push({ email: { in: emails } });
+    matchConditions.push(
+      ...emails.map((email): Prisma.UserWhereInput => ({
+        email: { equals: email, mode: "insensitive" },
+      })),
+    );
   }
 
   const users = await prisma.user.findMany({
@@ -1376,6 +1536,167 @@ function rowViewFromRecord(
   };
 }
 
+function executionFailureFromBatch(
+  batch: StudentImportExecutionBatchRecord,
+): ImportExecutionFailure | null {
+  const summary = jsonObject(batch.previewSummary);
+  const failure = summary.executionFailure;
+  if (!failure || typeof failure !== "object" || Array.isArray(failure)) {
+    return null;
+  }
+
+  const payload = failure as Record<string, unknown>;
+  return {
+    code: typeof payload.code === "string" ? payload.code : "UNKNOWN",
+    message:
+      typeof payload.message === "string"
+        ? payload.message
+        : "学生名单导入失败",
+    retryable: payload.retryable === true,
+    rowNumber:
+      typeof payload.rowNumber === "number" ? payload.rowNumber : undefined,
+    status: payload.retryable === true ? 409 : 409,
+  };
+}
+
+function isRetryableFailedBatch(
+  batch: StudentImportExecutionBatchRecord,
+): boolean {
+  return (
+    batch.status === StudentImportBatchStatus.FAILED &&
+    executionFailureFromBatch(batch)?.retryable === true
+  );
+}
+
+function rowHasBlockingExecutionIssue(row: StudentImportRowRecord): boolean {
+  return issueArrayFromJson(row.errorDetail).some(
+    (rowIssue) => rowIssue.level === "error",
+  );
+}
+
+function blockingBatchIssues(
+  batch: StudentImportExecutionBatchRecord,
+): StudentImportIssue[] {
+  const previewSummary = jsonObject(batch.previewSummary);
+  const batchIssues = Array.isArray(previewSummary.batchIssues)
+    ? (previewSummary.batchIssues as StudentImportIssue[])
+    : [];
+  return batchIssues.filter((item) => item.level === "error");
+}
+
+function executionActionForRow(
+  row: StudentImportRowRecord,
+): StudentImportExecutionAction {
+  if (row.executionStatus === StudentImportExecutionStatus.FAILED) {
+    return "FAILED";
+  }
+
+  if (row.createdUserId) {
+    return "CREATED_USER";
+  }
+
+  if (
+    row.executionStatus === StudentImportExecutionStatus.SKIPPED &&
+    row.matchedMembershipId
+  ) {
+    return "ALREADY_ENROLLED";
+  }
+
+  if (row.matchedUserId) {
+    return "MATCHED_EXISTING_USER";
+  }
+
+  return "SKIPPED";
+}
+
+function executionRowResultFromRecord(
+  row: StudentImportRowRecord,
+): StudentImportExecutionRowResult {
+  return {
+    rowNumber: row.rowNumber,
+    status: row.executionStatus,
+    action: executionActionForRow(row),
+    errorCode: row.errorCode,
+  };
+}
+
+function summarizeExecutionRows(
+  rows: readonly StudentImportExecutionRowResult[],
+): StudentImportExecutionSummary {
+  const summary: StudentImportExecutionSummary = {
+    totalRows: rows.length,
+    createdUserRows: 0,
+    matchedExistingUserRows: 0,
+    alreadyEnrolledRows: 0,
+    skippedRows: 0,
+    failedRows: 0,
+    importedRows: 0,
+  };
+
+  for (const row of rows) {
+    switch (row.action) {
+      case "CREATED_USER":
+        summary.createdUserRows += 1;
+        summary.importedRows += 1;
+        break;
+      case "MATCHED_EXISTING_USER":
+        summary.matchedExistingUserRows += 1;
+        summary.importedRows += 1;
+        break;
+      case "ALREADY_ENROLLED":
+        summary.alreadyEnrolledRows += 1;
+        break;
+      case "FAILED":
+        summary.failedRows += 1;
+        break;
+      case "SKIPPED":
+        summary.skippedRows += 1;
+        break;
+    }
+  }
+
+  return summary;
+}
+
+function executionResultFromRecords(
+  batch: StudentImportExecutionBatchRecord,
+  rows: readonly StudentImportRowRecord[],
+): StudentImportExecutionResult {
+  const rowResults = rows.map(executionRowResultFromRecord);
+  return {
+    batchId: batch.id,
+    status: batch.status,
+    idempotencyKey: batch.idempotencyKey,
+    retryable: executionFailureFromBatch(batch)?.retryable ?? false,
+    summary: summarizeExecutionRows(rowResults),
+    rows: rowResults,
+    startedAt: batch.startedAt,
+    completedAt: batch.completedAt,
+  };
+}
+
+function executionAuditSnapshot(input: {
+  batch: StudentImportExecutionBatchRecord;
+  result: StudentImportExecutionResult;
+  failure?: ImportExecutionFailure;
+}): AuditConfigSnapshot {
+  return {
+    batchId: input.batch.id,
+    courseId: input.batch.courseId,
+    classroomId: input.batch.classroomId,
+    sourceFileVersionId: input.batch.sourceFileVersionId,
+    sourceFileChecksum: input.batch.sourceFileChecksum,
+    idempotencyKey: input.batch.idempotencyKey,
+    status: input.result.status,
+    retryable: input.result.retryable,
+    summary: input.result.summary as unknown as AuditConfigSnapshot,
+    failureCode: input.failure?.code ?? null,
+    failureRowNumber: input.failure?.rowNumber ?? null,
+    startedAt: input.result.startedAt?.toISOString() ?? null,
+    completedAt: input.result.completedAt?.toISOString() ?? null,
+  };
+}
+
 async function getPreviewPageByBatchRecord(
   batch: StudentImportBatchRecord,
   page: number,
@@ -1426,6 +1747,719 @@ async function currentLatestFileVersionId(
   }
 
   return null;
+}
+
+async function latestSourceVersionIdForExecutionBatch(
+  batch: StudentImportExecutionBatchRecord,
+  client: DatabaseClient = prisma,
+): Promise<string | null> {
+  const sourceFile = batch.sourceFileVersion;
+  if (
+    sourceFile.fileKind !== CourseFileKind.IMPORT_SOURCE ||
+    sourceFile.fileKey !== STUDENT_ROSTER_FILE_KEY
+  ) {
+    return null;
+  }
+
+  if (sourceFile.courseId) {
+    const latest = await findLatestCourseFileVersion(
+      { type: "COURSE", courseId: sourceFile.courseId },
+      CourseFileKind.IMPORT_SOURCE,
+      STUDENT_ROSTER_FILE_KEY,
+      client,
+    );
+    return latest?.id ?? null;
+  }
+
+  if (sourceFile.classroomId) {
+    const latest = await findLatestCourseFileVersion(
+      { type: "CLASSROOM", classroomId: sourceFile.classroomId },
+      CourseFileKind.IMPORT_SOURCE,
+      STUDENT_ROSTER_FILE_KEY,
+      client,
+    );
+    return latest?.id ?? null;
+  }
+
+  return null;
+}
+
+async function loadExecutionBatchForActor(
+  actor: StudentImportActor,
+  batchId: string,
+  client: DatabaseClient = prisma,
+): Promise<StudentImportExecutionBatchRecord> {
+  const batch = await client.studentImportBatch.findFirst({
+    where: {
+      id: batchId,
+      ...(actor.role === Role.TEACHER
+        ? { course: { teacherId: actor.id } }
+        : {}),
+    },
+    select: executionBatchSelect,
+  });
+
+  if (!batch) {
+    throw new ResourceNotFoundError("导入批次不存在");
+  }
+
+  return batch;
+}
+
+async function loadExecutionRows(
+  batchId: string,
+  client: DatabaseClient = prisma,
+): Promise<StudentImportRowRecord[]> {
+  return client.studentImportRow.findMany({
+    where: { batchId },
+    select: rowSelect,
+    orderBy: { rowNumber: "asc" },
+  });
+}
+
+async function assertExecutionBatchReady(
+  batch: StudentImportExecutionBatchRecord,
+  rows: readonly StudentImportRowRecord[],
+  client: DatabaseClient = prisma,
+  options: { allowProcessing?: boolean } = {},
+): Promise<void> {
+  if (batch.status === StudentImportBatchStatus.SUCCEEDED) {
+    return;
+  }
+
+  if (batch.status === StudentImportBatchStatus.PROCESSING) {
+    if (!options.allowProcessing) {
+      throw new StudentImportOperationError(
+        "学生名单导入正在执行，请稍后查看结果。",
+        409,
+      );
+    }
+  }
+
+  const canRetry = isRetryableFailedBatch(batch);
+  if (
+    batch.status !== StudentImportBatchStatus.CONFIRMED &&
+    !(
+      options.allowProcessing &&
+      batch.status === StudentImportBatchStatus.PROCESSING
+    ) &&
+    !canRetry
+  ) {
+    throw new StudentImportOperationError(
+      "导入批次尚未完成有效预览确认，不能执行正式导入。",
+      409,
+    );
+  }
+
+  if (!batch.confirmedAt) {
+    throw new StudentImportOperationError(
+      "导入批次尚未确认字段映射，不能执行正式导入。",
+      409,
+    );
+  }
+
+  if (!batch.classroom || !batch.classroomId) {
+    throw new StudentImportOperationError("导入批次没有有效目标班级。", 409);
+  }
+
+  if (batch.classroom.status !== ClassroomStatus.ACTIVE) {
+    throw new StudentImportOperationError(
+      "目标班级已关闭，不能执行正式导入。",
+      409,
+    );
+  }
+
+  if (batch.classroom.courseId !== batch.courseId) {
+    throw new StudentImportOperationError(
+      "目标班级与导入批次课程不一致，请重新预览。",
+      409,
+    );
+  }
+
+  if (batch.sourceFileChecksum !== batch.sourceFileVersion.checksumSha256) {
+    throw new StudentImportOperationError(
+      "导入源文件版本与预览记录不一致，请重新预览。",
+      409,
+    );
+  }
+
+  if (
+    (await latestSourceVersionIdForExecutionBatch(batch, client)) !==
+    batch.sourceFileVersionId
+  ) {
+    throw new StudentImportOperationError(
+      "学生名单预览已不是当前文件版本，请重新预览后再导入。",
+      409,
+    );
+  }
+
+  const previewSummary = jsonObject(batch.previewSummary);
+  const summary = previewSummary.summary as StudentImportSummary | undefined;
+  if (
+    batch.invalidRows > 0 ||
+    batch.duplicateRows > 0 ||
+    summary?.canImport === false ||
+    blockingBatchIssues(batch).length > 0 ||
+    rows.some(rowHasBlockingExecutionIssue)
+  ) {
+    throw new StudentImportOperationError(
+      "导入批次存在阻断错误，请修正名单并重新预览。",
+      409,
+    );
+  }
+
+  if (
+    rows.every(
+      (row) => row.previewStatus === StudentImportPreviewStatus.PENDING,
+    )
+  ) {
+    throw new StudentImportOperationError(
+      "导入批次没有可执行的学生记录。",
+      409,
+    );
+  }
+}
+
+async function loadCurrentRowUserMatches(
+  transaction: Prisma.TransactionClient,
+  row: StudentImportRowRecord,
+  classroomId: string,
+): Promise<{
+  byStudentNo: UserMatchRecord | null;
+  byEmail: UserMatchRecord | null;
+}> {
+  const mappedValues = mappedValuesFromJson(row.sourceRow);
+  const studentNo = normalizeFieldValue(row.studentNo);
+  const email = normalizeEmail(mappedValues.email ?? "");
+  const conditions: Prisma.UserWhereInput[] = [];
+  if (studentNo) {
+    conditions.push({ profile: { is: { studentNo } } });
+  }
+  if (email) {
+    conditions.push({ email: { equals: email, mode: "insensitive" } });
+  }
+  if (conditions.length === 0) {
+    return { byStudentNo: null, byEmail: null };
+  }
+
+  const users = await transaction.user.findMany({
+    where: { OR: conditions },
+    select: {
+      ...userMatchSelect,
+      classMemberships: {
+        where: { classroomId },
+        select: { id: true, status: true },
+      },
+    },
+  });
+
+  let byStudentNo: UserMatchRecord | null = null;
+  let byEmail: UserMatchRecord | null = null;
+  for (const user of users as SelectedUserMatchRecord[]) {
+    if (
+      user.profile?.studentNo &&
+      normalizeFieldValue(user.profile.studentNo) === studentNo
+    ) {
+      byStudentNo = user;
+    }
+    if (user.email && normalizeEmail(user.email) === email) {
+      byEmail = user;
+    }
+  }
+
+  return { byStudentNo, byEmail };
+}
+
+async function ensureActiveMembership(
+  transaction: Prisma.TransactionClient,
+  classroomId: string,
+  studentId: string,
+  now: Date,
+): Promise<{ membershipId: string; alreadyActive: boolean }> {
+  const existing = await transaction.classMembership.findUnique({
+    where: { classroomId_studentId: { classroomId, studentId } },
+    select: { id: true, status: true },
+  });
+
+  if (existing?.status === MembershipStatus.ACTIVE) {
+    return { membershipId: existing.id, alreadyActive: true };
+  }
+
+  if (existing) {
+    const updated = await transaction.classMembership.update({
+      where: { id: existing.id },
+      data: {
+        status: MembershipStatus.ACTIVE,
+        joinedAt: now,
+        endedAt: null,
+      },
+      select: { id: true },
+    });
+    return { membershipId: updated.id, alreadyActive: false };
+  }
+
+  const created = await transaction.classMembership.create({
+    data: { classroomId, studentId, joinedAt: now },
+    select: { id: true },
+  });
+  return { membershipId: created.id, alreadyActive: false };
+}
+
+function throwRowExecutionFailure(input: {
+  code: string;
+  message: string;
+  rowNumber: number;
+  retryable?: boolean;
+}): never {
+  throw new StudentImportExecutionFailureError({
+    code: input.code,
+    message: input.message,
+    rowNumber: input.rowNumber,
+    retryable: input.retryable ?? false,
+    status: 409,
+  });
+}
+
+async function applyExecutableImportRow(
+  transaction: Prisma.TransactionClient,
+  row: StudentImportRowRecord,
+  batch: StudentImportExecutionBatchRecord,
+  now: Date,
+  dependencies: Required<
+    Pick<
+      StudentImportExecutionDependencies,
+      "passwordGenerator" | "passwordHasher"
+    >
+  >,
+): Promise<void> {
+  if (row.previewStatus === StudentImportPreviewStatus.PENDING) {
+    await transaction.studentImportRow.update({
+      where: { id: row.id },
+      data: {
+        executionStatus: StudentImportExecutionStatus.SKIPPED,
+        errorCode: null,
+        processedAt: now,
+      },
+    });
+    return;
+  }
+
+  if (
+    row.previewStatus === StudentImportPreviewStatus.INVALID ||
+    row.previewStatus === StudentImportPreviewStatus.DUPLICATE ||
+    rowHasBlockingExecutionIssue(row)
+  ) {
+    throwRowExecutionFailure({
+      code: "BLOCKING_PREVIEW_ROW",
+      message: "导入批次存在阻断错误，请重新预览。",
+      rowNumber: row.rowNumber,
+    });
+  }
+
+  if (!batch.classroomId) {
+    throwRowExecutionFailure({
+      code: "TARGET_CLASSROOM_MISSING",
+      message: "导入批次没有有效目标班级。",
+      rowNumber: row.rowNumber,
+    });
+  }
+
+  const mappedValues = mappedValuesFromJson(row.sourceRow);
+  const studentNo = normalizeFieldValue(row.studentNo);
+  const email = normalizeEmail(mappedValues.email ?? "");
+  const matches = await loadCurrentRowUserMatches(
+    transaction,
+    row,
+    batch.classroomId,
+  );
+  const byStudentNo = matches.byStudentNo;
+  const byEmail = matches.byEmail;
+
+  if (byStudentNo) {
+    if (byStudentNo.role !== Role.STUDENT) {
+      throwRowExecutionFailure({
+        code: "STUDENT_NO_ACCOUNT_ROLE_CONFLICT",
+        message: "该学号已关联非学生账号，不能通过名单导入变更角色。",
+        rowNumber: row.rowNumber,
+      });
+    }
+
+    if (byEmail && byEmail.id !== byStudentNo.id) {
+      throwRowExecutionFailure({
+        code: "EMAIL_ACCOUNT_CONFLICT",
+        message: "该邮箱已被其他账号使用，请重新预览名单。",
+        rowNumber: row.rowNumber,
+      });
+    }
+
+    const membership = await ensureActiveMembership(
+      transaction,
+      batch.classroomId,
+      byStudentNo.id,
+      now,
+    );
+    await transaction.studentImportRow.update({
+      where: { id: row.id },
+      data: {
+        executionStatus: membership.alreadyActive
+          ? StudentImportExecutionStatus.SKIPPED
+          : StudentImportExecutionStatus.APPLIED,
+        matchedUserId: byStudentNo.id,
+        matchedMembershipId: membership.membershipId,
+        createdUserId: null,
+        createdMembershipId: membership.alreadyActive
+          ? null
+          : membership.membershipId,
+        errorCode: null,
+        processedAt: now,
+      },
+    });
+    return;
+  }
+
+  if (byEmail) {
+    throwRowExecutionFailure({
+      code: "EMAIL_ACCOUNT_CONFLICT",
+      message: "该邮箱已被系统账号使用，不能用于创建新的学生账号。",
+      rowNumber: row.rowNumber,
+    });
+  }
+
+  const passwordHash = await dependencies.passwordHasher(
+    dependencies.passwordGenerator(),
+  );
+  const user = await transaction.user.create({
+    data: {
+      email: email || null,
+      passwordHash,
+      role: Role.STUDENT,
+      mustChangePassword: true,
+      profile: {
+        create: {
+          displayName: row.studentName,
+          studentNo,
+        },
+      },
+    },
+    select: { id: true },
+  });
+  const membership = await ensureActiveMembership(
+    transaction,
+    batch.classroomId,
+    user.id,
+    now,
+  );
+  await transaction.studentImportRow.update({
+    where: { id: row.id },
+    data: {
+      executionStatus: StudentImportExecutionStatus.APPLIED,
+      createdUserId: user.id,
+      createdMembershipId: membership.membershipId,
+      matchedUserId: null,
+      matchedMembershipId: null,
+      errorCode: null,
+      processedAt: now,
+    },
+  });
+}
+
+async function executeClaimedImportBatch(
+  transaction: Prisma.TransactionClient,
+  actor: StudentImportActor,
+  batchId: string,
+  dependencies: Required<
+    Pick<
+      StudentImportExecutionDependencies,
+      "now" | "passwordGenerator" | "passwordHasher"
+    >
+  >,
+  context: AuditRequestContext,
+): Promise<StudentImportExecutionResult> {
+  const now = dependencies.now();
+  const claim = await transaction.studentImportBatch.updateMany({
+    where: {
+      id: batchId,
+      OR: [
+        { status: StudentImportBatchStatus.CONFIRMED },
+        {
+          status: StudentImportBatchStatus.FAILED,
+          previewSummary: {
+            path: ["executionFailure", "retryable"],
+            equals: true,
+          },
+        },
+      ],
+      ...(actor.role === Role.TEACHER
+        ? { course: { teacherId: actor.id } }
+        : {}),
+    },
+    data: {
+      status: StudentImportBatchStatus.PROCESSING,
+      startedAt: now,
+      completedAt: null,
+      importedRows: 0,
+      failedRows: 0,
+    },
+  });
+
+  if (claim.count !== 1) {
+    const current = await loadExecutionBatchForActor(
+      actor,
+      batchId,
+      transaction,
+    );
+    const rows = await loadExecutionRows(batchId, transaction);
+    if (current.status === StudentImportBatchStatus.SUCCEEDED) {
+      return executionResultFromRecords(current, rows);
+    }
+    if (current.status === StudentImportBatchStatus.PROCESSING) {
+      throw new StudentImportOperationError(
+        "学生名单导入正在执行，请稍后查看结果。",
+        409,
+      );
+    }
+    throw new StudentImportOperationError(
+      "导入批次当前状态不能执行正式导入。",
+      409,
+    );
+  }
+
+  const batch = await loadExecutionBatchForActor(actor, batchId, transaction);
+  const rows = await loadExecutionRows(batchId, transaction);
+  await assertExecutionBatchReady(batch, rows, transaction, {
+    allowProcessing: true,
+  });
+
+  for (const row of rows) {
+    await applyExecutableImportRow(transaction, row, batch, now, dependencies);
+  }
+
+  const appliedRows = await loadExecutionRows(batchId, transaction);
+  const appliedResult = executionResultFromRecords(
+    {
+      ...batch,
+      status: StudentImportBatchStatus.SUCCEEDED,
+      startedAt: now,
+      completedAt: now,
+    },
+    appliedRows,
+  );
+  const nextPreviewSummary = jsonObject(batch.previewSummary);
+  delete nextPreviewSummary.executionFailure;
+
+  const updatedBatch = await transaction.studentImportBatch.update({
+    where: { id: batchId },
+    data: {
+      status: StudentImportBatchStatus.SUCCEEDED,
+      importedRows: appliedResult.summary.importedRows,
+      failedRows: 0,
+      completedAt: now,
+      previewSummary: inputJsonObject({
+        ...nextPreviewSummary,
+        execution: {
+          version: 1,
+          status: StudentImportBatchStatus.SUCCEEDED,
+          completedAt: now.toISOString(),
+          summary: appliedResult.summary,
+        },
+      }),
+    },
+    select: executionBatchSelect,
+  });
+  const finalRows = await loadExecutionRows(batchId, transaction);
+  const finalResult = executionResultFromRecords(updatedBatch, finalRows);
+
+  await writeGovernanceAuditLog(transaction, {
+    actorId: actor.id,
+    action: AuditAction.STUDENT_IMPORT_EXECUTED,
+    targetType: AuditTargetType.STUDENT_IMPORT_BATCH,
+    targetId: batchId,
+    summary: `执行学生名单导入：新建 ${finalResult.summary.createdUserRows} 人，匹配 ${finalResult.summary.matchedExistingUserRows} 人，已在班级 ${finalResult.summary.alreadyEnrolledRows} 人`,
+    beforeData: null,
+    afterData: executionAuditSnapshot({
+      batch: updatedBatch,
+      result: finalResult,
+    }),
+    context,
+  });
+
+  return finalResult;
+}
+
+function classifyExecutionError(error: unknown): ImportExecutionFailure {
+  if (error instanceof StudentImportExecutionFailureError) {
+    return error.failure;
+  }
+
+  if (isRetryablePrismaError(error)) {
+    return {
+      code: "RETRYABLE_DATABASE_CONFLICT",
+      message: "学生名单导入遇到数据库并发冲突，请重试。",
+      retryable: true,
+      status: 409,
+    };
+  }
+
+  if (isUniqueConstraintError(error)) {
+    return {
+      code: "UNIQUE_IDENTIFIER_CONFLICT",
+      message: "学生账号标识已被其他写入占用，请重新预览后再导入。",
+      retryable: true,
+      status: 409,
+    };
+  }
+
+  return {
+    code: "UNKNOWN_IMPORT_FAILURE",
+    message: "学生名单导入失败，正式数据已回滚，请稍后重试。",
+    retryable: true,
+    status: 500,
+  };
+}
+
+async function markExecutionFailure(
+  actor: StudentImportActor,
+  batchId: string,
+  failure: ImportExecutionFailure,
+  context: AuditRequestContext,
+  now: Date,
+): Promise<StudentImportExecutionResult | null> {
+  return prisma.$transaction(async (transaction) => {
+    const batch = await loadExecutionBatchForActor(actor, batchId, transaction);
+    if (batch.status === StudentImportBatchStatus.SUCCEEDED) {
+      return executionResultFromRecords(
+        batch,
+        await loadExecutionRows(batchId, transaction),
+      );
+    }
+
+    if (failure.rowNumber) {
+      await transaction.studentImportRow.updateMany({
+        where: { batchId, rowNumber: failure.rowNumber },
+        data: {
+          executionStatus: StudentImportExecutionStatus.FAILED,
+          errorCode: failure.code,
+          errorDetail: inputJsonValue({
+            issues: [
+              {
+                level: "error",
+                code: failure.code,
+                message: failure.message,
+                field: "row",
+              },
+            ],
+          }),
+          processedAt: now,
+        },
+      });
+    }
+
+    const updatedBatch = await transaction.studentImportBatch.update({
+      where: { id: batchId },
+      data: {
+        status: StudentImportBatchStatus.FAILED,
+        failedRows: failure.rowNumber ? 1 : Math.max(1, batch.previewRows),
+        completedAt: now,
+        previewSummary: inputJsonObject({
+          ...jsonObject(batch.previewSummary),
+          executionFailure: {
+            version: 1,
+            code: failure.code,
+            message: failure.message,
+            retryable: failure.retryable,
+            rowNumber: failure.rowNumber ?? null,
+            failedAt: now.toISOString(),
+          },
+        }),
+      },
+      select: executionBatchSelect,
+    });
+    const rows = await loadExecutionRows(batchId, transaction);
+    const result = executionResultFromRecords(updatedBatch, rows);
+
+    await writeGovernanceAuditLog(transaction, {
+      actorId: actor.id,
+      action: AuditAction.STUDENT_IMPORT_FAILED,
+      targetType: AuditTargetType.STUDENT_IMPORT_BATCH,
+      targetId: batchId,
+      summary: `学生名单导入失败：${failure.code}`,
+      beforeData: null,
+      afterData: executionAuditSnapshot({
+        batch: updatedBatch,
+        result,
+        failure,
+      }),
+      context,
+    });
+
+    return result;
+  });
+}
+
+async function executeStudentImportBatchForActor(
+  actor: StudentImportActor,
+  batchId: string,
+  context: AuditRequestContext,
+  dependencies: StudentImportExecutionDependencies = {},
+): Promise<StudentImportExecutionResult> {
+  const batch = await loadExecutionBatchForActor(actor, batchId);
+  const rows = await loadExecutionRows(batchId);
+  await assertExecutionBatchReady(batch, rows);
+
+  if (batch.status === StudentImportBatchStatus.SUCCEEDED) {
+    return executionResultFromRecords(batch, rows);
+  }
+
+  const executionDependencies = {
+    now: dependencies.now ?? (() => new Date()),
+    passwordGenerator:
+      dependencies.passwordGenerator ?? generateInitialPassword,
+    passwordHasher: dependencies.passwordHasher ?? hashPasswordCore,
+  };
+
+  try {
+    return await serializableImportTransaction((transaction) =>
+      executeClaimedImportBatch(
+        transaction,
+        actor,
+        batchId,
+        executionDependencies,
+        context,
+      ),
+    );
+  } catch (error: unknown) {
+    if (error instanceof StudentImportExecutionFailureError) {
+      const failure = error.failure;
+      await markExecutionFailure(
+        actor,
+        batchId,
+        failure,
+        context,
+        executionDependencies.now(),
+      );
+      throw error;
+    }
+
+    if (error instanceof StudentImportOperationError) {
+      throw error;
+    }
+
+    const failure = classifyExecutionError(error);
+    const failed = await markExecutionFailure(
+      actor,
+      batchId,
+      failure,
+      context,
+      executionDependencies.now(),
+    );
+    if (failed?.retryable) {
+      throw new StudentImportOperationError(
+        failure.message,
+        failure.status ?? 409,
+      );
+    }
+    throw new StudentImportExecutionFailureError(failure);
+  }
 }
 
 export async function previewTeacherStudentImportFromFile(
@@ -1523,100 +2557,123 @@ export async function previewTeacherStudentImportFromFile(
   });
 
   const batch = await prisma.$transaction(async (transaction) => {
-    const saved = await transaction.studentImportBatch.upsert({
+    const existing = await transaction.studentImportBatch.findUnique({
       where: {
         courseId_idempotencyKey: {
           courseId: target.course.id,
           idempotencyKey,
         },
       },
-      create: {
-        courseId: target.course.id,
-        classroomId: target.classroom.id,
-        createdById: teacherId,
-        sourceFileVersionId: file.id,
-        status: confirmed
-          ? StudentImportBatchStatus.CONFIRMED
-          : StudentImportBatchStatus.PREVIEW_READY,
-        idempotencyKey,
-        sourceFileName: file.originalFileName,
-        sourceFileChecksum: file.checksumSha256,
-        sourceFileMimeType: file.mimeType,
-        sourceFileSizeBytes: file.sizeBytes,
-        sourceSheetName: sheet.name,
-        mappingConfig: inputJsonObject(mappingConfig),
-        previewSummary,
-        totalRows: summary.totalRows,
-        previewRows: summary.previewRows,
-        newUserRows: summary.newUserRows,
-        existingUserRows: summary.existingUserRows,
-        alreadyEnrolledRows: summary.alreadyEnrolledRows,
-        courseMismatchRows: summary.courseMismatchRows,
-        invalidRows: summary.invalidRows,
-        duplicateRows: summary.duplicateRows,
-        importedRows: 0,
-        failedRows: 0,
-        previewedAt: now,
-        confirmedAt: confirmed ? now : null,
-      },
-      update: {
-        classroomId: target.classroom.id,
-        createdById: teacherId,
-        sourceFileVersionId: file.id,
-        status: confirmed
-          ? StudentImportBatchStatus.CONFIRMED
-          : StudentImportBatchStatus.PREVIEW_READY,
-        sourceFileName: file.originalFileName,
-        sourceFileChecksum: file.checksumSha256,
-        sourceFileMimeType: file.mimeType,
-        sourceFileSizeBytes: file.sizeBytes,
-        sourceSheetName: sheet.name,
-        mappingConfig: inputJsonObject(mappingConfig),
-        previewSummary,
-        totalRows: summary.totalRows,
-        previewRows: summary.previewRows,
-        newUserRows: summary.newUserRows,
-        existingUserRows: summary.existingUserRows,
-        alreadyEnrolledRows: summary.alreadyEnrolledRows,
-        courseMismatchRows: summary.courseMismatchRows,
-        invalidRows: summary.invalidRows,
-        duplicateRows: summary.duplicateRows,
-        importedRows: 0,
-        failedRows: 0,
-        previewedAt: now,
-        confirmedAt: confirmed ? now : null,
-      },
-      select: batchSelect,
+      select: { id: true, status: true },
     });
 
-    await transaction.studentImportRow.deleteMany({
-      where: { batchId: saved.id },
-    });
+    const previewData = {
+      classroomId: target.classroom.id,
+      createdById: teacherId,
+      sourceFileVersionId: file.id,
+      status: confirmed
+        ? StudentImportBatchStatus.CONFIRMED
+        : StudentImportBatchStatus.PREVIEW_READY,
+      sourceFileName: file.originalFileName,
+      sourceFileChecksum: file.checksumSha256,
+      sourceFileMimeType: file.mimeType,
+      sourceFileSizeBytes: file.sizeBytes,
+      sourceSheetName: sheet.name,
+      mappingConfig: inputJsonObject(mappingConfig),
+      previewSummary,
+      totalRows: summary.totalRows,
+      previewRows: summary.previewRows,
+      newUserRows: summary.newUserRows,
+      existingUserRows: summary.existingUserRows,
+      alreadyEnrolledRows: summary.alreadyEnrolledRows,
+      courseMismatchRows: summary.courseMismatchRows,
+      invalidRows: summary.invalidRows,
+      duplicateRows: summary.duplicateRows,
+      importedRows: 0,
+      failedRows: 0,
+      previewedAt: now,
+      confirmedAt: confirmed ? now : null,
+      startedAt: null,
+      completedAt: null,
+    };
 
-    if (matchedRows.length > 0) {
-      await transaction.studentImportRow.createMany({
-        data: matchedRows.map((row) => rowCreateData(saved.id, row)),
+    let saved: StudentImportBatchRecord;
+    let rowsNeedRefresh = true;
+    if (!existing) {
+      saved = await transaction.studentImportBatch.create({
+        data: {
+          courseId: target.course.id,
+          idempotencyKey,
+          ...previewData,
+        },
+        select: batchSelect,
       });
+    } else if (
+      existing.status === StudentImportBatchStatus.PROCESSING ||
+      existing.status === StudentImportBatchStatus.SUCCEEDED ||
+      existing.status === StudentImportBatchStatus.PARTIAL_FAILED
+    ) {
+      const current = await transaction.studentImportBatch.findUniqueOrThrow({
+        where: { id: existing.id },
+        select: batchSelect,
+      });
+      saved = current;
+      rowsNeedRefresh = false;
+    } else {
+      const updated = await transaction.studentImportBatch.updateMany({
+        where: {
+          id: existing.id,
+          status: {
+            notIn: [
+              StudentImportBatchStatus.PROCESSING,
+              StudentImportBatchStatus.SUCCEEDED,
+              StudentImportBatchStatus.PARTIAL_FAILED,
+            ],
+          },
+        },
+        data: previewData,
+      });
+      saved = await transaction.studentImportBatch.findUniqueOrThrow({
+        where: { id: existing.id },
+        select: batchSelect,
+      });
+      rowsNeedRefresh = updated.count === 1;
     }
 
-    await writeGovernanceAuditLog(transaction, {
-      actorId: teacherId,
-      action: confirmed
-        ? AuditAction.STUDENT_IMPORT_MAPPING_CONFIRMED
-        : AuditAction.STUDENT_IMPORT_PREVIEWED,
-      targetType: AuditTargetType.STUDENT_IMPORT_BATCH,
-      targetId: saved.id,
-      summary: confirmed ? "确认学生名单导入字段映射" : "生成学生名单导入预览",
-      beforeData: null,
-      afterData: summarySnapshot({
-        batchId: saved.id,
-        file,
-        mappingConfig,
-        summary,
-        batchIssues,
-      }),
-      context,
-    });
+    if (rowsNeedRefresh) {
+      await transaction.studentImportRow.deleteMany({
+        where: { batchId: saved.id },
+      });
+
+      if (matchedRows.length > 0) {
+        await transaction.studentImportRow.createMany({
+          data: matchedRows.map((row) => rowCreateData(saved.id, row)),
+        });
+      }
+    }
+
+    if (rowsNeedRefresh) {
+      await writeGovernanceAuditLog(transaction, {
+        actorId: teacherId,
+        action: confirmed
+          ? AuditAction.STUDENT_IMPORT_MAPPING_CONFIRMED
+          : AuditAction.STUDENT_IMPORT_PREVIEWED,
+        targetType: AuditTargetType.STUDENT_IMPORT_BATCH,
+        targetId: saved.id,
+        summary: confirmed
+          ? "确认学生名单导入字段映射"
+          : "生成学生名单导入预览",
+        beforeData: null,
+        afterData: summarySnapshot({
+          batchId: saved.id,
+          file,
+          mappingConfig,
+          summary,
+          batchIssues,
+        }),
+        context,
+      });
+    }
 
     return saved;
   });
@@ -1640,4 +2697,32 @@ export async function getTeacherStudentImportPreview(
   }
 
   return getPreviewPageByBatchRecord(batch, page, pageSize);
+}
+
+export function executeTeacherStudentImportBatch(
+  teacherId: string,
+  batchId: string,
+  context: AuditRequestContext,
+  dependencies: StudentImportExecutionDependencies = {},
+): Promise<StudentImportExecutionResult> {
+  return executeStudentImportBatchForActor(
+    { id: teacherId, role: Role.TEACHER },
+    batchId,
+    context,
+    dependencies,
+  );
+}
+
+export function executeAdminStudentImportBatch(
+  adminId: string,
+  batchId: string,
+  context: AuditRequestContext,
+  dependencies: StudentImportExecutionDependencies = {},
+): Promise<StudentImportExecutionResult> {
+  return executeStudentImportBatchForActor(
+    { id: adminId, role: Role.ADMIN },
+    batchId,
+    context,
+    dependencies,
+  );
 }

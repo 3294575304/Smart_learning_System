@@ -2,6 +2,7 @@ import type {
   CourseFileKind,
   Prisma,
   StudentImportBatchStatus,
+  StudentImportExecutionStatus,
   StudentImportPreviewStatus,
 } from "@prisma/client";
 
@@ -130,6 +131,41 @@ export interface StudentImportSummary {
   invalidRows: number;
   duplicateRows: number;
   canImport: boolean;
+}
+
+export type StudentImportExecutionAction =
+  | "CREATED_USER"
+  | "MATCHED_EXISTING_USER"
+  | "ALREADY_ENROLLED"
+  | "SKIPPED"
+  | "FAILED";
+
+export interface StudentImportExecutionSummary {
+  totalRows: number;
+  createdUserRows: number;
+  matchedExistingUserRows: number;
+  alreadyEnrolledRows: number;
+  skippedRows: number;
+  failedRows: number;
+  importedRows: number;
+}
+
+export interface StudentImportExecutionRowResult {
+  rowNumber: number;
+  status: StudentImportExecutionStatus;
+  action: StudentImportExecutionAction;
+  errorCode: string | null;
+}
+
+export interface StudentImportExecutionResult {
+  batchId: string;
+  status: StudentImportBatchStatus;
+  idempotencyKey: string;
+  retryable: boolean;
+  summary: StudentImportExecutionSummary;
+  rows: StudentImportExecutionRowResult[];
+  startedAt: Date | null;
+  completedAt: Date | null;
 }
 
 export interface StudentImportBatchView {
