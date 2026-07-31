@@ -3,6 +3,8 @@ import { z } from "zod";
 import { buildStudentAnalysisMessages } from "@/services/ai/prompt";
 import type { AIProvider, AIProviderOptions } from "@/services/ai/provider";
 import type { StudentAnalysisInput } from "@/services/ai/schemas";
+import { buildSyllabusParseMessages } from "@/services/syllabus-parsing/prompt";
+import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 
 const completionResponseSchema = z.object({
   choices: z
@@ -34,6 +36,26 @@ export class OpenAICompatibleProvider implements AIProvider {
     input: StudentAnalysisInput,
     options: AIProviderOptions,
   ): Promise<unknown> {
+    return this.completeJson(
+      buildStudentAnalysisMessages(input, options.validationError),
+      options.signal,
+    );
+  }
+
+  async parseSyllabus(
+    input: SyllabusParseInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    return this.completeJson(
+      buildSyllabusParseMessages(input, options.validationError),
+      options.signal,
+    );
+  }
+
+  private async completeJson(
+    messages: Array<{ role: "system" | "user"; content: string }>,
+    signal: AbortSignal,
+  ): Promise<unknown> {
     const response = await fetch(this.endpoint, {
       method: "POST",
       headers: {
@@ -44,9 +66,9 @@ export class OpenAICompatibleProvider implements AIProvider {
         model: this.model,
         temperature: 0.2,
         response_format: { type: "json_object" },
-        messages: buildStudentAnalysisMessages(input, options.validationError),
+        messages,
       }),
-      signal: options.signal,
+      signal,
     });
 
     if (!response.ok) {

@@ -72,6 +72,7 @@ test("provider timeouts are retried once and then fall back", async () => {
   const provider: AIProvider = {
     name: "timeout-test",
     model: "timeout-model",
+    parseSyllabus: async () => ({}),
     analyzeStudentPerformance: () => {
       calls += 1;
       return new Promise(() => undefined);

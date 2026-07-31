@@ -13,6 +13,13 @@ V1.0“迭代一：课程模型与导入基础”采用“预导入身份、学�
 - 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。
 - 模型输出会经过严格 Zod 校验，失败最多重试一次；仍失败时返回基于正确率的规则结果。分析接口独立于交卷和成绩接口，AI 故障不会影响成绩查看。
 
+## 教学大纲结构化解析
+
+- `POST /api/teacher/courses/:courseId/syllabus/parse` 解析教师课程当前版本的文本型教学大纲 PDF；`GET` 查询当前草稿和历史版本。
+- 解析结果只保存为草稿，不会自动发布知识点或覆盖正式课程结构。
+- PDF 按页提取文本，不支持扫描件 OCR；加密、损坏、无文本和超限文件会返回可理解的业务错误。
+- AI 输出经过严格 Zod 校验，失败最多重试一次。相同教学大纲版本和解析器版本会复用成功结果，并阻止并发重复解析。
+
 ## 管理员系统配置
 
 - 管理员可在 `/admin/system-config` 管理平台名称、公告、维护模式、自主注册、作业默认值和 AI 增强分析开关。

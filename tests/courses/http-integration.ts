@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
 import { assertIsolatedIntegrationEnvironment } from "../integration/database";
@@ -24,7 +24,14 @@ const baseUrl = `http://127.0.0.1:${port}`;
 async function testPdf(title: string): Promise<Buffer> {
   const document = await PDFDocument.create();
   document.setTitle(title);
-  document.addPage([595, 842]);
+  const font = await document.embedFont(StandardFonts.Helvetica);
+  const page = document.addPage([595, 842]);
+  page.drawText("Python syllabus text 32 hours", {
+    x: 40,
+    y: 780,
+    font,
+    size: 12,
+  });
   return Buffer.from(await document.save());
 }
 
@@ -401,6 +408,57 @@ async function main(): Promise<void> {
     assert.equal(uploadedSyllabus.data.originalName, "python-syllabus.pdf");
     assert.equal(uploadedSyllabus.data.sizeBytes, pdfA.length);
 
+    const syllabusParsePath = `${syllabusPath}/parse`;
+    assert.equal(
+      (await requestJson(syllabusParsePath, undefined, "POST")).status,
+      401,
+    );
+    assert.equal(
+      (await requestJson(syllabusParsePath, studentCookie, "POST")).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson(syllabusParsePath, adminCookie, "POST")).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson(syllabusParsePath, teacherTwoCookie, "POST")).status,
+      404,
+    );
+    const parseResponse = await requestJson(
+      syllabusParsePath,
+      teacherCookie,
+      "POST",
+    );
+    assert.equal(parseResponse.status, 201, await parseResponse.clone().text());
+    const parsedSyllabus = (await parseResponse.json()) as ApiSuccess<{
+      reused: boolean;
+      draft: {
+        status: string;
+        isCurrentSyllabusVersion: boolean;
+        result: {
+          courseInfo: unknown;
+          objectives: unknown[];
+          chapters: unknown[];
+          assessments: unknown[];
+          warnings: string[];
+        };
+      };
+    }>;
+    assert.equal(parsedSyllabus.data.reused, false);
+    assert.equal(parsedSyllabus.data.draft.status, "SUCCEEDED");
+    assert.equal(parsedSyllabus.data.draft.isCurrentSyllabusVersion, true);
+    assert.ok(parsedSyllabus.data.draft.result.courseInfo);
+    assert.equal(
+      (await requestJson(syllabusParsePath, teacherCookie, "POST")).status,
+      200,
+    );
+    const parseQueryResponse = await requestJson(
+      syllabusParsePath,
+      teacherCookie,
+    );
+    assert.equal(parseQueryResponse.status, 200);
+
     assert.equal(
       (
         await requestMultipart(
@@ -480,7 +538,7 @@ async function main(): Promise<void> {
         originalName: string;
         sizeBytes: number;
       }>;
-    assert.equal(replacedSyllabus.data.id, uploadedSyllabus.data.id);
+    assert.notEqual(replacedSyllabus.data.id, uploadedSyllabus.data.id);
     assert.equal(replacedSyllabus.data.originalName, "python-syllabus-v2.pdf");
     assert.equal(replacedSyllabus.data.sizeBytes, pdfB.length);
     const replacedDownloadResponse = await fetch(
@@ -1432,6 +1490,9 @@ async function main(): Promise<void> {
       });
     }
     if (createdCourseIds.length > 0) {
+      await prisma.syllabusParseDraft.deleteMany({
+        where: { courseId: { in: createdCourseIds } },
+      });
       await prisma.auditLog.deleteMany({
         where: { targetId: { in: createdCourseIds } },
       });

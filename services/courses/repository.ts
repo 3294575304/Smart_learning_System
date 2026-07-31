@@ -106,9 +106,11 @@ const courseSyllabusSelect = Prisma.validator<Prisma.CourseSyllabusSelect>()({
   id: true,
   courseId: true,
   uploadedById: true,
+  versionNumber: true,
   originalName: true,
   mimeType: true,
   sizeBytes: true,
+  checksumSha256: true,
   storageKey: true,
   createdAt: true,
   updatedAt: true,
@@ -131,12 +133,14 @@ export type CourseSyllabusRecord = Prisma.CourseSyllabusGetPayload<{
 
 type DatabaseClient = typeof prisma | Prisma.TransactionClient;
 
-interface UpsertCourseSyllabusData {
+interface CreateCourseSyllabusData {
   courseId: string;
   uploadedById: string;
+  versionNumber: number;
   originalName: string;
   mimeType: string;
   sizeBytes: number;
+  checksumSha256: string;
   storageKey: string;
 }
 
@@ -241,6 +245,7 @@ export function findTeacherCourseSyllabus(
       course: { teacherId },
     },
     select: courseSyllabusSelect,
+    orderBy: [{ versionNumber: "desc" }, { createdAt: "desc" }],
   });
 }
 
@@ -248,26 +253,19 @@ export function findCourseSyllabusByCourseId(
   courseId: string,
   client: DatabaseClient = prisma,
 ): Promise<CourseSyllabusRecord | null> {
-  return client.courseSyllabus.findUnique({
+  return client.courseSyllabus.findFirst({
     where: { courseId },
     select: courseSyllabusSelect,
+    orderBy: [{ versionNumber: "desc" }, { createdAt: "desc" }],
   });
 }
 
-export function upsertCourseSyllabusRecord(
-  data: UpsertCourseSyllabusData,
+export function createCourseSyllabusRecord(
+  data: CreateCourseSyllabusData,
   client: DatabaseClient = prisma,
 ): Promise<CourseSyllabusRecord> {
-  return client.courseSyllabus.upsert({
-    where: { courseId: data.courseId },
-    create: data,
-    update: {
-      uploadedById: data.uploadedById,
-      originalName: data.originalName,
-      mimeType: data.mimeType,
-      sizeBytes: data.sizeBytes,
-      storageKey: data.storageKey,
-    },
+  return client.courseSyllabus.create({
+    data,
     select: courseSyllabusSelect,
   });
 }

@@ -74,6 +74,7 @@ export interface TeacherCourseDeletionResult {
 export interface CourseSyllabusView {
   id: string;
   courseId: string;
+  versionNumber: number;
   originalName: string;
   mimeType: string;
   sizeBytes: number;

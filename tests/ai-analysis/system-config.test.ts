@@ -27,6 +27,7 @@ test("关闭 AI 增强后不调用 Provider 并返回规则分析", async () => 
   const provider: AIProvider = {
     name: "never-called",
     model: "never-called",
+    parseSyllabus: async () => ({}),
     async analyzeStudentPerformance() {
       calls += 1;
       throw new Error("provider should not be called");

@@ -1,4 +1,5 @@
 import type { StudentAnalysisInput } from "@/services/ai/schemas";
+import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 
 export interface AIProviderOptions {
   signal: AbortSignal;
@@ -11,6 +12,11 @@ export interface AIProvider {
 
   analyzeStudentPerformance(
     input: StudentAnalysisInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  parseSyllabus(
+    input: SyllabusParseInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 }

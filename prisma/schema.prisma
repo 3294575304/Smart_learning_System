@@ -138,6 +138,13 @@ enum CourseFileKind {
   OTHER
 }
 
+enum SyllabusParseStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
 enum StudentImportBatchStatus {
   UPLOADED
   PREVIEW_READY
@@ -312,6 +319,7 @@ model User {
   publishedAnnouncements      Announcement[]               @relation("AnnouncementPublisher")
   uploadedCourseFiles         CourseFileVersion[]          @relation("CourseFileUploadedBy")
   uploadedCourseSyllabi       CourseSyllabus[]             @relation("CourseSyllabusUploadedBy")
+  requestedSyllabusParses     SyllabusParseDraft[]         @relation("SyllabusParseRequestedBy")
   createdStudentImportBatches StudentImportBatch[]         @relation("StudentImportBatchCreatedBy")
   matchedStudentImportRows    StudentImportRow[]           @relation("StudentImportMatchedUser")
   createdStudentImportRows    StudentImportRow[]           @relation("StudentImportCreatedUser")
@@ -531,7 +539,8 @@ model Course {
   teacher              User                 @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
   classrooms           Classroom[]          @relation("ClassroomCourse")
   courseFileVersions   CourseFileVersion[]  @relation("CourseFileCourse")
-  syllabus             CourseSyllabus?      @relation("CourseSyllabusCourse")
+  syllabi              CourseSyllabus[]     @relation("CourseSyllabusCourse")
+  syllabusParseDrafts  SyllabusParseDraft[]
   studentImportBatches StudentImportBatch[] @relation("StudentImportCourse")
 
   @@unique([teacherId, courseNo, term])
@@ -574,20 +583,55 @@ model CourseFileVersion {
 }
 
 model CourseSyllabus {
-  id           String   @id @default(cuid())
-  courseId     String   @unique
-  uploadedById String
-  originalName String   @db.VarChar(255)
-  mimeType     String   @db.VarChar(100)
-  sizeBytes    Int
-  storageKey   String   @unique @db.VarChar(191)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  courseId       String
+  uploadedById   String
+  versionNumber  Int      @default(1)
+  originalName   String   @db.VarChar(255)
+  mimeType       String   @db.VarChar(100)
+  sizeBytes      Int
+  checksumSha256 String?  @db.Char(64)
+  storageKey     String   @unique @db.VarChar(191)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  course     Course @relation("CourseSyllabusCourse", fields: [courseId], references: [id], onDelete: Cascade)
-  uploadedBy User   @relation("CourseSyllabusUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  course      Course               @relation("CourseSyllabusCourse", fields: [courseId], references: [id], onDelete: Cascade)
+  uploadedBy  User                 @relation("CourseSyllabusUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  parseDrafts SyllabusParseDraft[]
 
+  @@unique([courseId, versionNumber])
+  @@index([courseId, createdAt])
   @@index([uploadedById])
+}
+
+model SyllabusParseDraft {
+  id                    String              @id @default(cuid())
+  courseId              String
+  syllabusId            String
+  requestedById         String
+  status                SyllabusParseStatus @default(PENDING)
+  parserVersion         String              @db.VarChar(50)
+  promptVersion         String              @db.VarChar(50)
+  ruleVersion           String              @db.VarChar(50)
+  provider              String?             @db.VarChar(100)
+  model                 String?             @db.VarChar(150)
+  retryCount            Int                 @default(0)
+  executionCount        Int                 @default(0)
+  structuredResult      Json?
+  extractedTextMetadata Json?
+  errorCode             String?             @db.VarChar(100)
+  startedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  course      Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  syllabus    CourseSyllabus @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  requestedBy User           @relation("SyllabusParseRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+
+  @@unique([syllabusId, parserVersion])
+  @@index([courseId, status, createdAt])
+  @@index([requestedById, createdAt])
 }
 
 model Classroom {

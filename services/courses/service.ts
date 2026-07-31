@@ -8,7 +8,7 @@ import {
   StudentImportBatchStatus,
   StudentImportExecutionStatus,
 } from "@prisma/client";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { PDFDocument } from "pdf-lib";
 
@@ -30,7 +30,7 @@ import {
   loadCourseTemplates,
   loadTeacherClassroomsForCourseLink,
   loadTeacherCourses,
-  upsertCourseSyllabusRecord,
+  createCourseSyllabusRecord,
   type CourseSyllabusRecord,
   type CourseTemplateRecord,
   type TeacherCourseClassroomRecord,
@@ -191,6 +191,7 @@ function courseSnapshot(item: TeacherCourseListItem): AuditConfigSnapshot {
 function syllabusSnapshot(syllabus: CourseSyllabusRecord): AuditConfigSnapshot {
   return {
     courseId: syllabus.courseId,
+    versionNumber: syllabus.versionNumber,
     originalName: syllabus.originalName,
     mimeType: syllabus.mimeType,
     sizeBytes: syllabus.sizeBytes,
@@ -297,6 +298,7 @@ function syllabusViewFromRecord(
   return {
     id: record.id,
     courseId: record.courseId,
+    versionNumber: record.versionNumber,
     originalName: record.originalName,
     mimeType: record.mimeType,
     sizeBytes: record.sizeBytes,
@@ -612,10 +614,7 @@ export async function uploadTeacherCourseSyllabus(
     throw new CourseOperationError("教学大纲文件保存失败，请稍后重试。", 500);
   }
 
-  let transactionResult: {
-    savedSyllabus: CourseSyllabusRecord;
-    previousStorageKey: string | null;
-  };
+  let transactionResult: { savedSyllabus: CourseSyllabusRecord };
 
   try {
     transactionResult = await prisma.$transaction(async (transaction) => {
@@ -632,13 +631,17 @@ export async function uploadTeacherCourseSyllabus(
         courseId,
         transaction,
       );
-      const nextSyllabus = await upsertCourseSyllabusRecord(
+      const nextSyllabus = await createCourseSyllabusRecord(
         {
           courseId,
           uploadedById: teacherId,
+          versionNumber: (previousSyllabus?.versionNumber ?? 0) + 1,
           originalName: upload.originalName,
           mimeType: upload.mimeType,
           sizeBytes: upload.sizeBytes,
+          checksumSha256: createHash("sha256")
+            .update(upload.data)
+            .digest("hex"),
           storageKey,
         },
         transaction,
@@ -661,24 +664,11 @@ export async function uploadTeacherCourseSyllabus(
 
       return {
         savedSyllabus: nextSyllabus,
-        previousStorageKey: previousSyllabus?.storageKey ?? null,
       };
     });
   } catch (error: unknown) {
     await cleanupSavedSyllabusFile(storage, storageKey, logger);
     throw error;
-  }
-
-  if (
-    transactionResult.previousStorageKey &&
-    transactionResult.previousStorageKey !==
-      transactionResult.savedSyllabus.storageKey
-  ) {
-    await cleanupSavedSyllabusFile(
-      storage,
-      transactionResult.previousStorageKey,
-      logger,
-    );
   }
 
   return syllabusViewFromRecord(transactionResult.savedSyllabus);
@@ -894,8 +884,7 @@ async function deleteCourseSyllabusParseDrafts(
 ): Promise<void> {
   const delegate = (
     transaction as unknown as OptionalSyllabusParseDraftDelegate
-  )
-    .syllabusParseDraft;
+  ).syllabusParseDraft;
   if (delegate) {
     await delegate.deleteMany({ where: { courseId } });
   }

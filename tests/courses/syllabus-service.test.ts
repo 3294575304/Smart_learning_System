@@ -130,8 +130,9 @@ test("教师课程教学大纲上传、替换、校验、清理和审计", async
       assert.equal(queried?.id, uploaded.id);
       assert.equal(queried?.originalName, "python-syllabus.pdf");
 
-      const firstRecord = await prisma.courseSyllabus.findUniqueOrThrow({
+      const firstRecord = await prisma.courseSyllabus.findFirstOrThrow({
         where: { courseId: course.id },
+        orderBy: { versionNumber: "desc" },
         select: { id: true, storageKey: true },
       });
       assert.equal(
@@ -145,11 +146,14 @@ test("教师课程教学大纲上传、替换、校验、清理和审计", async
         uploadFile("python-syllabus-v2.pdf", "application/pdf", pdfB),
         auditContext,
       );
-      assert.equal(replaced.id, uploaded.id);
+      assert.notEqual(replaced.id, uploaded.id);
+      assert.equal(replaced.versionNumber, 2);
+      touchedSyllabusIds.push(replaced.id);
       assert.equal(replaced.originalName, "python-syllabus-v2.pdf");
 
-      const replacedRecord = await prisma.courseSyllabus.findUniqueOrThrow({
+      const replacedRecord = await prisma.courseSyllabus.findFirstOrThrow({
         where: { courseId: course.id },
+        orderBy: { versionNumber: "desc" },
         select: { id: true, storageKey: true },
       });
       assert.notEqual(replacedRecord.storageKey, firstRecord.storageKey);
@@ -157,14 +161,16 @@ test("教师课程教学大纲上传、替换、校验、清理和审计", async
         (await storage.read(replacedRecord.storageKey)).equals(pdfB),
         true,
       );
-      await assert.rejects(() => storage.read(firstRecord.storageKey));
-
-      const beforeFailureRecord = await prisma.courseSyllabus.findUniqueOrThrow(
-        {
-          where: { courseId: course.id },
-          select: { originalName: true, storageKey: true },
-        },
+      assert.equal(
+        (await storage.read(firstRecord.storageKey)).equals(pdfA),
+        true,
       );
+
+      const beforeFailureRecord = await prisma.courseSyllabus.findFirstOrThrow({
+        where: { courseId: course.id },
+        orderBy: { versionNumber: "desc" },
+        select: { originalName: true, storageKey: true },
+      });
       const failingStorage: StorageService = {
         save: async () => {
           throw new Error("storage unavailable");
@@ -182,8 +188,9 @@ test("教师课程教学大纲上传、替换、校验、清理和审计", async
         ),
       );
       const afterSaveFailureRecord =
-        await prisma.courseSyllabus.findUniqueOrThrow({
+        await prisma.courseSyllabus.findFirstOrThrow({
           where: { courseId: course.id },
+          orderBy: { versionNumber: "desc" },
           select: { originalName: true, storageKey: true },
         });
       assert.deepEqual(afterSaveFailureRecord, beforeFailureRecord);
@@ -202,11 +209,13 @@ test("教师课程教学大纲上传、替换、校验、清理和审计", async
         ),
       );
       await assert.rejects(() => storage.read(dbFailureStorageKey));
-      const afterDbFailureRecord =
-        await prisma.courseSyllabus.findUniqueOrThrow({
+      const afterDbFailureRecord = await prisma.courseSyllabus.findFirstOrThrow(
+        {
           where: { courseId: course.id },
+          orderBy: { versionNumber: "desc" },
           select: { originalName: true, storageKey: true },
-        });
+        },
+      );
       assert.deepEqual(afterDbFailureRecord, beforeFailureRecord);
 
       await assert.rejects(() =>
@@ -281,7 +290,7 @@ test("教师课程教学大纲上传、替换、校验、清理和审计", async
         where: {
           action: AuditAction.COURSE_UPDATED,
           targetType: AuditTargetType.COURSE_FILE,
-          targetId: uploaded.id,
+          targetId: { in: touchedSyllabusIds },
         },
       });
       assert.equal(auditCount, 2);
