@@ -1,9 +1,16 @@
-import "server-only";
-
-import { ClassroomStatus, MembershipStatus, Prisma } from "@prisma/client";
+import {
+  AuditAction,
+  AuditTargetType,
+  ClassroomStatus,
+  MembershipStatus,
+  Prisma,
+  StudentImportBatchStatus,
+} from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { ResourceNotFoundError } from "@/services/auth/authorization";
+import { ResourceNotFoundError } from "@/services/auth/policy";
+import { writeGovernanceAuditLog } from "@/services/audit/repository";
+import type { AuditRequestContext } from "@/services/audit/types";
 import { ClassroomOperationError } from "@/services/classrooms/errors";
 import { generateJoinCode } from "@/services/classrooms/join-code";
 import {
@@ -11,6 +18,8 @@ import {
   assertMembershipCanJoin,
   assertStudentCanLeave,
 } from "@/services/classrooms/policy";
+import { getStorageService } from "@/services/storage";
+import type { StorageService } from "@/services/storage/types";
 
 const INVITE_CODE_ATTEMPTS = 8;
 
@@ -22,6 +31,7 @@ export interface TeacherClassroomListItem {
   status: ClassroomStatus;
   allowStudentLeave: boolean;
   studentCount: number;
+  course: { id: string; name: string } | null;
   createdAt: Date;
 }
 
@@ -91,6 +101,7 @@ export async function listTeacherClassrooms(
       status: true,
       allowStudentLeave: true,
       createdAt: true,
+      course: { select: { id: true, name: true } },
       _count: {
         select: {
           memberships: { where: { status: MembershipStatus.ACTIVE } },
@@ -103,6 +114,177 @@ export async function listTeacherClassrooms(
     ...classroom,
     studentCount: _count.memberships,
   }));
+}
+
+export interface ClassroomDissolutionResult {
+  id: string;
+  name: string;
+  releasedStudentCount: number;
+  dissolvedAt: Date;
+}
+
+export interface ClassroomDissolutionDependencies {
+  writeAuditLog?: typeof writeGovernanceAuditLog;
+  logger?: Pick<Console, "error">;
+  storage?: StorageService;
+}
+
+function isTransactionConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2034"
+  );
+}
+
+export async function dissolveTeacherClassroom(
+  teacherId: string,
+  classroomId: string,
+  context: AuditRequestContext,
+  dependencies: ClassroomDissolutionDependencies = {},
+): Promise<ClassroomDissolutionResult> {
+  const writeAuditLog = dependencies.writeAuditLog ?? writeGovernanceAuditLog;
+  const logger = dependencies.logger ?? console;
+  const storage = dependencies.storage ?? getStorageService();
+  let storageKeys: string[] = [];
+  let result: ClassroomDissolutionResult | undefined;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const transactionResult = await prisma.$transaction(
+        async (transaction) => {
+          await transaction.$queryRaw<Array<{ id: string }>>`
+            SELECT "id" FROM "Classroom"
+            WHERE "id" = ${classroomId} AND "teacherId" = ${teacherId}
+            FOR UPDATE
+          `;
+          const classroom = await transaction.classroom.findFirst({
+            where: { id: classroomId, teacherId },
+            select: {
+              id: true,
+              name: true,
+              teacherId: true,
+              courseId: true,
+              joinCode: true,
+              _count: { select: { memberships: true } },
+            },
+          });
+          if (!classroom) {
+            throw new ResourceNotFoundError("班级不存在");
+          }
+
+          await transaction.$queryRaw<Array<{ id: string }>>`
+            SELECT "id" FROM "StudentImportBatch"
+            WHERE "classroomId" = ${classroomId}
+            FOR UPDATE
+          `;
+          const [assignmentCount, analysisCount, processingBatchCount] =
+            await Promise.all([
+              transaction.assignment.count({ where: { classroomId } }),
+              transaction.aIAnalysis.count({ where: { classroomId } }),
+              transaction.studentImportBatch.count({
+                where: {
+                  classroomId,
+                  status: StudentImportBatchStatus.PROCESSING,
+                },
+              }),
+            ]);
+          if (assignmentCount > 0) {
+            throw new ClassroomOperationError(
+              "该班级已经产生作业、学生作答、成绩或批改记录，不能解散。",
+              409,
+            );
+          }
+          if (analysisCount > 0) {
+            throw new ClassroomOperationError(
+              "该班级已经产生学情分析、画像或推荐数据，不能解散。",
+              409,
+            );
+          }
+          if (processingBatchCount > 0) {
+            throw new ClassroomOperationError(
+              "该班级的学生名单正在处理，请稍后再试。",
+              409,
+            );
+          }
+
+          const files = await transaction.courseFileVersion.findMany({
+            where: { classroomId },
+            select: { storageKey: true },
+          });
+          const dissolvedAt = new Date();
+          await transaction.studentIdentityClassroomAssignment.deleteMany({
+            where: { classroomId },
+          });
+          await transaction.studentImportBatch.deleteMany({
+            where: { classroomId },
+          });
+          await transaction.classMembership.deleteMany({
+            where: { classroomId },
+          });
+          await transaction.courseFileVersion.deleteMany({
+            where: { classroomId },
+          });
+          await transaction.classroom.delete({ where: { id: classroomId } });
+
+          await writeAuditLog(transaction, {
+            actorId: teacherId,
+            action: AuditAction.CLASSROOM_DISSOLVED,
+            targetType: AuditTargetType.CLASSROOM,
+            targetId: classroomId,
+            summary: `解散班级：${classroom.name}`,
+            beforeData: {
+              classroomId,
+              name: classroom.name,
+              teacherId: classroom.teacherId,
+              memberCount: classroom._count.memberships,
+              courseId: classroom.courseId,
+              joinCode: classroom.joinCode,
+            },
+            afterData: {
+              classroomId,
+              teacherId,
+              courseId: classroom.courseId,
+              dissolvedById: teacherId,
+              dissolvedAt: dissolvedAt.toISOString(),
+            },
+            context,
+          });
+          return {
+            result: {
+              id: classroomId,
+              name: classroom.name,
+              releasedStudentCount: classroom._count.memberships,
+              dissolvedAt,
+            },
+            storageKeys: files.map((file) => file.storageKey),
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      result = transactionResult.result;
+      storageKeys = transactionResult.storageKeys;
+      break;
+    } catch (error: unknown) {
+      if (isTransactionConflict(error) && attempt < 2) continue;
+      throw error;
+    }
+  }
+
+  if (!result) {
+    throw new ClassroomOperationError("班级解散冲突，请稍后重试。", 409);
+  }
+  const cleanupResults = await Promise.allSettled(
+    [...new Set(storageKeys)].map((key) => storage.delete(key)),
+  );
+  cleanupResults.forEach((cleanup, index) => {
+    if (cleanup.status === "rejected") {
+      logger.error(
+        `Failed to delete classroom file after dissolution: ${storageKeys[index]}`,
+        cleanup.reason,
+      );
+    }
+  });
+  return result;
 }
 
 export async function getTeacherClassroom(
@@ -121,6 +303,7 @@ export async function getTeacherClassroom(
       allowStudentLeave: true,
       closedAt: true,
       createdAt: true,
+      course: { select: { id: true, name: true } },
       memberships: {
         where: { status: MembershipStatus.ACTIVE },
         orderBy: { joinedAt: "asc" },

@@ -31,6 +31,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   QUESTION_MADE_PRIVATE: "题目设为私有",
   QUESTION_DISABLED: "停用题目",
   CLASSROOM_CLOSED_BY_ADMIN: "管理员关闭班级",
+  CLASSROOM_DISSOLVED: "教师解散班级",
   COURSE_TEMPLATE_CREATED: "创建课程模板",
   COURSE_TEMPLATE_UPDATED: "更新课程模板",
   COURSE_TEMPLATE_ENABLED: "启用课程模板",

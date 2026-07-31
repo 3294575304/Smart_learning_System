@@ -576,3 +576,66 @@ test("课程数据库删除成功后文件清理失败只记录错误", async ()
 
   await prisma.auditLog.deleteMany({ where: { targetId: course.id } });
 });
+
+test("已执行但未落地任何业务关系的空导入批次不阻止删除草稿课程", async () => {
+  const suffix = randomBytes(4).toString("hex");
+  const [teacher, template] = await Promise.all([
+    prisma.user.findUniqueOrThrow({
+      where: { email: "teacher@example.com" },
+      select: { id: true },
+    }),
+    prisma.courseTemplate.findFirstOrThrow({
+      where: { code: "python-programming-v1" },
+      select: { id: true },
+    }),
+  ]);
+  const course = await prisma.course.create({
+    data: {
+      templateId: template.id,
+      teacherId: teacher.id,
+      courseNo: `EMPTY-IMPORT-${suffix.toUpperCase()}`,
+      term: "2026-2027-1",
+      name: "空导入批次删除测试",
+    },
+  });
+  const file = await prisma.courseFileVersion.create({
+    data: {
+      courseId: course.id,
+      uploadedById: teacher.id,
+      fileKind: CourseFileKind.IMPORT_SOURCE,
+      fileKey: "empty-import",
+      title: "空名单",
+      originalFileName: "empty.xlsx",
+      storageKey: `empty-import/${suffix}.xlsx`,
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      sizeBytes: 1,
+      checksumSha256: suffix.padEnd(64, "0"),
+    },
+  });
+  await prisma.studentImportBatch.create({
+    data: {
+      courseId: course.id,
+      createdById: teacher.id,
+      sourceFileVersionId: file.id,
+      status: StudentImportBatchStatus.SUCCEEDED,
+      idempotencyKey: `empty-${suffix}`,
+      sourceFileName: "empty.xlsx",
+      sourceFileChecksum: suffix.padEnd(64, "0"),
+      sourceFileMimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      sourceFileSizeBytes: 1,
+      mappingConfig: {},
+      importedRows: 0,
+    },
+  });
+  await deleteTeacherCourse(teacher.id, course.id, auditContext, {
+    storage: {
+      save: async () => undefined,
+      read: async () => Buffer.alloc(0),
+      delete: async () => undefined,
+    },
+  });
+  assert.equal(await prisma.course.count({ where: { id: course.id } }), 0);
+  await prisma.auditLog.deleteMany({ where: { targetId: course.id } });
+});

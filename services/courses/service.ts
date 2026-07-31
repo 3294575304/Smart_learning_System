@@ -1022,20 +1022,25 @@ export async function deleteTeacherCourse(
             }
           }
 
-          const formalImportBatchCount =
+          const processingImportBatchCount =
+            await transaction.studentImportBatch.count({
+              where: {
+                courseId,
+                status: StudentImportBatchStatus.PROCESSING,
+              },
+            });
+          if (processingImportBatchCount > 0) {
+            throw new CourseOperationError(
+              "该课程的学生名单正在处理，请稍后再试。",
+              409,
+            );
+          }
+
+          const materializedImportBatchCount =
             await transaction.studentImportBatch.count({
               where: {
                 courseId,
                 OR: [
-                  {
-                    status: {
-                      in: [
-                        StudentImportBatchStatus.PROCESSING,
-                        StudentImportBatchStatus.SUCCEEDED,
-                        StudentImportBatchStatus.PARTIAL_FAILED,
-                      ],
-                    },
-                  },
                   { importedRows: { gt: 0 } },
                   { identityAssignments: { some: {} } },
                   {
@@ -1057,7 +1062,7 @@ export async function deleteTeacherCourse(
                 ],
               },
             });
-          if (formalImportBatchCount > 0) {
+          if (materializedImportBatchCount > 0) {
             throw new CourseOperationError(
               "该课程的学生名单已经正式导入或正在处理，不能删除。",
               409,

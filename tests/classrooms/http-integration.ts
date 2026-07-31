@@ -114,8 +114,11 @@ async function createClassroom(
 async function main(): Promise<void> {
   try {
     await waitForServer();
-    const [teacher, teacherTwo, student, studentTwo, studentThree] =
+    const [admin, teacher, teacherTwo, student, studentTwo, studentThree] =
       await Promise.all([
+        prisma.user.findUniqueOrThrow({
+          where: { email: "admin@example.com" },
+        }),
         prisma.user.findUniqueOrThrow({
           where: { email: "teacher@example.com" },
         }),
@@ -133,18 +136,88 @@ async function main(): Promise<void> {
         }),
       ]);
     const [
+      adminCookie,
       teacherCookie,
       teacherTwoCookie,
       studentCookie,
       studentTwoCookie,
       studentThreeCookie,
     ] = await Promise.all([
+      sessionCookie(admin.id),
       sessionCookie(teacher.id),
       sessionCookie(teacherTwo.id),
       sessionCookie(student.id),
       sessionCookie(studentTwo.id),
       sessionCookie(studentThree.id),
     ]);
+
+    const dissolvable = await createClassroom(
+      teacherCookie,
+      "HTTP 可解散班级",
+      false,
+    );
+    assert.equal(
+      (
+        await fetch(`${baseUrl}/api/teacher/classrooms/${dissolvable.id}`, {
+          method: "DELETE",
+        })
+      ).status,
+      401,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/classrooms/${dissolvable.id}`,
+          studentCookie,
+          "DELETE",
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/classrooms/${dissolvable.id}`,
+          adminCookie,
+          "DELETE",
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/classrooms/${dissolvable.id}`,
+          teacherTwoCookie,
+          "DELETE",
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/classrooms/${dissolvable.id}`,
+          teacherCookie,
+          "DELETE",
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      await prisma.classroom.count({ where: { id: dissolvable.id } }),
+      0,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/classrooms/${dissolvable.id}`,
+          teacherCookie,
+          "DELETE",
+        )
+      ).status,
+      404,
+    );
 
     const invalidCreate = await requestJson(
       "/api/teacher/classrooms",
