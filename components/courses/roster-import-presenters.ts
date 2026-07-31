@@ -42,7 +42,7 @@ export const EXECUTION_ACTION_LABELS: Record<
   StudentImportExecutionAction,
   string
 > = {
-  CREATED_USER: "已新建账号并入班",
+  CREATED_IDENTITY: "已创建待认领身份并预分配班级",
   MATCHED_EXISTING_USER: "已有账号已入班",
   ALREADY_ENROLLED: "原本已在班级",
   SKIPPED: "已跳过",
@@ -72,7 +72,7 @@ export function previewBlockingReason(
 
 export function executionSummaryItems(summary: StudentImportExecutionSummary) {
   return [
-    { label: "新建账号", value: summary.createdUserRows },
+    { label: "新增待认领身份", value: summary.createdUserRows },
     { label: "已有账号入班", value: summary.matchedExistingUserRows },
     { label: "原本已在班级", value: summary.alreadyEnrolledRows },
     { label: "跳过", value: summary.skippedRows },

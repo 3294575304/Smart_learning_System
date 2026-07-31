@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Download,
   FileSpreadsheet,
   RefreshCw,
   ShieldAlert,
@@ -28,17 +27,12 @@ import {
   executionSummaryItems,
   previewBlockingReason,
 } from "@/components/courses/roster-import-presenters";
-import {
-  buildInitialCredentialCsv,
-  initialCredentialCsvFilename,
-} from "@/services/student-imports/credential-export";
 import type { StudentImportMappingFormData } from "@/services/student-imports/schemas";
 import type { TeacherCourseClassroomView } from "@/services/courses/types";
 import type { CourseFileVersionView } from "@/services/course-files/types";
 import type {
   StudentImportExecutionResult,
   StudentImportPreviewPage,
-  StudentInitialCredential,
 } from "@/services/student-imports/types";
 
 type CourseFileVersionClientView = Omit<CourseFileVersionView, "createdAt"> & {
@@ -63,22 +57,6 @@ function formatFileSize(value: number): string {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function downloadTextFile(filename: string, content: string): void {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.rel = "noopener";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
 
 function WizardSteps({ currentStep }: { currentStep: number }) {
@@ -413,19 +391,12 @@ export function CourseRosterImportWizard({
   const [preview, setPreview] = useState<StudentImportPreviewPage | null>(null);
   const [execution, setExecution] =
     useState<StudentImportExecutionResult | null>(null);
-  const [credentials, setCredentials] = useState<StudentInitialCredential[]>(
-    [],
-  );
-  const [downloadComplete, setDownloadComplete] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-
-  const hasUndownloadedCredentials = credentials.length > 0;
 
   const loadFiles = useCallback(async () => {
     setIsLoading(true);
@@ -446,38 +417,6 @@ export function CourseRosterImportWizard({
     void loadFiles();
   }, [loadFiles]);
 
-  useEffect(() => {
-    if (!hasUndownloadedCredentials) return;
-
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    const interceptLinks = (event: MouseEvent) => {
-      const element = event.target;
-      if (!(element instanceof Element)) return;
-      const link = element.closest("a");
-      if (!link || link.target === "_blank" || link.hasAttribute("download")) {
-        return;
-      }
-      if (
-        !window.confirm(
-          "一次性账号表尚未下载。离开后无法恢复本批次明文初始密码，仍要离开吗？",
-        )
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-
-    window.addEventListener("beforeunload", beforeUnload);
-    document.addEventListener("click", interceptLinks, true);
-    return () => {
-      window.removeEventListener("beforeunload", beforeUnload);
-      document.removeEventListener("click", interceptLinks, true);
-    };
-  }, [hasUndownloadedCredentials]);
-
   const selectedClassroom =
     linkedClassrooms.find(
       (classroom) => classroom.id === selectedClassroomId,
@@ -486,8 +425,6 @@ export function CourseRosterImportWizard({
   function resetDownstreamState() {
     setPreview(null);
     setExecution(null);
-    setCredentials([]);
-    setDownloadComplete(false);
     setMessage(null);
   }
 
@@ -613,49 +550,7 @@ export function CourseRosterImportWizard({
       return;
     }
     setExecution(result.data);
-    setCredentials(result.data.initialCredentials);
-    setMessage(
-      result.data.initialCredentials.length > 0
-        ? "正式导入完成。请立即下载本批次一次性账号表。"
-        : "正式导入完成，本批次没有新建学生账号。",
-    );
-  }
-
-  async function downloadCredentials() {
-    if (!preview || credentials.length === 0) return;
-    setIsDownloading(true);
-    setError(null);
-
-    try {
-      downloadTextFile(
-        initialCredentialCsvFilename(preview.batch.id),
-        buildInitialCredentialCsv(credentials),
-      );
-    } catch {
-      setIsDownloading(false);
-      setError("账号表生成失败，明文凭据仍保留在本页，请立即重试。");
-      return;
-    }
-
-    const result = await requestApi<{
-      batchId: string;
-      downloadCount: number;
-    }>(
-      `/api/teacher/student-import-batches/${preview.batch.id}/account-sheet-downloads`,
-      { method: "POST" },
-    );
-    setCredentials([]);
-    setIsDownloading(false);
-    setDownloadComplete(true);
-    if (!result.success) {
-      setError(
-        "账号表已由浏览器下载，但下载审计记录失败；本页已清除明文，不能再次下载。",
-      );
-      return;
-    }
-    setMessage(
-      "一次性账号表已下载，本页已清除明文初始密码。请教师通过已有联系方式自行发给学生。",
-    );
+    setMessage("正式导入完成。新学生可使用名单中的学号和姓名认领账号。");
   }
 
   const blockingReason = preview
@@ -955,7 +850,7 @@ export function CourseRosterImportWizard({
                 正在正式导入学生名单
               </p>
               <p className="mt-1 text-sm text-blue-800">
-                系统正在事务内匹配账号、创建新账号并加入班级，请勿重复提交或关闭页面。
+                系统正在事务内匹配已有账号、创建待认领身份并预分配班级，请勿重复提交或关闭页面。
               </p>
             </div>
           ) : execution && preview ? (
@@ -971,48 +866,17 @@ export function CourseRosterImportWizard({
                 ))}
               </div>
 
-              {credentials.length > 0 ? (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 p-5 text-amber-950">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-semibold">
-                        有 {credentials.length} 个新账号等待交付
-                      </p>
-                      <p className="mt-1 text-sm">
-                        一次性账号表仅可下载一次。离开或刷新后，明文初始密码无法恢复。
-                      </p>
-                    </div>
-                    <button
-                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-                      disabled={isDownloading}
-                      onClick={() => void downloadCredentials()}
-                      type="button"
-                    >
-                      {isDownloading ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="h-4 w-4" />
-                      )}
-                      {isDownloading ? "正在生成" : "下载一次性账号表"}
-                    </button>
-                  </div>
-                </div>
-              ) : downloadComplete ? (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                  <p className="font-semibold">账号表已下载且明文已清除</p>
-                  <p className="mt-1">
-                    请教师通过已有联系方式自行发给学生。平台不提供邮件、短信、微信或其他自动发送功能。
-                  </p>
-                </div>
-              ) : execution.summary.createdUserRows === 0 ? (
+              {execution.summary.createdUserRows === 0 ? (
                 <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-700">
-                  本批次没有新建账号，因此无需下载一次性账号表。
+                  本批次没有新增待认领学生身份。
                 </div>
               ) : (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                  <p className="font-semibold">本页没有可下载的明文初始密码</p>
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                  <p className="font-semibold">
+                    已新增 {execution.summary.createdUserRows} 个待认领学生身份
+                  </p>
                   <p className="mt-1">
-                    该批次此前已经成功执行，或首次响应未能返回到当前页面。出于安全限制，系统不能恢复旧密码；请对尚未交付的学生逐个发起密码重置。
+                    请通知学生使用名单中的学号和姓名在注册页认领账号。导入过程不会创建默认密码。
                   </p>
                 </div>
               )}
@@ -1027,7 +891,7 @@ export function CourseRosterImportWizard({
               <p className="font-semibold">本次导入尚未完成</p>
               <p className="mt-1">
                 {error ??
-                  "未读取到导入结果。可以返回预览页再次提交；服务端幂等机制会避免重复创建账号。"}
+                  "未读取到导入结果。可以返回预览页再次提交；服务端幂等机制会避免重复创建身份。"}
               </p>
               <button
                 className="mt-3 inline-flex items-center gap-2 font-medium"

@@ -21,17 +21,14 @@ import {
   executeAdminStudentImportBatch,
   executeTeacherStudentImportBatch,
   classifyStudentImportExecutionError,
-  markTeacherStudentImportAccountSheetDownloaded,
   previewTeacherStudentImportFromFile,
 } from "@/services/student-imports/service";
-import { buildInitialCredentialCsv } from "@/services/student-imports/credential-export";
 import { studentImportPreviewRequestSchema } from "@/services/student-imports/schemas";
 import type { StorageService } from "@/services/storage/types";
 import {
   buildCsvFixture,
   officialStudentRosterHeaders,
 } from "../helpers/student-import-fixtures";
-import { compare } from "bcryptjs";
 
 const prisma = new PrismaClient();
 const auditContext = {
@@ -253,6 +250,12 @@ async function importedUserIdsByPrefix(prefix: string): Promise<string[]> {
 }
 
 async function cleanup(context: ImportExecutionContext): Promise<void> {
+  await prisma.studentIdentityClassroomAssignment.deleteMany({
+    where: { classroomId: { in: context.classroomIds } },
+  });
+  await prisma.studentIdentity.deleteMany({
+    where: { studentNo: { startsWith: context.studentNoPrefix } },
+  });
   const prefixedUserIds = await importedUserIdsByPrefix(
     context.studentNoPrefix,
   );
@@ -379,33 +382,14 @@ test("正式导入创建账号、匹配账号、跳过已入班并保持审计�
       failedRows: 0,
       importedRows: 2,
     });
-    assert.equal(result.initialCredentials.length, 1);
-    assert.deepEqual(result.initialCredentials[0], {
-      rowNumber: 2,
-      studentName: "新建学生",
-      studentNo: `${context.studentNoPrefix}001`,
-      className: "软件1班",
-      loginAccount: `${context.studentNoPrefix}001`,
-      initialPassword: "ImportPass123A",
-      contact: null,
+    assert.equal(result.initialCredentials.length, 0);
+    const pendingIdentity = await prisma.studentIdentity.findUniqueOrThrow({
+      where: { studentNo: `${context.studentNoPrefix}001` },
+      include: { assignments: true },
     });
-
-    const newUser = await prisma.user.findFirstOrThrow({
-      where: { profile: { studentNo: `${context.studentNoPrefix}001` } },
-      include: { profile: true },
-    });
-    assert.equal(newUser.role, Role.STUDENT);
-    assert.equal(newUser.email, null);
-    assert.equal(newUser.mustChangePassword, true);
-    assert.equal(newUser.passwordHash.includes("ImportPass123A"), false);
-    assert.equal(
-      await compare(
-        result.initialCredentials[0].initialPassword,
-        newUser.passwordHash,
-      ),
-      true,
-    );
-    assert.equal(newUser.profile?.displayName, "新建学生");
+    assert.equal(pendingIdentity.name, "新建学生");
+    assert.equal(pendingIdentity.userId, null);
+    assert.equal(pendingIdentity.assignments.length, 1);
 
     const existingAfter = await prisma.user.findUniqueOrThrow({
       where: { id: existing.id },
@@ -422,7 +406,7 @@ test("正式导入创建账号、匹配账号、跳过已入班并保持审计�
           status: MembershipStatus.ACTIVE,
         },
       }),
-      3,
+      2,
     );
 
     const repeat = await executeTeacherStudentImportBatch(
@@ -468,46 +452,14 @@ test("正式导入创建账号、匹配账号、跳过已入班并保持审计�
       false,
     );
 
-    const csv = buildInitialCredentialCsv(result.initialCredentials);
-    assert.match(csv, /姓名,?|"姓名"/u);
-    assert.match(csv, /ImportPass123A/u);
-    assert.doesNotMatch(csv, /passwordHash|createdUserId|matchedUserId/u);
-
-    const mark = await markTeacherStudentImportAccountSheetDownloaded(
-      context.teacherId,
-      preview.batch.id,
-      auditContext,
-    );
-    assert.equal(mark.downloadCount, 1);
-    assert.equal(mark.createdUserRows, 1);
-    await assert.rejects(
-      () =>
-        markTeacherStudentImportAccountSheetDownloaded(
-          context.teacherId,
-          preview.batch.id,
-          auditContext,
-        ),
-      /不能重复下载/u,
-    );
-    await assert.rejects(
-      () =>
-        markTeacherStudentImportAccountSheetDownloaded(
-          context.teacherTwoId,
-          preview.batch.id,
-          auditContext,
-        ),
-      /导入批次不存在/u,
-    );
-    const downloadAudit = await prisma.auditLog.findFirstOrThrow({
-      where: {
-        targetId: preview.batch.id,
-        action: AuditAction.STUDENT_IMPORT_ACCOUNT_SHEET_DOWNLOADED,
-      },
-      select: { afterData: true },
-    });
     assert.equal(
-      JSON.stringify(downloadAudit.afterData).includes("ImportPass123A"),
-      false,
+      await prisma.auditLog.count({
+        where: {
+          targetId: preview.batch.id,
+          action: AuditAction.STUDENT_IMPORT_ACCOUNT_SHEET_DOWNLOADED,
+        },
+      }),
+      0,
     );
 
     const secondFile = await createRosterFile(context, data);
@@ -527,9 +479,9 @@ test("正式导入创建账号、匹配账号、跳过已入班并保持审计�
       secondPreview.batch.id,
       auditContext,
     );
-    assert.equal(secondResult.summary.createdUserRows, 0);
+    assert.equal(secondResult.summary.createdUserRows, 1);
     assert.equal(secondResult.summary.matchedExistingUserRows, 0);
-    assert.equal(secondResult.summary.alreadyEnrolledRows, 3);
+    assert.equal(secondResult.summary.alreadyEnrolledRows, 2);
     assert.equal(secondResult.summary.skippedRows, 1);
   } finally {
     await cleanup(context);
@@ -559,13 +511,13 @@ test("同一批次并发执行只产生一次正式写入", async () => {
     assert.equal(left.status, StudentImportBatchStatus.SUCCEEDED);
     assert.equal(right.status, StudentImportBatchStatus.SUCCEEDED);
     assert.equal(
-      await prisma.userProfile.count({
+      await prisma.studentIdentity.count({
         where: { studentNo: `${context.studentNoPrefix}101` },
       }),
       1,
     );
     assert.equal(
-      await prisma.classMembership.count({
+      await prisma.studentIdentityClassroomAssignment.count({
         where: { classroomId: context.classroomId },
       }),
       1,
@@ -634,23 +586,18 @@ test("不同批次并发导入同一学号会重试并只创建一个账号", as
     assert.equal(firstResult.status, StudentImportBatchStatus.SUCCEEDED);
     assert.equal(secondResult.status, StudentImportBatchStatus.SUCCEEDED);
     assert.equal(
-      firstResult.summary.createdUserRows +
-        secondResult.summary.createdUserRows,
-      1,
-    );
-    assert.equal(
       firstResult.initialCredentials.length +
         secondResult.initialCredentials.length,
-      1,
+      0,
     );
     assert.equal(
-      await prisma.userProfile.count({
+      await prisma.studentIdentity.count({
         where: { studentNo: sharedStudentNo },
       }),
       1,
     );
     assert.equal(
-      await prisma.classMembership.count({
+      await prisma.studentIdentityClassroomAssignment.count({
         where: {
           classroomId: {
             in: [firstContext.classroomId, secondContext.classroomId],
@@ -883,7 +830,7 @@ test("密码哈希在交互事务开始前完成", async () => {
       },
     );
 
-    assert.equal(hashCompleted, true);
+    assert.equal(hashCompleted, false);
     assert.equal(result.status, StudentImportBatchStatus.SUCCEEDED);
     assert.equal(result.summary.createdUserRows, 1);
   } finally {
@@ -912,15 +859,15 @@ test("96 行新账号名单可在正式事务中完整写入", async () => {
     assert.equal(result.status, StudentImportBatchStatus.SUCCEEDED);
     assert.equal(result.summary.createdUserRows, 96);
     assert.equal(result.summary.importedRows, 96);
-    assert.equal(result.initialCredentials.length, 96);
+    assert.equal(result.initialCredentials.length, 0);
     assert.equal(
-      await prisma.userProfile.count({
+      await prisma.studentIdentity.count({
         where: { studentNo: { startsWith: context.studentNoPrefix } },
       }),
       96,
     );
     assert.equal(
-      await prisma.classMembership.count({
+      await prisma.studentIdentityClassroomAssignment.count({
         where: { classroomId: context.classroomId },
       }),
       96,
@@ -1008,7 +955,7 @@ test("真实事务超时分类为 P2028 超时且失败批次可以安全重试"
     );
     assert.equal(retried.status, StudentImportBatchStatus.SUCCEEDED);
     assert.equal(retried.summary.createdUserRows, 1);
-    assert.equal(retried.initialCredentials.length, 1);
+    assert.equal(retried.initialCredentials.length, 0);
   } finally {
     await cleanup(context);
   }

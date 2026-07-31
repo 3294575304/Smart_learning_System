@@ -134,7 +134,7 @@ export interface StudentImportSummary {
 }
 
 export type StudentImportExecutionAction =
-  | "CREATED_USER"
+  | "CREATED_IDENTITY"
   | "MATCHED_EXISTING_USER"
   | "ALREADY_ENROLLED"
   | "SKIPPED"

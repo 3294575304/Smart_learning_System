@@ -28,7 +28,7 @@ export default async function RegisterPage() {
           {config.platformName}学生注册
         </h1>
         <p className="text-muted-foreground mt-2 text-sm">
-          注册后将直接进入学生工作台。
+          学生账号仅限已导入名单中的学生注册。请使用教师提供的学号，并填写与名单一致的姓名。
         </p>
         {config.allowSelfRegistration ? (
           <RegisterForm />

@@ -6,7 +6,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { compare } from "bcryptjs";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
 import { assertIsolatedIntegrationEnvironment } from "../integration/database";
@@ -987,9 +986,7 @@ async function main(): Promise<void> {
     const initialCredentials = concurrentExecutionResults.flatMap(
       (result) => result.data.initialCredentials,
     );
-    assert.equal(initialCredentials.length, 1);
-    assert.equal(initialCredentials[0]?.studentNo, "20260003");
-    assert.equal(initialCredentials[0]?.studentName, "学生三");
+    assert.equal(initialCredentials.length, 0);
     assert.equal(
       concurrentExecutionResults.every(
         (result) =>
@@ -1001,32 +998,14 @@ async function main(): Promise<void> {
       true,
     );
 
-    const importedRosterStudent = await prisma.user.findFirstOrThrow({
-      where: { profile: { studentNo: "20260003" } },
-      select: {
-        id: true,
-        passwordHash: true,
-        mustChangePassword: true,
-        profile: { select: { displayName: true, studentNo: true } },
-      },
-    });
-    createdImportUserIds.push(importedRosterStudent.id);
-    assert.equal(importedRosterStudent.mustChangePassword, true);
-    assert.equal(importedRosterStudent.profile?.studentNo, "20260003");
-    assert.equal(importedRosterStudent.profile?.displayName, "学生三");
-    assert.equal(
-      await compare(
-        initialCredentials[0]?.initialPassword ?? "",
-        importedRosterStudent.passwordHash,
-      ),
-      true,
-    );
-    assert.equal(
-      importedRosterStudent.passwordHash.includes(
-        initialCredentials[0]?.initialPassword ?? "",
-      ),
-      false,
-    );
+    const importedRosterIdentity =
+      await prisma.studentIdentity.findUniqueOrThrow({
+        where: { studentNo: "20260003" },
+        include: { assignments: true },
+      });
+    assert.equal(importedRosterIdentity.userId, null);
+    assert.equal(importedRosterIdentity.name, "学生三");
+    assert.equal(importedRosterIdentity.assignments.length, 1);
 
     const existingRosterStudentAfter = await prisma.user.findUniqueOrThrow({
       where: { id: existingRosterStudent.id },
@@ -1050,11 +1029,11 @@ async function main(): Promise<void> {
         where: {
           classroomId: classroom.id,
           studentId: {
-            in: [existingRosterStudent.id, importedRosterStudent.id],
+            in: [existingRosterStudent.id],
           },
         },
       }),
-      2,
+      1,
     );
 
     const replayExecutionResponse = await requestJson(
@@ -1088,9 +1067,7 @@ async function main(): Promise<void> {
       }),
     ]);
     assert.equal(
-      JSON.stringify(persistedSensitiveData).includes(
-        initialCredentials[0]?.initialPassword ?? "",
-      ),
+      JSON.stringify(persistedSensitiveData).includes("passwordHash"),
       false,
     );
 
@@ -1109,7 +1086,7 @@ async function main(): Promise<void> {
     );
     assert.equal(
       (await requestJson(accountSheetPath, teacherCookie, "POST")).status,
-      200,
+      409,
     );
     assert.equal(
       (await requestJson(accountSheetPath, teacherCookie, "POST")).status,
@@ -1124,8 +1101,8 @@ async function main(): Promise<void> {
         },
       },
     );
-    assert.equal(accountSheetState.accountSheetDownloadCount, 1);
-    assert.notEqual(accountSheetState.accountSheetDownloadedAt, null);
+    assert.equal(accountSheetState.accountSheetDownloadCount, 0);
+    assert.equal(accountSheetState.accountSheetDownloadedAt, null);
 
     const repeatRosterUploadResponse = await requestMultipart(
       rosterPath,
@@ -1173,9 +1150,9 @@ async function main(): Promise<void> {
       };
       initialCredentials: unknown[];
     }>;
-    assert.equal(repeatImport.data.summary.createdUserRows, 0);
+    assert.equal(repeatImport.data.summary.createdUserRows, 1);
     assert.equal(repeatImport.data.summary.matchedExistingUserRows, 0);
-    assert.equal(repeatImport.data.summary.alreadyEnrolledRows, 2);
+    assert.equal(repeatImport.data.summary.alreadyEnrolledRows, 1);
     assert.equal(repeatImport.data.initialCredentials.length, 0);
     assert.equal(
       (
@@ -1191,18 +1168,18 @@ async function main(): Promise<void> {
       await prisma.userProfile.count({
         where: { studentNo: { in: ["20260003", "20260004"] } },
       }),
-      2,
+      1,
     );
     assert.equal(
       await prisma.classMembership.count({
         where: {
           classroomId: classroom.id,
           studentId: {
-            in: [existingRosterStudent.id, importedRosterStudent.id],
+            in: [existingRosterStudent.id],
           },
         },
       }),
-      2,
+      1,
     );
 
     assert.equal(
@@ -1286,6 +1263,9 @@ async function main(): Promise<void> {
       });
     }
     if (createdClassroomIds.length > 0) {
+      await prisma.studentIdentityClassroomAssignment.deleteMany({
+        where: { classroomId: { in: createdClassroomIds } },
+      });
       await prisma.classroom.deleteMany({
         where: { id: { in: createdClassroomIds } },
       });

@@ -423,7 +423,9 @@ test("学生名单预览只写入导入暂存区并生成分页错误清单", as
 
     const userCountBefore = await prisma.user.count();
     const profileCountBefore = await prisma.userProfile.count();
-    const membershipCountBefore = await prisma.classMembership.count();
+    const membershipCountBefore = await prisma.classMembership.count({
+      where: { classroomId: context.classroomId },
+    });
     const preview = await previewTeacherStudentImportFromFile(
       context.teacherId,
       file.id,
@@ -502,7 +504,12 @@ test("学生名单预览只写入导入暂存区并生成分页错误清单", as
 
     assert.equal(await prisma.user.count(), userCountBefore);
     assert.equal(await prisma.userProfile.count(), profileCountBefore);
-    assert.equal(await prisma.classMembership.count(), membershipCountBefore);
+    assert.equal(
+      await prisma.classMembership.count({
+        where: { classroomId: context.classroomId },
+      }),
+      membershipCountBefore,
+    );
 
     const auditCount = await prisma.auditLog.count({
       where: {

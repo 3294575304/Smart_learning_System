@@ -146,7 +146,7 @@ test("导入向导覆盖四步、阻断理由与完整结果分类", () => {
       importedRows: 6,
     }),
     [
-      { label: "新建账号", value: 3 },
+      { label: "新增待认领身份", value: 3 },
       { label: "已有账号入班", value: 2 },
       { label: "原本已在班级", value: 1 },
       { label: "跳过", value: 3 },
@@ -155,7 +155,7 @@ test("导入向导覆盖四步、阻断理由与完整结果分类", () => {
   );
 });
 
-test("向导源码保留离页保护、明确处理中状态与禁止自动发送说明", async () => {
+test("向导源码明确展示待认领导入的处理中状态与注册说明", async () => {
   const source = await readFile(
     new URL(
       "../../components/courses/course-roster-import-wizard.tsx",
@@ -164,10 +164,9 @@ test("向导源码保留离页保护、明确处理中状态与禁止自动发�
     "utf8",
   );
 
-  assert.match(source, /beforeunload/u);
-  assert.match(source, /一次性账号表尚未下载/u);
   assert.match(source, /正在正式导入学生名单/u);
   assert.match(source, /disabled=\{\s*isExecuting/u);
-  assert.match(source, /平台不提供邮件、短信、微信或其他自动发送功能/u);
+  assert.match(source, /导入过程不会创建默认密码/u);
+  assert.match(source, /学号和姓名在注册页认领账号/u);
   assert.match(source, /preview\.batch\.summary\.canImport/u);
 });

@@ -1,6 +1,6 @@
 "use server";
 
-import { Prisma, Role, UserStatus } from "@prisma/client";
+import { UserStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -8,7 +8,11 @@ import {
   getSafeErrorMessage,
   roleHomePath,
 } from "@/services/auth/authorization";
-import { hashPassword, verifyPassword } from "@/services/auth/password";
+import { verifyPassword } from "@/services/auth/password";
+import {
+  claimStudentAccount,
+  StudentClaimError,
+} from "@/services/auth/registration";
 import {
   changeInitialPasswordSchema,
   loginSchema,
@@ -125,19 +129,7 @@ export async function registerAction(
 
   try {
     assertRegistrationAvailable(await getSystemConfig());
-    const passwordHash = await hashPassword(parsed.data.password);
-    const user = await prisma.$transaction(async (transaction) => {
-      return transaction.user.create({
-        data: {
-          email: parsed.data.email,
-          passwordHash,
-          role: Role.STUDENT,
-          profile: {
-            create: { displayName: parsed.data.displayName },
-          },
-        },
-      });
-    });
+    const user = await claimStudentAccount(parsed.data);
 
     await createSession(user.id);
 
@@ -152,15 +144,12 @@ export async function registerAction(
     ) {
       return { success: false, error: error.message, status: error.status };
     }
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if (error instanceof StudentClaimError) {
       return {
         success: false,
-        error: "该邮箱已被注册",
-        status: 409,
-        fieldErrors: { email: ["该邮箱已被注册"] },
+        error: error.message,
+        status: error.status,
+        fieldErrors: error.fieldErrors,
       };
     }
 

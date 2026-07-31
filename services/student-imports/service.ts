@@ -9,13 +9,13 @@ import {
   StudentImportBatchStatus,
   StudentImportExecutionStatus,
   StudentImportPreviewStatus,
+  StudentIdentityStatus,
 } from "@prisma/client";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { hashPasswordCore } from "@/services/auth/password-core";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type {
   AuditConfigSnapshot,
@@ -65,6 +65,10 @@ import {
 } from "@/services/student-imports/types";
 import { getStorageService } from "@/services/storage";
 import type { StorageService } from "@/services/storage/types";
+import {
+  normalizeStudentName,
+  normalizeStudentNo,
+} from "@/services/student-identities/normalization";
 
 const MAX_STORED_FIELD_LENGTHS: Record<
   "academicTerm" | "className" | "courseNo" | "studentName" | "studentNo",
@@ -147,6 +151,7 @@ const rowSelect = Prisma.validator<Prisma.StudentImportRowSelect>()({
   matchedMembershipId: true,
   createdUserId: true,
   createdMembershipId: true,
+  studentIdentityId: true,
   processedAt: true,
 });
 
@@ -343,16 +348,6 @@ const SERIALIZABLE_RETRY_BASE_DELAY_MS = 50;
 const IMPORT_TRANSACTION_MAX_WAIT_MS = 5_000;
 const IMPORT_TRANSACTION_TIMEOUT_MS = 30_000;
 
-interface PreparedInitialCredential {
-  initialPassword: string;
-  passwordHash: string;
-}
-
-type PreparedInitialCredentials = ReadonlyMap<
-  string,
-  PreparedInitialCredential
->;
-
 class StudentImportDatabaseOperationError extends Error {
   constructor(
     readonly operation: string,
@@ -362,19 +357,6 @@ class StudentImportDatabaseOperationError extends Error {
     super("Student import database operation failed", { cause });
     this.name = "StudentImportDatabaseOperationError";
   }
-}
-
-function generateInitialPassword(): string {
-  return `Zx${randomBytes(12).toString("base64url")}7a`;
-}
-
-function contactForInitialCredential(
-  mappedValues: Partial<Record<StudentImportField, string>>,
-): string | null {
-  const values = [mappedValues.email, mappedValues.phone]
-    .map((value) => normalizeFieldValue(value ?? ""))
-    .filter(Boolean);
-  return values.length > 0 ? values.join(" / ") : null;
 }
 
 function knownPrismaError(
@@ -1038,7 +1020,7 @@ function baseRowKey(
   sourceRow: Prisma.InputJsonObject,
 ): string {
   const studentNo = mappedValues.studentNo
-    ? normalizeFieldValue(mappedValues.studentNo)
+    ? normalizeStudentNo(mappedValues.studentNo)
     : "";
   if (studentNo) {
     return `studentNo:${sha256Text(studentNo)}`;
@@ -1103,7 +1085,7 @@ async function loadUserMatches(
   const studentNos = Array.from(
     new Set(
       rows
-        .map((row) => normalizeFieldValue(row.mappedValues.studentNo ?? ""))
+        .map((row) => normalizeStudentNo(row.mappedValues.studentNo ?? ""))
         .filter(Boolean),
     ),
   );
@@ -1148,7 +1130,7 @@ async function loadUserMatches(
   const byEmail = new Map<string, UserMatchRecord>();
   for (const user of users as SelectedUserMatchRecord[]) {
     if (user.profile?.studentNo) {
-      byStudentNo.set(normalizeFieldValue(user.profile.studentNo), user);
+      byStudentNo.set(normalizeStudentNo(user.profile.studentNo), user);
     }
     if (user.email) {
       byEmail.set(normalizeEmail(user.email), user);
@@ -1166,7 +1148,7 @@ function applyUserMatches(
   },
 ): PreparedPreviewRow[] {
   return rows.map((row) => {
-    const studentNo = normalizeFieldValue(row.mappedValues.studentNo ?? "");
+    const studentNo = normalizeStudentNo(row.mappedValues.studentNo ?? "");
     const email = normalizeEmail(row.mappedValues.email ?? "");
     const byStudentNo = studentNo ? matches.byStudentNo.get(studentNo) : null;
     const emailMatch = email ? matches.byEmail.get(email) : null;
@@ -1227,6 +1209,59 @@ function applyUserMatches(
       matchedUserId,
       matchedMembershipId,
     };
+  });
+}
+
+async function applyStudentIdentityConflicts(
+  rows: PreparedPreviewRow[],
+): Promise<PreparedPreviewRow[]> {
+  const studentNos = Array.from(
+    new Set(
+      rows
+        .map((row) => normalizeStudentNo(row.mappedValues.studentNo ?? ""))
+        .filter(Boolean),
+    ),
+  );
+  if (studentNos.length === 0) return rows;
+
+  const identities = await prisma.studentIdentity.findMany({
+    where: { studentNo: { in: studentNos } },
+    select: { studentNo: true, name: true, status: true },
+  });
+  const byStudentNo = new Map(
+    identities.map((identity) => [identity.studentNo, identity]),
+  );
+
+  return rows.map((row) => {
+    const identity = byStudentNo.get(
+      normalizeStudentNo(row.mappedValues.studentNo ?? ""),
+    );
+    if (!identity) return row;
+    const issues = [...row.issues];
+    if (
+      normalizeStudentName(identity.name) !==
+      normalizeStudentName(row.mappedValues.studentName ?? "")
+    ) {
+      issues.push(
+        issue(
+          "error",
+          "STUDENT_NO_NAME_CONFLICT",
+          "同一学号对应的名单姓名不一致，请先处理冲突。",
+          { field: "studentName" },
+        ),
+      );
+    }
+    if (identity.status === StudentIdentityStatus.DISABLED) {
+      issues.push(
+        issue(
+          "error",
+          "STUDENT_IDENTITY_DISABLED",
+          "该学生身份已停用，不能继续导入。",
+          { field: "studentNo" },
+        ),
+      );
+    }
+    return { ...row, issues };
   });
 }
 
@@ -1316,7 +1351,10 @@ function prepareRows(
       previewStatus: StudentImportPreviewStatus.PENDING,
       academicTerm: storageText(mappedValues.academicTerm, "academicTerm"),
       courseNo: storageText(mappedValues.courseNo, "courseNo"),
-      studentNo: storageText(mappedValues.studentNo, "studentNo"),
+      studentNo: storageText(
+        normalizeStudentNo(mappedValues.studentNo ?? ""),
+        "studentNo",
+      ),
       studentName: storageText(mappedValues.studentName, "studentName"),
       className: storageText(mappedValues.className, "className"),
       sourceRow,
@@ -1703,7 +1741,11 @@ function executionActionForRow(
   }
 
   if (row.createdUserId) {
-    return "CREATED_USER";
+    return "CREATED_IDENTITY";
+  }
+
+  if (row.studentIdentityId && !row.matchedUserId) {
+    return "CREATED_IDENTITY";
   }
 
   if (
@@ -1746,7 +1788,7 @@ function summarizeExecutionRows(
 
   for (const row of rows) {
     switch (row.action) {
-      case "CREATED_USER":
+      case "CREATED_IDENTITY":
         summary.createdUserRows += 1;
         summary.importedRows += 1;
         break;
@@ -2042,7 +2084,7 @@ async function loadCurrentRowUserMatches(
   byEmail: UserMatchRecord | null;
 }> {
   const mappedValues = mappedValuesFromJson(row.sourceRow);
-  const studentNo = normalizeFieldValue(row.studentNo);
+  const studentNo = normalizeStudentNo(row.studentNo);
   const email = normalizeEmail(mappedValues.email ?? "");
   const conditions: Prisma.UserWhereInput[] = [];
   if (studentNo) {
@@ -2076,7 +2118,7 @@ async function loadCurrentRowUserMatches(
   for (const user of users as SelectedUserMatchRecord[]) {
     if (
       user.profile?.studentNo &&
-      normalizeFieldValue(user.profile.studentNo) === studentNo
+      normalizeStudentNo(user.profile.studentNo) === studentNo
     ) {
       byStudentNo = user;
     }
@@ -2139,37 +2181,6 @@ async function ensureActiveMembership(
   return { membershipId: created.id, alreadyActive: false };
 }
 
-function shouldPrepareInitialCredential(row: StudentImportRowRecord): boolean {
-  return (
-    !row.matchedUserId &&
-    row.previewStatus !== StudentImportPreviewStatus.PENDING &&
-    row.previewStatus !== StudentImportPreviewStatus.INVALID &&
-    row.previewStatus !== StudentImportPreviewStatus.DUPLICATE &&
-    !rowHasBlockingExecutionIssue(row)
-  );
-}
-
-async function prepareInitialCredentials(
-  rows: readonly StudentImportRowRecord[],
-  dependencies: Required<
-    Pick<
-      StudentImportExecutionDependencies,
-      "passwordGenerator" | "passwordHasher"
-    >
-  >,
-): Promise<PreparedInitialCredentials> {
-  const prepared = new Map<string, PreparedInitialCredential>();
-  for (const row of rows) {
-    if (!shouldPrepareInitialCredential(row)) continue;
-    const initialPassword = dependencies.passwordGenerator();
-    prepared.set(row.id, {
-      initialPassword,
-      passwordHash: await dependencies.passwordHasher(initialPassword),
-    });
-  }
-  return prepared;
-}
-
 function throwRowExecutionFailure(input: {
   code: string;
   message: string;
@@ -2190,8 +2201,7 @@ async function applyExecutableImportRow(
   row: StudentImportRowRecord,
   batch: StudentImportExecutionBatchRecord,
   now: Date,
-  preparedCredentials: PreparedInitialCredentials,
-): Promise<StudentInitialCredential | null> {
+): Promise<void> {
   if (row.previewStatus === StudentImportPreviewStatus.PENDING) {
     await importDatabaseOperation("SKIP_EMPTY_IMPORT_ROW", row.rowNumber, () =>
       transaction.studentImportRow.update({
@@ -2203,7 +2213,7 @@ async function applyExecutableImportRow(
         },
       }),
     );
-    return null;
+    return;
   }
 
   if (
@@ -2227,7 +2237,7 @@ async function applyExecutableImportRow(
   }
 
   const mappedValues = mappedValuesFromJson(row.sourceRow);
-  const studentNo = normalizeFieldValue(row.studentNo);
+  const studentNo = normalizeStudentNo(row.studentNo);
   const email = normalizeEmail(mappedValues.email ?? "");
   const matches = await loadCurrentRowUserMatches(
     transaction,
@@ -2282,7 +2292,7 @@ async function applyExecutableImportRow(
           },
         }),
     );
-    return null;
+    return;
   }
 
   if (byEmail) {
@@ -2293,52 +2303,80 @@ async function applyExecutableImportRow(
     });
   }
 
-  const preparedCredential = preparedCredentials.get(row.id);
-  if (!preparedCredential) {
+  const existingIdentity = await importDatabaseOperation(
+    "FIND_STUDENT_IDENTITY",
+    row.rowNumber,
+    () =>
+      transaction.studentIdentity.findUnique({
+        where: { studentNo },
+        select: { id: true, name: true, status: true, userId: true },
+      }),
+  );
+
+  if (
+    existingIdentity &&
+    normalizeStudentName(existingIdentity.name) !==
+      normalizeStudentName(row.studentName)
+  ) {
     throwRowExecutionFailure({
-      code: "STUDENT_IDENTITY_CHANGED",
-      message: "学生账号匹配状态已变化，请重新预览名单后再导入。",
+      code: "STUDENT_NO_NAME_CONFLICT",
+      message: "同一学号对应的名单姓名不一致，请先处理冲突。",
+      rowNumber: row.rowNumber,
+    });
+  }
+  if (existingIdentity?.status === StudentIdentityStatus.DISABLED) {
+    throwRowExecutionFailure({
+      code: "STUDENT_IDENTITY_DISABLED",
+      message: "该学生身份已停用，不能继续导入。",
       rowNumber: row.rowNumber,
     });
   }
 
-  const user = await importDatabaseOperation(
-    "CREATE_STUDENT_ACCOUNT",
+  const identity = existingIdentity
+    ? await transaction.studentIdentity.update({
+        where: { id: existingIdentity.id },
+        data: { email: email || undefined },
+        select: { id: true, userId: true },
+      })
+    : await transaction.studentIdentity.create({
+        data: {
+          studentNo,
+          name: normalizeStudentName(row.studentName),
+          email: email || null,
+        },
+        select: { id: true, userId: true },
+      });
+
+  await importDatabaseOperation(
+    "CREATE_STUDENT_CLASSROOM_ASSIGNMENT",
     row.rowNumber,
     () =>
-      transaction.user.create({
-        data: {
-          email: email || null,
-          passwordHash: preparedCredential.passwordHash,
-          role: Role.STUDENT,
-          mustChangePassword: true,
-          profile: {
-            create: {
-              displayName: row.studentName,
-              studentNo,
-            },
+      transaction.studentIdentityClassroomAssignment.upsert({
+        where: {
+          studentIdentityId_classroomId: {
+            studentIdentityId: identity.id,
+            classroomId: batch.classroomId!,
           },
         },
-        select: { id: true },
+        create: {
+          studentIdentityId: identity.id,
+          classroomId: batch.classroomId!,
+          sourceBatchId: batch.id,
+        },
+        update: {},
       }),
   );
-  const membership = await ensureActiveMembership(
-    transaction,
-    batch.classroomId,
-    user.id,
-    now,
-    row.rowNumber,
-  );
   await importDatabaseOperation(
-    "UPDATE_CREATED_IMPORT_ROW",
+    "UPDATE_PENDING_IDENTITY_IMPORT_ROW",
     row.rowNumber,
     () =>
       transaction.studentImportRow.update({
         where: { id: row.id },
         data: {
           executionStatus: StudentImportExecutionStatus.APPLIED,
-          createdUserId: user.id,
-          createdMembershipId: membership.membershipId,
+          studentIdentityId: identity.id,
+          createdUserId: null,
+          createdMembershipId: null,
           matchedUserId: null,
           matchedMembershipId: null,
           errorCode: null,
@@ -2346,15 +2384,7 @@ async function applyExecutableImportRow(
         },
       }),
   );
-  return {
-    rowNumber: row.rowNumber,
-    studentName: row.studentName,
-    studentNo,
-    className: row.className,
-    loginAccount: email || studentNo,
-    initialPassword: preparedCredential.initialPassword,
-    contact: contactForInitialCredential(mappedValues),
-  };
+  return;
 }
 
 async function executeClaimedImportBatch(
@@ -2362,7 +2392,6 @@ async function executeClaimedImportBatch(
   actor: StudentImportActor,
   batchId: string,
   now: Date,
-  preparedCredentials: PreparedInitialCredentials,
   context: AuditRequestContext,
 ): Promise<StudentImportExecutionResult> {
   const claim = await importDatabaseOperation("CLAIM_IMPORT_BATCH", null, () =>
@@ -2421,23 +2450,11 @@ async function executeClaimedImportBatch(
     allowProcessing: true,
   });
 
-  const initialCredentials: StudentInitialCredential[] = [];
   for (const row of rows) {
-    const credential = await applyExecutableImportRow(
-      transaction,
-      row,
-      batch,
-      now,
-      preparedCredentials,
-    );
-    if (credential) {
-      initialCredentials.push(credential);
-    }
+    await applyExecutableImportRow(transaction, row, batch, now);
   }
 
   const appliedRows = await loadExecutionRows(batchId, transaction);
-  const visibleInitialCredentials =
-    actor.role === Role.TEACHER ? initialCredentials : [];
   const appliedResult = executionResultFromRecords(
     {
       ...batch,
@@ -2446,7 +2463,7 @@ async function executeClaimedImportBatch(
       completedAt: now,
     },
     appliedRows,
-    visibleInitialCredentials,
+    [],
   );
   const nextPreviewSummary = jsonObject(batch.previewSummary);
   delete nextPreviewSummary.executionFailure;
@@ -2476,11 +2493,7 @@ async function executeClaimedImportBatch(
       }),
   );
   const finalRows = await loadExecutionRows(batchId, transaction);
-  const finalResult = executionResultFromRecords(
-    updatedBatch,
-    finalRows,
-    visibleInitialCredentials,
-  );
+  const finalResult = executionResultFromRecords(updatedBatch, finalRows, []);
 
   await writeGovernanceAuditLog(transaction, {
     actorId: actor.id,
@@ -2708,19 +2721,12 @@ async function executeStudentImportBatchForActor(
 
   const executionDependencies = {
     now: dependencies.now ?? (() => new Date()),
-    passwordGenerator:
-      dependencies.passwordGenerator ?? generateInitialPassword,
-    passwordHasher: dependencies.passwordHasher ?? hashPasswordCore,
     logger: dependencies.logger ?? console,
     transactionTimeoutMs:
       dependencies.transactionTimeoutMs ?? IMPORT_TRANSACTION_TIMEOUT_MS,
   };
 
   try {
-    const preparedCredentials = await prepareInitialCredentials(
-      rows,
-      executionDependencies,
-    );
     const executionStartedAt = executionDependencies.now();
     return await serializableImportTransaction(
       (transaction) =>
@@ -2729,7 +2735,6 @@ async function executeStudentImportBatchForActor(
           actor,
           batchId,
           executionStartedAt,
-          preparedCredentials,
           context,
         ),
       executionDependencies.transactionTimeoutMs,
@@ -2808,9 +2813,13 @@ export async function previewTeacherStudentImportFromFile(
     target,
     mappingResolution.issues,
   );
-  const matchedRows = applyUserMatches(
-    rowsBeforeMatches,
-    await loadUserMatches(rowsBeforeMatches, target.classroom.id),
+  const matchedRows = (
+    await applyStudentIdentityConflicts(
+      applyUserMatches(
+        rowsBeforeMatches,
+        await loadUserMatches(rowsBeforeMatches, target.classroom.id),
+      ),
+    )
   ).map((row) => {
     const enriched = {
       ...row,

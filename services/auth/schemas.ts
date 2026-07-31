@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { normalizeStudentNo } from "@/services/student-identities/normalization";
+
 function fitsBcryptLimit(password: string): boolean {
   return new TextEncoder().encode(password).length <= 72;
 }
@@ -41,6 +43,12 @@ export const loginSchema = z.object({
 
 export const registerSchema = z
   .object({
+    studentNo: z
+      .string()
+      .transform(normalizeStudentNo)
+      .pipe(
+        z.string().min(1, "请输入学号").max(50, "学号长度不能超过 50 个字符"),
+      ),
     displayName: z
       .string()
       .trim()
@@ -50,6 +58,7 @@ export const registerSchema = z
     password: strongPasswordSchema,
     confirmPassword: z.string().min(1, "请再次输入密码"),
   })
+  .strict("注册信息包含不允许的字段")
   .refine((input) => input.password === input.confirmPassword, {
     message: "两次输入的密码不一致",
     path: ["confirmPassword"],
@@ -74,6 +83,7 @@ export const classroomIdSchema = z.string().cuid("班级 ID 格式无效");
 
 export type LoginInput = z.input<typeof loginSchema>;
 export type RegisterInput = z.input<typeof registerSchema>;
+export type RegisterData = z.output<typeof registerSchema>;
 export type ChangeInitialPasswordInput = z.input<
   typeof changeInitialPasswordSchema
 >;

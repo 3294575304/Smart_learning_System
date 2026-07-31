@@ -170,6 +170,12 @@ enum MembershipStatus {
   REMOVED
 }
 
+enum StudentIdentityStatus {
+  PENDING
+  ACTIVATED
+  DISABLED
+}
+
 enum QuestionType {
   SINGLE_CHOICE
   MULTIPLE_CHOICE
@@ -307,6 +313,7 @@ model User {
   createdStudentImportBatches StudentImportBatch[]         @relation("StudentImportBatchCreatedBy")
   matchedStudentImportRows    StudentImportRow[]           @relation("StudentImportMatchedUser")
   createdStudentImportRows    StudentImportRow[]           @relation("StudentImportCreatedUser")
+  studentIdentity             StudentIdentity?
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -454,6 +461,40 @@ model UserProfile {
   @@index([displayName])
 }
 
+model StudentIdentity {
+  id        String                @id @default(cuid())
+  studentNo String                @unique @db.VarChar(50)
+  name      String                @db.VarChar(100)
+  email     String?               @db.VarChar(254)
+  status    StudentIdentityStatus @default(PENDING)
+  userId    String?               @unique
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  user        User?                                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  assignments StudentIdentityClassroomAssignment[]
+  importRows  StudentImportRow[]
+
+  @@index([status, createdAt])
+}
+
+model StudentIdentityClassroomAssignment {
+  id                String   @id @default(cuid())
+  studentIdentityId String
+  classroomId       String
+  sourceBatchId     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  studentIdentity StudentIdentity     @relation(fields: [studentIdentityId], references: [id], onDelete: Restrict)
+  classroom       Classroom           @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  sourceBatch     StudentImportBatch? @relation(fields: [sourceBatchId], references: [id], onDelete: SetNull)
+
+  @@unique([studentIdentityId, classroomId])
+  @@index([classroomId])
+  @@index([sourceBatchId])
+}
+
 model CourseTemplate {
   id          String   @id @default(cuid())
   code        String   @unique
@@ -561,13 +602,14 @@ model Classroom {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  teacher              User                 @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
-  course               Course?              @relation("ClassroomCourse", fields: [courseId], references: [id], onDelete: SetNull)
-  memberships          ClassMembership[]
-  assignments          Assignment[]
-  aiAnalyses           AIAnalysis[]
-  courseFileVersions   CourseFileVersion[]  @relation("CourseFileClassroom")
-  studentImportBatches StudentImportBatch[] @relation("StudentImportBatchClassroom")
+  teacher                    User                                 @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  course                     Course?                              @relation("ClassroomCourse", fields: [courseId], references: [id], onDelete: SetNull)
+  memberships                ClassMembership[]
+  assignments                Assignment[]
+  aiAnalyses                 AIAnalysis[]
+  courseFileVersions         CourseFileVersion[]                  @relation("CourseFileClassroom")
+  studentImportBatches       StudentImportBatch[]                 @relation("StudentImportBatchClassroom")
+  studentIdentityAssignments StudentIdentityClassroomAssignment[]
 
   @@index([teacherId, status])
   @@index([courseId, status])
@@ -629,12 +671,13 @@ model StudentImportBatch {
   createdAt                 DateTime                 @default(now())
   updatedAt                 DateTime                 @updatedAt
 
-  course              Course             @relation("StudentImportCourse", fields: [courseId], references: [id], onDelete: Restrict)
-  classroom           Classroom?         @relation("StudentImportBatchClassroom", fields: [classroomId], references: [id], onDelete: SetNull)
-  createdBy           User               @relation("StudentImportBatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  sourceFileVersion   CourseFileVersion  @relation("StudentImportSourceFile", fields: [sourceFileVersionId], references: [id], onDelete: Restrict)
-  accountSheetVersion CourseFileVersion? @relation("StudentImportAccountSheet", fields: [accountSheetVersionId], references: [id], onDelete: SetNull)
+  course              Course                               @relation("StudentImportCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  classroom           Classroom?                           @relation("StudentImportBatchClassroom", fields: [classroomId], references: [id], onDelete: SetNull)
+  createdBy           User                                 @relation("StudentImportBatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  sourceFileVersion   CourseFileVersion                    @relation("StudentImportSourceFile", fields: [sourceFileVersionId], references: [id], onDelete: Restrict)
+  accountSheetVersion CourseFileVersion?                   @relation("StudentImportAccountSheet", fields: [accountSheetVersionId], references: [id], onDelete: SetNull)
   rows                StudentImportRow[]
+  identityAssignments StudentIdentityClassroomAssignment[]
 
   @@unique([courseId, idempotencyKey])
   @@index([courseId, status, createdAt])
@@ -662,6 +705,7 @@ model StudentImportRow {
   matchedMembershipId String?
   createdUserId       String?
   createdMembershipId String?
+  studentIdentityId   String?
   processedAt         DateTime?
   createdAt           DateTime                     @default(now())
   updatedAt           DateTime                     @updatedAt
@@ -671,6 +715,7 @@ model StudentImportRow {
   matchedMembership ClassMembership?   @relation("StudentImportMatchedMembership", fields: [matchedMembershipId], references: [id], onDelete: SetNull)
   createdUser       User?              @relation("StudentImportCreatedUser", fields: [createdUserId], references: [id], onDelete: SetNull)
   createdMembership ClassMembership?   @relation("StudentImportCreatedMembership", fields: [createdMembershipId], references: [id], onDelete: SetNull)
+  studentIdentity   StudentIdentity?   @relation(fields: [studentIdentityId], references: [id], onDelete: SetNull)
 
   @@unique([batchId, rowNumber])
   @@index([batchId, previewStatus])
@@ -681,6 +726,7 @@ model StudentImportRow {
   @@index([matchedMembershipId])
   @@index([createdUserId])
   @@index([createdMembershipId])
+  @@index([studentIdentityId])
 }
 
 model KnowledgePoint {

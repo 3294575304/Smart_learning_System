@@ -10,6 +10,7 @@ import { registerAction } from "@/app/actions/auth";
 import { registerSchema, type RegisterInput } from "@/services/auth/schemas";
 
 const registerFields = [
+  "studentNo",
   "displayName",
   "email",
   "password",
@@ -28,6 +29,7 @@ export function RegisterForm() {
   } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
+      studentNo: "",
       displayName: "",
       email: "",
       password: "",
@@ -58,6 +60,13 @@ export function RegisterForm() {
 
   return (
     <form className="mt-8 space-y-4" onSubmit={onSubmit} noValidate>
+      <FormField
+        autoComplete="username"
+        error={errors.studentNo?.message}
+        id="studentNo"
+        label="学号"
+        registration={register("studentNo")}
+      />
       <FormField
         autoComplete="name"
         error={errors.displayName?.message}
@@ -90,7 +99,7 @@ export function RegisterForm() {
         type="password"
       />
       <p className="text-muted-foreground text-xs">
-        自助注册仅创建学生账号；教师和管理员账号由管理员维护。
+        学生账号仅限已导入名单中的学生注册。请使用教师提供的学号，并填写与名单一致的姓名。
       </p>
       {serverError ? (
         <p

@@ -7,6 +7,8 @@ import { PrismaClient, Role, UserStatus } from "@prisma/client";
 import { compare } from "bcryptjs";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
+import { claimStudentAccount } from "@/services/auth/registration";
+import { registerSchema } from "@/services/auth/schemas";
 import { assertIsolatedIntegrationEnvironment } from "../integration/database";
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
@@ -97,6 +99,7 @@ async function assertPageRedirect(
 async function main(): Promise<void> {
   const createdSessionIds: string[] = [];
   const createdUserIds: string[] = [];
+  const createdIdentityNos: string[] = [];
   let deactivatedStudentId: string | null = null;
 
   try {
@@ -153,6 +156,174 @@ async function main(): Promise<void> {
         where: { teacherId: teacherTwo.id },
       }),
     ]);
+
+    const claimToken = randomBytes(5).toString("hex").toUpperCase();
+    const createClaimIdentity = async (
+      suffix: string,
+      options: { name?: string; assign?: boolean } = {},
+    ) => {
+      const studentNo = `HTTPCLAIM${claimToken}${suffix}`;
+      createdIdentityNos.push(studentNo);
+      await prisma.studentIdentity.create({
+        data: {
+          studentNo,
+          name: options.name ?? "HTTP 认领学生",
+          assignments:
+            options.assign === false
+              ? undefined
+              : { create: { classroomId: ownedClassroom.id } },
+        },
+      });
+      return studentNo;
+    };
+    const register = (body: Record<string, unknown>) =>
+      fetch(`${baseUrl}/api/auth/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const registrationBody = (
+      studentNo: string,
+      email: string,
+      overrides: Record<string, unknown> = {},
+    ) => ({
+      studentNo,
+      displayName: "HTTP 认领学生",
+      email,
+      password: "ClaimPass123",
+      confirmPassword: "ClaimPass123",
+      ...overrides,
+    });
+
+    const validNo = await createClaimIdentity("A");
+    const validEmail = `claim-${claimToken.toLowerCase()}-a@example.test`;
+    const validClaim = await register(registrationBody(validNo, validEmail));
+    assert.equal(validClaim.status, 201);
+    const validUser = await prisma.user.findUniqueOrThrow({
+      where: { email: validEmail },
+    });
+    createdUserIds.push(validUser.id);
+    assert.equal(validUser.role, Role.STUDENT);
+    assert.equal(
+      await prisma.classMembership.count({
+        where: { classroomId: ownedClassroom.id, studentId: validUser.id },
+      }),
+      1,
+    );
+
+    const missingClaim = await register(
+      registrationBody(
+        `MISSING${claimToken}`,
+        `claim-${claimToken.toLowerCase()}-missing@example.test`,
+      ),
+    );
+    assert.equal(missingClaim.status, 400);
+    assert.equal((await missingClaim.json()).error, "学号或姓名信息不正确");
+
+    const mismatchNo = await createClaimIdentity("B");
+    const mismatchClaim = await register(
+      registrationBody(
+        mismatchNo,
+        `claim-${claimToken.toLowerCase()}-mismatch@example.test`,
+        { displayName: "错误姓名" },
+      ),
+    );
+    assert.equal(mismatchClaim.status, 400);
+    assert.equal((await mismatchClaim.json()).error, "学号或姓名信息不正确");
+
+    const boundClaim = await register(
+      registrationBody(
+        validNo,
+        `claim-${claimToken.toLowerCase()}-bound@example.test`,
+      ),
+    );
+    assert.equal(boundClaim.status, 409);
+    assert.equal(
+      (await boundClaim.json()).error,
+      "该学生信息已绑定账号，请直接登录或联系教师",
+    );
+
+    const duplicateEmailNo = await createClaimIdentity("C");
+    const duplicateEmailClaim = await register(
+      registrationBody(duplicateEmailNo, validEmail),
+    );
+    assert.equal(duplicateEmailClaim.status, 409);
+    assert.equal((await duplicateEmailClaim.json()).error, "该邮箱已被注册");
+
+    const roleNo = await createClaimIdentity("D");
+    const roleClaim = await register(
+      registrationBody(
+        roleNo,
+        `claim-${claimToken.toLowerCase()}-role@example.test`,
+        { role: "ADMIN" },
+      ),
+    );
+    assert.equal(roleClaim.status, 400);
+
+    const disabledNo = await createClaimIdentity("E");
+    await prisma.systemConfig.update({
+      where: { singletonKey: "default" },
+      data: { allowSelfRegistration: false },
+    });
+    const disabledClaim = await register(
+      registrationBody(
+        disabledNo,
+        `claim-${claimToken.toLowerCase()}-disabled@example.test`,
+      ),
+    );
+    assert.equal(disabledClaim.status, 403);
+    await prisma.systemConfig.update({
+      where: { singletonKey: "default" },
+      data: { allowSelfRegistration: true },
+    });
+
+    const concurrentNo = await createClaimIdentity("F");
+    const [concurrentLeft, concurrentRight] = await Promise.all([
+      register(
+        registrationBody(
+          concurrentNo,
+          `claim-${claimToken.toLowerCase()}-left@example.test`,
+        ),
+      ),
+      register(
+        registrationBody(
+          concurrentNo,
+          `claim-${claimToken.toLowerCase()}-right@example.test`,
+        ),
+      ),
+    ]);
+    assert.deepEqual(
+      [concurrentLeft.status, concurrentRight.status].sort(),
+      [201, 409],
+    );
+    const concurrentIdentity = await prisma.studentIdentity.findUniqueOrThrow({
+      where: { studentNo: concurrentNo },
+    });
+    assert.notEqual(concurrentIdentity.userId, null);
+    createdUserIds.push(concurrentIdentity.userId!);
+
+    const rollbackNo = await createClaimIdentity("G");
+    const rollbackEmail = `claim-${claimToken.toLowerCase()}-rollback@example.test`;
+    await assert.rejects(
+      () =>
+        claimStudentAccount(
+          registerSchema.parse(registrationBody(rollbackNo, rollbackEmail)),
+          {
+            beforeCommit: async () => {
+              throw new Error("forced registration rollback");
+            },
+          },
+        ),
+      /forced registration rollback/u,
+    );
+    const rollbackIdentity = await prisma.studentIdentity.findUniqueOrThrow({
+      where: { studentNo: rollbackNo },
+    });
+    assert.equal(rollbackIdentity.userId, null);
+    assert.equal(
+      await prisma.user.count({ where: { email: rollbackEmail } }),
+      0,
+    );
 
     const anonymousSession = await fetch(`${baseUrl}/api/auth/session`);
     assert.equal(anonymousSession.status, 401);
@@ -336,6 +507,15 @@ async function main(): Promise<void> {
     if (createdUserIds.length > 0) {
       await prisma.authSession.deleteMany({
         where: { userId: { in: createdUserIds } },
+      });
+      await prisma.studentIdentityClassroomAssignment.deleteMany({
+        where: { studentIdentity: { studentNo: { in: createdIdentityNos } } },
+      });
+      await prisma.studentIdentity.deleteMany({
+        where: { studentNo: { in: createdIdentityNos } },
+      });
+      await prisma.classMembership.deleteMany({
+        where: { studentId: { in: createdUserIds } },
       });
       await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     }
