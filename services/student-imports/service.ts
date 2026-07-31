@@ -255,6 +255,8 @@ interface StudentImportExecutionDependencies {
   now?: () => Date;
   passwordGenerator?: () => string;
   passwordHasher?: (password: string) => Promise<string>;
+  logger?: Pick<Console, "error">;
+  transactionTimeoutMs?: number;
 }
 
 type DatabaseClient = typeof prisma | Prisma.TransactionClient;
@@ -264,12 +266,12 @@ interface StudentImportActor {
   role: typeof Role.ADMIN | typeof Role.TEACHER;
 }
 
-interface ImportExecutionFailure {
+export interface ImportExecutionFailure {
   code: string;
   message: string;
   retryable: boolean;
   rowNumber?: number;
-  status?: 400 | 409 | 500;
+  status?: 400 | 409 | 500 | 503;
 }
 
 class StudentImportExecutionFailureError extends StudentImportOperationError {
@@ -337,6 +339,30 @@ type SelectedUserMatchRecord = Prisma.UserGetPayload<{
 }>;
 
 const SERIALIZABLE_RETRY_LIMIT = 3;
+const SERIALIZABLE_RETRY_BASE_DELAY_MS = 50;
+const IMPORT_TRANSACTION_MAX_WAIT_MS = 5_000;
+const IMPORT_TRANSACTION_TIMEOUT_MS = 30_000;
+
+interface PreparedInitialCredential {
+  initialPassword: string;
+  passwordHash: string;
+}
+
+type PreparedInitialCredentials = ReadonlyMap<
+  string,
+  PreparedInitialCredential
+>;
+
+class StudentImportDatabaseOperationError extends Error {
+  constructor(
+    readonly operation: string,
+    readonly rowNumber: number | null,
+    cause: unknown,
+  ) {
+    super("Student import database operation failed", { cause });
+    this.name = "StudentImportDatabaseOperationError";
+  }
+}
 
 function generateInitialPassword(): string {
   return `Zx${randomBytes(12).toString("base64url")}7a`;
@@ -351,30 +377,104 @@ function contactForInitialCredential(
   return values.length > 0 ? values.join(" / ") : null;
 }
 
-function isRetryablePrismaError(error: unknown): boolean {
+function knownPrismaError(
+  error: unknown,
+): Prisma.PrismaClientKnownRequestError | null {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error;
+  }
+  if (error instanceof StudentImportDatabaseOperationError) {
+    return knownPrismaError(error.cause);
+  }
+  return null;
+}
+
+function uniqueConstraintTarget(
+  error: Prisma.PrismaClientKnownRequestError,
+): string | null {
+  const target = error.meta?.target;
+  if (Array.isArray(target)) {
+    return target.map(String).join(",");
+  }
+  return typeof target === "string" ? target : null;
+}
+
+function targetContainsFields(
+  target: string | null,
+  fields: readonly string[],
+): boolean {
+  if (!target) return false;
+  const normalized = target.toLowerCase();
+  return fields.every((field) => normalized.includes(field.toLowerCase()));
+}
+
+function isRetryableUniqueConstraintError(
+  error: Prisma.PrismaClientKnownRequestError,
+): boolean {
+  if (error.code !== "P2002") return false;
+  const target = uniqueConstraintTarget(error);
   return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    (error.code === "P2034" || error.code === "P2028")
+    targetContainsFields(target, ["studentNo"]) ||
+    targetContainsFields(target, ["email"]) ||
+    targetContainsFields(target, ["classroomId", "studentId"])
   );
 }
 
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002"
+function isAutomaticTransactionRetryError(error: unknown): boolean {
+  const prismaError = knownPrismaError(error);
+  const operation = databaseOperationContext(error).operation;
+  return Boolean(
+    prismaError &&
+    (prismaError.code === "P2034" ||
+      isRetryableUniqueConstraintError(prismaError) ||
+      (prismaError.code === "P2002" &&
+        (operation === "CREATE_STUDENT_ACCOUNT" ||
+          operation === "CREATE_CLASS_MEMBERSHIP"))),
   );
+}
+
+function retryDelay(attempt: number): Promise<void> {
+  const delayMs =
+    SERIALIZABLE_RETRY_BASE_DELAY_MS * Math.pow(2, Math.max(0, attempt - 1));
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function importDatabaseOperation<T>(
+  operation: string,
+  rowNumber: number | null,
+  callback: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await callback();
+  } catch (error: unknown) {
+    if (knownPrismaError(error)) {
+      throw new StudentImportDatabaseOperationError(
+        operation,
+        rowNumber,
+        error,
+      );
+    }
+    throw error;
+  }
 }
 
 async function serializableImportTransaction<T>(
   operation: (transaction: Prisma.TransactionClient) => Promise<T>,
+  timeout: number,
 ): Promise<T> {
   for (let attempt = 1; attempt <= SERIALIZABLE_RETRY_LIMIT; attempt += 1) {
     try {
       return await prisma.$transaction(operation, {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: IMPORT_TRANSACTION_MAX_WAIT_MS,
+        timeout,
       });
     } catch (error: unknown) {
-      if (isRetryablePrismaError(error) && attempt < SERIALIZABLE_RETRY_LIMIT) {
+      if (
+        isAutomaticTransactionRetryError(error) &&
+        attempt < SERIALIZABLE_RETRY_LIMIT
+      ) {
+        await retryDelay(attempt);
         continue;
       }
       throw error;
@@ -1955,16 +2055,21 @@ async function loadCurrentRowUserMatches(
     return { byStudentNo: null, byEmail: null };
   }
 
-  const users = await transaction.user.findMany({
-    where: { OR: conditions },
-    select: {
-      ...userMatchSelect,
-      classMemberships: {
-        where: { classroomId },
-        select: { id: true, status: true },
-      },
-    },
-  });
+  const users = await importDatabaseOperation(
+    "MATCH_STUDENT_ACCOUNT",
+    row.rowNumber,
+    () =>
+      transaction.user.findMany({
+        where: { OR: conditions },
+        select: {
+          ...userMatchSelect,
+          classMemberships: {
+            where: { classroomId },
+            select: { id: true, status: true },
+          },
+        },
+      }),
+  );
 
   let byStudentNo: UserMatchRecord | null = null;
   let byEmail: UserMatchRecord | null = null;
@@ -1988,34 +2093,81 @@ async function ensureActiveMembership(
   classroomId: string,
   studentId: string,
   now: Date,
+  rowNumber: number,
 ): Promise<{ membershipId: string; alreadyActive: boolean }> {
-  const existing = await transaction.classMembership.findUnique({
-    where: { classroomId_studentId: { classroomId, studentId } },
-    select: { id: true, status: true },
-  });
+  const existing = await importDatabaseOperation(
+    "FIND_CLASS_MEMBERSHIP",
+    rowNumber,
+    () =>
+      transaction.classMembership.findUnique({
+        where: { classroomId_studentId: { classroomId, studentId } },
+        select: { id: true, status: true },
+      }),
+  );
 
   if (existing?.status === MembershipStatus.ACTIVE) {
     return { membershipId: existing.id, alreadyActive: true };
   }
 
   if (existing) {
-    const updated = await transaction.classMembership.update({
-      where: { id: existing.id },
-      data: {
-        status: MembershipStatus.ACTIVE,
-        joinedAt: now,
-        endedAt: null,
-      },
-      select: { id: true },
-    });
+    const updated = await importDatabaseOperation(
+      "REACTIVATE_CLASS_MEMBERSHIP",
+      rowNumber,
+      () =>
+        transaction.classMembership.update({
+          where: { id: existing.id },
+          data: {
+            status: MembershipStatus.ACTIVE,
+            joinedAt: now,
+            endedAt: null,
+          },
+          select: { id: true },
+        }),
+    );
     return { membershipId: updated.id, alreadyActive: false };
   }
 
-  const created = await transaction.classMembership.create({
-    data: { classroomId, studentId, joinedAt: now },
-    select: { id: true },
-  });
+  const created = await importDatabaseOperation(
+    "CREATE_CLASS_MEMBERSHIP",
+    rowNumber,
+    () =>
+      transaction.classMembership.create({
+        data: { classroomId, studentId, joinedAt: now },
+        select: { id: true },
+      }),
+  );
   return { membershipId: created.id, alreadyActive: false };
+}
+
+function shouldPrepareInitialCredential(row: StudentImportRowRecord): boolean {
+  return (
+    !row.matchedUserId &&
+    row.previewStatus !== StudentImportPreviewStatus.PENDING &&
+    row.previewStatus !== StudentImportPreviewStatus.INVALID &&
+    row.previewStatus !== StudentImportPreviewStatus.DUPLICATE &&
+    !rowHasBlockingExecutionIssue(row)
+  );
+}
+
+async function prepareInitialCredentials(
+  rows: readonly StudentImportRowRecord[],
+  dependencies: Required<
+    Pick<
+      StudentImportExecutionDependencies,
+      "passwordGenerator" | "passwordHasher"
+    >
+  >,
+): Promise<PreparedInitialCredentials> {
+  const prepared = new Map<string, PreparedInitialCredential>();
+  for (const row of rows) {
+    if (!shouldPrepareInitialCredential(row)) continue;
+    const initialPassword = dependencies.passwordGenerator();
+    prepared.set(row.id, {
+      initialPassword,
+      passwordHash: await dependencies.passwordHasher(initialPassword),
+    });
+  }
+  return prepared;
 }
 
 function throwRowExecutionFailure(input: {
@@ -2038,22 +2190,19 @@ async function applyExecutableImportRow(
   row: StudentImportRowRecord,
   batch: StudentImportExecutionBatchRecord,
   now: Date,
-  dependencies: Required<
-    Pick<
-      StudentImportExecutionDependencies,
-      "passwordGenerator" | "passwordHasher"
-    >
-  >,
+  preparedCredentials: PreparedInitialCredentials,
 ): Promise<StudentInitialCredential | null> {
   if (row.previewStatus === StudentImportPreviewStatus.PENDING) {
-    await transaction.studentImportRow.update({
-      where: { id: row.id },
-      data: {
-        executionStatus: StudentImportExecutionStatus.SKIPPED,
-        errorCode: null,
-        processedAt: now,
-      },
-    });
+    await importDatabaseOperation("SKIP_EMPTY_IMPORT_ROW", row.rowNumber, () =>
+      transaction.studentImportRow.update({
+        where: { id: row.id },
+        data: {
+          executionStatus: StudentImportExecutionStatus.SKIPPED,
+          errorCode: null,
+          processedAt: now,
+        },
+      }),
+    );
     return null;
   }
 
@@ -2110,23 +2259,29 @@ async function applyExecutableImportRow(
       batch.classroomId,
       byStudentNo.id,
       now,
+      row.rowNumber,
     );
-    await transaction.studentImportRow.update({
-      where: { id: row.id },
-      data: {
-        executionStatus: membership.alreadyActive
-          ? StudentImportExecutionStatus.SKIPPED
-          : StudentImportExecutionStatus.APPLIED,
-        matchedUserId: byStudentNo.id,
-        matchedMembershipId: membership.membershipId,
-        createdUserId: null,
-        createdMembershipId: membership.alreadyActive
-          ? null
-          : membership.membershipId,
-        errorCode: null,
-        processedAt: now,
-      },
-    });
+    await importDatabaseOperation(
+      "UPDATE_MATCHED_IMPORT_ROW",
+      row.rowNumber,
+      () =>
+        transaction.studentImportRow.update({
+          where: { id: row.id },
+          data: {
+            executionStatus: membership.alreadyActive
+              ? StudentImportExecutionStatus.SKIPPED
+              : StudentImportExecutionStatus.APPLIED,
+            matchedUserId: byStudentNo.id,
+            matchedMembershipId: membership.membershipId,
+            createdUserId: null,
+            createdMembershipId: membership.alreadyActive
+              ? null
+              : membership.membershipId,
+            errorCode: null,
+            processedAt: now,
+          },
+        }),
+    );
     return null;
   }
 
@@ -2138,48 +2293,66 @@ async function applyExecutableImportRow(
     });
   }
 
-  const initialPassword = dependencies.passwordGenerator();
-  const passwordHash = await dependencies.passwordHasher(initialPassword);
-  const user = await transaction.user.create({
-    data: {
-      email: email || null,
-      passwordHash,
-      role: Role.STUDENT,
-      mustChangePassword: true,
-      profile: {
-        create: {
-          displayName: row.studentName,
-          studentNo,
+  const preparedCredential = preparedCredentials.get(row.id);
+  if (!preparedCredential) {
+    throwRowExecutionFailure({
+      code: "STUDENT_IDENTITY_CHANGED",
+      message: "学生账号匹配状态已变化，请重新预览名单后再导入。",
+      rowNumber: row.rowNumber,
+    });
+  }
+
+  const user = await importDatabaseOperation(
+    "CREATE_STUDENT_ACCOUNT",
+    row.rowNumber,
+    () =>
+      transaction.user.create({
+        data: {
+          email: email || null,
+          passwordHash: preparedCredential.passwordHash,
+          role: Role.STUDENT,
+          mustChangePassword: true,
+          profile: {
+            create: {
+              displayName: row.studentName,
+              studentNo,
+            },
+          },
         },
-      },
-    },
-    select: { id: true },
-  });
+        select: { id: true },
+      }),
+  );
   const membership = await ensureActiveMembership(
     transaction,
     batch.classroomId,
     user.id,
     now,
+    row.rowNumber,
   );
-  await transaction.studentImportRow.update({
-    where: { id: row.id },
-    data: {
-      executionStatus: StudentImportExecutionStatus.APPLIED,
-      createdUserId: user.id,
-      createdMembershipId: membership.membershipId,
-      matchedUserId: null,
-      matchedMembershipId: null,
-      errorCode: null,
-      processedAt: now,
-    },
-  });
+  await importDatabaseOperation(
+    "UPDATE_CREATED_IMPORT_ROW",
+    row.rowNumber,
+    () =>
+      transaction.studentImportRow.update({
+        where: { id: row.id },
+        data: {
+          executionStatus: StudentImportExecutionStatus.APPLIED,
+          createdUserId: user.id,
+          createdMembershipId: membership.membershipId,
+          matchedUserId: null,
+          matchedMembershipId: null,
+          errorCode: null,
+          processedAt: now,
+        },
+      }),
+  );
   return {
     rowNumber: row.rowNumber,
     studentName: row.studentName,
     studentNo,
     className: row.className,
     loginAccount: email || studentNo,
-    initialPassword,
+    initialPassword: preparedCredential.initialPassword,
     contact: contactForInitialCredential(mappedValues),
   };
 }
@@ -2188,40 +2361,37 @@ async function executeClaimedImportBatch(
   transaction: Prisma.TransactionClient,
   actor: StudentImportActor,
   batchId: string,
-  dependencies: Required<
-    Pick<
-      StudentImportExecutionDependencies,
-      "now" | "passwordGenerator" | "passwordHasher"
-    >
-  >,
+  now: Date,
+  preparedCredentials: PreparedInitialCredentials,
   context: AuditRequestContext,
 ): Promise<StudentImportExecutionResult> {
-  const now = dependencies.now();
-  const claim = await transaction.studentImportBatch.updateMany({
-    where: {
-      id: batchId,
-      OR: [
-        { status: StudentImportBatchStatus.CONFIRMED },
-        {
-          status: StudentImportBatchStatus.FAILED,
-          previewSummary: {
-            path: ["executionFailure", "retryable"],
-            equals: true,
+  const claim = await importDatabaseOperation("CLAIM_IMPORT_BATCH", null, () =>
+    transaction.studentImportBatch.updateMany({
+      where: {
+        id: batchId,
+        OR: [
+          { status: StudentImportBatchStatus.CONFIRMED },
+          {
+            status: StudentImportBatchStatus.FAILED,
+            previewSummary: {
+              path: ["executionFailure", "retryable"],
+              equals: true,
+            },
           },
-        },
-      ],
-      ...(actor.role === Role.TEACHER
-        ? { course: { teacherId: actor.id } }
-        : {}),
-    },
-    data: {
-      status: StudentImportBatchStatus.PROCESSING,
-      startedAt: now,
-      completedAt: null,
-      importedRows: 0,
-      failedRows: 0,
-    },
-  });
+        ],
+        ...(actor.role === Role.TEACHER
+          ? { course: { teacherId: actor.id } }
+          : {}),
+      },
+      data: {
+        status: StudentImportBatchStatus.PROCESSING,
+        startedAt: now,
+        completedAt: null,
+        importedRows: 0,
+        failedRows: 0,
+      },
+    }),
+  );
 
   if (claim.count !== 1) {
     const current = await loadExecutionBatchForActor(
@@ -2258,7 +2428,7 @@ async function executeClaimedImportBatch(
       row,
       batch,
       now,
-      dependencies,
+      preparedCredentials,
     );
     if (credential) {
       initialCredentials.push(credential);
@@ -2281,25 +2451,30 @@ async function executeClaimedImportBatch(
   const nextPreviewSummary = jsonObject(batch.previewSummary);
   delete nextPreviewSummary.executionFailure;
 
-  const updatedBatch = await transaction.studentImportBatch.update({
-    where: { id: batchId },
-    data: {
-      status: StudentImportBatchStatus.SUCCEEDED,
-      importedRows: appliedResult.summary.importedRows,
-      failedRows: 0,
-      completedAt: now,
-      previewSummary: inputJsonObject({
-        ...nextPreviewSummary,
-        execution: {
-          version: 1,
+  const updatedBatch = await importDatabaseOperation(
+    "COMPLETE_IMPORT_BATCH",
+    null,
+    () =>
+      transaction.studentImportBatch.update({
+        where: { id: batchId },
+        data: {
           status: StudentImportBatchStatus.SUCCEEDED,
-          completedAt: now.toISOString(),
-          summary: appliedResult.summary,
+          importedRows: appliedResult.summary.importedRows,
+          failedRows: 0,
+          completedAt: now,
+          previewSummary: inputJsonObject({
+            ...nextPreviewSummary,
+            execution: {
+              version: 1,
+              status: StudentImportBatchStatus.SUCCEEDED,
+              completedAt: now.toISOString(),
+              summary: appliedResult.summary,
+            },
+          }),
         },
+        select: executionBatchSelect,
       }),
-    },
-    select: executionBatchSelect,
-  });
+  );
   const finalRows = await loadExecutionRows(batchId, transaction);
   const finalResult = executionResultFromRecords(
     updatedBatch,
@@ -2324,12 +2499,48 @@ async function executeClaimedImportBatch(
   return finalResult;
 }
 
-function classifyExecutionError(error: unknown): ImportExecutionFailure {
+function databaseOperationContext(error: unknown): {
+  operation: string | null;
+  rowNumber: number | null;
+} {
+  return error instanceof StudentImportDatabaseOperationError
+    ? { operation: error.operation, rowNumber: error.rowNumber }
+    : { operation: null, rowNumber: null };
+}
+
+function logExecutionDatabaseError(
+  logger: Pick<Console, "error">,
+  batchId: string,
+  error: unknown,
+): void {
+  const prismaError = knownPrismaError(error);
+  const context = databaseOperationContext(error);
+  logger.error("[student-import-execution-failed]", {
+    batchId,
+    prismaCode: prismaError?.code ?? null,
+    constraint:
+      prismaError?.code === "P2002"
+        ? uniqueConstraintTarget(prismaError)
+        : null,
+    modelName:
+      typeof prismaError?.meta?.modelName === "string"
+        ? prismaError.meta.modelName
+        : null,
+    operation: context.operation,
+    rowNumber: context.rowNumber,
+  });
+}
+
+export function classifyStudentImportExecutionError(
+  error: unknown,
+): ImportExecutionFailure {
   if (error instanceof StudentImportExecutionFailureError) {
     return error.failure;
   }
 
-  if (isRetryablePrismaError(error)) {
+  const prismaError = knownPrismaError(error);
+  const operation = databaseOperationContext(error);
+  if (prismaError?.code === "P2034") {
     return {
       code: "RETRYABLE_DATABASE_CONFLICT",
       message: "学生名单导入遇到数据库并发冲突，请重试。",
@@ -2338,12 +2549,59 @@ function classifyExecutionError(error: unknown): ImportExecutionFailure {
     };
   }
 
-  if (isUniqueConstraintError(error)) {
+  if (prismaError?.code === "P2028") {
     return {
-      code: "UNIQUE_IDENTIFIER_CONFLICT",
-      message: "学生账号标识已被其他写入占用，请重新预览后再导入。",
+      code: "DATABASE_TRANSACTION_TIMEOUT",
+      message: "学生名单导入事务执行超时，正式数据已回滚，请重试。",
       retryable: true,
+      status: 503,
+    };
+  }
+
+  if (prismaError?.code === "P2002") {
+    const target = uniqueConstraintTarget(prismaError);
+    if (targetContainsFields(target, ["studentNo"])) {
+      return {
+        code: "STUDENT_NO_UNIQUE_CONFLICT",
+        message: "该学号已被其他账号占用，请重新预览名单后再导入。",
+        retryable: false,
+        rowNumber: operation.rowNumber ?? undefined,
+        status: 409,
+      };
+    }
+    if (targetContainsFields(target, ["email"])) {
+      return {
+        code: "EMAIL_UNIQUE_CONFLICT",
+        message: "该邮箱已被其他账号占用，请重新预览名单后再导入。",
+        retryable: false,
+        rowNumber: operation.rowNumber ?? undefined,
+        status: 409,
+      };
+    }
+    if (targetContainsFields(target, ["classroomId", "studentId"])) {
+      return {
+        code: "CLASS_MEMBERSHIP_UNIQUE_CONFLICT",
+        message: "班级成员关系发生并发写入冲突，请重试。",
+        retryable: true,
+        rowNumber: operation.rowNumber ?? undefined,
+        status: 409,
+      };
+    }
+    return {
+      code: "DATABASE_UNIQUE_CONSTRAINT_CONFLICT",
+      message: "学生名单导入存在唯一标识冲突，请重新预览后再导入。",
+      retryable: false,
+      rowNumber: operation.rowNumber ?? undefined,
       status: 409,
+    };
+  }
+
+  if (prismaError) {
+    return {
+      code: "DATABASE_WRITE_FAILURE",
+      message: "学生名单导入数据库写入失败，正式数据已回滚。",
+      retryable: false,
+      status: 500,
     };
   }
 
@@ -2453,19 +2711,33 @@ async function executeStudentImportBatchForActor(
     passwordGenerator:
       dependencies.passwordGenerator ?? generateInitialPassword,
     passwordHasher: dependencies.passwordHasher ?? hashPasswordCore,
+    logger: dependencies.logger ?? console,
+    transactionTimeoutMs:
+      dependencies.transactionTimeoutMs ?? IMPORT_TRANSACTION_TIMEOUT_MS,
   };
 
   try {
-    return await serializableImportTransaction((transaction) =>
-      executeClaimedImportBatch(
-        transaction,
-        actor,
-        batchId,
-        executionDependencies,
-        context,
-      ),
+    const preparedCredentials = await prepareInitialCredentials(
+      rows,
+      executionDependencies,
+    );
+    const executionStartedAt = executionDependencies.now();
+    return await serializableImportTransaction(
+      (transaction) =>
+        executeClaimedImportBatch(
+          transaction,
+          actor,
+          batchId,
+          executionStartedAt,
+          preparedCredentials,
+          context,
+        ),
+      executionDependencies.transactionTimeoutMs,
     );
   } catch (error: unknown) {
+    if (knownPrismaError(error)) {
+      logExecutionDatabaseError(executionDependencies.logger, batchId, error);
+    }
     if (error instanceof StudentImportExecutionFailureError) {
       const failure = error.failure;
       await markExecutionFailure(
@@ -2482,7 +2754,7 @@ async function executeStudentImportBatchForActor(
       throw error;
     }
 
-    const failure = classifyExecutionError(error);
+    const failure = classifyStudentImportExecutionError(error);
     const failed = await markExecutionFailure(
       actor,
       batchId,
@@ -2490,6 +2762,9 @@ async function executeStudentImportBatchForActor(
       context,
       executionDependencies.now(),
     );
+    if (failed?.status === StudentImportBatchStatus.SUCCEEDED) {
+      return failed;
+    }
     if (failed?.retryable) {
       throw new StudentImportOperationError(
         failure.message,

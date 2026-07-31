@@ -7,6 +7,7 @@ import {
   ClassroomStatus,
   CourseFileKind,
   MembershipStatus,
+  Prisma,
   PrismaClient,
   Role,
   StudentImportBatchStatus,
@@ -19,6 +20,7 @@ import {
 import {
   executeAdminStudentImportBatch,
   executeTeacherStudentImportBatch,
+  classifyStudentImportExecutionError,
   markTeacherStudentImportAccountSheetDownloaded,
   previewTeacherStudentImportFromFile,
 } from "@/services/student-imports/service";
@@ -81,6 +83,10 @@ function sha256(data: Buffer): string {
 
 function uniqueSuffix(): string {
   return randomBytes(5).toString("hex").toUpperCase();
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function previewInput(input: {
@@ -578,6 +584,87 @@ test("同一批次并发执行只产生一次正式写入", async () => {
   }
 });
 
+test("不同批次并发导入同一学号会重试并只创建一个账号", async () => {
+  const firstContext = await createImportContext();
+  const secondContext = await createImportContext();
+  const sharedStudentNo = `${firstContext.studentNoPrefix}151`;
+  try {
+    const firstBatch = await createConfirmedBatch(firstContext, [
+      [
+        "2026-2027-1",
+        firstContext.courseNo,
+        sharedStudentNo,
+        "并发批次学生",
+        "软件1班",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ],
+    ]);
+    const secondBatch = await createConfirmedBatch(secondContext, [
+      [
+        "2026-2027-1",
+        secondContext.courseNo,
+        sharedStudentNo,
+        "并发批次学生",
+        "软件2班",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ],
+    ]);
+
+    const [firstResult, secondResult] = await Promise.all([
+      executeTeacherStudentImportBatch(
+        firstContext.teacherId,
+        firstBatch.preview.batch.id,
+        auditContext,
+      ),
+      executeTeacherStudentImportBatch(
+        secondContext.teacherId,
+        secondBatch.preview.batch.id,
+        auditContext,
+      ),
+    ]);
+
+    assert.equal(firstResult.status, StudentImportBatchStatus.SUCCEEDED);
+    assert.equal(secondResult.status, StudentImportBatchStatus.SUCCEEDED);
+    assert.equal(
+      firstResult.summary.createdUserRows +
+        secondResult.summary.createdUserRows,
+      1,
+    );
+    assert.equal(
+      firstResult.initialCredentials.length +
+        secondResult.initialCredentials.length,
+      1,
+    );
+    assert.equal(
+      await prisma.userProfile.count({
+        where: { studentNo: sharedStudentNo },
+      }),
+      1,
+    );
+    assert.equal(
+      await prisma.classMembership.count({
+        where: {
+          classroomId: {
+            in: [firstContext.classroomId, secondContext.classroomId],
+          },
+        },
+      }),
+      2,
+    );
+  } finally {
+    await cleanup(secondContext);
+    await cleanup(firstContext);
+  }
+});
+
 test("正式导入重新校验标识与角色冲突并回滚整个批次", async () => {
   const context = await createImportContext();
   try {
@@ -616,10 +703,18 @@ test("正式导入重新校验标识与角色冲突并回滚整个批次", async
     );
     const failedBatch = await prisma.studentImportBatch.findUniqueOrThrow({
       where: { id: preview.batch.id },
-      select: { status: true, failedRows: true },
+      select: { status: true, failedRows: true, previewSummary: true },
     });
     assert.equal(failedBatch.status, StudentImportBatchStatus.FAILED);
     assert.equal(failedBatch.failedRows, 1);
+    assert.equal(
+      (
+        failedBatch.previewSummary as {
+          executionFailure?: { code?: string };
+        }
+      ).executionFailure?.code,
+      "STUDENT_NO_ACCOUNT_ROLE_CONFLICT",
+    );
     assert.equal(
       await prisma.auditLog.count({
         where: {
@@ -705,6 +800,18 @@ test("正式导入阻断执行期邮箱标识冲突", async () => {
       }),
       0,
     );
+    const failedBatch = await prisma.studentImportBatch.findUniqueOrThrow({
+      where: { id: preview.batch.id },
+      select: { previewSummary: true },
+    });
+    assert.equal(
+      (
+        failedBatch.previewSummary as {
+          executionFailure?: { code?: string };
+        }
+      ).executionFailure?.code,
+      "EMAIL_ACCOUNT_CONFLICT",
+    );
   } finally {
     await cleanup(context);
   }
@@ -748,6 +855,201 @@ test("非法批次和跨教师越权不能执行", async () => {
         ),
       /导入批次不存在/u,
     );
+  } finally {
+    await cleanup(context);
+  }
+});
+
+test("密码哈希在交互事务开始前完成", async () => {
+  const context = await createImportContext();
+  try {
+    const { preview } = await createConfirmedBatch(context, [
+      rosterRow(context, "601", "事务边界学生"),
+    ]);
+    let hashCompleted = false;
+
+    const result = await executeTeacherStudentImportBatch(
+      context.teacherId,
+      preview.batch.id,
+      auditContext,
+      {
+        passwordGenerator: () => "BoundaryPass123A",
+        passwordHasher: async () => {
+          await delay(1_200);
+          hashCompleted = true;
+          return "prepared-password-hash";
+        },
+        transactionTimeoutMs: 1_000,
+      },
+    );
+
+    assert.equal(hashCompleted, true);
+    assert.equal(result.status, StudentImportBatchStatus.SUCCEEDED);
+    assert.equal(result.summary.createdUserRows, 1);
+  } finally {
+    await cleanup(context);
+  }
+});
+
+test("96 行新账号名单可在正式事务中完整写入", async () => {
+  const context = await createImportContext();
+  try {
+    const rows = Array.from({ length: 96 }, (_, index) =>
+      rosterRow(
+        context,
+        `${700 + index}`,
+        `去标识化学生${String(index + 1).padStart(3, "0")}`,
+      ),
+    );
+    const { preview } = await createConfirmedBatch(context, rows);
+
+    const result = await executeTeacherStudentImportBatch(
+      context.teacherId,
+      preview.batch.id,
+      auditContext,
+    );
+
+    assert.equal(result.status, StudentImportBatchStatus.SUCCEEDED);
+    assert.equal(result.summary.createdUserRows, 96);
+    assert.equal(result.summary.importedRows, 96);
+    assert.equal(result.initialCredentials.length, 96);
+    assert.equal(
+      await prisma.userProfile.count({
+        where: { studentNo: { startsWith: context.studentNoPrefix } },
+      }),
+      96,
+    );
+    assert.equal(
+      await prisma.classMembership.count({
+        where: { classroomId: context.classroomId },
+      }),
+      96,
+    );
+  } finally {
+    await cleanup(context);
+  }
+});
+
+test("真实事务超时分类为 P2028 超时且失败批次可以安全重试", async () => {
+  const context = await createImportContext();
+  try {
+    const studentName = "超时回滚学生";
+    const studentNo = `${context.studentNoPrefix}801`;
+    const oneTimePassword = "TimeoutSecret123A";
+    const { preview } = await createConfirmedBatch(context, [
+      rosterRow(context, "801", studentName),
+    ]);
+    const logEntries: unknown[][] = [];
+
+    await assert.rejects(
+      () =>
+        executeTeacherStudentImportBatch(
+          context.teacherId,
+          preview.batch.id,
+          auditContext,
+          {
+            passwordGenerator: () => oneTimePassword,
+            passwordHasher: async () => "timeout-test-hash",
+            transactionTimeoutMs: 1,
+            logger: {
+              error: (...args: unknown[]) => {
+                logEntries.push(args);
+              },
+            },
+          },
+        ),
+      /事务执行超时/u,
+    );
+
+    const failedBatch = await prisma.studentImportBatch.findUniqueOrThrow({
+      where: { id: preview.batch.id },
+      select: { status: true, previewSummary: true },
+    });
+    assert.equal(failedBatch.status, StudentImportBatchStatus.FAILED);
+    assert.equal(
+      (
+        failedBatch.previewSummary as {
+          executionFailure?: { code?: string; retryable?: boolean };
+        }
+      ).executionFailure?.code,
+      "DATABASE_TRANSACTION_TIMEOUT",
+    );
+    assert.equal(
+      (
+        failedBatch.previewSummary as {
+          executionFailure?: { code?: string; retryable?: boolean };
+        }
+      ).executionFailure?.retryable,
+      true,
+    );
+    assert.equal(await prisma.userProfile.count({ where: { studentNo } }), 0);
+    assert.equal(
+      await prisma.classMembership.count({
+        where: { classroomId: context.classroomId },
+      }),
+      0,
+    );
+
+    const serializedLogs = JSON.stringify(logEntries);
+    assert.match(serializedLogs, /P2028/u);
+    assert.match(serializedLogs, new RegExp(preview.batch.id, "u"));
+    assert.doesNotMatch(serializedLogs, new RegExp(oneTimePassword, "u"));
+    assert.doesNotMatch(serializedLogs, new RegExp(studentName, "u"));
+    assert.doesNotMatch(serializedLogs, new RegExp(studentNo, "u"));
+
+    const retried = await executeTeacherStudentImportBatch(
+      context.teacherId,
+      preview.batch.id,
+      auditContext,
+      {
+        passwordGenerator: () => "RecoveredPass123A",
+        passwordHasher: async () => "recovered-password-hash",
+      },
+    );
+    assert.equal(retried.status, StudentImportBatchStatus.SUCCEEDED);
+    assert.equal(retried.summary.createdUserRows, 1);
+    assert.equal(retried.initialCredentials.length, 1);
+  } finally {
+    await cleanup(context);
+  }
+});
+
+test("真实 P2002 学号唯一约束不会被归类为数据库并发冲突", async () => {
+  const context = await createImportContext();
+  try {
+    const studentNo = `${context.studentNoPrefix}901`;
+    await createUserWithProfile(context, {
+      role: Role.STUDENT,
+      displayName: "唯一约束账号一",
+      studentNo,
+    });
+
+    let capturedError: unknown;
+    try {
+      await prisma.user.create({
+        data: {
+          passwordHash: "unique-conflict-test",
+          role: Role.STUDENT,
+          profile: {
+            create: {
+              displayName: "唯一约束账号二",
+              studentNo,
+            },
+          },
+        },
+      });
+      assert.fail("预期数据库返回 P2002");
+    } catch (error: unknown) {
+      capturedError = error;
+    }
+
+    assert.ok(capturedError instanceof Prisma.PrismaClientKnownRequestError);
+    assert.equal(capturedError.code, "P2002");
+    assert.equal(capturedError.meta?.target, null);
+    const failure = classifyStudentImportExecutionError(capturedError);
+    assert.equal(failure.code, "DATABASE_UNIQUE_CONSTRAINT_CONFLICT");
+    assert.equal(failure.retryable, false);
+    assert.doesNotMatch(failure.message, /数据库并发冲突/u);
   } finally {
     await cleanup(context);
   }
