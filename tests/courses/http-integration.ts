@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
+import { PDFDocument } from "pdf-lib";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
 import { assertIsolatedIntegrationEnvironment } from "../integration/database";
@@ -19,8 +20,16 @@ assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
 const port = 3111;
 const baseUrl = `http://127.0.0.1:${port}`;
-const pdfA = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
-const pdfB = Buffer.from("%PDF-1.5\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
+
+async function testPdf(title: string): Promise<Buffer> {
+  const document = await PDFDocument.create();
+  document.setTitle(title);
+  document.addPage([595, 842]);
+  return Buffer.from(await document.save());
+}
+
+let pdfA: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+let pdfB: Buffer<ArrayBufferLike> = Buffer.alloc(0);
 const rosterCsvA = Buffer.from(
   [
     "学年学期(文本),课程号(文本),学号(文本),姓名(文本),班级(文本),成绩标识(文本),期末成绩(100.0%)(文本),特殊原因(文本),等级成绩类型(文本),备注(文本)",
@@ -141,6 +150,11 @@ async function requestMultipart(
 }
 
 async function main(): Promise<void> {
+  [pdfA, pdfB] = await Promise.all([
+    testPdf("HTTP Python 教学大纲"),
+    testPdf("HTTP Python 教学大纲第二版"),
+  ]);
+
   try {
     await waitForServer();
     const [admin, teacher, teacherTwo, student] = await Promise.all([
@@ -1232,7 +1246,7 @@ async function main(): Promise<void> {
     );
 
     console.info(
-      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation, file upload versioning, protected downloads, roster preview and execution, concurrent and cross-batch idempotency, one-time credential handoff, ownership isolation, classroom linking, unlinking, and invalid input handling.",
+      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation, file upload versioning, protected downloads, roster preview and execution, concurrent and cross-batch idempotency, pending identity registration, legacy credential endpoint isolation, ownership isolation, classroom linking, unlinking, and invalid input handling.",
     );
   } finally {
     if (createdStudentImportBatchIds.length > 0) {

@@ -4,7 +4,7 @@ AI 驱动的智能教学平台。当前 MVP 已完成管理员治理、教师教
 
 完整功能状态、角色权限、环境配置、测试数据库、演示流程和已知限制见 [`docs/MVP-ACCEPTANCE.md`](docs/MVP-ACCEPTANCE.md)。
 
-V1.0“迭代一：课程模型与导入基础”已经完成综合验收。当前学生名单导入采用“预导入身份、学生自主认领”的账号流程；历史一次性账号交付验收记录见 [`docs/ITERATION-ONE-ACCEPTANCE.md`](docs/ITERATION-ONE-ACCEPTANCE.md)。
+V1.0“迭代一：课程模型与导入基础”采用“预导入身份、学生自主认领”的账号流程。名单导入只创建待认领身份和班级预分配；学生在注册页使用唯一学号与名单姓名认领账号。历史一次性账号仅保留兼容能力，当前验收记录见 [`docs/ITERATION-ONE-ACCEPTANCE.md`](docs/ITERATION-ONE-ACCEPTANCE.md)。
 
 ## AI 学情分析
 

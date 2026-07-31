@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { PDFDocument } from "pdf-lib";
 
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -59,6 +60,22 @@ function isKnownPrismaError(error: unknown, code: string): boolean {
 const SYLLABUS_MAX_SIZE_BYTES = 20 * 1024 * 1024;
 const PDF_MIME_TYPE = "application/pdf";
 const PDF_HEADER = Buffer.from("%PDF-");
+
+async function assertReadablePdf(data: Buffer): Promise<void> {
+  try {
+    const document = await PDFDocument.load(data, {
+      ignoreEncryption: false,
+      updateMetadata: false,
+      throwOnInvalidObject: true,
+    });
+    document.getPageCount();
+  } catch {
+    throw new CourseOperationError(
+      "教学大纲 PDF 已损坏、被加密或无法解析，请更换文件后重试。",
+      400,
+    );
+  }
+}
 
 export interface CourseSyllabusUploadFile {
   name: string;
@@ -131,6 +148,7 @@ async function validatedSyllabusFile(
   if (!data.subarray(0, PDF_HEADER.length).equals(PDF_HEADER)) {
     throw new CourseOperationError("教学大纲文件内容不是合法 PDF。", 400);
   }
+  await assertReadablePdf(data);
 
   return {
     originalName,

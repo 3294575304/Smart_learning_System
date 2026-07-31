@@ -30,7 +30,7 @@ export function CourseStudentRosterImportCard({
             <h2 className="font-semibold">学生名单管理</h2>
           </div>
           <p className="text-muted-foreground mt-2 text-sm">
-            通过分步向导上传名单、核对字段映射、预览错误并完成账号入班。
+            通过分步向导上传名单、核对字段映射、预览错误并建立待认领学生身份。
           </p>
         </div>
         <Link
@@ -62,9 +62,9 @@ export function CourseStudentRosterImportCard({
         <div className="rounded-lg bg-gray-50 p-3">
           <p className="flex items-center gap-2 text-xs text-gray-600">
             <ShieldCheck className="h-4 w-4" />
-            安全交付
+            安全注册
           </p>
-          <p className="mt-2 text-sm font-medium">一次性账号表单次下载</p>
+          <p className="mt-2 text-sm font-medium">学号与名单姓名认领</p>
         </div>
       </div>
 

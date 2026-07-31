@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { AuditAction, AuditTargetType, PrismaClient } from "@prisma/client";
+import { PDFDocument } from "pdf-lib";
 
 import {
   createTeacherCourse,
@@ -21,12 +22,16 @@ const auditContext = {
   ipAddress: "127.0.0.1",
   userAgent: "course-syllabus-service-test",
 };
-const pdfA = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
-const pdfB = Buffer.from("%PDF-1.5\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
-
 process.on("exit", () => {
   void prisma.$disconnect();
 });
+
+async function testPdf(title: string): Promise<Buffer> {
+  const document = await PDFDocument.create();
+  document.setTitle(title);
+  document.addPage([595, 842]);
+  return Buffer.from(await document.save());
+}
 
 function bufferArrayBuffer(buffer: Buffer): ArrayBuffer {
   return Uint8Array.from(buffer).buffer;
@@ -86,6 +91,10 @@ async function createOwnedCourse(teacherId: string) {
 
 test("教师课程教学大纲上传、替换、校验、清理和审计", async () => {
   await withUploadRoot(async (root) => {
+    const [pdfA, pdfB] = await Promise.all([
+      testPdf("Python 教学大纲"),
+      testPdf("Python 教学大纲第二版"),
+    ]);
     const createdCourseIds: string[] = [];
     const touchedSyllabusIds: string[] = [];
     const storage = new LocalStorageService(root);
@@ -215,6 +224,20 @@ test("教师课程教学大纲上传、替换、校验、清理和审计", async
           uploadFile("fake.pdf", "application/pdf", Buffer.from("hello")),
           auditContext,
         ),
+      );
+      await assert.rejects(
+        () =>
+          uploadTeacherCourseSyllabus(
+            teacher.id,
+            course.id,
+            uploadFile(
+              "truncated.pdf",
+              "application/pdf",
+              Buffer.from("%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>"),
+            ),
+            auditContext,
+          ),
+        /已损坏、被加密或无法解析/u,
       );
       await assert.rejects(() =>
         uploadTeacherCourseSyllabus(

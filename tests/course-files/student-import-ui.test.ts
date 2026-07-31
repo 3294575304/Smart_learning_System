@@ -38,7 +38,7 @@ test("名单管理入口沿用课程详情卡片并展示明确安全说明", ()
 
   assert.match(markup, /学生名单管理/u);
   assert.match(markup, /分步向导/u);
-  assert.match(markup, /一次性账号表单次下载/u);
+  assert.match(markup, /学号与名单姓名认领/u);
   assert.match(markup, /\/teacher\/courses\/course-1\/students\/import/u);
   assert.match(markup, /1 个班级 · 42 名学生/u);
 });

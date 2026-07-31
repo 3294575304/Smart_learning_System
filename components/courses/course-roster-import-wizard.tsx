@@ -206,7 +206,7 @@ function PreviewSummary({ preview }: { preview: StudentImportPreviewPage }) {
   const summary = preview.batch.summary;
   const items = [
     ["总记录", summary.totalRows],
-    ["新建账号", summary.newUserRows],
+    ["新增待认领身份", summary.newUserRows],
     ["已有账号", summary.existingUserRows],
     ["已在班级", summary.alreadyEnrolledRows],
     ["警告记录", summary.warningRows],
@@ -531,7 +531,7 @@ export function CourseRosterImportWizard({
     if (!preview || !preview.batch.summary.canImport) return;
     if (
       !window.confirm(
-        `确认正式导入到“${selectedClassroom?.name ?? "目标班级"}”吗？本次将新建 ${preview.batch.summary.newUserRows} 个账号、匹配 ${preview.batch.summary.existingUserRows} 个已有账号。`,
+        `确认正式导入到“${selectedClassroom?.name ?? "目标班级"}”吗？本次将新增 ${preview.batch.summary.newUserRows} 个待认领身份、匹配 ${preview.batch.summary.existingUserRows} 个已有账号。`,
       )
     ) {
       return;
@@ -834,9 +834,9 @@ export function CourseRosterImportWizard({
       {currentStep === 4 ? (
         <section className="space-y-5 rounded-xl border bg-white p-5">
           <div>
-            <h2 className="font-semibold">第四步：导入结果与账号交付</h2>
+            <h2 className="font-semibold">第四步：导入结果与注册指引</h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              平台不会自动发送账号。教师需下载后通过已有联系方式自行分发。
+              平台不会生成或发送初始密码。请通知学生使用名单中的学号和姓名完成账号认领。
             </p>
           </div>
 

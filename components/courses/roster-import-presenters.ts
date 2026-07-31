@@ -13,13 +13,13 @@ export const ROSTER_IMPORT_STEPS = [
   { number: 1, label: "上传文件", description: "选择班级与名单版本" },
   { number: 2, label: "字段映射", description: "核对自动识别结果" },
   { number: 3, label: "数据预览", description: "检查错误与导入范围" },
-  { number: 4, label: "确认导入", description: "查看结果并下载账号表" },
+  { number: 4, label: "确认导入", description: "查看结果并通知学生认领" },
 ] as const;
 
 export const PREVIEW_STATUS_LABELS: Record<StudentImportPreviewStatus, string> =
   {
     PENDING: "待处理",
-    NEW_USER: "将新建账号",
+    NEW_USER: "将新建待认领身份",
     EXISTING_USER: "已有账号，将加入班级",
     ALREADY_ENROLLED: "已在班级",
     COURSE_MISMATCH: "课程或学期不匹配",
