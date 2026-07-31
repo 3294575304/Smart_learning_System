@@ -63,6 +63,14 @@ export interface TeacherCourseDetail extends TeacherCourseListItem {
   classrooms: TeacherCourseClassroomView[];
 }
 
+export interface TeacherCourseDeletionResult {
+  id: string;
+  name: string;
+  courseNo: string;
+  term: string;
+  deletedAt: Date;
+}
+
 export interface CourseSyllabusView {
   id: string;
   courseId: string;

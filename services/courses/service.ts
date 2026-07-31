@@ -5,6 +5,8 @@ import {
   CourseStatus,
   MembershipStatus,
   Prisma,
+  StudentImportBatchStatus,
+  StudentImportExecutionStatus,
 } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -45,6 +47,7 @@ import type {
   CourseSyllabusDownload,
   CourseSyllabusView,
   TeacherCourseClassroomView,
+  TeacherCourseDeletionResult,
   TeacherCourseDetail,
   TeacherCourseListItem,
 } from "@/services/courses/types";
@@ -330,11 +333,34 @@ function courseUpdateSnapshot(
   };
 }
 
+function courseDeletionSnapshot(
+  course: TeacherCourseRecord,
+  deletedAt: Date,
+): AuditConfigSnapshot {
+  return {
+    courseId: course.id,
+    title: course.name,
+    name: course.name,
+    courseNo: course.courseNo,
+    term: course.term,
+    teacherId: course.teacherId,
+    templateId: course.templateId,
+    templateCode: course.template.code,
+    status: course.status,
+    classroomIds: course.classrooms.map((classroom) => classroom.id),
+    deletedAt: deletedAt.toISOString(),
+  };
+}
+
 function throwIfUniqueConstraintError(error: unknown, message: string): never {
   if (isKnownPrismaError(error, "P2002")) {
     throw new CourseOperationError(message);
   }
   throw error;
+}
+
+function isTransactionConflict(error: unknown): boolean {
+  return isKnownPrismaError(error, "P2034");
 }
 
 export async function listAdminCourseTemplates(): Promise<
@@ -848,6 +874,279 @@ export async function updateTeacherCourse(
     );
     return courseDetailFromRecords(after, classrooms);
   });
+}
+
+interface CourseDeletionDependencies {
+  storage?: StorageService;
+  logger?: Pick<Console, "error">;
+  writeAuditLog?: typeof writeGovernanceAuditLog;
+}
+
+interface OptionalSyllabusParseDraftDelegate {
+  syllabusParseDraft?: {
+    deleteMany(args: { where: { courseId: string } }): Promise<unknown>;
+  };
+}
+
+async function deleteCourseSyllabusParseDrafts(
+  transaction: Prisma.TransactionClient,
+  courseId: string,
+): Promise<void> {
+  const delegate = (
+    transaction as unknown as OptionalSyllabusParseDraftDelegate
+  )
+    .syllabusParseDraft;
+  if (delegate) {
+    await delegate.deleteMany({ where: { courseId } });
+  }
+}
+
+async function deleteCourseFilesAfterCommit(
+  storageKeys: string[],
+  storage: StorageService,
+  logger: Pick<Console, "error">,
+): Promise<void> {
+  const uniqueStorageKeys = [...new Set(storageKeys)];
+  const results = await Promise.allSettled(
+    uniqueStorageKeys.map((storageKey) => storage.delete(storageKey)),
+  );
+
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      logger.error(
+        `Failed to delete course file after database deletion: ${uniqueStorageKeys[index]}`,
+        result.reason,
+      );
+    }
+  });
+}
+
+export async function deleteTeacherCourse(
+  teacherId: string,
+  courseId: string,
+  context: AuditRequestContext,
+  dependencies: CourseDeletionDependencies = {},
+): Promise<TeacherCourseDeletionResult> {
+  const storage = dependencies.storage ?? getStorageService();
+  const logger = dependencies.logger ?? console;
+  const writeAuditLog = dependencies.writeAuditLog ?? writeGovernanceAuditLog;
+  let transactionResult:
+    | {
+        result: TeacherCourseDeletionResult;
+        storageKeys: string[];
+      }
+    | undefined;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      transactionResult = await prisma.$transaction(
+        async (transaction) => {
+          await transaction.$queryRaw<Array<{ id: string }>>`
+            SELECT "id"
+            FROM "Course"
+            WHERE "id" = ${courseId} AND "teacherId" = ${teacherId}
+            FOR UPDATE
+          `;
+
+          const course = await findTeacherCourseById(
+            teacherId,
+            courseId,
+            transaction,
+          );
+          if (!course) {
+            throw new ResourceNotFoundError("课程不存在");
+          }
+          if (course.status !== CourseStatus.DRAFT) {
+            throw new CourseOperationError(
+              "只有尚未发布的草稿课程可以删除。",
+              409,
+            );
+          }
+
+          await transaction.$queryRaw<Array<{ id: string }>>`
+            SELECT "id"
+            FROM "Classroom"
+            WHERE "courseId" = ${courseId}
+            FOR UPDATE
+          `;
+
+          const classroomIds = course.classrooms.map(
+            (classroom) => classroom.id,
+          );
+          if (classroomIds.length > 0) {
+            const [
+              assignmentCount,
+              submissionCount,
+              answerCount,
+              analysisCount,
+              recommendationCount,
+            ] = await Promise.all([
+              transaction.assignment.count({
+                where: { classroomId: { in: classroomIds } },
+              }),
+              transaction.submission.count({
+                where: {
+                  assignment: { classroomId: { in: classroomIds } },
+                },
+              }),
+              transaction.studentAnswer.count({
+                where: {
+                  submission: {
+                    assignment: { classroomId: { in: classroomIds } },
+                  },
+                },
+              }),
+              transaction.aIAnalysis.count({
+                where: { classroomId: { in: classroomIds } },
+              }),
+              transaction.personalizedRecommendation.count({
+                where: {
+                  analysis: {
+                    classroomId: { in: classroomIds },
+                  },
+                },
+              }),
+            ]);
+
+            if (assignmentCount > 0 || submissionCount > 0 || answerCount > 0) {
+              throw new CourseOperationError(
+                "该课程已经产生作业、学生作答、成绩或批改记录，不能删除。",
+                409,
+              );
+            }
+            if (analysisCount > 0 || recommendationCount > 0) {
+              throw new CourseOperationError(
+                "该课程已经产生学情分析、画像或推荐数据，不能删除。",
+                409,
+              );
+            }
+          }
+
+          const formalImportBatchCount =
+            await transaction.studentImportBatch.count({
+              where: {
+                courseId,
+                OR: [
+                  {
+                    status: {
+                      in: [
+                        StudentImportBatchStatus.PROCESSING,
+                        StudentImportBatchStatus.SUCCEEDED,
+                        StudentImportBatchStatus.PARTIAL_FAILED,
+                      ],
+                    },
+                  },
+                  { importedRows: { gt: 0 } },
+                  { identityAssignments: { some: {} } },
+                  {
+                    rows: {
+                      some: {
+                        OR: [
+                          {
+                            executionStatus:
+                              StudentImportExecutionStatus.APPLIED,
+                          },
+                          { matchedMembershipId: { not: null } },
+                          { createdMembershipId: { not: null } },
+                          { createdUserId: { not: null } },
+                          { studentIdentityId: { not: null } },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            });
+          if (formalImportBatchCount > 0) {
+            throw new CourseOperationError(
+              "该课程的学生名单已经正式导入或正在处理，不能删除。",
+              409,
+            );
+          }
+
+          const [courseFiles, syllabi] = await Promise.all([
+            transaction.courseFileVersion.findMany({
+              where: { courseId },
+              select: { storageKey: true },
+            }),
+            transaction.courseSyllabus.findMany({
+              where: { courseId },
+              select: { storageKey: true },
+            }),
+          ]);
+          const storageKeys = [
+            ...courseFiles.map((file) => file.storageKey),
+            ...syllabi.map((syllabus) => syllabus.storageKey),
+          ];
+          const deletedAt = new Date();
+          const snapshot = courseDeletionSnapshot(course, deletedAt);
+
+          await transaction.studentImportBatch.deleteMany({
+            where: { courseId },
+          });
+          await deleteCourseSyllabusParseDrafts(transaction, courseId);
+          await transaction.courseSyllabus.deleteMany({
+            where: { courseId },
+          });
+          await transaction.courseFileVersion.deleteMany({
+            where: { courseId },
+          });
+          await transaction.classroom.updateMany({
+            where: { courseId },
+            data: { courseId: null },
+          });
+          await transaction.course.delete({ where: { id: courseId } });
+
+          await writeAuditLog(transaction, {
+            actorId: teacherId,
+            action: AuditAction.COURSE_DELETED,
+            targetType: AuditTargetType.COURSE,
+            targetId: courseId,
+            summary: `删除课程：${course.name}（${course.courseNo} / ${course.term}）`,
+            beforeData: snapshot,
+            afterData: {
+              courseId,
+              teacherId,
+              deletedById: teacherId,
+              deletedAt: deletedAt.toISOString(),
+            },
+            context,
+          });
+
+          return {
+            result: {
+              id: course.id,
+              name: course.name,
+              courseNo: course.courseNo,
+              term: course.term,
+              deletedAt,
+            },
+            storageKeys,
+          };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+      break;
+    } catch (error: unknown) {
+      if (isTransactionConflict(error) && attempt < 2) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (!transactionResult) {
+    throw new CourseOperationError("课程删除冲突，请稍后重试。", 409);
+  }
+
+  await deleteCourseFilesAfterCommit(
+    transactionResult.storageKeys,
+    storage,
+    logger,
+  );
+  return transactionResult.result;
 }
 
 export async function linkTeacherClassroomToCourse(

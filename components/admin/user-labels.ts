@@ -37,6 +37,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   COURSE_TEMPLATE_DISABLED: "停用课程模板",
   COURSE_CREATED: "创建课程",
   COURSE_UPDATED: "更新课程",
+  COURSE_DELETED: "删除课程",
   COURSE_CLASSROOM_LINKED: "关联班级",
   COURSE_CLASSROOM_UNLINKED: "解除班级关联",
   COURSE_FILE_UPLOADED: "上传课程文件",

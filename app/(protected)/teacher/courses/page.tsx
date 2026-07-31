@@ -1,8 +1,9 @@
-import { CourseStatus, Role } from "@prisma/client";
-import { BookOpenCheck, Plus, School } from "lucide-react";
+import { Role } from "@prisma/client";
+import { BookOpenCheck, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { CourseForm } from "@/components/courses/course-form";
+import { TeacherCourseList } from "@/components/courses/teacher-course-list";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -10,18 +11,6 @@ import {
   listTeacherCourseTemplates,
   listTeacherCourses,
 } from "@/services/courses/service";
-
-const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
-  DRAFT: "草稿",
-  ACTIVE: "启用",
-  ARCHIVED: "归档",
-};
-
-const COURSE_STATUS_STYLES: Record<CourseStatus, string> = {
-  DRAFT: "bg-gray-100 text-gray-700",
-  ACTIVE: "bg-emerald-50 text-emerald-700",
-  ARCHIVED: "bg-slate-100 text-slate-600",
-};
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -54,77 +43,7 @@ export default async function TeacherCoursesPage({}: PageProps) {
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <section className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-semibold">我的课程</h2>
-            <span className="text-muted-foreground text-sm">
-              共 {courses.length} 门
-            </span>
-          </div>
-          {courses.length === 0 ? (
-            <EmptyState
-              description="先基于课程模板创建一门课程，再把班级关联进来。"
-              icon={School}
-              title="暂无课程"
-            />
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {courses.map((course) => (
-                <Link
-                  className="bg-card rounded-xl border p-5 transition-colors hover:bg-gray-50"
-                  href={`/teacher/courses/${course.id}`}
-                  key={course.id}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate font-semibold">{course.name}</h3>
-                      <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
-                        {course.description ?? "暂无课程说明"}
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
-                    >
-                      {COURSE_STATUS_LABELS[course.status]}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                    <div>
-                      <p className="text-muted-foreground text-xs">课程号</p>
-                      <p className="mt-1 font-medium">{course.courseNo}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs">学期</p>
-                      <p className="mt-1 font-medium">{course.term}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs">关联班级</p>
-                      <p className="mt-1 font-medium">
-                        {course.classroomCount}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs">学生人数</p>
-                      <p className="mt-1 font-medium">
-                        {course.activeStudentCount}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between gap-3 text-xs">
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">
-                      {course.template.name}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {course.activeClassroomCount} 个开课班级
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
+        <TeacherCourseList initialCourses={courses} />
 
         <aside className="space-y-4">
           <section className="bg-card rounded-xl border p-5">

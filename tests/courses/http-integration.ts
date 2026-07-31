@@ -53,6 +53,7 @@ const sessionIds: string[] = [];
 const createdTemplateIds: string[] = [];
 const createdCourseIds: string[] = [];
 const createdClassroomIds: string[] = [];
+const createdAssignmentIds: string[] = [];
 const createdSyllabusIds: string[] = [];
 const createdCourseFileIds: string[] = [];
 const createdStudentImportBatchIds: string[] = [];
@@ -716,6 +717,147 @@ async function main(): Promise<void> {
       (
         await requestJson(
           `/api/teacher/courses/${createdCourse.data.id}`,
+          teacherCookie,
+          "DELETE",
+        )
+      ).status,
+      409,
+    );
+
+    const deletableCourse = await prisma.course.create({
+      data: {
+        templateId: createdTemplate.data.id,
+        teacherId: teacher.id,
+        courseNo: `HTTP-DELETE-${randomBytes(3).toString("hex").toUpperCase()}`,
+        term: "2026-2027-1",
+        name: "HTTP 可删除草稿课程",
+        status: "DRAFT",
+      },
+      select: { id: true },
+    });
+    createdCourseIds.push(deletableCourse.id);
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/courses/${deletableCourse.id}`,
+          undefined,
+          "DELETE",
+        )
+      ).status,
+      401,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/courses/${deletableCourse.id}`,
+          studentCookie,
+          "DELETE",
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/courses/${deletableCourse.id}`,
+          adminCookie,
+          "DELETE",
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/courses/${deletableCourse.id}`,
+          teacherTwoCookie,
+          "DELETE",
+        )
+      ).status,
+      404,
+    );
+
+    const deleteResponse = await requestJson(
+      `/api/teacher/courses/${deletableCourse.id}`,
+      teacherCookie,
+      "DELETE",
+    );
+    assert.equal(deleteResponse.status, 200);
+    assert.equal(
+      (
+        (await deleteResponse.json()) as ApiSuccess<{
+          id: string;
+        }>
+      ).data.id,
+      deletableCourse.id,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/courses/${deletableCourse.id}`,
+          teacherCookie,
+          "DELETE",
+        )
+      ).status,
+      404,
+    );
+    const coursesAfterDelete = (await requestJson(
+      "/api/teacher/courses",
+      teacherCookie,
+    ).then((response) => response.json())) as ApiSuccess<Array<{ id: string }>>;
+    assert.equal(
+      coursesAfterDelete.data.some((item) => item.id === deletableCourse.id),
+      false,
+    );
+
+    const formalCourse = await prisma.course.create({
+      data: {
+        templateId: createdTemplate.data.id,
+        teacherId: teacher.id,
+        courseNo: `HTTP-FORMAL-${randomBytes(3).toString("hex").toUpperCase()}`,
+        term: "2026-2027-1",
+        name: "HTTP 已有教学数据草稿",
+        status: "DRAFT",
+      },
+      select: { id: true },
+    });
+    createdCourseIds.push(formalCourse.id);
+    const formalClassroom = await prisma.classroom.create({
+      data: {
+        teacherId: teacher.id,
+        courseId: formalCourse.id,
+        joinCode: `HTTPFORMAL${randomBytes(4).toString("hex").toUpperCase()}`,
+        name: "HTTP 正式数据班级",
+      },
+      select: { id: true },
+    });
+    createdClassroomIds.push(formalClassroom.id);
+    const formalAssignment = await prisma.assignment.create({
+      data: {
+        classroomId: formalClassroom.id,
+        teacherId: teacher.id,
+        title: "HTTP 已发布作业",
+        status: "PUBLISHED",
+        publishedAt: new Date(),
+      },
+      select: { id: true },
+    });
+    createdAssignmentIds.push(formalAssignment.id);
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/courses/${formalCourse.id}`,
+          teacherCookie,
+          "DELETE",
+        )
+      ).status,
+      409,
+    );
+
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/courses/${createdCourse.data.id}`,
           teacherTwoCookie,
         )
       ).status,
@@ -1246,9 +1388,14 @@ async function main(): Promise<void> {
     );
 
     console.info(
-      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation, file upload versioning, protected downloads, roster preview and execution, concurrent and cross-batch idempotency, pending identity registration, legacy credential endpoint isolation, ownership isolation, classroom linking, unlinking, and invalid input handling.",
+      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation and safe deletion, file upload versioning, protected downloads, roster preview and execution, concurrent and cross-batch idempotency, pending identity registration, legacy credential endpoint isolation, ownership isolation, classroom linking, unlinking, and invalid input handling.",
     );
   } finally {
+    if (createdAssignmentIds.length > 0) {
+      await prisma.assignment.deleteMany({
+        where: { id: { in: createdAssignmentIds } },
+      });
+    }
     if (createdStudentImportBatchIds.length > 0) {
       await prisma.auditLog.deleteMany({
         where: { targetId: { in: createdStudentImportBatchIds } },
