@@ -41,12 +41,15 @@ const validOutput: SyllabusParseOutput = {
     totalHours: 32,
     theoryHours: 20,
     practiceHours: 12,
+    description: "Python programming syllabus.",
+    sourceRefs: [{ page: 1, verified: false }],
   },
   objectives: [
     {
       code: "OBJ-1",
       title: "Programming foundations",
       description: "Understand Python foundations.",
+      sourceRefs: [{ page: 1, verified: false }],
     },
   ],
   chapters: [
@@ -56,24 +59,39 @@ const validOutput: SyllabusParseOutput = {
       description: null,
       suggestedHours: 2,
       order: 1,
+      sourceRefs: [{ page: 1, verified: false }],
       knowledgePoints: [
         {
           code: "KP-1",
           name: "Basic syntax",
           description: null,
           importance: "CORE",
+          sourceRefs: [{ page: 1, verified: false }],
         },
       ],
     },
   ],
+  prerequisites: [],
+  keyTopics: [],
+  difficultTopics: [],
   assessments: [
     {
+      code: "ASSESS-1",
       name: "Final examination",
       type: "EXAM",
       weight: 100,
       description: null,
+      sourceRefs: [{ page: 1, verified: false }],
     },
   ],
+  objectiveAssessmentMappings: [
+    {
+      objectiveCode: "OBJ-1",
+      assessmentCode: "ASSESS-1",
+      sourceRefs: [{ page: 1, verified: false }],
+    },
+  ],
+  materials: [],
   warnings: [],
 };
 

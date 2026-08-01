@@ -103,6 +103,7 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
 
     setSyllabus(result.data);
     setSuccessMessage(syllabus ? "教学大纲已替换。" : "教学大纲已上传。");
+    window.dispatchEvent(new CustomEvent("course-syllabus-updated"));
     router.refresh();
   }
 

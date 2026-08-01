@@ -8,6 +8,10 @@ import {
   createTeacherSyllabusParse,
   getTeacherSyllabusParses,
 } from "@/services/syllabus-parsing/service";
+import {
+  getLatestTeacherSyllabusReview,
+  getTeacherPublishedSyllabi,
+} from "@/services/syllabus-parsing/review-service";
 
 interface RouteContext {
   params: Promise<{ courseId: string }>;
@@ -23,9 +27,19 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!parsedId.success) return apiError("课程 ID 格式无效", 400);
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
-    return apiSuccess(
-      await getTeacherSyllabusParses(teacher.id, parsedId.data),
-    );
+    const parses = await getTeacherSyllabusParses(teacher.id, parsedId.data);
+    const [review, published] = await Promise.all([
+      parses.current?.status === "SUCCEEDED" &&
+      parses.current.hasFieldSourceRefs
+        ? getLatestTeacherSyllabusReview(
+            teacher.id,
+            parsedId.data,
+            parses.current.id,
+          )
+        : null,
+      getTeacherPublishedSyllabi(teacher.id, parsedId.data),
+    ]);
+    return apiSuccess({ ...parses, review, published });
   } catch (error: unknown) {
     return syllabusParseApiError(error);
   }

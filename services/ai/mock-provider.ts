@@ -47,12 +47,19 @@ export class MockAIProvider implements AIProvider {
         totalHours: null,
         theoryHours: null,
         practiceHours: null,
+        description: "Python 程序设计课程基础信息。",
+        sourceRefs: [
+          { page: input.pages[0]?.pageNumber ?? 1, verified: false },
+        ],
       },
       objectives: [
         {
           code: "OBJ-1",
           title: "课程目标 1",
           description: "理解 Python 程序设计基础并能够解决基础问题。",
+          sourceRefs: [
+            { page: input.pages[0]?.pageNumber ?? 1, verified: false },
+          ],
         },
       ],
       chapters: [
@@ -62,17 +69,28 @@ export class MockAIProvider implements AIProvider {
           description: "根据教学大纲文本形成的稳定 Mock 章节。",
           suggestedHours: null,
           order: 1,
+          sourceRefs: [
+            { page: input.pages[0]?.pageNumber ?? 1, verified: false },
+          ],
           knowledgePoints: [
             {
               code: "KP-1",
               name: "Python 基础语法",
               description: null,
               importance: "CORE",
+              sourceRefs: [
+                { page: input.pages[0]?.pageNumber ?? 1, verified: false },
+              ],
             },
           ],
         },
       ],
+      prerequisites: [],
+      keyTopics: [],
+      difficultTopics: [],
       assessments: [],
+      objectiveAssessmentMappings: [],
+      materials: [],
       warnings: ["Mock Provider 仅用于本地开发和自动化测试。"],
     };
     return output;

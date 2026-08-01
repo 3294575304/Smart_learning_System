@@ -1078,6 +1078,16 @@ export async function deleteTeacherCourse(
           await transaction.studentImportBatch.deleteMany({
             where: { courseId },
           });
+          await transaction.course.update({
+            where: { id: courseId },
+            data: { currentPublishedSyllabusStructureId: null },
+          });
+          await transaction.publishedSyllabusStructure.deleteMany({
+            where: { courseId },
+          });
+          await transaction.syllabusReviewRevision.deleteMany({
+            where: { courseId },
+          });
           await deleteCourseSyllabusParseDrafts(transaction, courseId);
           await transaction.courseSyllabus.deleteMany({
             where: { courseId },

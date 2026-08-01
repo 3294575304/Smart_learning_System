@@ -7,6 +7,7 @@ import { CourseClassroomManager } from "@/components/courses/course-classroom-ma
 import { CourseForm } from "@/components/courses/course-form";
 import { CourseStudentRosterImportCard } from "@/components/courses/course-student-roster-import-card";
 import { CourseSyllabusCard } from "@/components/courses/course-syllabus-card";
+import { CourseSyllabusReviewPanel } from "@/components/courses/course-syllabus-review-panel";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
@@ -130,6 +131,7 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
           </div>
 
           <CourseSyllabusCard courseId={course.id} />
+          <CourseSyllabusReviewPanel courseId={course.id} />
 
           <CourseStudentRosterImportCard
             courseId={course.id}

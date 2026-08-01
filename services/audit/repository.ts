@@ -151,7 +151,9 @@ interface WriteGovernanceAuditInput {
     | typeof AuditTargetType.COURSE
     | typeof AuditTargetType.COURSE_TEMPLATE
     | typeof AuditTargetType.COURSE_FILE
-    | typeof AuditTargetType.STUDENT_IMPORT_BATCH;
+    | typeof AuditTargetType.STUDENT_IMPORT_BATCH
+    | typeof AuditTargetType.SYLLABUS_REVIEW
+    | typeof AuditTargetType.SYLLABUS_STRUCTURE;
   targetId: string;
   summary: string;
   beforeData: AuditConfigSnapshot | null;

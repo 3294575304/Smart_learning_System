@@ -458,6 +458,117 @@ async function main(): Promise<void> {
       teacherCookie,
     );
     assert.equal(parseQueryResponse.status, 200);
+    assert.equal(
+      (await requestJson(syllabusParsePath, studentCookie)).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson(syllabusParsePath, adminCookie)).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson(syllabusParsePath, teacherTwoCookie)).status,
+      404,
+    );
+
+    const parseState = (await parseQueryResponse.json()) as ApiSuccess<{
+      current: {
+        id: string;
+        result: {
+          courseInfo: unknown;
+          objectives: unknown[];
+          chapters: unknown[];
+          prerequisites: unknown[];
+          keyTopics: unknown[];
+          difficultTopics: unknown[];
+          assessments: unknown[];
+          objectiveAssessmentMappings: unknown[];
+          materials: unknown[];
+          warnings: string[];
+        };
+      };
+      review: null;
+      published: { current: null; history: [] };
+    }>;
+    const reviewPath = `${syllabusParsePath}/${parseState.data.current.id}/review`;
+    const publishPath = `${syllabusParsePath}/${parseState.data.current.id}/publish`;
+    assert.equal(
+      (await requestJson(reviewPath, studentCookie, "PATCH", {})).status,
+      403,
+    );
+    const reviewResponse = await requestJson(
+      reviewPath,
+      teacherCookie,
+      "PATCH",
+      {
+        expectedRevisionNumber: 0,
+        structure: parseState.data.current.result,
+      },
+    );
+    assert.equal(
+      reviewResponse.status,
+      200,
+      await reviewResponse.clone().text(),
+    );
+    const review = (await reviewResponse.json()) as ApiSuccess<{
+      id: string;
+      revisionNumber: number;
+    }>;
+    assert.equal(review.data.revisionNumber, 1);
+    assert.equal(
+      (
+        await requestJson(reviewPath, teacherCookie, "PATCH", {
+          expectedRevisionNumber: 0,
+          structure: parseState.data.current.result,
+        })
+      ).status,
+      409,
+    );
+    const publishResponse = await requestJson(
+      publishPath,
+      teacherCookie,
+      "POST",
+      { reviewRevisionId: review.data.id },
+    );
+    assert.equal(
+      publishResponse.status,
+      200,
+      await publishResponse.clone().text(),
+    );
+    const published = (await publishResponse.json()) as ApiSuccess<{
+      id: string;
+      versionNumber: number;
+    }>;
+    assert.equal(published.data.versionNumber, 1);
+    const replayPublish = await requestJson(
+      publishPath,
+      teacherCookie,
+      "POST",
+      { reviewRevisionId: review.data.id },
+    );
+    assert.equal(replayPublish.status, 200);
+    assert.equal(
+      ((await replayPublish.json()) as ApiSuccess<{ id: string }>).data.id,
+      published.data.id,
+    );
+    const publishedPath = `${syllabusPath}/published`;
+    assert.equal((await requestJson(publishedPath, studentCookie)).status, 403);
+    assert.equal((await requestJson(publishedPath, adminCookie)).status, 403);
+    assert.equal(
+      (await requestJson(publishedPath, teacherTwoCookie)).status,
+      404,
+    );
+    const publishedQuery = await requestJson(publishedPath, teacherCookie);
+    assert.equal(publishedQuery.status, 200);
+    assert.equal(
+      (
+        (await publishedQuery.json()) as ApiSuccess<{
+          current: { id: string };
+          history: unknown[];
+        }>
+      ).data.current.id,
+      published.data.id,
+    );
 
     assert.equal(
       (
@@ -1490,6 +1601,33 @@ async function main(): Promise<void> {
       });
     }
     if (createdCourseIds.length > 0) {
+      await prisma.course.updateMany({
+        where: { id: { in: createdCourseIds } },
+        data: { currentPublishedSyllabusStructureId: null },
+      });
+      const [reviewRecords, publishedRecords] = await Promise.all([
+        prisma.syllabusReviewRevision.findMany({
+          where: { courseId: { in: createdCourseIds } },
+          select: { id: true },
+        }),
+        prisma.publishedSyllabusStructure.findMany({
+          where: { courseId: { in: createdCourseIds } },
+          select: { id: true },
+        }),
+      ]);
+      await prisma.auditLog.deleteMany({
+        where: {
+          targetId: {
+            in: [...reviewRecords, ...publishedRecords].map((item) => item.id),
+          },
+        },
+      });
+      await prisma.publishedSyllabusStructure.deleteMany({
+        where: { courseId: { in: createdCourseIds } },
+      });
+      await prisma.syllabusReviewRevision.deleteMany({
+        where: { courseId: { in: createdCourseIds } },
+      });
       await prisma.syllabusParseDraft.deleteMany({
         where: { courseId: { in: createdCourseIds } },
       });

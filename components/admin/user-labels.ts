@@ -48,4 +48,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   STUDENT_IMPORT_EXECUTED: "执行学生名单导入",
   STUDENT_IMPORT_ACCOUNT_SHEET_DOWNLOADED: "下载初始账号表",
   STUDENT_IMPORT_FAILED: "学生名单导入失败",
+  SYLLABUS_REVIEW_SAVED: "保存教学大纲审核稿",
+  SYLLABUS_STRUCTURE_PUBLISHED: "发布教学大纲结构",
 };

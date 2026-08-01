@@ -63,6 +63,18 @@
 - AI 故障不会阻塞交卷、批改或成绩查看。
 - 本地可使用 `mock` Provider；生产环境可使用 OpenAI-compatible Provider。
 
+### 教学大纲审核与发布
+
+- 教学大纲 PDF、AI 原始解析草稿、教师审核修订和正式结构分别保存，教师修改不会覆盖 AI 原稿。
+- 新解析 Schema 提供课程信息、课程目标、章节、知识点、先修关系、重点难点、考核项目、目标映射、教材资料和 warnings。
+- 核心结构项保存 PDF 页码和长度受限的原文片段；页码越界会被服务端拒绝，无法核验的片段明确标为待核验。
+- 审核保存使用不可变修订和乐观并发版本，过期页面返回 `409`，不会静默覆盖。
+- 发布在一个事务内创建不可变正式版本、更新课程当前版本指针并写审计日志；同一审核修订重复发布不会创建重复版本。
+- 历史文件、解析稿和正式版本继续保留。上传新大纲不会自动替换当前正式结构，课程详情会显示来源过期提示。
+- 页面入口：教师课程详情 `/teacher/courses/:courseId` 的“教学大纲解析与审核”。
+- 接口：`PATCH /api/teacher/courses/:courseId/syllabus/parse/:draftId/review`、`POST /api/teacher/courses/:courseId/syllabus/parse/:draftId/publish`、`GET /api/teacher/courses/:courseId/syllabus/published`。
+- 当前限制：不支持 OCR、DOCX 大纲解析、持久化后台 worker、知识图谱发布、题目自动绑定及对既有作业、成绩、画像或推荐的自动修改。
+
 ## 角色权限摘要
 
 | 能力           | 管理员     | 教师                   | 学生                   |

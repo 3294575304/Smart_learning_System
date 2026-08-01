@@ -55,6 +55,8 @@ enum AuditAction {
   STUDENT_IMPORT_EXECUTED
   STUDENT_IMPORT_ACCOUNT_SHEET_DOWNLOADED
   STUDENT_IMPORT_FAILED
+  SYLLABUS_REVIEW_SAVED
+  SYLLABUS_STRUCTURE_PUBLISHED
 }
 
 enum AuditTargetType {
@@ -69,6 +71,8 @@ enum AuditTargetType {
   COURSE_TEMPLATE
   COURSE_FILE
   STUDENT_IMPORT_BATCH
+  SYLLABUS_REVIEW
+  SYLLABUS_STRUCTURE
 }
 
 enum NotificationType {
@@ -320,6 +324,8 @@ model User {
   uploadedCourseFiles         CourseFileVersion[]          @relation("CourseFileUploadedBy")
   uploadedCourseSyllabi       CourseSyllabus[]             @relation("CourseSyllabusUploadedBy")
   requestedSyllabusParses     SyllabusParseDraft[]         @relation("SyllabusParseRequestedBy")
+  syllabusReviewRevisions     SyllabusReviewRevision[]     @relation("SyllabusReviewEditedBy")
+  publishedSyllabusStructures PublishedSyllabusStructure[] @relation("SyllabusStructurePublishedBy")
   createdStudentImportBatches StudentImportBatch[]         @relation("StudentImportBatchCreatedBy")
   matchedStudentImportRows    StudentImportRow[]           @relation("StudentImportMatchedUser")
   createdStudentImportRows    StudentImportRow[]           @relation("StudentImportCreatedUser")
@@ -522,26 +528,30 @@ model CourseTemplate {
 }
 
 model Course {
-  id          String       @id @default(cuid())
-  templateId  String
-  teacherId   String
-  courseNo    String       @db.VarChar(50)
-  term        String       @db.VarChar(50)
-  name        String       @db.VarChar(100)
-  description String?      @db.Text
-  status      CourseStatus @default(DRAFT)
-  publishedAt DateTime?
-  archivedAt  DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id                                  String       @id @default(cuid())
+  templateId                          String
+  teacherId                           String
+  courseNo                            String       @db.VarChar(50)
+  term                                String       @db.VarChar(50)
+  name                                String       @db.VarChar(100)
+  description                         String?      @db.Text
+  status                              CourseStatus @default(DRAFT)
+  publishedAt                         DateTime?
+  archivedAt                          DateTime?
+  currentPublishedSyllabusStructureId String?      @unique
+  createdAt                           DateTime     @default(now())
+  updatedAt                           DateTime     @updatedAt
 
-  template             CourseTemplate       @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  teacher              User                 @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
-  classrooms           Classroom[]          @relation("ClassroomCourse")
-  courseFileVersions   CourseFileVersion[]  @relation("CourseFileCourse")
-  syllabi              CourseSyllabus[]     @relation("CourseSyllabusCourse")
-  syllabusParseDrafts  SyllabusParseDraft[]
-  studentImportBatches StudentImportBatch[] @relation("StudentImportCourse")
+  template                          CourseTemplate               @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  teacher                           User                         @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  classrooms                        Classroom[]                  @relation("ClassroomCourse")
+  courseFileVersions                CourseFileVersion[]          @relation("CourseFileCourse")
+  syllabi                           CourseSyllabus[]             @relation("CourseSyllabusCourse")
+  syllabusParseDrafts               SyllabusParseDraft[]
+  syllabusReviewRevisions           SyllabusReviewRevision[]
+  publishedSyllabusStructures       PublishedSyllabusStructure[] @relation("PublishedSyllabusStructureCourse")
+  currentPublishedSyllabusStructure PublishedSyllabusStructure?  @relation("CurrentPublishedSyllabusStructure", fields: [currentPublishedSyllabusStructureId], references: [id], onDelete: SetNull)
+  studentImportBatches              StudentImportBatch[]         @relation("StudentImportCourse")
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -595,9 +605,11 @@ model CourseSyllabus {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  course      Course               @relation("CourseSyllabusCourse", fields: [courseId], references: [id], onDelete: Cascade)
-  uploadedBy  User                 @relation("CourseSyllabusUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
-  parseDrafts SyllabusParseDraft[]
+  course              Course                       @relation("CourseSyllabusCourse", fields: [courseId], references: [id], onDelete: Cascade)
+  uploadedBy          User                         @relation("CourseSyllabusUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  parseDrafts         SyllabusParseDraft[]
+  reviewRevisions     SyllabusReviewRevision[]
+  publishedStructures PublishedSyllabusStructure[]
 
   @@unique([courseId, versionNumber])
   @@index([courseId, createdAt])
@@ -625,13 +637,63 @@ model SyllabusParseDraft {
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
-  course      Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  syllabus    CourseSyllabus @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
-  requestedBy User           @relation("SyllabusParseRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  course              Course                       @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  syllabus            CourseSyllabus               @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  requestedBy         User                         @relation("SyllabusParseRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewRevisions     SyllabusReviewRevision[]
+  publishedStructures PublishedSyllabusStructure[]
 
   @@unique([syllabusId, parserVersion])
   @@index([courseId, status, createdAt])
   @@index([requestedById, createdAt])
+}
+
+model SyllabusReviewRevision {
+  id             String   @id @default(cuid())
+  courseId       String
+  syllabusId     String
+  parseDraftId   String
+  editedById     String
+  revisionNumber Int
+  structureJson  Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  course             Course                      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  syllabus           CourseSyllabus              @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  parseDraft         SyllabusParseDraft          @relation(fields: [parseDraftId], references: [id], onDelete: Restrict)
+  editedBy           User                        @relation("SyllabusReviewEditedBy", fields: [editedById], references: [id], onDelete: Restrict)
+  publishedStructure PublishedSyllabusStructure?
+
+  @@unique([parseDraftId, revisionNumber])
+  @@index([courseId, createdAt])
+  @@index([editedById, createdAt])
+}
+
+model PublishedSyllabusStructure {
+  id               String   @id @default(cuid())
+  courseId         String
+  syllabusId       String
+  parseDraftId     String
+  reviewRevisionId String   @unique
+  publishedById    String
+  versionNumber    Int
+  structureJson    Json
+  publishedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  course           Course                 @relation("PublishedSyllabusStructureCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  currentForCourse Course?                @relation("CurrentPublishedSyllabusStructure")
+  syllabus         CourseSyllabus         @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  parseDraft       SyllabusParseDraft     @relation(fields: [parseDraftId], references: [id], onDelete: Restrict)
+  reviewRevision   SyllabusReviewRevision @relation(fields: [reviewRevisionId], references: [id], onDelete: Restrict)
+  publishedBy      User                   @relation("SyllabusStructurePublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+
+  @@unique([courseId, versionNumber])
+  @@index([courseId, publishedAt])
+  @@index([syllabusId])
+  @@index([publishedById, publishedAt])
 }
 
 model Classroom {

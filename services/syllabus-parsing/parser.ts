@@ -18,6 +18,66 @@ export interface SyllabusParseExecution {
   latencyMs: number;
 }
 
+class SourceReferenceValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SourceReferenceValidationError";
+  }
+}
+
+function normalizedQuote(value: string): string {
+  return value.replace(/\s+/gu, " ").trim();
+}
+
+function verifySourceReferences(
+  output: SyllabusParseOutput,
+  input: SyllabusParseInput,
+): SyllabusParseOutput {
+  const pageText = new Map(
+    input.pages.map((page) => [page.pageNumber, normalizedQuote(page.text)]),
+  );
+  let unverifiedQuoteCount = 0;
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    if (Array.isArray(record.sourceRefs)) {
+      for (const candidate of record.sourceRefs) {
+        if (!candidate || typeof candidate !== "object") continue;
+        const source = candidate as Record<string, unknown>;
+        const page = typeof source.page === "number" ? source.page : 0;
+        const text = pageText.get(page);
+        if (!text) {
+          throw new SourceReferenceValidationError(
+            `sourceRefs 引用了不存在的第 ${page} 页`,
+          );
+        }
+        const quote =
+          typeof source.quote === "string"
+            ? normalizedQuote(source.quote)
+            : null;
+        source.verified = quote ? text.includes(quote) : false;
+        if (quote && source.verified === false) unverifiedQuoteCount += 1;
+      }
+    }
+    Object.values(record).forEach(visit);
+  };
+  const verified = structuredClone(output);
+  visit(verified);
+  if (unverifiedQuoteCount > 0) {
+    verified.warnings = [
+      ...new Set([
+        ...verified.warnings,
+        `${unverifiedQuoteCount} 个原文片段未能在对应页可靠核验，请教师对照原文。`,
+      ]),
+    ];
+  }
+  return verified;
+}
+
 function validationDetails(error: unknown): string {
   if (error instanceof ZodError) {
     return error.issues
@@ -25,6 +85,7 @@ function validationDetails(error: unknown): string {
       .join("; ");
   }
   if (error instanceof SyntaxError) return "返回内容不是合法 JSON";
+  if (error instanceof SourceReferenceValidationError) return error.message;
   if (error instanceof DOMException && error.name === "AbortError") {
     return "请求超时";
   }
@@ -81,7 +142,9 @@ async function parseAttempt(
       timeout,
     ]);
     const json: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
-    return applyDeterministicWarnings(syllabusParseOutputSchema.parse(json));
+    return applyDeterministicWarnings(
+      verifySourceReferences(syllabusParseOutputSchema.parse(json), input),
+    );
   } finally {
     clearTimeout(timer);
   }
@@ -110,7 +173,9 @@ export async function parseSyllabusStructure(
   const code =
     lastError instanceof DOMException && lastError.name === "AbortError"
       ? "PROVIDER_TIMEOUT"
-      : lastError instanceof SyntaxError || lastError instanceof ZodError
+      : lastError instanceof SyntaxError ||
+          lastError instanceof ZodError ||
+          lastError instanceof SourceReferenceValidationError
         ? "INVALID_PROVIDER_OUTPUT"
         : "PROVIDER_ERROR";
   throw new SyllabusParseOperationError(

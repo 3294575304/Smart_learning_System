@@ -30,7 +30,9 @@ import {
 } from "@/services/syllabus-parsing/repository";
 import {
   syllabusParseOutputSchema,
+  syllabusParseOutputV1Schema,
   type SyllabusParseOutput,
+  type SyllabusParseOutputV1,
 } from "@/services/syllabus-parsing/schemas";
 import type { SyllabusParseDraftView } from "@/services/syllabus-parsing/types";
 
@@ -57,9 +59,13 @@ function timeoutMs(configured?: number): number {
 
 function resultFromDraft(
   draft: SyllabusParseDraft,
-): SyllabusParseOutput | null {
+): SyllabusParseOutput | SyllabusParseOutputV1 | null {
   if (draft.status !== SyllabusParseStatus.SUCCEEDED) return null;
-  const parsed = syllabusParseOutputSchema.safeParse(draft.structuredResult);
+  const schema =
+    draft.parserVersion === "syllabus-parser-v1"
+      ? syllabusParseOutputV1Schema
+      : syllabusParseOutputSchema;
+  const parsed = schema.safeParse(draft.structuredResult);
   if (!parsed.success) {
     throw new SyllabusParseOperationError(
       "已保存的教学大纲解析草稿无法读取，请重新解析。",
@@ -89,6 +95,7 @@ function draftView(
     retryCount: draft.retryCount,
     executionCount: draft.executionCount,
     result: resultFromDraft(draft),
+    hasFieldSourceRefs: draft.parserVersion !== "syllabus-parser-v1",
     errorCode: draft.errorCode,
     startedAt: draft.startedAt,
     completedAt: draft.completedAt,
