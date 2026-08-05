@@ -25,6 +25,7 @@ import {
   findCurrentOwnedSyllabus,
   findParseDraft,
   listOwnedCourseParseDrafts,
+  markInterruptedParseDrafts,
   markParseFailed,
   markParseSucceeded,
 } from "@/services/syllabus-parsing/repository";
@@ -40,7 +41,7 @@ interface ParseDependencies {
   provider?: AIProvider;
   storage?: StorageService;
   timeoutMs?: number;
-  logger?: Pick<Console, "error">;
+  logger?: Partial<Pick<Console, "error" | "info">>;
   failSuccessWriteForTest?: boolean;
 }
 
@@ -157,6 +158,7 @@ export async function createTeacherSyllabusParse(
   courseId: string,
   dependencies: ParseDependencies = {},
 ): Promise<{ draft: SyllabusParseDraftView; reused: boolean }> {
+  const logger = dependencies.logger ?? console;
   const syllabus = await currentSyllabusOrThrow(teacherId, courseId);
   let draft = await getOrCreateDraft(teacherId, courseId, syllabus.id);
   if (draft.status === SyllabusParseStatus.SUCCEEDED) {
@@ -165,7 +167,8 @@ export async function createTeacherSyllabusParse(
       reused: true,
     };
   }
-  if (!(await claimParseDraft(draft.id, teacherId))) {
+  const attemptId = await claimParseDraft(draft.id, teacherId);
+  if (!attemptId) {
     throw new SyllabusParseOperationError(
       "当前版本的教学大纲正在解析，请稍后查询结果。",
       409,
@@ -180,7 +183,7 @@ export async function createTeacherSyllabusParse(
     try {
       data = await storage.read(syllabus.storageKey);
     } catch (error: unknown) {
-      dependencies.logger?.error("Failed to read syllabus for parsing", error);
+      logger.error?.("Failed to read syllabus for parsing", error);
       throw new SyllabusParseOperationError(
         "教学大纲文件暂时无法读取，请稍后重试。",
         500,
@@ -208,7 +211,14 @@ export async function createTeacherSyllabusParse(
     if (dependencies.failSuccessWriteForTest) {
       throw new Error("Injected success write failure");
     }
-    draft = await markParseSucceeded(draft.id, {
+    const finalAttempt = execution.attempts.at(-1);
+    logger.info?.("Syllabus AI parse completed", {
+      draftId: draft.id,
+      attemptId,
+      attempts: execution.attempts,
+      durationMs: execution.latencyMs,
+    });
+    const write = await markParseSucceeded(draft.id, attemptId, {
       provider: provider.name,
       model: provider.model,
       retryCount: execution.retryCount,
@@ -222,6 +232,31 @@ export async function createTeacherSyllabusParse(
       },
       completedAt: new Date(),
     });
+    if (write.count !== 1) {
+      throw new SyllabusParseOperationError(
+        "A newer parse attempt replaced this result.",
+        409,
+        "JOB_INTERRUPTED",
+        { attempts: execution.attempts },
+      );
+    }
+    await prisma.syllabusParseDraft.updateMany({
+      where: { id: draft.id, attemptId },
+      data: {
+        providerRequestId: finalAttempt?.providerRequestId,
+        finishReason: finalAttempt?.finishReason,
+        promptTokens: finalAttempt?.promptTokens,
+        completionTokens: finalAttempt?.completionTokens,
+        totalTokens: finalAttempt?.totalTokens,
+        responseLength: finalAttempt?.responseLength,
+        providerDurationMs: finalAttempt?.providerDurationMs,
+        jsonParseDurationMs: finalAttempt?.jsonParseDurationMs,
+        validationDurationMs: finalAttempt?.validationDurationMs,
+        errorPhase: finalAttempt?.errorPhase,
+      },
+    });
+    draft =
+      (await findParseDraft(syllabus.id, SYLLABUS_PARSER_VERSION)) ?? draft;
     return {
       draft: draftView(draft, syllabus, syllabus.id),
       reused: false,
@@ -232,15 +267,48 @@ export async function createTeacherSyllabusParse(
         ? error.code
         : "SYLLABUS_PARSE_INTERNAL_ERROR";
     try {
-      await markParseFailed(draft.id, code, provider);
+      const attempts =
+        error instanceof SyllabusParseOperationError &&
+        error.diagnostics &&
+        typeof error.diagnostics === "object" &&
+        "attempts" in error.diagnostics &&
+        Array.isArray(error.diagnostics.attempts)
+          ? error.diagnostics.attempts
+          : [];
+      const finalAttempt = attempts.at(-1);
+      logger.error?.("Syllabus AI parse failed", {
+        draftId: draft.id,
+        attemptId,
+        failureCode: code,
+        attempts,
+      });
+      await markParseFailed(
+        draft.id,
+        attemptId,
+        code,
+        {
+          retryCount: Math.max(0, attempts.length - 1),
+          providerRequestId: finalAttempt?.providerRequestId ?? null,
+          finishReason: finalAttempt?.finishReason ?? null,
+          promptTokens: finalAttempt?.promptTokens ?? null,
+          completionTokens: finalAttempt?.completionTokens ?? null,
+          totalTokens: finalAttempt?.totalTokens ?? null,
+          responseLength: finalAttempt?.responseLength ?? 0,
+          providerDurationMs: finalAttempt?.providerDurationMs ?? 0,
+          jsonParseDurationMs: finalAttempt?.jsonParseDurationMs ?? 0,
+          validationDurationMs: finalAttempt?.validationDurationMs ?? 0,
+          errorPhase: finalAttempt?.errorPhase ?? "job",
+        },
+        provider,
+      );
     } catch (failureWriteError: unknown) {
-      dependencies.logger?.error(
+      logger.error?.(
         "Failed to persist syllabus parse failure",
         failureWriteError,
       );
     }
     if (error instanceof SyllabusParseOperationError) throw error;
-    dependencies.logger?.error("Syllabus parse failed", error);
+    logger.error?.("Syllabus parse failed", error);
     throw new SyllabusParseOperationError(
       "教学大纲解析失败，请稍后重试。",
       500,
@@ -257,6 +325,11 @@ export async function getTeacherSyllabusParses(
   history: SyllabusParseDraftView[];
 }> {
   const syllabus = await currentSyllabusOrThrow(teacherId, courseId);
+  const staleAfterMs = timeoutMs() + 30_000;
+  await markInterruptedParseDrafts(
+    courseId,
+    new Date(Date.now() - staleAfterMs),
+  );
   const drafts = await listOwnedCourseParseDrafts(teacherId, courseId);
   const views = drafts.map((draft) =>
     draftView(

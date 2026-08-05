@@ -5,6 +5,7 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { randomUUID } from "node:crypto";
 
 export type DatabaseClient = typeof prisma | Prisma.TransactionClient;
 
@@ -67,6 +68,26 @@ export function listOwnedCourseParseDrafts(
   });
 }
 
+export function markInterruptedParseDrafts(
+  courseId: string,
+  staleBefore: Date,
+  client: DatabaseClient = prisma,
+) {
+  return client.syllabusParseDraft.updateMany({
+    where: {
+      courseId,
+      status: SyllabusParseStatus.PROCESSING,
+      startedAt: { lt: staleBefore },
+    },
+    data: {
+      status: SyllabusParseStatus.FAILED,
+      errorCode: "JOB_INTERRUPTED",
+      errorPhase: "job",
+      completedAt: new Date(),
+    },
+  });
+}
+
 export function createPendingParseDraft(
   data: {
     courseId: string;
@@ -85,7 +106,8 @@ export async function claimParseDraft(
   id: string,
   requestedById: string,
   client: DatabaseClient = prisma,
-): Promise<boolean> {
+): Promise<string | null> {
+  const attemptId = randomUUID();
   const result = await client.syllabusParseDraft.updateMany({
     where: {
       id,
@@ -98,15 +120,17 @@ export async function claimParseDraft(
       startedAt: new Date(),
       completedAt: null,
       errorCode: null,
+      attemptId,
       structuredResult: Prisma.JsonNull,
       extractedTextMetadata: Prisma.JsonNull,
     },
   });
-  return result.count === 1;
+  return result.count === 1 ? attemptId : null;
 }
 
 export function markParseSucceeded(
   id: string,
+  attemptId: string,
   data: Pick<
     SyllabusParseDraft,
     "provider" | "model" | "retryCount" | "completedAt"
@@ -116,8 +140,8 @@ export function markParseSucceeded(
   },
   client: DatabaseClient = prisma,
 ) {
-  return client.syllabusParseDraft.update({
-    where: { id },
+  return client.syllabusParseDraft.updateMany({
+    where: { id, attemptId, status: SyllabusParseStatus.PROCESSING },
     data: {
       ...data,
       status: SyllabusParseStatus.SUCCEEDED,
@@ -128,17 +152,32 @@ export function markParseSucceeded(
 
 export function markParseFailed(
   id: string,
+  attemptId: string,
   errorCode: string,
+  diagnostics: {
+    retryCount?: number;
+    providerRequestId?: string | null;
+    finishReason?: string | null;
+    promptTokens?: number | null;
+    completionTokens?: number | null;
+    totalTokens?: number | null;
+    responseLength?: number;
+    providerDurationMs?: number;
+    jsonParseDurationMs?: number;
+    validationDurationMs?: number;
+    errorPhase?: string | null;
+  } = {},
   provider?: { name: string; model: string } | null,
   client: DatabaseClient = prisma,
 ) {
-  return client.syllabusParseDraft.update({
-    where: { id },
+  return client.syllabusParseDraft.updateMany({
+    where: { id, attemptId, status: SyllabusParseStatus.PROCESSING },
     data: {
       status: SyllabusParseStatus.FAILED,
       provider: provider?.name,
       model: provider?.model,
       errorCode,
+      ...diagnostics,
       completedAt: new Date(),
       structuredResult: Prisma.JsonNull,
     },

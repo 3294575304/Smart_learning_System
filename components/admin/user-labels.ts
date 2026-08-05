@@ -50,4 +50,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   STUDENT_IMPORT_FAILED: "学生名单导入失败",
   SYLLABUS_REVIEW_SAVED: "保存教学大纲审核稿",
   SYLLABUS_STRUCTURE_PUBLISHED: "发布教学大纲结构",
+  KNOWLEDGE_GRAPH_GENERATED: "生成知识图谱草稿",
+  KNOWLEDGE_GRAPH_REVIEW_SAVED: "保存知识图谱审核稿",
+  KNOWLEDGE_GRAPH_PUBLISHED: "发布知识图谱",
 };

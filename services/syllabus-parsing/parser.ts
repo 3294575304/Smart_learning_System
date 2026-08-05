@@ -10,20 +10,36 @@ import {
   type SyllabusParseInput,
   type SyllabusParseOutput,
 } from "@/services/syllabus-parsing/schemas";
-import type { AIProvider } from "@/services/ai/provider";
+import {
+  AIProviderRequestError,
+  type AIProvider,
+  type AIProviderResponse,
+} from "@/services/ai/provider";
+
+export type SyllabusErrorPhase = "provider" | "json" | "validation" | "job";
+
+export interface SyllabusAttemptMetrics {
+  attempt: number;
+  providerRequestId: string | null;
+  providerDurationMs: number;
+  jsonParseDurationMs: number;
+  validationDurationMs: number;
+  finishReason: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  responseLength: number;
+  errorPhase: SyllabusErrorPhase | null;
+}
 
 export interface SyllabusParseExecution {
   output: SyllabusParseOutput;
   retryCount: number;
   latencyMs: number;
+  attempts: SyllabusAttemptMetrics[];
 }
 
-class SourceReferenceValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SourceReferenceValidationError";
-  }
-}
+class SourceReferenceValidationError extends Error {}
 
 function normalizedQuote(value: string): string {
   return value.replace(/\s+/gu, " ").trim();
@@ -32,16 +48,13 @@ function normalizedQuote(value: string): string {
 function verifySourceReferences(
   output: SyllabusParseOutput,
   input: SyllabusParseInput,
-): SyllabusParseOutput {
+) {
   const pageText = new Map(
     input.pages.map((page) => [page.pageNumber, normalizedQuote(page.text)]),
   );
   let unverifiedQuoteCount = 0;
   const visit = (value: unknown): void => {
-    if (Array.isArray(value)) {
-      value.forEach(visit);
-      return;
-    }
+    if (Array.isArray(value)) return value.forEach(visit);
     if (!value || typeof value !== "object") return;
     const record = value as Record<string, unknown>;
     if (Array.isArray(record.sourceRefs)) {
@@ -50,17 +63,16 @@ function verifySourceReferences(
         const source = candidate as Record<string, unknown>;
         const page = typeof source.page === "number" ? source.page : 0;
         const text = pageText.get(page);
-        if (!text) {
+        if (!text)
           throw new SourceReferenceValidationError(
-            `sourceRefs 引用了不存在的第 ${page} 页`,
+            `sourceRefs references missing page ${page}`,
           );
-        }
         const quote =
           typeof source.quote === "string"
             ? normalizedQuote(source.quote)
             : null;
         source.verified = quote ? text.includes(quote) : false;
-        if (quote && source.verified === false) unverifiedQuoteCount += 1;
+        if (quote && !source.verified) unverifiedQuoteCount += 1;
       }
     }
     Object.values(record).forEach(visit);
@@ -71,25 +83,11 @@ function verifySourceReferences(
     verified.warnings = [
       ...new Set([
         ...verified.warnings,
-        `${unverifiedQuoteCount} 个原文片段未能在对应页可靠核验，请教师对照原文。`,
+        `${unverifiedQuoteCount} source quotations could not be verified; review against the PDF.`,
       ]),
     ];
   }
   return verified;
-}
-
-function validationDetails(error: unknown): string {
-  if (error instanceof ZodError) {
-    return error.issues
-      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-      .join("; ");
-  }
-  if (error instanceof SyntaxError) return "返回内容不是合法 JSON";
-  if (error instanceof SourceReferenceValidationError) return error.message;
-  if (error instanceof DOMException && error.name === "AbortError") {
-    return "请求超时";
-  }
-  return "Provider 返回无效结果";
 }
 
 function applyDeterministicWarnings(
@@ -102,9 +100,10 @@ function applyDeterministicWarnings(
       (sum, weight) => sum + (weight ?? 0),
       0,
     );
-    if (Math.abs(total - 100) > 0.01) {
-      warnings.add(`考核方式权重合计为 ${total}%，不是 100%，请教师审核。`);
-    }
+    if (Math.abs(total - 100) > 0.01)
+      warnings.add(
+        `Assessment weights total ${total}%, not 100%; teacher review required.`,
+      );
   }
   const { totalHours, theoryHours, practiceHours } = output.courseInfo;
   if (
@@ -113,38 +112,63 @@ function applyDeterministicWarnings(
     practiceHours !== null &&
     Math.abs(theoryHours + practiceHours - totalHours) > 0.01
   ) {
-    warnings.add("理论学时与实践学时之和不等于总学时，请教师审核。");
+    warnings.add(
+      "Theory and practice hours do not equal total hours; teacher review required.",
+    );
   }
   return { ...output, warnings: [...warnings] };
 }
 
-async function parseAttempt(
+function responseEnvelope(raw: unknown): AIProviderResponse {
+  if (raw && typeof raw === "object" && "content" in raw && "usage" in raw)
+    return raw as AIProviderResponse;
+  const responseLength =
+    typeof raw === "string" ? raw.length : (JSON.stringify(raw)?.length ?? 0);
+  return {
+    content: raw,
+    requestId: null,
+    finishReason: null,
+    usage: { promptTokens: null, completionTokens: null, totalTokens: null },
+    responseLength,
+  };
+}
+
+function validationDetails(error: unknown): string {
+  if (error instanceof ZodError)
+    return error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+  if (error instanceof SyntaxError) return "Response was not valid JSON";
+  if (error instanceof SourceReferenceValidationError) return error.message;
+  return "Provider returned invalid output";
+}
+
+async function providerCall(
   provider: AIProvider,
   input: SyllabusParseInput,
   timeoutMs: number,
   validationError?: string,
-): Promise<SyllabusParseOutput> {
+) {
   const controller = new AbortController();
-  let rejectTimeout: ((reason: DOMException) => void) | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    rejectTimeout = reject;
-  });
-  const timer = setTimeout(() => {
-    controller.abort();
-    rejectTimeout?.(new DOMException("AI request timed out", "AbortError"));
-  }, timeoutMs);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const raw = await Promise.race([
-      provider.parseSyllabus(input, {
+    return responseEnvelope(
+      await provider.parseSyllabus(input, {
         signal: controller.signal,
         validationError,
       }),
-      timeout,
-    ]);
-    const json: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
-    return applyDeterministicWarnings(
-      verifySourceReferences(syllabusParseOutputSchema.parse(json), input),
     );
+  } catch (error: unknown) {
+    if (
+      controller.signal.aborted ||
+      (error instanceof DOMException && error.name === "AbortError")
+    ) {
+      throw new AIProviderRequestError(
+        "AI provider request timed out",
+        "PROVIDER_TIMEOUT",
+      );
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -156,31 +180,124 @@ export async function parseSyllabusStructure(
   timeoutMs = DEFAULT_SYLLABUS_AI_TIMEOUT_MS,
 ): Promise<SyllabusParseExecution> {
   const startedAt = Date.now();
-  let lastError: unknown;
+  const attempts: SyllabusAttemptMetrics[] = [];
   let validationError: string | undefined;
-  for (let attempt = 0; attempt < SYLLABUS_MAX_AI_ATTEMPTS; attempt += 1) {
+  for (let index = 0; index < SYLLABUS_MAX_AI_ATTEMPTS; index += 1) {
+    const metrics: SyllabusAttemptMetrics = {
+      attempt: index + 1,
+      providerRequestId: null,
+      providerDurationMs: 0,
+      jsonParseDurationMs: 0,
+      validationDurationMs: 0,
+      finishReason: null,
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      responseLength: 0,
+      errorPhase: null,
+    };
     try {
-      return {
-        output: await parseAttempt(provider, input, timeoutMs, validationError),
-        retryCount: attempt,
-        latencyMs: Date.now() - startedAt,
-      };
+      const providerStartedAt = Date.now();
+      let response: AIProviderResponse;
+      try {
+        response = await providerCall(
+          provider,
+          input,
+          timeoutMs,
+          validationError,
+        );
+      } finally {
+        metrics.providerDurationMs = Date.now() - providerStartedAt;
+      }
+      Object.assign(metrics, {
+        providerRequestId: response.requestId,
+        finishReason: response.finishReason,
+        promptTokens: response.usage.promptTokens,
+        completionTokens: response.usage.completionTokens,
+        totalTokens: response.usage.totalTokens,
+        responseLength: response.responseLength,
+      });
+      if (response.finishReason === "length") {
+        metrics.errorPhase = "provider";
+        attempts.push(metrics);
+        throw new SyllabusParseOperationError(
+          "AI output was truncated. Please retry explicitly.",
+          502,
+          "AI_OUTPUT_TRUNCATED",
+          { attempts },
+        );
+      }
+      const jsonStartedAt = Date.now();
+      let json: unknown;
+      try {
+        json =
+          typeof response.content === "string"
+            ? JSON.parse(response.content)
+            : response.content;
+      } catch (error: unknown) {
+        metrics.jsonParseDurationMs = Date.now() - jsonStartedAt;
+        metrics.errorPhase = "json";
+        attempts.push(metrics);
+        if (index + 1 < SYLLABUS_MAX_AI_ATTEMPTS) {
+          validationError = validationDetails(error);
+          continue;
+        }
+        throw new SyllabusParseOperationError(
+          "AI returned invalid JSON.",
+          502,
+          "INVALID_AI_JSON",
+          { attempts },
+        );
+      }
+      metrics.jsonParseDurationMs = Date.now() - jsonStartedAt;
+      const validationStartedAt = Date.now();
+      try {
+        const output = applyDeterministicWarnings(
+          verifySourceReferences(syllabusParseOutputSchema.parse(json), input),
+        );
+        metrics.validationDurationMs = Date.now() - validationStartedAt;
+        attempts.push(metrics);
+        return {
+          output,
+          retryCount: index,
+          latencyMs: Date.now() - startedAt,
+          attempts,
+        };
+      } catch (error: unknown) {
+        metrics.validationDurationMs = Date.now() - validationStartedAt;
+        metrics.errorPhase = "validation";
+        attempts.push(metrics);
+        if (index + 1 < SYLLABUS_MAX_AI_ATTEMPTS) {
+          validationError = validationDetails(error);
+          continue;
+        }
+        throw new SyllabusParseOperationError(
+          "AI output failed schema validation.",
+          502,
+          "INVALID_AI_OUTPUT",
+          { attempts },
+        );
+      }
     } catch (error: unknown) {
-      lastError = error;
-      validationError = validationDetails(error);
+      if (error instanceof SyllabusParseOperationError) throw error;
+      metrics.errorPhase = "provider";
+      if (!attempts.includes(metrics)) attempts.push(metrics);
+      const code =
+        error instanceof AIProviderRequestError
+          ? error.code
+          : "PROVIDER_UNAVAILABLE";
+      throw new SyllabusParseOperationError(
+        "AI provider request failed.",
+        502,
+        code,
+        { attempts },
+      );
     }
   }
-  const code =
-    lastError instanceof DOMException && lastError.name === "AbortError"
-      ? "PROVIDER_TIMEOUT"
-      : lastError instanceof SyntaxError ||
-          lastError instanceof ZodError ||
-          lastError instanceof SourceReferenceValidationError
-        ? "INVALID_PROVIDER_OUTPUT"
-        : "PROVIDER_ERROR";
   throw new SyllabusParseOperationError(
-    "教学大纲结构化解析失败，请稍后重试或更换文件。",
-    502,
-    code,
+    "Syllabus parsing was interrupted.",
+    500,
+    "JOB_INTERRUPTED",
+    { attempts },
   );
 }

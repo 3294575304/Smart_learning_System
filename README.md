@@ -10,7 +10,7 @@ V1.0“迭代一：课程模型与导入基础”采用“预导入身份、学�
 
 - `POST /api/student/submissions/:submissionId/analysis` 为当前已批改作答生成或复用学情分析。
 - `GET /api/student/submissions/:submissionId/analysis` 读取与当前数据指纹匹配的已有分析。
-- 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。
+- 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。大纲长结构化输出单独使用毫秒单位的 `SYLLABUS_AI_TIMEOUT_MS`，默认 `180000`，允许覆盖到 `600000`。
 - 模型输出会经过严格 Zod 校验，失败最多重试一次；仍失败时返回基于正确率的规则结果。分析接口独立于交卷和成绩接口，AI 故障不会影响成绩查看。
 
 ## 教学大纲结构化解析
@@ -23,7 +23,17 @@ V1.0“迭代一：课程模型与导入基础”采用“预导入身份、学�
 - `PATCH /api/teacher/courses/:courseId/syllabus/parse/:draftId/review` 保存审核修订，`POST .../:draftId/publish` 显式发布，`GET /api/teacher/courses/:courseId/syllabus/published` 查询当前和历史正式版本。
 - 发布结果是不可变、版本化的课程大纲结构快照。同一审核修订重复发布幂等；上传新 PDF 不会覆盖旧正式版本，页面会提示旧版本来源已过期。
 - v2 结构覆盖课程信息、目标、章节、知识点、先修关系、重点难点、考核映射和教材资料。旧 v1 草稿保持只读且不补造字段来源。
-- 当前仍未实现知识图谱发布、题目自动绑定、OCR 和持久化后台 worker；解析继续在 POST 请求内执行。
+- 当前仍未实现题目自动绑定、OCR 和持久化后台 worker；教学大纲解析继续在 POST 请求内执行。
+
+## Python 课程知识图谱
+
+- 教师可在课程详情进入知识图谱工作区；图谱只能基于 `Course.currentPublishedSyllabusStructureId` 指向的正式大纲结构生成。
+- 章节、知识点、包含关系和大纲明确的先修关系由确定性程序转换；AI 仅提出 `RELATED` 无向关系，输出严格校验且最多重试一次。
+- 图谱采用“生成草稿 → 不可变审核修订 → 显式发布”的版本流程。正式版本同时保存完整快照及 PostgreSQL 节点、关系记录。
+- 生成请求先持久化任务状态，再在请求结束后的后台阶段执行；教师端通过轮询展示进度和失败恢复，不使用 WebSocket/SSE。
+- 图谱模型与 MVP 的全局 `KnowledgePoint` 隔离，本阶段不会改写题库、作业、成绩、掌握度、推荐或错题数据。
+- 新正式大纲发布后旧图谱继续只读保留，并显示来源过期；必须从新正式大纲重新生成、审核和发布。
+- 本阶段尚不实现题目绑定、学生端图谱、掌握度更新、推荐联动、图数据库和 WebSocket/SSE。
 
 ## 管理员系统配置
 

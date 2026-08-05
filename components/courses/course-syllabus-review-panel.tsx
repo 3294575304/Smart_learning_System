@@ -4,6 +4,10 @@ import { AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { requestApi } from "@/components/courses/request-api";
+import {
+  shouldPollSyllabusParse,
+  syllabusParseFailureMessage,
+} from "@/components/courses/syllabus-parse-presenter";
 import type {
   SyllabusParseOutput,
   SyllabusParseOutputV1,
@@ -125,6 +129,13 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
     window.addEventListener("course-syllabus-updated", reload);
     return () => window.removeEventListener("course-syllabus-updated", reload);
   }, [load]);
+
+  useEffect(() => {
+    const status = state?.current?.status;
+    if (!shouldPollSyllabusParse(status)) return;
+    const timer = window.setInterval(() => void load(), 2_000);
+    return () => window.clearInterval(timer);
+  }, [load, state]);
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -256,7 +267,10 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
       ) : null}
       {current?.status === "FAILED" ? (
         <div className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">
-          <p>解析失败：{current.errorCode ?? "文件或解析服务暂时不可用"}</p>
+          <p>
+            解析失败：
+            {syllabusParseFailureMessage(current.errorCode)}
+          </p>
           <button
             className="mt-2 font-medium"
             disabled={parsing}

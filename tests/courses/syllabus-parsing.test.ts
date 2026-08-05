@@ -9,6 +9,7 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 
 import type { AIProvider, AIProviderOptions } from "@/services/ai/provider";
 import { MockAIProvider } from "@/services/ai/mock-provider";
+import { OpenAICompatibleProvider } from "@/services/ai/openai-compatible";
 import {
   createTeacherCourse,
   listTeacherCourseTemplates,
@@ -18,6 +19,8 @@ import {
 import { LocalStorageService } from "@/services/storage/local-storage";
 import { extractTextFromPdf } from "@/services/syllabus-parsing/pdf-extractor";
 import { parseSyllabusStructure } from "@/services/syllabus-parsing/parser";
+import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
+import { markParseSucceeded } from "@/services/syllabus-parsing/repository";
 import type {
   SyllabusParseInput,
   SyllabusParseOutput,
@@ -167,6 +170,162 @@ test("strict AI JSON validation retries once and accepts a repaired output", asy
   assert.deepEqual(result.output, validOutput);
 });
 
+test("invalid JSON retries once and then reports INVALID_AI_JSON", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      parseSyllabusStructure(
+        providerWith(() => {
+          calls += 1;
+          return "not-json";
+        }),
+        {
+          courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+          pages: [{ pageNumber: 1, text: "Python syllabus" }],
+        },
+      ),
+    (error: unknown) =>
+      error instanceof SyllabusParseOperationError &&
+      error.code === "INVALID_AI_JSON",
+  );
+  assert.equal(calls, 2);
+});
+
+test("provider returning before the deadline succeeds", async () => {
+  let calls = 0;
+  const result = await parseSyllabusStructure(
+    providerWith(async () => {
+      calls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return validOutput;
+    }),
+    {
+      courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+      pages: [{ pageNumber: 1, text: "Python syllabus" }],
+    },
+    100,
+  );
+  assert.equal(calls, 1);
+  assert.equal(result.retryCount, 0);
+});
+
+test("provider timeout aborts the request, calls once, and maps PROVIDER_TIMEOUT", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      parseSyllabusStructure(
+        providerWith(
+          (_input, options) =>
+            new Promise((_resolve, reject) => {
+              calls += 1;
+              options.signal.addEventListener(
+                "abort",
+                () => reject(new DOMException("aborted", "AbortError")),
+                { once: true },
+              );
+            }),
+        ),
+        {
+          courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+          pages: [{ pageNumber: 1, text: "Python syllabus" }],
+        },
+        10,
+      ),
+    (error: unknown) =>
+      error instanceof SyllabusParseOperationError &&
+      error.code === "PROVIDER_TIMEOUT",
+  );
+  assert.equal(calls, 1);
+});
+
+test("schema failure retries once and ends as INVALID_AI_OUTPUT", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      parseSyllabusStructure(
+        providerWith(() => {
+          calls += 1;
+          return { unexpected: true };
+        }),
+        {
+          courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+          pages: [{ pageNumber: 1, text: "Python syllabus" }],
+        },
+      ),
+    (error: unknown) =>
+      error instanceof SyllabusParseOperationError &&
+      error.code === "INVALID_AI_OUTPUT",
+  );
+  assert.equal(calls, 2);
+});
+
+test("finish_reason length maps AI_OUTPUT_TRUNCATED without a repair retry", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      parseSyllabusStructure(
+        providerWith(() => {
+          calls += 1;
+          return {
+            content: "{}",
+            requestId: "req-1",
+            finishReason: "length",
+            usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+            responseLength: 2,
+          };
+        }),
+        {
+          courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+          pages: [{ pageNumber: 1, text: "Python syllabus" }],
+        },
+      ),
+    (error: unknown) =>
+      error instanceof SyllabusParseOperationError &&
+      error.code === "AI_OUTPUT_TRUNCATED",
+  );
+  assert.equal(calls, 1);
+});
+
+test("openai-compatible client has implicit retries disabled", () => {
+  const provider = new OpenAICompatibleProvider({
+    apiKey: "test",
+    baseUrl: "https://example.invalid/v1",
+    model: "test",
+  });
+  assert.equal(provider.maxRetries, 0);
+});
+
+test("terminal writes use attemptId so a late result cannot overwrite a newer attempt", async () => {
+  let where: unknown;
+  const client = {
+    syllabusParseDraft: {
+      updateMany: async (input: { where: unknown }) => {
+        where = input.where;
+        return { count: 0 };
+      },
+    },
+  };
+  const result = await markParseSucceeded(
+    "draft-1",
+    "old-attempt",
+    {
+      provider: "test",
+      model: "test",
+      retryCount: 0,
+      completedAt: new Date(),
+      structuredResult: {},
+      extractedTextMetadata: {},
+    },
+    client as never,
+  );
+  assert.equal(result.count, 0);
+  assert.deepEqual(where, {
+    id: "draft-1",
+    attemptId: "old-attempt",
+    status: "PROCESSING",
+  });
+});
+
 test("two invalid AI outputs fail without creating a fabricated fallback", async () => {
   const extracted = await extractTextFromPdf(await textPdf());
   let calls = 0;
@@ -186,7 +345,7 @@ test("two invalid AI outputs fail without creating a fabricated fallback", async
           pages: extracted.pages,
         },
       ),
-    /结构化解析失败/u,
+    /schema validation/u,
   );
   assert.equal(calls, 2);
 });
@@ -330,7 +489,7 @@ test("parse drafts are version-isolated, idempotent and preserve existing data",
     );
     let failed = await getTeacherSyllabusParses(teacher.id, course.id);
     assert.equal(failed.current?.status, "FAILED");
-    assert.equal(failed.current?.errorCode, "INVALID_PROVIDER_OUTPUT");
+    assert.equal(failed.current?.errorCode, "INVALID_AI_OUTPUT");
     assert.equal(failed.current?.result, null);
 
     await assert.rejects(

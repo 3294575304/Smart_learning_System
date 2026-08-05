@@ -1080,7 +1080,37 @@ export async function deleteTeacherCourse(
           });
           await transaction.course.update({
             where: { id: courseId },
-            data: { currentPublishedSyllabusStructureId: null },
+            data: {
+              currentPublishedSyllabusStructureId: null,
+              currentPublishedKnowledgeGraphVersionId: null,
+            },
+          });
+          const graphVersions =
+            await transaction.publishedKnowledgeGraphVersion.findMany({
+              where: { courseId },
+              select: { id: true },
+            });
+          await transaction.publishedKnowledgeGraphEdge.deleteMany({
+            where: {
+              graphVersionId: { in: graphVersions.map((item) => item.id) },
+            },
+          });
+          await transaction.publishedKnowledgeGraphNode.deleteMany({
+            where: {
+              graphVersionId: { in: graphVersions.map((item) => item.id) },
+            },
+          });
+          await transaction.publishedKnowledgeGraphVersion.deleteMany({
+            where: { courseId },
+          });
+          await transaction.knowledgeGraphReviewRevision.deleteMany({
+            where: { courseId },
+          });
+          await transaction.knowledgeGraphDraft.deleteMany({
+            where: { courseId },
+          });
+          await transaction.knowledgeGraphConcept.deleteMany({
+            where: { courseId },
           });
           await transaction.publishedSyllabusStructure.deleteMany({
             where: { courseId },

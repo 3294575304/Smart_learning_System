@@ -5,6 +5,7 @@ import type {
   SyllabusParseInput,
   SyllabusParseOutput,
 } from "@/services/syllabus-parsing/schemas";
+import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 
 export type MockAIResponder = (
   input: StudentAnalysisInput,
@@ -94,5 +95,14 @@ export class MockAIProvider implements AIProvider {
       warnings: ["Mock Provider 仅用于本地开发和自动化测试。"],
     };
     return output;
+  }
+
+  async inferKnowledgeGraphRelations(
+    _input: KnowledgeGraphStructure,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    if (options.signal.aborted)
+      throw new DOMException("AI request aborted", "AbortError");
+    return { related: [] };
   }
 }

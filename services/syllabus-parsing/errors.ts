@@ -5,6 +5,7 @@ export class SyllabusParseOperationError extends Error {
     message: string,
     readonly status = 409,
     readonly code = "SYLLABUS_PARSE_ERROR",
+    readonly diagnostics?: unknown,
   ) {
     super(message);
     this.name = "SyllabusParseOperationError";

@@ -153,7 +153,10 @@ interface WriteGovernanceAuditInput {
     | typeof AuditTargetType.COURSE_FILE
     | typeof AuditTargetType.STUDENT_IMPORT_BATCH
     | typeof AuditTargetType.SYLLABUS_REVIEW
-    | typeof AuditTargetType.SYLLABUS_STRUCTURE;
+    | typeof AuditTargetType.SYLLABUS_STRUCTURE
+    | typeof AuditTargetType.KNOWLEDGE_GRAPH_DRAFT
+    | typeof AuditTargetType.KNOWLEDGE_GRAPH_REVIEW
+    | typeof AuditTargetType.KNOWLEDGE_GRAPH_VERSION;
   targetId: string;
   summary: string;
   beforeData: AuditConfigSnapshot | null;

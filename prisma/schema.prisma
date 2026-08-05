@@ -57,6 +57,9 @@ enum AuditAction {
   STUDENT_IMPORT_FAILED
   SYLLABUS_REVIEW_SAVED
   SYLLABUS_STRUCTURE_PUBLISHED
+  KNOWLEDGE_GRAPH_GENERATED
+  KNOWLEDGE_GRAPH_REVIEW_SAVED
+  KNOWLEDGE_GRAPH_PUBLISHED
 }
 
 enum AuditTargetType {
@@ -73,6 +76,9 @@ enum AuditTargetType {
   STUDENT_IMPORT_BATCH
   SYLLABUS_REVIEW
   SYLLABUS_STRUCTURE
+  KNOWLEDGE_GRAPH_DRAFT
+  KNOWLEDGE_GRAPH_REVIEW
+  KNOWLEDGE_GRAPH_VERSION
 }
 
 enum NotificationType {
@@ -147,6 +153,31 @@ enum SyllabusParseStatus {
   PROCESSING
   SUCCEEDED
   FAILED
+}
+
+enum KnowledgeGraphStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum KnowledgeGraphNodeType {
+  COURSE
+  CHAPTER
+  KNOWLEDGE_POINT
+}
+
+enum KnowledgeGraphRelationType {
+  CONTAINS
+  PREREQUISITE
+  RELATED
+}
+
+enum KnowledgeGraphSourceType {
+  SYLLABUS
+  AI_INFERRED
+  TEACHER
 }
 
 enum StudentImportBatchStatus {
@@ -300,36 +331,39 @@ model User {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
-  profile                     UserProfile?
-  taughtClassrooms            Classroom[]                  @relation("ClassroomTeacher")
-  taughtCourses               Course[]                     @relation("CourseTeacher")
-  classMemberships            ClassMembership[]            @relation("ClassMembershipStudent")
-  createdQuestions            Question[]                   @relation("QuestionCreator")
-  createdKnowledgePoints      KnowledgePoint[]             @relation("KnowledgePointCreator")
-  assignments                 Assignment[]                 @relation("AssignmentTeacher")
-  submissions                 Submission[]                 @relation("SubmissionStudent")
-  gradedAnswers               StudentAnswer[]              @relation("StudentAnswerGrader")
-  wrongQuestions              WrongQuestion[]              @relation("WrongQuestionStudent")
-  knowledgeMasteries          StudentKnowledgeMastery[]    @relation("MasteryStudent")
-  requestedAIAnalyses         AIAnalysis[]                 @relation("AIAnalysisRequester")
-  studentAIAnalyses           AIAnalysis[]                 @relation("AIAnalysisStudent")
-  personalizedRecommendations PersonalizedRecommendation[]
-  aiTutoringRecords           AITutoringRecord[]
-  authSessions                AuthSession[]
-  auditLogs                   AuditLog[]                   @relation("AuditActor")
-  updatedSystemConfigs        SystemConfig[]               @relation("SystemConfigUpdater")
-  notifications               Notification[]               @relation("NotificationRecipient")
-  createdAnnouncements        Announcement[]               @relation("AnnouncementCreator")
-  publishedAnnouncements      Announcement[]               @relation("AnnouncementPublisher")
-  uploadedCourseFiles         CourseFileVersion[]          @relation("CourseFileUploadedBy")
-  uploadedCourseSyllabi       CourseSyllabus[]             @relation("CourseSyllabusUploadedBy")
-  requestedSyllabusParses     SyllabusParseDraft[]         @relation("SyllabusParseRequestedBy")
-  syllabusReviewRevisions     SyllabusReviewRevision[]     @relation("SyllabusReviewEditedBy")
-  publishedSyllabusStructures PublishedSyllabusStructure[] @relation("SyllabusStructurePublishedBy")
-  createdStudentImportBatches StudentImportBatch[]         @relation("StudentImportBatchCreatedBy")
-  matchedStudentImportRows    StudentImportRow[]           @relation("StudentImportMatchedUser")
-  createdStudentImportRows    StudentImportRow[]           @relation("StudentImportCreatedUser")
-  studentIdentity             StudentIdentity?
+  profile                       UserProfile?
+  taughtClassrooms              Classroom[]                      @relation("ClassroomTeacher")
+  taughtCourses                 Course[]                         @relation("CourseTeacher")
+  classMemberships              ClassMembership[]                @relation("ClassMembershipStudent")
+  createdQuestions              Question[]                       @relation("QuestionCreator")
+  createdKnowledgePoints        KnowledgePoint[]                 @relation("KnowledgePointCreator")
+  assignments                   Assignment[]                     @relation("AssignmentTeacher")
+  submissions                   Submission[]                     @relation("SubmissionStudent")
+  gradedAnswers                 StudentAnswer[]                  @relation("StudentAnswerGrader")
+  wrongQuestions                WrongQuestion[]                  @relation("WrongQuestionStudent")
+  knowledgeMasteries            StudentKnowledgeMastery[]        @relation("MasteryStudent")
+  requestedAIAnalyses           AIAnalysis[]                     @relation("AIAnalysisRequester")
+  studentAIAnalyses             AIAnalysis[]                     @relation("AIAnalysisStudent")
+  personalizedRecommendations   PersonalizedRecommendation[]
+  aiTutoringRecords             AITutoringRecord[]
+  authSessions                  AuthSession[]
+  auditLogs                     AuditLog[]                       @relation("AuditActor")
+  updatedSystemConfigs          SystemConfig[]                   @relation("SystemConfigUpdater")
+  notifications                 Notification[]                   @relation("NotificationRecipient")
+  createdAnnouncements          Announcement[]                   @relation("AnnouncementCreator")
+  publishedAnnouncements        Announcement[]                   @relation("AnnouncementPublisher")
+  uploadedCourseFiles           CourseFileVersion[]              @relation("CourseFileUploadedBy")
+  uploadedCourseSyllabi         CourseSyllabus[]                 @relation("CourseSyllabusUploadedBy")
+  requestedSyllabusParses       SyllabusParseDraft[]             @relation("SyllabusParseRequestedBy")
+  syllabusReviewRevisions       SyllabusReviewRevision[]         @relation("SyllabusReviewEditedBy")
+  publishedSyllabusStructures   PublishedSyllabusStructure[]     @relation("SyllabusStructurePublishedBy")
+  requestedKnowledgeGraphDrafts KnowledgeGraphDraft[]            @relation("KnowledgeGraphDraftRequestedBy")
+  knowledgeGraphReviewRevisions KnowledgeGraphReviewRevision[]   @relation("KnowledgeGraphReviewEditedBy")
+  publishedKnowledgeGraphs      PublishedKnowledgeGraphVersion[] @relation("KnowledgeGraphPublishedBy")
+  createdStudentImportBatches   StudentImportBatch[]             @relation("StudentImportBatchCreatedBy")
+  matchedStudentImportRows      StudentImportRow[]               @relation("StudentImportMatchedUser")
+  createdStudentImportRows      StudentImportRow[]               @relation("StudentImportCreatedUser")
+  studentIdentity               StudentIdentity?
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -528,30 +562,36 @@ model CourseTemplate {
 }
 
 model Course {
-  id                                  String       @id @default(cuid())
-  templateId                          String
-  teacherId                           String
-  courseNo                            String       @db.VarChar(50)
-  term                                String       @db.VarChar(50)
-  name                                String       @db.VarChar(100)
-  description                         String?      @db.Text
-  status                              CourseStatus @default(DRAFT)
-  publishedAt                         DateTime?
-  archivedAt                          DateTime?
-  currentPublishedSyllabusStructureId String?      @unique
-  createdAt                           DateTime     @default(now())
-  updatedAt                           DateTime     @updatedAt
+  id                                      String       @id @default(cuid())
+  templateId                              String
+  teacherId                               String
+  courseNo                                String       @db.VarChar(50)
+  term                                    String       @db.VarChar(50)
+  name                                    String       @db.VarChar(100)
+  description                             String?      @db.Text
+  status                                  CourseStatus @default(DRAFT)
+  publishedAt                             DateTime?
+  archivedAt                              DateTime?
+  currentPublishedSyllabusStructureId     String?      @unique
+  currentPublishedKnowledgeGraphVersionId String?      @unique
+  createdAt                               DateTime     @default(now())
+  updatedAt                               DateTime     @updatedAt
 
-  template                          CourseTemplate               @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  teacher                           User                         @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
-  classrooms                        Classroom[]                  @relation("ClassroomCourse")
-  courseFileVersions                CourseFileVersion[]          @relation("CourseFileCourse")
-  syllabi                           CourseSyllabus[]             @relation("CourseSyllabusCourse")
-  syllabusParseDrafts               SyllabusParseDraft[]
-  syllabusReviewRevisions           SyllabusReviewRevision[]
-  publishedSyllabusStructures       PublishedSyllabusStructure[] @relation("PublishedSyllabusStructureCourse")
-  currentPublishedSyllabusStructure PublishedSyllabusStructure?  @relation("CurrentPublishedSyllabusStructure", fields: [currentPublishedSyllabusStructureId], references: [id], onDelete: SetNull)
-  studentImportBatches              StudentImportBatch[]         @relation("StudentImportCourse")
+  template                              CourseTemplate                   @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  teacher                               User                             @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  classrooms                            Classroom[]                      @relation("ClassroomCourse")
+  courseFileVersions                    CourseFileVersion[]              @relation("CourseFileCourse")
+  syllabi                               CourseSyllabus[]                 @relation("CourseSyllabusCourse")
+  syllabusParseDrafts                   SyllabusParseDraft[]
+  syllabusReviewRevisions               SyllabusReviewRevision[]
+  publishedSyllabusStructures           PublishedSyllabusStructure[]     @relation("PublishedSyllabusStructureCourse")
+  currentPublishedSyllabusStructure     PublishedSyllabusStructure?      @relation("CurrentPublishedSyllabusStructure", fields: [currentPublishedSyllabusStructureId], references: [id], onDelete: SetNull)
+  knowledgeGraphDrafts                  KnowledgeGraphDraft[]
+  knowledgeGraphReviewRevisions         KnowledgeGraphReviewRevision[]
+  publishedKnowledgeGraphVersions       PublishedKnowledgeGraphVersion[] @relation("PublishedKnowledgeGraphCourse")
+  currentPublishedKnowledgeGraphVersion PublishedKnowledgeGraphVersion?  @relation("CurrentPublishedKnowledgeGraph", fields: [currentPublishedKnowledgeGraphVersionId], references: [id], onDelete: SetNull)
+  knowledgeGraphConcepts                KnowledgeGraphConcept[]
+  studentImportBatches                  StudentImportBatch[]             @relation("StudentImportCourse")
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -632,6 +672,17 @@ model SyllabusParseDraft {
   structuredResult      Json?
   extractedTextMetadata Json?
   errorCode             String?             @db.VarChar(100)
+  attemptId             String?             @db.VarChar(36)
+  providerRequestId     String?             @db.VarChar(191)
+  finishReason          String?             @db.VarChar(50)
+  promptTokens          Int?
+  completionTokens      Int?
+  totalTokens           Int?
+  responseLength        Int?
+  providerDurationMs    Int?
+  jsonParseDurationMs   Int?
+  validationDurationMs Int?
+  errorPhase            String?             @db.VarChar(30)
   startedAt             DateTime?
   completedAt           DateTime?
   createdAt             DateTime            @default(now())
@@ -646,6 +697,7 @@ model SyllabusParseDraft {
   @@unique([syllabusId, parserVersion])
   @@index([courseId, status, createdAt])
   @@index([requestedById, createdAt])
+  @@index([attemptId])
 }
 
 model SyllabusReviewRevision {
@@ -683,17 +735,174 @@ model PublishedSyllabusStructure {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  course           Course                 @relation("PublishedSyllabusStructureCourse", fields: [courseId], references: [id], onDelete: Restrict)
-  currentForCourse Course?                @relation("CurrentPublishedSyllabusStructure")
-  syllabus         CourseSyllabus         @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
-  parseDraft       SyllabusParseDraft     @relation(fields: [parseDraftId], references: [id], onDelete: Restrict)
-  reviewRevision   SyllabusReviewRevision @relation(fields: [reviewRevisionId], references: [id], onDelete: Restrict)
-  publishedBy      User                   @relation("SyllabusStructurePublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  course                        Course                           @relation("PublishedSyllabusStructureCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  currentForCourse              Course?                          @relation("CurrentPublishedSyllabusStructure")
+  syllabus                      CourseSyllabus                   @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  parseDraft                    SyllabusParseDraft               @relation(fields: [parseDraftId], references: [id], onDelete: Restrict)
+  reviewRevision                SyllabusReviewRevision           @relation(fields: [reviewRevisionId], references: [id], onDelete: Restrict)
+  publishedBy                   User                             @relation("SyllabusStructurePublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  knowledgeGraphDrafts          KnowledgeGraphDraft[]
+  knowledgeGraphReviewRevisions KnowledgeGraphReviewRevision[]
+  publishedKnowledgeGraphs      PublishedKnowledgeGraphVersion[]
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
   @@index([syllabusId])
   @@index([publishedById, publishedAt])
+}
+
+model KnowledgeGraphDraft {
+  id                         String               @id @default(cuid())
+  courseId                   String
+  sourceSyllabusStructureId  String
+  requestedById              String
+  status                     KnowledgeGraphStatus @default(PENDING)
+  generatorVersion           String               @db.VarChar(50)
+  promptVersion              String               @db.VarChar(50)
+  ruleVersion                String               @db.VarChar(50)
+  provider                   String?              @db.VarChar(100)
+  model                      String?              @db.VarChar(150)
+  retryCount                 Int                  @default(0)
+  executionCount             Int                  @default(0)
+  progress                   Int                  @default(0)
+  successCount               Int                  @default(0)
+  failureCount               Int                  @default(0)
+  deterministicStructureJson Json?
+  aiInferenceJson            Json?
+  generatedStructureJson     Json?
+  errorCode                  String?              @db.VarChar(100)
+  startedAt                  DateTime?
+  completedAt                DateTime?
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+
+  course                  Course                           @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  sourceSyllabusStructure PublishedSyllabusStructure       @relation(fields: [sourceSyllabusStructureId], references: [id], onDelete: Restrict)
+  requestedBy             User                             @relation("KnowledgeGraphDraftRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewRevisions         KnowledgeGraphReviewRevision[]
+  publishedVersions       PublishedKnowledgeGraphVersion[]
+
+  @@unique([sourceSyllabusStructureId, generatorVersion])
+  @@index([courseId, status, createdAt])
+  @@index([requestedById, createdAt])
+}
+
+model KnowledgeGraphReviewRevision {
+  id                        String   @id @default(cuid())
+  courseId                  String
+  graphDraftId              String
+  sourceSyllabusStructureId String
+  editedById                String
+  revisionNumber            Int
+  structureJson             Json
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  course                  Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  graphDraft              KnowledgeGraphDraft             @relation(fields: [graphDraftId], references: [id], onDelete: Restrict)
+  sourceSyllabusStructure PublishedSyllabusStructure      @relation(fields: [sourceSyllabusStructureId], references: [id], onDelete: Restrict)
+  editedBy                User                            @relation("KnowledgeGraphReviewEditedBy", fields: [editedById], references: [id], onDelete: Restrict)
+  publishedVersion        PublishedKnowledgeGraphVersion?
+
+  @@unique([graphDraftId, revisionNumber])
+  @@index([courseId, createdAt])
+  @@index([editedById, createdAt])
+}
+
+model PublishedKnowledgeGraphVersion {
+  id                        String   @id @default(cuid())
+  courseId                  String
+  sourceSyllabusStructureId String
+  graphDraftId              String
+  reviewRevisionId          String   @unique
+  publishedById             String
+  versionNumber             Int
+  structureJson             Json
+  publishedAt               DateTime @default(now())
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  course                  Course                        @relation("PublishedKnowledgeGraphCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  currentForCourse        Course?                       @relation("CurrentPublishedKnowledgeGraph")
+  sourceSyllabusStructure PublishedSyllabusStructure    @relation(fields: [sourceSyllabusStructureId], references: [id], onDelete: Restrict)
+  graphDraft              KnowledgeGraphDraft           @relation(fields: [graphDraftId], references: [id], onDelete: Restrict)
+  reviewRevision          KnowledgeGraphReviewRevision  @relation(fields: [reviewRevisionId], references: [id], onDelete: Restrict)
+  publishedBy             User                          @relation("KnowledgeGraphPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  nodes                   PublishedKnowledgeGraphNode[]
+  edges                   PublishedKnowledgeGraphEdge[]
+
+  @@unique([courseId, versionNumber])
+  @@index([courseId, publishedAt])
+  @@index([sourceSyllabusStructureId])
+}
+
+model KnowledgeGraphConcept {
+  id        String   @id @default(cuid())
+  courseId  String
+  stableKey String   @db.VarChar(191)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course Course                        @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  nodes  PublishedKnowledgeGraphNode[]
+
+  @@unique([courseId, stableKey])
+  @@index([courseId, createdAt])
+}
+
+model PublishedKnowledgeGraphNode {
+  id                 String                   @id @default(cuid())
+  graphVersionId     String
+  conceptId          String
+  nodeType           KnowledgeGraphNodeType
+  code               String                   @db.VarChar(100)
+  name               String                   @db.VarChar(300)
+  description        String?                  @db.Text
+  importance         String?                  @db.VarChar(30)
+  isKeyTopic         Boolean                  @default(false)
+  isDifficultTopic   Boolean                  @default(false)
+  objectiveMappings  Json?
+  assessmentMappings Json?
+  sourceType         KnowledgeGraphSourceType
+  sourceRefs         Json
+  confidence         Decimal?                 @db.Decimal(5, 4)
+  sourcePath         String?                  @db.VarChar(500)
+  sortOrder          Int
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  graphVersion  PublishedKnowledgeGraphVersion @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
+  concept       KnowledgeGraphConcept          @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  outgoingEdges PublishedKnowledgeGraphEdge[]  @relation("KnowledgeGraphEdgeFrom")
+  incomingEdges PublishedKnowledgeGraphEdge[]  @relation("KnowledgeGraphEdgeTo")
+
+  @@unique([graphVersionId, code])
+  @@unique([graphVersionId, conceptId])
+  @@index([graphVersionId, nodeType, sortOrder])
+  @@index([conceptId])
+}
+
+model PublishedKnowledgeGraphEdge {
+  id             String                     @id @default(cuid())
+  graphVersionId String
+  fromNodeId     String
+  toNodeId       String
+  relationType   KnowledgeGraphRelationType
+  description    String?                    @db.Text
+  sourceType     KnowledgeGraphSourceType
+  sourceRefs     Json
+  confidence     Decimal?                   @db.Decimal(5, 4)
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  graphVersion PublishedKnowledgeGraphVersion @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
+  fromNode     PublishedKnowledgeGraphNode    @relation("KnowledgeGraphEdgeFrom", fields: [fromNodeId], references: [id], onDelete: Restrict)
+  toNode       PublishedKnowledgeGraphNode    @relation("KnowledgeGraphEdgeTo", fields: [toNodeId], references: [id], onDelete: Restrict)
+
+  @@unique([graphVersionId, relationType, fromNodeId, toNodeId])
+  @@index([graphVersionId, relationType])
+  @@index([fromNodeId])
+  @@index([toNodeId])
 }
 
 model Classroom {
