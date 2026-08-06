@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { KNOWLEDGE_GRAPH_GENERATOR_VERSION } from "@/services/knowledge-graph/constants";
 import { KnowledgeGraphOperationError } from "@/services/knowledge-graph/errors";
 import {
   getTeacherKnowledgeGraph,
@@ -203,7 +204,7 @@ test("AI 降级审核稿可事务发布、幂等复用并维护正式指针与�
         sourceSyllabusStructureId: publishedSyllabus.id,
         requestedById: teacher.id,
         status: KnowledgeGraphStatus.SUCCEEDED,
-        generatorVersion: `graph-test-${suffix}`,
+        generatorVersion: KNOWLEDGE_GRAPH_GENERATOR_VERSION,
         promptVersion: "graph-test-v1",
         ruleVersion: "graph-test-v1",
         deterministicStructureJson: base,
@@ -323,13 +324,20 @@ test("AI 降级审核稿可事务发布、幂等复用并维护正式指针与�
         generatedStructureJson: enhanced,
         aiEnhancementStatus: AIEnhancementStatus.SUCCEEDED,
         aiInferenceJson: { related: [{ from: "kp:first", to: "kp:second" }] },
+        aiFinishedAt: new Date(reviewOne.createdAt.getTime() + 1),
       },
     });
+    const enhancedState = await getTeacherKnowledgeGraph(teacher.id, course.id);
+    assert.equal(enhancedState.review, null);
+    assert.equal(enhancedState.latestReviewRevisionNumber, 1);
     const reviewTwo = await saveTeacherKnowledgeGraphReview(
       teacher.id,
       course.id,
       draft.id,
-      { expectedRevisionNumber: 1, structure: enhanced },
+      {
+        expectedRevisionNumber: enhancedState.latestReviewRevisionNumber,
+        structure: enhanced,
+      },
       context,
     );
     targetIds.push(reviewTwo.id);

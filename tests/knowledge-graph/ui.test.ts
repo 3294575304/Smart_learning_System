@@ -39,3 +39,18 @@ test("发布请求携带并发与大纲上下文且后端错误码可见", async
   assert.match(source, /setNotice\(`知识图谱第/u);
   assert.match(source, /warning && !error/u);
 });
+
+test("AI 增强后保存使用隐藏审核稿的最新修订号", async () => {
+  const source = await readFile(
+    new URL(
+      "../../components/courses/knowledge-graph-workspace.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /latestReviewRevisionNumber: number/u);
+  assert.match(
+    source,
+    /expectedRevisionNumber: state\.latestReviewRevisionNumber/u,
+  );
+});

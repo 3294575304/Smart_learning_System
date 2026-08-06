@@ -581,6 +581,7 @@ export async function getTeacherKnowledgeGraph(
           orderBy: { revisionNumber: "desc" },
         })
       : null;
+  const latestReviewRevisionNumber = review?.revisionNumber ?? 0;
   if (
     review &&
     draft?.aiEnhancementStatus === AIEnhancementStatus.SUCCEEDED &&
@@ -623,6 +624,7 @@ export async function getTeacherKnowledgeGraph(
       course.currentPublishedSyllabusStructureId && !isCurrentSourceUsable,
     ),
     draft: mapDraft,
+    latestReviewRevisionNumber,
     review: review
       ? { ...review, structure: parseGraph(review.structureJson) }
       : null,

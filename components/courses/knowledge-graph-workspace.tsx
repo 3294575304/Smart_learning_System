@@ -12,6 +12,7 @@ import type { ActionResult } from "@/types/action-result";
 
 interface State {
   sourceSyllabusStructureId: string | null;
+  latestReviewRevisionNumber: number;
   draft: null | {
     id: string;
     status: KnowledgeGraphGenerationStatus | string;
@@ -140,7 +141,14 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     setGraph(null);
     setDirty(false);
     setState((current) =>
-      current ? { ...current, draft: null, review: null } : current,
+      current
+        ? {
+            ...current,
+            draft: null,
+            review: null,
+            latestReviewRevisionNumber: 0,
+          }
+        : current,
     );
     const result = await requestApi<{ draft: State["draft"] }>(
       `/api/teacher/courses/${courseId}/knowledge-graph`,
@@ -183,7 +191,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          expectedRevisionNumber: state.review?.revisionNumber ?? 0,
+          expectedRevisionNumber: state.latestReviewRevisionNumber,
           structure: graph,
         }),
       },
