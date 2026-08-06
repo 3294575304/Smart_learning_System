@@ -21,6 +21,7 @@ import { extractTextFromPdf } from "@/services/syllabus-parsing/pdf-extractor";
 import { parseSyllabusStructure } from "@/services/syllabus-parsing/parser";
 import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
 import { markParseSucceeded } from "@/services/syllabus-parsing/repository";
+import { buildSyllabusParseMessages } from "@/services/syllabus-parsing/prompt";
 import type {
   SyllabusParseInput,
   SyllabusParseOutput,
@@ -293,6 +294,53 @@ test("openai-compatible client has implicit retries disabled", () => {
     model: "test",
   });
   assert.equal(provider.maxRetries, 0);
+});
+
+test("syllabus request explicitly uses the 8192 completion-token ceiling", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: Record<string, unknown> | undefined;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: { content: JSON.stringify(validOutput) },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }),
+      { status: 200 },
+    );
+  };
+  try {
+    const provider = new OpenAICompatibleProvider({
+      apiKey: "test",
+      baseUrl: "https://example.invalid/v1",
+      model: "test",
+    });
+    await provider.parseSyllabus(
+      {
+        courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+        pages: [{ pageNumber: 1, text: "Python syllabus" }],
+      },
+      { signal: new AbortController().signal },
+    );
+    assert.equal(requestBody?.max_tokens, 8_192);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("syllabus prompt requires compact page-only references by default", () => {
+  const messages = buildSyllabusParseMessages({
+    courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+    pages: [{ pageNumber: 1, text: "Python syllabus" }],
+  });
+  assert.match(messages[0]?.content ?? "", /紧凑的单行 JSON/u);
+  assert.match(messages[0]?.content ?? "", /不要输出 quote/u);
+  assert.match(messages[0]?.content ?? "", /完整性优先/u);
 });
 
 test("terminal writes use attemptId so a late result cannot overwrite a newer attempt", async () => {

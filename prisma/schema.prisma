@@ -191,6 +191,12 @@ enum KnowledgeGraphStatus {
   FAILED
 }
 
+enum AIEnhancementStatus {
+  NOT_ATTEMPTED
+  SUCCEEDED
+  FAILED
+}
+
 enum KnowledgeGraphNodeType {
   COURSE
   CHAPTER
@@ -808,6 +814,11 @@ model KnowledgeGraphDraft {
   aiInferenceJson            Json?
   generatedStructureJson     Json?
   errorCode                  String?              @db.VarChar(100)
+  aiEnhancementStatus        AIEnhancementStatus  @default(NOT_ATTEMPTED)
+  aiWarningCode              String?              @db.VarChar(100)
+  aiWarningMessage           String?
+  aiAttemptCount             Int                  @default(0)
+  aiFinishedAt               DateTime?
   startedAt                  DateTime?
   completedAt                DateTime?
   createdAt                  DateTime             @default(now())

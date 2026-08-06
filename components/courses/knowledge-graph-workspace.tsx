@@ -3,15 +3,23 @@
 import { AlertCircle, CheckCircle2, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { requestApi } from "@/components/courses/request-api";
+import {
+  presentKnowledgeGraphGeneration,
+  type KnowledgeGraphGenerationStatus,
+} from "@/components/courses/knowledge-graph-generation-state";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 
 interface State {
   sourceSyllabusStructureId: string | null;
   draft: null | {
     id: string;
-    status: string;
+    status: KnowledgeGraphGenerationStatus | string;
     progress: number;
     errorCode: string | null;
+    errorMessage: string | null;
+    aiEnhancementStatus: string;
+    aiWarningCode: string | null;
+    aiWarningMessage: string | null;
     provider: string | null;
     model: string | null;
     structure: KnowledgeGraphStructure | null;
@@ -50,6 +58,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     const result = await requestApi<State>(
@@ -60,20 +69,38 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     setState(result.data);
     setGraph(
       structuredClone(
-        result.data.review?.structure ??
-          result.data.draft?.structure ??
-          result.data.published.current?.structure ??
-          null,
+        result.data.review?.structure ?? result.data.draft?.structure ?? null,
       ),
     );
     setDirty(false);
-    setError(null);
+    const presentation = presentKnowledgeGraphGeneration(result.data.draft);
+    if (presentation.kind === "failed") {
+      setNotice(null);
+      setWarning(null);
+      setError(presentation.message);
+    } else if (presentation.kind === "warning") {
+      setError(null);
+      setNotice(null);
+      setWarning(presentation.message);
+    } else if (presentation.kind === "succeeded") {
+      setError(null);
+      setWarning(null);
+      setNotice(presentation.message);
+    } else {
+      setError(null);
+      if (presentation.kind === "generating") setNotice(null);
+    }
   }, [courseId]);
   useEffect(() => {
     void load();
   }, [load]);
   useEffect(() => {
-    if (state?.draft?.status !== "PROCESSING") return;
+    if (
+      state?.draft?.status !== "PENDING" &&
+      state?.draft?.status !== "PROCESSING" &&
+      state?.draft?.status !== "RUNNING"
+    )
+      return;
     const timer = window.setInterval(() => void load(), 2000);
     return () => window.clearInterval(timer);
   }, [state?.draft?.status, load]);
@@ -94,14 +121,44 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
   async function generate() {
     setBusy(true);
     setError(null);
-    const result = await requestApi<unknown>(
+    setNotice(null);
+    setWarning(null);
+    setGraph(null);
+    setDirty(false);
+    setState((current) =>
+      current ? { ...current, draft: null, review: null } : current,
+    );
+    const result = await requestApi<{ draft: State["draft"] }>(
       `/api/teacher/courses/${courseId}/knowledge-graph`,
       { method: "POST" },
     );
     setBusy(false);
-    if (!result.success) return setError(result.error);
-    setNotice("知识图谱草稿已生成，请审核后保存。");
-    await load();
+    if (!result.success) {
+      setNotice(null);
+      return setError(result.error);
+    }
+    setState((current) =>
+      current
+        ? {
+            ...current,
+            draft: result.data.draft
+              ? {
+                  ...result.data.draft,
+                  status: "PENDING",
+                  progress: 0,
+                  errorCode: null,
+                  errorMessage: null,
+                  aiEnhancementStatus: "NOT_ATTEMPTED",
+                  aiWarningCode: null,
+                  aiWarningMessage: null,
+                  structure: null,
+                }
+              : null,
+            review: null,
+          }
+        : current,
+    );
+    setNotice("知识图谱生成任务已提交，请稍候。");
   }
   async function save() {
     if (!graph || !state?.draft) return;
@@ -192,15 +249,12 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
             当前正式图谱来自旧正式大纲，请重新生成、审核并发布。
           </p>
         ) : null}
-        {state?.draft?.status === "PROCESSING" ? (
+        {state?.draft?.status === "PENDING" ||
+        state?.draft?.status === "PROCESSING" ||
+        state?.draft?.status === "RUNNING" ? (
           <p className="mt-4 flex gap-2 rounded bg-blue-50 p-3 text-sm text-blue-700">
             <RefreshCw className="h-4 w-4 animate-spin" />
-            生成中，进度 {state.draft.progress}%
-          </p>
-        ) : null}
-        {state?.draft?.status === "FAILED" ? (
-          <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">
-            生成失败：{state.draft.errorCode}
+            知识图谱生成中，进度 {state.draft.progress}%
           </p>
         ) : null}
       </div>
@@ -271,7 +325,10 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
             ) : null}
           </div>
         </div>
-      ) : !loading ? (
+      ) : !loading &&
+        state?.draft?.status !== "PENDING" &&
+        state?.draft?.status !== "PROCESSING" &&
+        state?.draft?.status !== "RUNNING" ? (
         <p className="rounded-xl border border-dashed p-5 text-sm text-gray-500">
           尚无知识图谱草稿。
         </p>
@@ -289,10 +346,16 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
           </ul>
         </details>
       ) : null}
-      {notice ? (
+      {notice && !error ? (
         <p className="flex gap-2 rounded bg-emerald-50 p-3 text-sm text-emerald-700">
           <CheckCircle2 className="h-4 w-4" />
           {notice}
+        </p>
+      ) : null}
+      {warning && !error ? (
+        <p className="flex gap-2 rounded bg-amber-50 p-3 text-sm text-amber-800">
+          <AlertCircle className="h-4 w-4" />
+          {warning}
         </p>
       ) : null}
       {error ? (

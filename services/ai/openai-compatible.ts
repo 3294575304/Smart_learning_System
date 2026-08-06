@@ -34,6 +34,9 @@ export interface OpenAICompatibleProviderConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  syllabusMaxCompletionTokens?: number;
+  timeoutMs?: number;
+  logger?: Pick<Console, "error">;
 }
 
 export class OpenAICompatibleProvider implements AIProvider {
@@ -42,10 +45,15 @@ export class OpenAICompatibleProvider implements AIProvider {
   readonly name = "openai-compatible";
   readonly model: string;
   private readonly endpoint: string;
+  private readonly logger: Pick<Console, "error">;
 
   constructor(private readonly config: OpenAICompatibleProviderConfig) {
     this.model = config.model;
-    this.endpoint = `${config.baseUrl.replace(/\/$/u, "")}/chat/completions`;
+    const normalized = config.baseUrl
+      .replace(/\/+$/u, "")
+      .replace(/\/chat\/completions$/u, "");
+    this.endpoint = `${normalized}/chat/completions`;
+    this.logger = config.logger ?? console;
   }
 
   async analyzeStudentPerformance(
@@ -67,6 +75,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     return this.completeJson(
       buildSyllabusParseMessages(input, options.validationError),
       options.signal,
+      this.config.syllabusMaxCompletionTokens ?? 8_192,
     );
   }
 
@@ -106,6 +115,7 @@ export class OpenAICompatibleProvider implements AIProvider {
   private async completeJson(
     messages: Array<{ role: "system" | "user"; content: string }>,
     signal: AbortSignal,
+    maxCompletionTokens?: number,
   ): Promise<AIProviderResponse> {
     let response: Response;
     try {
@@ -119,6 +129,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           model: this.model,
           temperature: 0.2,
           response_format: { type: "json_object" },
+          ...(maxCompletionTokens ? { max_tokens: maxCompletionTokens } : {}),
           messages,
         }),
         signal,
@@ -128,11 +139,13 @@ export class OpenAICompatibleProvider implements AIProvider {
         signal.aborted ||
         (error instanceof DOMException && error.name === "AbortError")
       ) {
+        this.logNetworkDiagnostic("PROVIDER_TIMEOUT", error);
         throw new AIProviderRequestError(
           "AI provider request timed out",
           "PROVIDER_TIMEOUT",
         );
       }
+      this.logNetworkDiagnostic("PROVIDER_UNAVAILABLE", error);
       throw new AIProviderRequestError(
         "AI provider is unavailable",
         "PROVIDER_UNAVAILABLE",
@@ -140,9 +153,22 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
 
     if (!response.ok) {
+      const summary = await safeResponseSummary(response);
+      const code = providerHttpErrorCode(response.status);
+      this.logDiagnostic(code, response, summary);
       throw new AIProviderRequestError(
         `AI provider returned HTTP ${response.status}`,
-        "PROVIDER_UNAVAILABLE",
+        code,
+        response.headers.get("x-request-id"),
+      );
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.toLowerCase().includes("text/html")) {
+      const summary = await safeResponseSummary(response);
+      this.logDiagnostic("PROVIDER_BAD_RESPONSE", response, summary);
+      throw new AIProviderRequestError(
+        "AI provider returned a non-JSON response",
+        "PROVIDER_BAD_RESPONSE",
         response.headers.get("x-request-id"),
       );
     }
@@ -150,17 +176,26 @@ export class OpenAICompatibleProvider implements AIProvider {
     try {
       payload = await response.json();
     } catch {
+      this.logDiagnostic("PROVIDER_BAD_RESPONSE", response, "unreadable JSON");
       throw new AIProviderRequestError(
         "AI provider returned an unreadable response",
-        "PROVIDER_UNAVAILABLE",
+        "PROVIDER_BAD_RESPONSE",
         response.headers.get("x-request-id"),
       );
     }
     const parsed = completionResponseSchema.safeParse(payload);
     if (!parsed.success) {
+      this.logDiagnostic(
+        "PROVIDER_SCHEMA_INVALID",
+        response,
+        parsed.error.issues
+          .slice(0, 3)
+          .map((issue) => issue.path.join("."))
+          .join(", "),
+      );
       throw new AIProviderRequestError(
         "AI provider returned an incompatible response",
-        "PROVIDER_UNAVAILABLE",
+        "PROVIDER_SCHEMA_INVALID",
         response.headers.get("x-request-id"),
       );
     }
@@ -176,5 +211,59 @@ export class OpenAICompatibleProvider implements AIProvider {
       },
       responseLength: choice.message.content.length,
     };
+  }
+
+  private logDiagnostic(
+    code: string,
+    response: Response,
+    responseSummary: string,
+  ) {
+    this.logger.error("[ai-provider-request-failed]", {
+      code,
+      provider: this.name,
+      baseUrl: this.config.baseUrl,
+      model: this.model,
+      timeoutMs: this.config.timeoutMs ?? 8_000,
+      apiKeyConfigured: Boolean(this.config.apiKey),
+      httpStatus: response.status,
+      responseContentType: response.headers.get("content-type"),
+      responseSummary,
+    });
+  }
+
+  private logNetworkDiagnostic(code: string, error: unknown) {
+    this.logger.error("[ai-provider-request-failed]", {
+      code,
+      provider: this.name,
+      baseUrl: this.config.baseUrl,
+      model: this.model,
+      timeoutMs: this.config.timeoutMs ?? 8_000,
+      apiKeyConfigured: Boolean(this.config.apiKey),
+      httpStatus: null,
+      responseContentType: null,
+      responseSummary:
+        error instanceof Error ? error.name.slice(0, 100) : "UnknownError",
+    });
+  }
+}
+
+function providerHttpErrorCode(status: number) {
+  if (status === 401) return "PROVIDER_UNAUTHORIZED" as const;
+  if (status === 403) return "PROVIDER_FORBIDDEN" as const;
+  if (status === 404) return "PROVIDER_MODEL_NOT_FOUND" as const;
+  if (status === 429) return "PROVIDER_RATE_LIMITED" as const;
+  return status >= 500
+    ? ("PROVIDER_UNAVAILABLE" as const)
+    : ("PROVIDER_BAD_RESPONSE" as const);
+}
+
+async function safeResponseSummary(response: Response) {
+  try {
+    return (await response.text())
+      .slice(0, 500)
+      .replace(/Bearer\s+\S+/giu, "Bearer [REDACTED]")
+      .replace(/(?:sk-|key[-_]?)[A-Za-z0-9_-]{8,}/giu, "[REDACTED]");
+  } catch {
+    return "unreadable response body";
   }
 }

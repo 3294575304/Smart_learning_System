@@ -10,7 +10,7 @@ V1.0“迭代一：课程模型与导入基础”采用“预导入身份、学�
 
 - `POST /api/student/submissions/:submissionId/analysis` 为当前已批改作答生成或复用学情分析。
 - `GET /api/student/submissions/:submissionId/analysis` 读取与当前数据指纹匹配的已有分析。
-- 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。大纲长结构化输出单独使用毫秒单位的 `SYLLABUS_AI_TIMEOUT_MS`，默认 `180000`，允许覆盖到 `600000`。
+- 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。大纲长结构化输出单独使用毫秒单位的 `SYLLABUS_AI_TIMEOUT_MS`，默认 `180000`，允许覆盖到 `600000`；`SYLLABUS_AI_MAX_COMPLETION_TOKENS` 默认 `8192`，用于显式设置大纲输出上限。
 - 模型输出会经过严格 Zod 校验，失败最多重试一次；仍失败时返回基于正确率的规则结果。分析接口独立于交卷和成绩接口，AI 故障不会影响成绩查看。
 
 ## 教学大纲结构化解析

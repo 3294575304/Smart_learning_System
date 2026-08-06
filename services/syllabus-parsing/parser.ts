@@ -30,6 +30,7 @@ export interface SyllabusAttemptMetrics {
   totalTokens: number | null;
   responseLength: number;
   errorPhase: SyllabusErrorPhase | null;
+  validationError: string | null;
 }
 
 export interface SyllabusParseExecution {
@@ -195,6 +196,7 @@ export async function parseSyllabusStructure(
       totalTokens: null,
       responseLength: 0,
       errorPhase: null,
+      validationError: null,
     };
     try {
       const providerStartedAt = Date.now();
@@ -237,6 +239,7 @@ export async function parseSyllabusStructure(
       } catch (error: unknown) {
         metrics.jsonParseDurationMs = Date.now() - jsonStartedAt;
         metrics.errorPhase = "json";
+        metrics.validationError = validationDetails(error);
         attempts.push(metrics);
         if (index + 1 < SYLLABUS_MAX_AI_ATTEMPTS) {
           validationError = validationDetails(error);
@@ -266,6 +269,7 @@ export async function parseSyllabusStructure(
       } catch (error: unknown) {
         metrics.validationDurationMs = Date.now() - validationStartedAt;
         metrics.errorPhase = "validation";
+        metrics.validationError = validationDetails(error);
         attempts.push(metrics);
         if (index + 1 < SYLLABUS_MAX_AI_ATTEMPTS) {
           validationError = validationDetails(error);

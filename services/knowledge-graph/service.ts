@@ -1,10 +1,10 @@
 import {
+  AIEnhancementStatus,
   AuditAction,
   AuditTargetType,
   KnowledgeGraphStatus,
   Prisma,
 } from "@prisma/client";
-import { ZodError } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { createAIProvider } from "@/services/ai/provider-factory";
@@ -13,9 +13,7 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import {
-  KNOWLEDGE_GRAPH_AI_TIMEOUT_MS,
   KNOWLEDGE_GRAPH_GENERATOR_VERSION,
-  KNOWLEDGE_GRAPH_MAX_AI_ATTEMPTS,
   KNOWLEDGE_GRAPH_PROMPT_VERSION,
   KNOWLEDGE_GRAPH_RULE_VERSION,
 } from "@/services/knowledge-graph/constants";
@@ -26,13 +24,13 @@ import {
   loadTeacherCourseForKnowledgeGraph,
 } from "@/services/knowledge-graph/syllabus-source";
 import { findOrCreateTeacherKnowledgeGraphDraft } from "@/services/knowledge-graph/task-repository";
+import { runOptionalKnowledgeGraphAiEnhancement } from "@/services/knowledge-graph/ai-enhancement";
 import {
   deterministicGraph,
   mergeRelated,
 } from "@/services/knowledge-graph/generator";
 import {
   knowledgeGraphStructureSchema,
-  relatedInferenceSchema,
   type KnowledgeGraphStructure,
 } from "@/services/knowledge-graph/schemas";
 import { validateKnowledgeGraph } from "@/services/knowledge-graph/validation";
@@ -69,57 +67,15 @@ function parseGraph(value: unknown): KnowledgeGraphStructure {
   return parsed.data;
 }
 
-async function infer(provider: AIProvider, base: KnowledgeGraphStructure) {
-  if (!provider.inferKnowledgeGraphRelations)
-    throw new KnowledgeGraphOperationError(
-      "当前 AI Provider 不支持知识图谱关系推断。",
-      502,
-      "PROVIDER_UNSUPPORTED",
-    );
-  let last: unknown;
-  for (
-    let attempt = 0;
-    attempt < KNOWLEDGE_GRAPH_MAX_AI_ATTEMPTS;
-    attempt += 1
-  ) {
-    const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      KNOWLEDGE_GRAPH_AI_TIMEOUT_MS,
-    );
-    try {
-      const raw = await provider.inferKnowledgeGraphRelations(base, {
-        signal: controller.signal,
-        validationError: last instanceof Error ? last.message : undefined,
-      });
-      const parsed = relatedInferenceSchema.parse(
-        typeof raw === "string" ? JSON.parse(raw) : raw,
-      );
-      return { inference: parsed, retryCount: attempt };
-    } catch (error) {
-      last = error;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  const code =
-    last instanceof DOMException && last.name === "AbortError"
-      ? "PROVIDER_TIMEOUT"
-      : last instanceof ZodError || last instanceof SyntaxError
-        ? "INVALID_PROVIDER_OUTPUT"
-        : "PROVIDER_ERROR";
-  throw new KnowledgeGraphOperationError(
-    "知识图谱 AI 推断失败，请稍后重试。",
-    502,
-    code,
-  );
-}
-
 export async function generateTeacherKnowledgeGraph(
   teacherId: string,
   courseId: string,
   context: AuditRequestContext,
-  dependencies: { provider?: AIProvider } = {},
+  dependencies: {
+    provider?: AIProvider;
+    logger?: Pick<Console, "error">;
+    failSuccessWriteForTest?: boolean;
+  } = {},
 ) {
   const source = await getCurrentPublishedSyllabusForKnowledgeGraph(
     teacherId,
@@ -172,6 +128,14 @@ export async function generateTeacherKnowledgeGraph(
       executionCount: { increment: 1 },
       progress: 10,
       errorCode: null,
+      aiEnhancementStatus: AIEnhancementStatus.NOT_ATTEMPTED,
+      aiWarningCode: null,
+      aiWarningMessage: null,
+      aiAttemptCount: 0,
+      aiFinishedAt: null,
+      deterministicStructureJson: Prisma.JsonNull,
+      aiInferenceJson: Prisma.JsonNull,
+      generatedStructureJson: Prisma.JsonNull,
       startedAt: new Date(),
       completedAt: null,
     },
@@ -183,7 +147,7 @@ export async function generateTeacherKnowledgeGraph(
         where: { id: draft.id },
       }),
     };
-  const provider = dependencies.provider ?? createAIProvider();
+  const logger = dependencies.logger ?? console;
   try {
     const syllabus = publishableSyllabusStructureSchema.parse(
       source.structureJson,
@@ -193,36 +157,52 @@ export async function generateTeacherKnowledgeGraph(
       where: { id: draft.id },
       data: { deterministicStructureJson: json(base), progress: 45 },
     });
-    const ai = await infer(provider, base);
+    const ai = await runOptionalKnowledgeGraphAiEnhancement(
+      base,
+      () => dependencies.provider ?? createAIProvider(),
+    );
     const structure = mergeRelated(base, ai.inference);
-    const saved = await prisma.knowledgeGraphDraft.update({
-      where: { id: draft.id },
-      data: {
-        status: KnowledgeGraphStatus.SUCCEEDED,
-        provider: provider.name,
-        model: provider.model,
-        retryCount: ai.retryCount,
-        aiInferenceJson: json(ai.inference),
-        generatedStructureJson: json(structure),
-        progress: 100,
-        successCount: structure.nodes.length + structure.edges.length,
-        failureCount: 0,
-        completedAt: new Date(),
-      },
-    });
-    await writeGovernanceAuditLog(prisma, {
-      actorId: teacherId,
-      action: AuditAction.KNOWLEDGE_GRAPH_GENERATED,
-      targetType: AuditTargetType.KNOWLEDGE_GRAPH_DRAFT,
-      targetId: saved.id,
-      summary: "生成知识图谱草稿",
-      beforeData: null,
-      afterData: {
-        courseId,
-        sourceSyllabusStructureId: source.id,
-        generatorVersion: KNOWLEDGE_GRAPH_GENERATOR_VERSION,
-      },
-      context,
+    const saved = await prisma.$transaction(async (tx) => {
+      if (dependencies.failSuccessWriteForTest)
+        throw new Error("Simulated knowledge graph persistence failure");
+      const persisted = await tx.knowledgeGraphDraft.update({
+        where: { id: draft.id },
+        data: {
+          status: KnowledgeGraphStatus.SUCCEEDED,
+          provider: ai.provider?.name ?? null,
+          model: ai.provider?.model ?? null,
+          retryCount: Math.max(0, ai.attemptCount - 1),
+          aiEnhancementStatus: ai.status,
+          aiWarningCode: ai.warningCode,
+          aiWarningMessage: ai.warningMessage,
+          aiAttemptCount: ai.attemptCount,
+          aiFinishedAt: new Date(),
+          aiInferenceJson: json(ai.inference),
+          generatedStructureJson: json(structure),
+          progress: 100,
+          successCount: structure.nodes.length + structure.edges.length,
+          failureCount: ai.status === AIEnhancementStatus.FAILED ? 1 : 0,
+          errorCode: null,
+          completedAt: new Date(),
+        },
+      });
+      await writeGovernanceAuditLog(tx, {
+        actorId: teacherId,
+        action: AuditAction.KNOWLEDGE_GRAPH_GENERATED,
+        targetType: AuditTargetType.KNOWLEDGE_GRAPH_DRAFT,
+        targetId: persisted.id,
+        summary: "生成知识图谱草稿",
+        beforeData: null,
+        afterData: {
+          courseId,
+          sourceSyllabusStructureId: source.id,
+          generatorVersion: KNOWLEDGE_GRAPH_GENERATOR_VERSION,
+          aiEnhancementStatus: ai.status,
+          aiWarningCode: ai.warningCode,
+        },
+        context,
+      });
+      return persisted;
     });
     return { reused: false, draft: { ...saved, structure } };
   } catch (error) {
@@ -230,8 +210,6 @@ export async function generateTeacherKnowledgeGraph(
       where: { id: draft.id },
       data: {
         status: KnowledgeGraphStatus.FAILED,
-        provider: provider.name,
-        model: provider.model,
         progress: 100,
         failureCount: 1,
         generatedStructureJson: Prisma.JsonNull,
@@ -242,6 +220,15 @@ export async function generateTeacherKnowledgeGraph(
         completedAt: new Date(),
       },
     });
+    logger.error("[knowledge-graph-generation-failed]", {
+      courseId,
+      draftId: draft.id,
+      errorCode:
+        error instanceof KnowledgeGraphOperationError
+          ? error.code
+          : "GRAPH_GENERATION_FAILED",
+      errorClass: error instanceof Error ? error.name : "UnknownError",
+    });
     throw error;
   }
 }
@@ -250,17 +237,31 @@ export async function queueTeacherKnowledgeGraph(
   teacherId: string,
   courseId: string,
 ) {
-  const draft = await findOrCreateTeacherKnowledgeGraphDraft(
-    teacherId,
-    courseId,
-  );
+  let draft = await findOrCreateTeacherKnowledgeGraphDraft(teacherId, courseId);
+  if (draft.status === KnowledgeGraphStatus.FAILED) {
+    draft = await prisma.knowledgeGraphDraft.update({
+      where: { id: draft.id },
+      data: {
+        status: KnowledgeGraphStatus.PENDING,
+        progress: 0,
+        errorCode: null,
+        aiEnhancementStatus: AIEnhancementStatus.NOT_ATTEMPTED,
+        aiWarningCode: null,
+        aiWarningMessage: null,
+        aiAttemptCount: 0,
+        aiFinishedAt: null,
+        deterministicStructureJson: Prisma.JsonNull,
+        aiInferenceJson: Prisma.JsonNull,
+        generatedStructureJson: Prisma.JsonNull,
+        completedAt: null,
+      },
+    });
+  }
   return {
     reused:
       draft.status === KnowledgeGraphStatus.SUCCEEDED ||
       draft.status === KnowledgeGraphStatus.PROCESSING,
-    shouldExecute:
-      draft.status === KnowledgeGraphStatus.PENDING ||
-      draft.status === KnowledgeGraphStatus.FAILED,
+    shouldExecute: draft.status === KnowledgeGraphStatus.PENDING,
     draft,
   };
 }
@@ -382,8 +383,8 @@ export async function getTeacherKnowledgeGraph(
   const currentSource = course.currentPublishedSyllabusStructure;
   const isCurrentSourceUsable = Boolean(
     currentSource &&
-      course.syllabi[0] &&
-      currentSource.syllabusId === course.syllabi[0].id,
+    course.syllabi[0] &&
+    currentSource.syllabusId === course.syllabi[0].id,
   );
   const currentSourceId =
     isCurrentSourceUsable && currentSource ? currentSource.id : null;
@@ -403,18 +404,38 @@ export async function getTeacherKnowledgeGraph(
       orderBy: { versionNumber: "desc" },
     }),
   ]);
-  const review = draft
-    ? await prisma.knowledgeGraphReviewRevision.findFirst({
-        where: { graphDraftId: draft.id },
-        orderBy: { revisionNumber: "desc" },
-      })
-    : null;
+  const review =
+    draft?.status === KnowledgeGraphStatus.SUCCEEDED
+      ? await prisma.knowledgeGraphReviewRevision.findFirst({
+          where: {
+            graphDraftId: draft.id,
+            ...(draft.startedAt ? { createdAt: { gte: draft.startedAt } } : {}),
+          },
+          orderBy: { revisionNumber: "desc" },
+        })
+      : null;
+  const hasPersistedDraft = Boolean(draft?.generatedStructureJson);
+  if (draft?.status === KnowledgeGraphStatus.SUCCEEDED && !hasPersistedDraft)
+    console.error("[knowledge-graph-succeeded-without-draft]", {
+      courseId,
+      draftId: draft.id,
+      errorCode: "GRAPH_DRAFT_MISSING",
+    });
   const mapDraft = draft
     ? {
         ...draft,
-        structure: draft.generatedStructureJson
-          ? parseGraph(draft.generatedStructureJson)
-          : null,
+        errorMessage:
+          draft.status === KnowledgeGraphStatus.FAILED
+            ? knowledgeGraphGenerationErrorMessage(draft.errorCode)
+            : draft.status === KnowledgeGraphStatus.SUCCEEDED &&
+                !hasPersistedDraft
+              ? knowledgeGraphGenerationErrorMessage("GRAPH_DRAFT_MISSING")
+              : null,
+        structure:
+          draft.status === KnowledgeGraphStatus.SUCCEEDED &&
+          draft.generatedStructureJson
+            ? parseGraph(draft.generatedStructureJson)
+            : null,
       }
     : null;
   const history = published.map((item) => ({
@@ -441,6 +462,35 @@ export async function getTeacherKnowledgeGraph(
   };
 }
 
+export function knowledgeGraphGenerationErrorMessage(code: string | null) {
+  switch (code) {
+    case "PROVIDER_NOT_CONFIGURED":
+      return "AI 服务尚未正确配置。";
+    case "PROVIDER_UNAUTHORIZED":
+      return "AI 服务鉴权失败。";
+    case "PROVIDER_FORBIDDEN":
+      return "AI 服务拒绝了当前请求。";
+    case "PROVIDER_MODEL_NOT_FOUND":
+      return "AI 模型不存在或接口地址不正确。";
+    case "PROVIDER_RATE_LIMITED":
+      return "AI 服务请求过于频繁。";
+    case "PROVIDER_TIMEOUT":
+      return "AI 服务响应超时，请稍后重试。";
+    case "PROVIDER_UNSUPPORTED":
+      return "当前 AI 服务不支持知识图谱生成。";
+    case "PROVIDER_BAD_RESPONSE":
+      return "AI 服务返回了无法读取的响应。";
+    case "PROVIDER_SCHEMA_INVALID":
+      return "AI 服务返回的数据格式无效，请重试或联系管理员。";
+    case "PROVIDER_UNAVAILABLE":
+      return "AI 服务暂时不可用，请稍后重试。";
+    case "GRAPH_DRAFT_MISSING":
+      return "生成任务已结束，但未找到有效草稿，请重试。";
+    default:
+      return "知识图谱生成失败，请稍后重试。";
+  }
+}
+
 async function publishKnowledgeGraphTransaction(
   teacherId: string,
   courseId: string,
@@ -465,10 +515,7 @@ async function publishKnowledgeGraphTransaction(
         where: { id: draftId, courseId },
       });
       if (!draft) throw new ResourceNotFoundError("知识图谱草稿不存在。");
-      if (
-        draft.sourceSyllabusStructureId !==
-        currentSyllabusStructure.id
-      )
+      if (draft.sourceSyllabusStructureId !== currentSyllabusStructure.id)
         throw new KnowledgeGraphOperationError(
           "该图谱草稿来自旧正式大纲，请重新生成。",
           409,

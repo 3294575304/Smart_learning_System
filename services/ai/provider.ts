@@ -22,7 +22,16 @@ export interface AIProviderResponse {
 export class AIProviderRequestError extends Error {
   constructor(
     message: string,
-    readonly code: "PROVIDER_TIMEOUT" | "PROVIDER_UNAVAILABLE",
+    readonly code:
+      | "PROVIDER_NOT_CONFIGURED"
+      | "PROVIDER_UNAUTHORIZED"
+      | "PROVIDER_FORBIDDEN"
+      | "PROVIDER_MODEL_NOT_FOUND"
+      | "PROVIDER_RATE_LIMITED"
+      | "PROVIDER_TIMEOUT"
+      | "PROVIDER_BAD_RESPONSE"
+      | "PROVIDER_SCHEMA_INVALID"
+      | "PROVIDER_UNAVAILABLE",
     readonly requestId: string | null = null,
   ) {
     super(message);
