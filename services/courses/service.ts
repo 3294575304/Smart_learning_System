@@ -1090,6 +1090,9 @@ export async function deleteTeacherCourse(
               where: { courseId },
               select: { id: true },
             });
+          await transaction.questionKnowledgeGraphBindingSet.deleteMany({
+            where: { courseId },
+          });
           await transaction.publishedKnowledgeGraphEdge.deleteMany({
             where: {
               graphVersionId: { in: graphVersions.map((item) => item.id) },

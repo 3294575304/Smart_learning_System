@@ -60,6 +60,13 @@ enum AuditAction {
   KNOWLEDGE_GRAPH_GENERATED
   KNOWLEDGE_GRAPH_REVIEW_SAVED
   KNOWLEDGE_GRAPH_PUBLISHED
+  QUESTION_GRAPH_BINDINGS_UPDATED
+  QUESTION_GRAPH_BINDINGS_CLEARED
+}
+
+enum QuestionGraphBindingType {
+  PRIMARY
+  SECONDARY
 }
 
 enum AuditTargetType {
@@ -360,6 +367,7 @@ model User {
   requestedKnowledgeGraphDrafts KnowledgeGraphDraft[]            @relation("KnowledgeGraphDraftRequestedBy")
   knowledgeGraphReviewRevisions KnowledgeGraphReviewRevision[]   @relation("KnowledgeGraphReviewEditedBy")
   publishedKnowledgeGraphs      PublishedKnowledgeGraphVersion[] @relation("KnowledgeGraphPublishedBy")
+  createdQuestionGraphBindings  QuestionKnowledgeGraphBinding[]  @relation("QuestionGraphBindingCreator")
   createdStudentImportBatches   StudentImportBatch[]             @relation("StudentImportBatchCreatedBy")
   matchedStudentImportRows      StudentImportRow[]               @relation("StudentImportMatchedUser")
   createdStudentImportRows      StudentImportRow[]               @relation("StudentImportCreatedUser")
@@ -577,21 +585,23 @@ model Course {
   createdAt                               DateTime     @default(now())
   updatedAt                               DateTime     @updatedAt
 
-  template                              CourseTemplate                   @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  teacher                               User                             @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
-  classrooms                            Classroom[]                      @relation("ClassroomCourse")
-  courseFileVersions                    CourseFileVersion[]              @relation("CourseFileCourse")
-  syllabi                               CourseSyllabus[]                 @relation("CourseSyllabusCourse")
+  template                              CourseTemplate                     @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  teacher                               User                               @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  classrooms                            Classroom[]                        @relation("ClassroomCourse")
+  courseFileVersions                    CourseFileVersion[]                @relation("CourseFileCourse")
+  syllabi                               CourseSyllabus[]                   @relation("CourseSyllabusCourse")
   syllabusParseDrafts                   SyllabusParseDraft[]
   syllabusReviewRevisions               SyllabusReviewRevision[]
-  publishedSyllabusStructures           PublishedSyllabusStructure[]     @relation("PublishedSyllabusStructureCourse")
-  currentPublishedSyllabusStructure     PublishedSyllabusStructure?      @relation("CurrentPublishedSyllabusStructure", fields: [currentPublishedSyllabusStructureId], references: [id], onDelete: SetNull)
+  publishedSyllabusStructures           PublishedSyllabusStructure[]       @relation("PublishedSyllabusStructureCourse")
+  currentPublishedSyllabusStructure     PublishedSyllabusStructure?        @relation("CurrentPublishedSyllabusStructure", fields: [currentPublishedSyllabusStructureId], references: [id], onDelete: SetNull)
   knowledgeGraphDrafts                  KnowledgeGraphDraft[]
   knowledgeGraphReviewRevisions         KnowledgeGraphReviewRevision[]
-  publishedKnowledgeGraphVersions       PublishedKnowledgeGraphVersion[] @relation("PublishedKnowledgeGraphCourse")
-  currentPublishedKnowledgeGraphVersion PublishedKnowledgeGraphVersion?  @relation("CurrentPublishedKnowledgeGraph", fields: [currentPublishedKnowledgeGraphVersionId], references: [id], onDelete: SetNull)
+  publishedKnowledgeGraphVersions       PublishedKnowledgeGraphVersion[]   @relation("PublishedKnowledgeGraphCourse")
+  currentPublishedKnowledgeGraphVersion PublishedKnowledgeGraphVersion?    @relation("CurrentPublishedKnowledgeGraph", fields: [currentPublishedKnowledgeGraphVersionId], references: [id], onDelete: SetNull)
   knowledgeGraphConcepts                KnowledgeGraphConcept[]
-  studentImportBatches                  StudentImportBatch[]             @relation("StudentImportCourse")
+  questionGraphBindingSets              QuestionKnowledgeGraphBindingSet[]
+  questionGraphBindings                 QuestionKnowledgeGraphBinding[]
+  studentImportBatches                  StudentImportBatch[]               @relation("StudentImportCourse")
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -681,7 +691,7 @@ model SyllabusParseDraft {
   responseLength        Int?
   providerDurationMs    Int?
   jsonParseDurationMs   Int?
-  validationDurationMs Int?
+  validationDurationMs  Int?
   errorPhase            String?             @db.VarChar(30)
   startedAt             DateTime?
   completedAt           DateTime?
@@ -822,14 +832,15 @@ model PublishedKnowledgeGraphVersion {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
-  course                  Course                        @relation("PublishedKnowledgeGraphCourse", fields: [courseId], references: [id], onDelete: Restrict)
-  currentForCourse        Course?                       @relation("CurrentPublishedKnowledgeGraph")
-  sourceSyllabusStructure PublishedSyllabusStructure    @relation(fields: [sourceSyllabusStructureId], references: [id], onDelete: Restrict)
-  graphDraft              KnowledgeGraphDraft           @relation(fields: [graphDraftId], references: [id], onDelete: Restrict)
-  reviewRevision          KnowledgeGraphReviewRevision  @relation(fields: [reviewRevisionId], references: [id], onDelete: Restrict)
-  publishedBy             User                          @relation("KnowledgeGraphPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  course                  Course                          @relation("PublishedKnowledgeGraphCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  currentForCourse        Course?                         @relation("CurrentPublishedKnowledgeGraph")
+  sourceSyllabusStructure PublishedSyllabusStructure      @relation(fields: [sourceSyllabusStructureId], references: [id], onDelete: Restrict)
+  graphDraft              KnowledgeGraphDraft             @relation(fields: [graphDraftId], references: [id], onDelete: Restrict)
+  reviewRevision          KnowledgeGraphReviewRevision    @relation(fields: [reviewRevisionId], references: [id], onDelete: Restrict)
+  publishedBy             User                            @relation("KnowledgeGraphPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
   nodes                   PublishedKnowledgeGraphNode[]
   edges                   PublishedKnowledgeGraphEdge[]
+  sourceQuestionBindings  QuestionKnowledgeGraphBinding[] @relation("QuestionGraphBindingSourceVersion")
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
@@ -843,8 +854,9 @@ model KnowledgeGraphConcept {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  course Course                        @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  nodes  PublishedKnowledgeGraphNode[]
+  course           Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  nodes            PublishedKnowledgeGraphNode[]
+  questionBindings QuestionKnowledgeGraphBinding[]
 
   @@unique([courseId, stableKey])
   @@index([courseId, createdAt])
@@ -871,10 +883,11 @@ model PublishedKnowledgeGraphNode {
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
 
-  graphVersion  PublishedKnowledgeGraphVersion @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
-  concept       KnowledgeGraphConcept          @relation(fields: [conceptId], references: [id], onDelete: Restrict)
-  outgoingEdges PublishedKnowledgeGraphEdge[]  @relation("KnowledgeGraphEdgeFrom")
-  incomingEdges PublishedKnowledgeGraphEdge[]  @relation("KnowledgeGraphEdgeTo")
+  graphVersion           PublishedKnowledgeGraphVersion  @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
+  concept                KnowledgeGraphConcept           @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  outgoingEdges          PublishedKnowledgeGraphEdge[]   @relation("KnowledgeGraphEdgeFrom")
+  incomingEdges          PublishedKnowledgeGraphEdge[]   @relation("KnowledgeGraphEdgeTo")
+  sourceQuestionBindings QuestionKnowledgeGraphBinding[] @relation("QuestionGraphBindingSourceNode")
 
   @@unique([graphVersionId, code])
   @@unique([graphVersionId, conceptId])
@@ -1091,18 +1104,65 @@ model Question {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  creator                      User                           @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  creator                      User                               @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
   options                      QuestionOption[]
   knowledgePointLinks          QuestionKnowledgePoint[]
   assignmentQuestions          AssignmentQuestion[]
   recommendations              PersonalizedRecommendation[]
-  practiceAnswers              RecommendationPracticeAnswer[] @relation("RecommendationPracticeQuestion")
-  recommendationWrongQuestions WrongQuestion[]                @relation("WrongQuestionSourceQuestion")
+  practiceAnswers              RecommendationPracticeAnswer[]     @relation("RecommendationPracticeQuestion")
+  recommendationWrongQuestions WrongQuestion[]                    @relation("WrongQuestionSourceQuestion")
   aiTutoringRecords            AITutoringRecord[]
+  graphBindingSets             QuestionKnowledgeGraphBindingSet[]
+  graphBindings                QuestionKnowledgeGraphBinding[]
 
   @@index([creatorId, status, deletedAt, createdAt])
   @@index([visibility, status, deletedAt, type, difficulty])
   @@index([type, difficulty])
+}
+
+model QuestionKnowledgeGraphBindingSet {
+  id         String   @id @default(cuid())
+  questionId String
+  courseId   String
+  revision   Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  question Question                        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  course   Course                          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  bindings QuestionKnowledgeGraphBinding[]
+
+  @@unique([questionId, courseId])
+  @@index([courseId, updatedAt])
+}
+
+model QuestionKnowledgeGraphBinding {
+  id                   String                   @id @default(cuid())
+  bindingSetId         String
+  questionId           String
+  courseId             String
+  conceptId            String
+  sourceGraphVersionId String
+  sourceNodeId         String
+  bindingType          QuestionGraphBindingType
+  createdById          String
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  bindingSet         QuestionKnowledgeGraphBindingSet @relation(fields: [bindingSetId], references: [id], onDelete: Cascade)
+  question           Question                         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  course             Course                           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  concept            KnowledgeGraphConcept            @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  sourceGraphVersion PublishedKnowledgeGraphVersion   @relation("QuestionGraphBindingSourceVersion", fields: [sourceGraphVersionId], references: [id], onDelete: Restrict)
+  sourceNode         PublishedKnowledgeGraphNode      @relation("QuestionGraphBindingSourceNode", fields: [sourceNodeId], references: [id], onDelete: Restrict)
+  createdBy          User                             @relation("QuestionGraphBindingCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([questionId, courseId, conceptId])
+  @@unique([bindingSetId, conceptId])
+  @@index([courseId, bindingType])
+  @@index([conceptId])
+  @@index([sourceGraphVersionId])
+  @@index([sourceNodeId])
 }
 
 model QuestionOption {

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { QuestionForm } from "@/components/questions/question-form";
+import { QuestionGraphBindingPanel } from "@/components/questions/question-graph-binding-panel";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { questionIdSchema } from "@/services/questions/schemas";
@@ -10,6 +11,7 @@ import {
   getTeacherQuestion,
   listKnowledgePointOptions,
 } from "@/services/questions/service";
+import { listTeacherBindingCourses } from "@/services/question-graph-bindings/service";
 
 interface EditQuestionPageProps {
   params: Promise<{ questionId: string }>;
@@ -22,9 +24,10 @@ export default async function EditQuestionPage({
   const parsedId = questionIdSchema.safeParse((await params).questionId);
   if (!parsedId.success) notFound();
   try {
-    const [question, knowledgePoints] = await Promise.all([
+    const [question, knowledgePoints, courses] = await Promise.all([
       getTeacherQuestion(teacher.id, parsedId.data),
       listKnowledgePointOptions(),
+      listTeacherBindingCourses(teacher.id),
     ]);
     if (!question.canEdit) notFound();
     return (
@@ -48,6 +51,7 @@ export default async function EditQuestionPage({
           mode="edit"
           question={question}
         />
+        <QuestionGraphBindingPanel courses={courses} questionId={question.id} />
       </section>
     );
   } catch (error: unknown) {

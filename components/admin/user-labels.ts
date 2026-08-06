@@ -53,4 +53,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   KNOWLEDGE_GRAPH_GENERATED: "生成知识图谱草稿",
   KNOWLEDGE_GRAPH_REVIEW_SAVED: "保存知识图谱审核稿",
   KNOWLEDGE_GRAPH_PUBLISHED: "发布知识图谱",
+  QUESTION_GRAPH_BINDINGS_UPDATED: "更新题目图谱绑定",
+  QUESTION_GRAPH_BINDINGS_CLEARED: "清除题目图谱绑定",
 };
