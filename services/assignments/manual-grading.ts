@@ -16,6 +16,7 @@ import {
 } from "@/services/assignments/answer-presentation";
 import { AssignmentOperationError } from "@/services/assignments/errors";
 import { gradeAnswer, savedAnswerInput } from "@/services/assignments/grading";
+import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import type {
   ManualGradeAnswerData,
   TeacherSubmissionListQuery,
@@ -28,6 +29,8 @@ import type {
 import { writeTeachingAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { synchronizeAnswersConceptEvidence } from "@/services/concept-mastery/evidence";
+import { recalculateStudentCourseConceptMastery } from "@/services/concept-mastery/service";
 import { notifyAssignmentGraded } from "@/services/notifications/events/assignment";
 import { logNotificationFailure } from "@/services/notifications/logging";
 
@@ -145,27 +148,6 @@ function detailFromRecord(
       explanation: answer.assignmentQuestion.explanationSnapshot,
     })),
   };
-}
-
-async function runSerializable<T>(
-  operation: (transaction: Prisma.TransactionClient) => Promise<T>,
-): Promise<T> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      return await prisma.$transaction(operation, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      });
-    } catch (error: unknown) {
-      if (
-        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-        error.code !== "P2034" ||
-        attempt === 1
-      ) {
-        throw error;
-      }
-    }
-  }
-  throw new AssignmentOperationError("批改并发冲突，请稍后重试");
 }
 
 async function loadTeacherSubmission(
@@ -304,7 +286,7 @@ export async function saveManualAnswerGrade(
   answerId: string,
   input: ManualGradeAnswerData,
 ): Promise<TeacherSubmissionDetail> {
-  await runSerializable(async (transaction) => {
+  await runAssignmentSerializable(async (transaction) => {
     const answer = await transaction.studentAnswer.findFirst({
       where: {
         id: answerId,
@@ -361,7 +343,18 @@ export async function saveManualAnswerGrade(
     if (updated.count !== 1) {
       throw new AssignmentOperationError("评分状态已发生变化，请刷新后重试");
     }
-  });
+    const masteryContext = await synchronizeAnswersConceptEvidence(
+      transaction,
+      [answer.id],
+    );
+    if (masteryContext) {
+      await recalculateStudentCourseConceptMastery(
+        transaction,
+        masteryContext.studentId,
+        masteryContext.courseId,
+      );
+    }
+  }, "评分状态已发生变化，请刷新后重试");
 
   return getTeacherSubmissionForGrading(teacherId, assignmentId, submissionId);
 }
@@ -372,7 +365,7 @@ export async function completeSubmissionGrading(
   submissionId: string,
   auditContext: AuditRequestContext,
 ): Promise<TeacherSubmissionDetail> {
-  await runSerializable(async (transaction) => {
+  await runAssignmentSerializable(async (transaction) => {
     const submission = await transaction.submission.findFirst({
       where: {
         id: submissionId,
@@ -398,6 +391,7 @@ export async function completeSubmissionGrading(
     );
     let totalScore = new Prisma.Decimal(0);
     const now = new Date();
+    const answerIds: string[] = [];
 
     for (const question of submission.assignment.questions) {
       const answer = answers.get(question.id);
@@ -429,6 +423,7 @@ export async function completeSubmissionGrading(
             where: { studentAnswerId: answer.id },
           });
         }
+        answerIds.push(answer.id);
         continue;
       }
 
@@ -451,7 +446,7 @@ export async function completeSubmissionGrading(
       );
       const score = new Prisma.Decimal(result.score ?? 0);
       totalScore = totalScore.add(score);
-      await transaction.studentAnswer.upsert({
+      const persisted = await transaction.studentAnswer.upsert({
         where: {
           submissionId_assignmentQuestionId: {
             submissionId,
@@ -476,7 +471,9 @@ export async function completeSubmissionGrading(
           isCorrect: result.isCorrect,
           gradedAt: now,
         },
+        select: { id: true },
       });
+      answerIds.push(persisted.id);
     }
 
     if (totalScore.gt(submission.assignment.totalPoints)) {
@@ -507,6 +504,17 @@ export async function completeSubmissionGrading(
         "提交批改状态已发生变化，请刷新后重试",
       );
     }
+    const masteryContext = await synchronizeAnswersConceptEvidence(
+      transaction,
+      answerIds,
+    );
+    if (masteryContext) {
+      await recalculateStudentCourseConceptMastery(
+        transaction,
+        masteryContext.studentId,
+        masteryContext.courseId,
+      );
+    }
     await writeTeachingAuditLog(transaction, {
       actorId: teacherId,
       action: AuditAction.SUBMISSION_GRADING_COMPLETED,
@@ -525,7 +533,7 @@ export async function completeSubmissionGrading(
       },
       context: auditContext,
     });
-  });
+  }, "批改并发冲突，请稍后重试");
 
   return getTeacherSubmissionForGrading(teacherId, assignmentId, submissionId);
 }
@@ -543,7 +551,7 @@ export async function publishAssignmentResults(
   assignmentId: string,
   auditContext: AuditRequestContext,
 ): Promise<PublishAssignmentResultsResult> {
-  const result = await runSerializable<PublishTransactionResult>(
+  const result = await runAssignmentSerializable<PublishTransactionResult>(
     async (transaction) => {
       const assignment = await transaction.assignment.findFirst({
         where: { id: assignmentId, teacherId },
@@ -668,6 +676,7 @@ export async function publishAssignmentResults(
         })),
       };
     },
+    "成绩发布状态已发生变化，请刷新后重试",
   );
 
   for (const notification of result.notifications) {

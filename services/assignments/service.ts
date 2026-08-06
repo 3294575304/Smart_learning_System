@@ -21,6 +21,7 @@ import {
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { AssignmentOperationError } from "@/services/assignments/errors";
 import { gradeAnswer, savedAnswerInput } from "@/services/assignments/grading";
+import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import {
   assertActiveMembership,
   assertAssignmentAcceptsWork,
@@ -41,6 +42,9 @@ import type {
   SubmissionResultView,
   TeacherAssignmentView,
 } from "@/services/assignments/types";
+import { freezeAssignmentQuestionConcepts } from "@/services/concept-mastery/assignment-snapshot";
+import { synchronizeAnswersConceptEvidence } from "@/services/concept-mastery/evidence";
+import { recalculateStudentCourseConceptMastery } from "@/services/concept-mastery/service";
 import { notifyAssignmentPublished } from "@/services/notifications/events/assignment";
 
 const teacherAssignmentInclude = {
@@ -366,7 +370,7 @@ export async function publishAssignment(
   assignmentId: string,
 ): Promise<TeacherAssignmentView> {
   const now = new Date();
-  await prisma.$transaction(async (transaction) => {
+  await runAssignmentSerializable(async (transaction) => {
     const assignment = await transaction.assignment.findUnique({
       where: { id: assignmentId },
       include: {
@@ -378,6 +382,7 @@ export async function publishAssignment(
         },
         classroom: {
           select: {
+            courseId: true,
             memberships: {
               where: {
                 status: MembershipStatus.ACTIVE,
@@ -396,8 +401,12 @@ export async function publishAssignment(
         },
       },
     });
+    if (!assignment || assignment.teacherId !== teacherId) {
+      throw new ResourceNotFoundError("作业不存在");
+    }
+    if (assignment.status === AssignmentStatus.PUBLISHED) return;
     assertDraftAssignment(teacherId, assignment);
-    if (!assignment || assignment.questions.length === 0) {
+    if (assignment.questions.length === 0) {
       throw new AssignmentOperationError("发布作业前至少需要选择一道题", 400);
     }
     if (!assignment.publishedAt || !assignment.dueAt) {
@@ -428,6 +437,11 @@ export async function publishAssignment(
       teacherId,
       snapshotInput,
     );
+    await freezeAssignmentQuestionConcepts(
+      transaction,
+      assignmentId,
+      assignment.classroom.courseId,
+    );
     await transaction.assignment.update({
       where: { id: assignmentId },
       data: { status: AssignmentStatus.PUBLISHED, totalPoints },
@@ -447,7 +461,7 @@ export async function publishAssignment(
       },
       transaction,
     );
-  });
+  }, "作业发布状态已发生变化，请刷新后重试");
   return getTeacherAssignment(teacherId, assignmentId);
 }
 
@@ -971,142 +985,128 @@ export async function submitStudentAssignment(
   studentId: string,
   submissionId: string,
 ): Promise<SubmissionResultView> {
-  for (
-    let transactionAttempt = 0;
-    transactionAttempt < 2;
-    transactionAttempt += 1
-  ) {
-    try {
-      await prisma.$transaction(
-        async (transaction) => {
-          const submission = await transaction.submission.findFirst({
-            where: { id: submissionId, studentId },
-            include: gradingSubmissionInclude,
-          });
-          if (!submission) throw new ResourceNotFoundError("作答记录不存在");
-          if (submission.status !== SubmissionStatus.IN_PROGRESS) return;
-          const membership = submission.assignment.classroom.memberships.find(
-            (item) => item.studentId === studentId,
-          );
-          assertActiveMembership(membership ?? null);
-          const now = new Date();
-          assertAssignmentAcceptsWork(submission.assignment, now);
-          const claimed = await transaction.submission.updateMany({
-            where: {
-              id: submissionId,
-              studentId,
-              status: SubmissionStatus.IN_PROGRESS,
-            },
-            data: { status: SubmissionStatus.SUBMITTED, submittedAt: now },
-          });
-          if (claimed.count !== 1) return;
+  await runAssignmentSerializable(async (transaction) => {
+    const submission = await transaction.submission.findFirst({
+      where: { id: submissionId, studentId },
+      include: gradingSubmissionInclude,
+    });
+    if (!submission) throw new ResourceNotFoundError("作答记录不存在");
+    if (submission.status !== SubmissionStatus.IN_PROGRESS) return;
+    const membership = submission.assignment.classroom.memberships.find(
+      (item) => item.studentId === studentId,
+    );
+    assertActiveMembership(membership ?? null);
+    const now = new Date();
+    assertAssignmentAcceptsWork(submission.assignment, now);
+    const claimed = await transaction.submission.updateMany({
+      where: {
+        id: submissionId,
+        studentId,
+        status: SubmissionStatus.IN_PROGRESS,
+      },
+      data: { status: SubmissionStatus.SUBMITTED, submittedAt: now },
+    });
+    if (claimed.count !== 1) return;
 
-          const answerMap = new Map(
-            submission.answers.map((answer) => [
-              answer.assignmentQuestionId,
-              answer,
-            ]),
-          );
-          let earned = new Prisma.Decimal(0);
-          let requiresManualReview = false;
-          for (const question of submission.assignment.questions) {
-            const currentAnswer = answerMap.get(question.id);
-            const savedInput = savedAnswerInput(
-              { id: question.id, type: question.typeSnapshot },
-              currentAnswer,
-            );
-            const result = gradeAnswer(
-              {
-                type: question.typeSnapshot,
-                points: question.points.toNumber(),
-                correctBoolean: question.correctBooleanSnapshot,
-                acceptableAnswers: question.acceptableAnswersSnapshot,
-                isCaseSensitive: question.isCaseSensitiveSnapshot,
-                options: question.optionSnapshots.map((option) => ({
-                  id: option.id,
-                  isCorrect: option.isCorrectSnapshot,
-                })),
-              },
-              savedInput,
-            );
-            if (result.score !== null) earned = earned.add(result.score);
-            if (result.gradingStatus === GradingStatus.MANUAL_REVIEW_REQUIRED) {
-              requiresManualReview = true;
-            }
-            const persisted = await transaction.studentAnswer.upsert({
-              where: {
-                submissionId_assignmentQuestionId: {
-                  submissionId,
-                  assignmentQuestionId: question.id,
-                },
-              },
-              update: {
-                gradingStatus: result.gradingStatus,
-                score: result.score,
-                maxScore: question.points,
-                isCorrect: result.isCorrect,
-                gradedAt:
-                  result.gradingStatus === GradingStatus.AUTO_GRADED
-                    ? now
-                    : null,
-              },
-              create: {
-                submissionId,
-                assignmentQuestionId: question.id,
-                maxScore: question.points,
-                gradingStatus: result.gradingStatus,
-                score: result.score,
-                isCorrect: result.isCorrect,
-                gradedAt:
-                  result.gradingStatus === GradingStatus.AUTO_GRADED
-                    ? now
-                    : null,
-              },
-              select: { id: true },
-            });
-            if (result.isCorrect === false) {
-              await transaction.wrongQuestion.upsert({
-                where: { studentAnswerId: persisted.id },
-                update: { isResolved: false },
-                create: {
-                  studentId,
-                  studentAnswerId: persisted.id,
-                  assignmentQuestionId: question.id,
-                },
-              });
-            }
-          }
-          const maxScore = submission.assignment.totalPoints;
-          const percentage = maxScore.gt(0)
-            ? earned.div(maxScore).mul(100).toDecimalPlaces(2)
-            : new Prisma.Decimal(0);
-          await transaction.submission.update({
-            where: { id: submissionId },
-            data: {
-              status: requiresManualReview
-                ? SubmissionStatus.PENDING_REVIEW
-                : SubmissionStatus.GRADED,
-              gradedAt: requiresManualReview ? null : now,
-              publishedAt: null,
-              score: earned,
-              maxScore,
-              percentage,
-            },
-          });
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    const answerMap = new Map(
+      submission.answers.map((answer) => [answer.assignmentQuestionId, answer]),
+    );
+    let earned = new Prisma.Decimal(0);
+    let requiresManualReview = false;
+    const answerIds: string[] = [];
+    for (const question of submission.assignment.questions) {
+      const currentAnswer = answerMap.get(question.id);
+      const savedInput = savedAnswerInput(
+        { id: question.id, type: question.typeSnapshot },
+        currentAnswer,
       );
-      break;
-    } catch (error: unknown) {
-      if (
-        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-        error.code !== "P2034" ||
-        transactionAttempt === 1
-      ) {
-        throw error;
+      const result = gradeAnswer(
+        {
+          type: question.typeSnapshot,
+          points: question.points.toNumber(),
+          correctBoolean: question.correctBooleanSnapshot,
+          acceptableAnswers: question.acceptableAnswersSnapshot,
+          isCaseSensitive: question.isCaseSensitiveSnapshot,
+          options: question.optionSnapshots.map((option) => ({
+            id: option.id,
+            isCorrect: option.isCorrectSnapshot,
+          })),
+        },
+        savedInput,
+      );
+      if (result.score !== null) earned = earned.add(result.score);
+      if (result.gradingStatus === GradingStatus.MANUAL_REVIEW_REQUIRED) {
+        requiresManualReview = true;
+      }
+      const persisted = await transaction.studentAnswer.upsert({
+        where: {
+          submissionId_assignmentQuestionId: {
+            submissionId,
+            assignmentQuestionId: question.id,
+          },
+        },
+        update: {
+          gradingStatus: result.gradingStatus,
+          score: result.score,
+          maxScore: question.points,
+          isCorrect: result.isCorrect,
+          gradedAt:
+            result.gradingStatus === GradingStatus.AUTO_GRADED ? now : null,
+        },
+        create: {
+          submissionId,
+          assignmentQuestionId: question.id,
+          maxScore: question.points,
+          gradingStatus: result.gradingStatus,
+          score: result.score,
+          isCorrect: result.isCorrect,
+          gradedAt:
+            result.gradingStatus === GradingStatus.AUTO_GRADED ? now : null,
+        },
+        select: { id: true },
+      });
+      answerIds.push(persisted.id);
+      if (result.isCorrect === false) {
+        await transaction.wrongQuestion.upsert({
+          where: { studentAnswerId: persisted.id },
+          update: { isResolved: false },
+          create: {
+            studentId,
+            studentAnswerId: persisted.id,
+            assignmentQuestionId: question.id,
+          },
+        });
       }
     }
-  }
+    const maxScore = submission.assignment.totalPoints;
+    const percentage = maxScore.gt(0)
+      ? earned.div(maxScore).mul(100).toDecimalPlaces(2)
+      : new Prisma.Decimal(0);
+    await transaction.submission.update({
+      where: { id: submissionId },
+      data: {
+        status: requiresManualReview
+          ? SubmissionStatus.PENDING_REVIEW
+          : SubmissionStatus.GRADED,
+        gradedAt: requiresManualReview ? null : now,
+        publishedAt: null,
+        score: earned,
+        maxScore,
+        percentage,
+      },
+    });
+    const masteryContext = await synchronizeAnswersConceptEvidence(
+      transaction,
+      answerIds,
+    );
+    if (masteryContext) {
+      await recalculateStudentCourseConceptMastery(
+        transaction,
+        masteryContext.studentId,
+        masteryContext.courseId,
+      );
+    }
+  }, "提交状态已发生变化，请刷新后重试");
   return getStudentSubmissionResult(studentId, submissionId);
 }
 
