@@ -14,6 +14,9 @@ import {
   uploadTeacherCourseSyllabus,
 } from "@/services/courses/service";
 import { LocalStorageService } from "@/services/storage/local-storage";
+import { KnowledgeGraphOperationError } from "@/services/knowledge-graph/errors";
+import { getCurrentPublishedSyllabusForKnowledgeGraph } from "@/services/knowledge-graph/syllabus-source";
+import { findOrCreateTeacherKnowledgeGraphDraft } from "@/services/knowledge-graph/task-repository";
 import { createTeacherSyllabusParse } from "@/services/syllabus-parsing/service";
 import {
   getTeacherPublishedSyllabi,
@@ -143,6 +146,38 @@ test("审核修订保持 AI 原稿、阻止并发覆盖并幂等发布不可变�
       /页码/u,
     );
 
+    await assert.rejects(
+      () => findOrCreateTeacherKnowledgeGraphDraft(teacher.id, course.id),
+      (error: unknown) =>
+        error instanceof KnowledgeGraphOperationError &&
+        error.code === "PUBLISHED_SYLLABUS_REQUIRED",
+    );
+
+    await assert.rejects(() =>
+      publishTeacherSyllabusReview(
+        teacher.id,
+        course.id,
+        parsed.draft.id,
+        revision.id,
+        { ipAddress: null, userAgent: "\0" },
+      ),
+    );
+    assert.equal(
+      await prisma.publishedSyllabusStructure.count({
+        where: { reviewRevisionId: revision.id },
+      }),
+      0,
+    );
+    assert.equal(
+      (
+        await prisma.course.findUniqueOrThrow({
+          where: { id: course.id },
+          select: { currentPublishedSyllabusStructureId: true },
+        })
+      ).currentPublishedSyllabusStructureId,
+      null,
+    );
+
     const published = await publishTeacherSyllabusReview(
       teacher.id,
       course.id,
@@ -164,10 +199,57 @@ test("审核修订保持 AI 原稿、阻止并发覆盖并幂等发布不可变�
       }),
       1,
     );
+    const refreshed = await getTeacherPublishedSyllabi(teacher.id, course.id);
+    assert.equal(refreshed.current?.id, published.id);
+    assert.equal(refreshed.currentPublishedStructure?.id, published.id);
+    assert.equal(refreshed.currentPublishedSyllabusStructureId, published.id);
+    assert.equal(refreshed.sourceReviewRevisionId, revision.id);
+    assert.equal(refreshed.currentReviewRevisionId, revision.id);
+    assert.equal(refreshed.isCurrentReviewRevisionPublished, true);
+    assert.equal(refreshed.isCurrentPublishedStructureStale, false);
+
+    await prisma.course.update({
+      where: { id: course.id },
+      data: { currentPublishedSyllabusStructureId: null },
+    });
+    const orphaned = await getTeacherPublishedSyllabi(teacher.id, course.id);
+    assert.equal(orphaned.currentPublishedStructure, null);
+    assert.equal(orphaned.currentPublishedSyllabusStructureId, null);
+    assert.equal(orphaned.isCurrentReviewRevisionPublished, true);
+    const repaired = await publishTeacherSyllabusReview(
+      teacher.id,
+      course.id,
+      parsed.draft.id,
+      revision.id,
+      context,
+    );
+    assert.equal(repaired.id, published.id);
     assert.equal(
-      (await getTeacherPublishedSyllabi(teacher.id, course.id)).current?.id,
+      (
+        await prisma.course.findUniqueOrThrow({
+          where: { id: course.id },
+          select: { currentPublishedSyllabusStructureId: true },
+        })
+      ).currentPublishedSyllabusStructureId,
       published.id,
     );
+    assert.equal(
+      await prisma.publishedSyllabusStructure.count({
+        where: { reviewRevisionId: revision.id },
+      }),
+      1,
+    );
+
+    const graphSource = await getCurrentPublishedSyllabusForKnowledgeGraph(
+      teacher.id,
+      course.id,
+    );
+    assert.equal(graphSource.id, published.id);
+    const queuedGraph = await findOrCreateTeacherKnowledgeGraphDraft(
+      teacher.id,
+      course.id,
+    );
+    assert.equal(queuedGraph.sourceSyllabusStructureId, published.id);
 
     await uploadTeacherCourseSyllabus(
       teacher.id,
@@ -179,6 +261,21 @@ test("审核修订保持 AI 原稿、阻止并发覆盖并幂等发布不可变�
     const afterUpload = await getTeacherPublishedSyllabi(teacher.id, course.id);
     assert.equal(afterUpload.current?.id, published.id);
     assert.equal(afterUpload.current?.isFromCurrentSyllabus, false);
+    assert.equal(afterUpload.isCurrentPublishedStructureStale, true);
+    assert.equal(afterUpload.isCurrentReviewRevisionPublished, false);
+    await assert.rejects(
+      () => findOrCreateTeacherKnowledgeGraphDraft(teacher.id, course.id),
+      (error: unknown) =>
+        error instanceof KnowledgeGraphOperationError &&
+        error.code === "PUBLISHED_SYLLABUS_STALE",
+    );
+    const otherUser = await prisma.user.findUniqueOrThrow({
+      where: { email: "admin@example.com" },
+      select: { id: true },
+    });
+    await assert.rejects(() =>
+      getTeacherPublishedSyllabi(otherUser.id, course.id),
+    );
     assert.equal(
       await prisma.auditLog.count({
         where: {
@@ -192,7 +289,7 @@ test("审核修订保持 AI 原稿、阻止并发覆盖并幂等发布不可变�
           targetId: { in: [revision.id, published.id] },
         },
       }),
-      2,
+      3,
     );
   } finally {
     if (courseId) {
@@ -217,6 +314,7 @@ test("审核修订保持 AI 原稿、阻止并发覆盖并幂等发布不可变�
           },
         },
       });
+      await prisma.knowledgeGraphDraft.deleteMany({ where: { courseId } });
       await prisma.publishedSyllabusStructure.deleteMany({
         where: { courseId },
       });

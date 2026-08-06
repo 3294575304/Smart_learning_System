@@ -11,6 +11,7 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
+import { SYLLABUS_PARSER_VERSION } from "@/services/syllabus-parsing/constants";
 import {
   publishableSyllabusStructureSchema,
   syllabusParseOutputSchema,
@@ -178,6 +179,7 @@ function publishedView(
   }
   return {
     ...record,
+    sourceReviewRevisionId: record.reviewRevisionId,
     structure: parsed.data,
     isFromCurrentSyllabus: record.syllabusId === currentSyllabusId,
   };
@@ -331,17 +333,9 @@ async function publishTransaction(
 ) {
   return prisma.$transaction(
     async (transaction) => {
-      const course = await ownedCourseOrThrow(teacherId, courseId, transaction);
-      const existing = await transaction.publishedSyllabusStructure.findUnique({
-        where: { reviewRevisionId },
-        include: {
-          syllabus: { select: { versionNumber: true, originalName: true } },
-        },
-      });
-      if (existing)
-        return publishedView(existing, course.syllabi[0]?.id ?? null);
-
+      let course = await ownedCourseOrThrow(teacherId, courseId, transaction);
       await transaction.$queryRaw`SELECT "id" FROM "Course" WHERE "id" = ${courseId} FOR UPDATE`;
+      course = await ownedCourseOrThrow(teacherId, courseId, transaction);
       const { draft, currentSyllabus } = await editableDraftOrThrow(
         teacherId,
         courseId,
@@ -363,6 +357,51 @@ async function publishTransaction(
           409,
           "REVIEW_REVISION_STALE",
         );
+      }
+      const existing = await transaction.publishedSyllabusStructure.findUnique({
+        where: { reviewRevisionId: review.id },
+        include: {
+          syllabus: { select: { versionNumber: true, originalName: true } },
+        },
+      });
+      if (existing) {
+        if (
+          existing.courseId !== courseId ||
+          existing.syllabusId !== currentSyllabus.id
+        ) {
+          throw new SyllabusParseOperationError(
+            "已发布结构与当前教学大纲来源不一致。",
+            409,
+            "PUBLISHED_STRUCTURE_SOURCE_MISMATCH",
+          );
+        }
+        if (course.currentPublishedSyllabusStructureId !== existing.id) {
+          await transaction.course.update({
+            where: { id: courseId },
+            data: { currentPublishedSyllabusStructureId: existing.id },
+          });
+          await writeGovernanceAuditLog(transaction, {
+            actorId: teacherId,
+            action: AuditAction.SYLLABUS_STRUCTURE_PUBLISHED,
+            targetType: AuditTargetType.SYLLABUS_STRUCTURE,
+            targetId: existing.id,
+            summary: `修复课程当前正式大纲结构指针（版本 ${existing.versionNumber}）`,
+            beforeData: course.currentPublishedSyllabusStructureId
+              ? {
+                  currentPublishedSyllabusStructureId:
+                    course.currentPublishedSyllabusStructureId,
+                }
+              : null,
+            afterData: {
+              courseId,
+              currentPublishedSyllabusStructureId: existing.id,
+              reviewRevisionId: review.id,
+              repaired: true,
+            },
+            context,
+          });
+        }
+        return publishedView(existing, currentSyllabus.id);
       }
       const parsed = publishableSyllabusStructureSchema.safeParse(
         review.structureJson,
@@ -459,24 +498,63 @@ export async function publishTeacherSyllabusReview(
 export async function getTeacherPublishedSyllabi(
   teacherId: string,
   courseId: string,
+  knownCurrentReviewRevisionId?: string | null,
 ) {
   const course = await ownedCourseOrThrow(teacherId, courseId);
-  const history = await prisma.publishedSyllabusStructure.findMany({
-    where: { courseId },
-    include: {
-      syllabus: { select: { versionNumber: true, originalName: true } },
-    },
-    orderBy: [{ versionNumber: "desc" }, { publishedAt: "desc" }],
-  });
   const currentSyllabusId = course.syllabi[0]?.id ?? null;
+  const [history, discoveredCurrentReview] = await Promise.all([
+    prisma.publishedSyllabusStructure.findMany({
+      where: { courseId },
+      include: {
+        syllabus: { select: { versionNumber: true, originalName: true } },
+      },
+      orderBy: [{ versionNumber: "desc" }, { publishedAt: "desc" }],
+    }),
+    knownCurrentReviewRevisionId === undefined && currentSyllabusId
+      ? prisma.syllabusReviewRevision.findFirst({
+          where: {
+            courseId,
+            syllabusId: currentSyllabusId,
+            parseDraft: { parserVersion: SYLLABUS_PARSER_VERSION },
+          },
+          orderBy: [{ revisionNumber: "desc" }, { createdAt: "desc" }],
+          select: { id: true },
+        })
+      : null,
+  ]);
   const views = history.map((record) =>
     publishedView(record, currentSyllabusId),
   );
+  const currentPublishedStructure =
+    views.find(
+      (item) => item.id === course.currentPublishedSyllabusStructureId,
+    ) ?? null;
+  const currentReviewRevisionId =
+    knownCurrentReviewRevisionId === undefined
+      ? (discoveredCurrentReview?.id ?? null)
+      : knownCurrentReviewRevisionId;
+  const sourceReviewRevisionId =
+    currentPublishedStructure?.sourceReviewRevisionId ?? null;
+  const isCurrentPublishedStructureStale = Boolean(
+    currentPublishedStructure &&
+    !currentPublishedStructure.isFromCurrentSyllabus,
+  );
   return {
-    current:
-      views.find(
-        (item) => item.id === course.currentPublishedSyllabusStructureId,
-      ) ?? null,
+    currentPublishedStructure,
+    currentPublishedSyllabusStructureId:
+      course.currentPublishedSyllabusStructureId,
+    sourceReviewRevisionId,
+    currentReviewRevisionId,
+    isCurrentReviewRevisionPublished: Boolean(
+      currentReviewRevisionId &&
+      views.some(
+        (item) =>
+          item.sourceReviewRevisionId === currentReviewRevisionId &&
+          item.syllabusId === currentSyllabusId,
+      ),
+    ),
+    isCurrentPublishedStructureStale,
+    current: currentPublishedStructure,
     history: views,
   };
 }

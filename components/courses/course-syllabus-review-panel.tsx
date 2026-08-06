@@ -36,6 +36,7 @@ interface PublishedView {
   id: string;
   versionNumber: number;
   syllabusId: string;
+  sourceReviewRevisionId: string;
   isFromCurrentSyllabus: boolean;
   publishedAt: string;
   syllabus: { versionNumber: number; originalName: string };
@@ -46,7 +47,16 @@ interface ParseState {
   current: DraftView | null;
   history: DraftView[];
   review: ReviewView | null;
-  published: { current: PublishedView | null; history: PublishedView[] };
+  published: {
+    currentPublishedStructure: PublishedView | null;
+    currentPublishedSyllabusStructureId: string | null;
+    sourceReviewRevisionId: string | null;
+    currentReviewRevisionId: string | null;
+    isCurrentReviewRevisionPublished: boolean;
+    isCurrentPublishedStructureStale: boolean;
+    current: PublishedView | null;
+    history: PublishedView[];
+  };
 }
 
 function SourceRefs({
@@ -111,7 +121,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
       setState(null);
       setStructure(null);
       setError(result.error);
-      return;
+      return null;
     }
     setState(result.data);
     const editable =
@@ -121,6 +131,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
         : null);
     setStructure(editable ? structuredClone(editable) : null);
     setDirty(false);
+    return result.data;
   }, [courseId]);
 
   useEffect(() => {
@@ -229,9 +240,23 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
     );
     setPublishing(false);
     if (!result.success) return setError(result.error);
+    const refreshed = await load();
+    if (
+      refreshed?.published.currentPublishedSyllabusStructureId !==
+      result.data.id
+    ) {
+      setError("发布结果未能从服务端恢复，请重试发布以修复课程正式大纲指针。");
+      return;
+    }
     setNotice(`课程大纲结构第 ${result.data.versionNumber} 版已发布。`);
-    await load();
   }
+
+  const isCurrentReviewPublished = Boolean(
+    state?.review &&
+    state.published.currentPublishedStructure &&
+    state.published.sourceReviewRevisionId === state.review.id &&
+    !state.published.isCurrentPublishedStructureStale,
+  );
 
   return (
     <section className="bg-card rounded-xl border p-5" aria-live="polite">
@@ -243,7 +268,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
           </p>
         </div>
         <span className="rounded-full bg-slate-100 px-3 py-1 text-sm">
-          {statusLabel}
+          {isCurrentReviewPublished ? "已发布" : statusLabel}
         </span>
       </div>
 
@@ -288,8 +313,8 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
         </p>
       ) : null}
 
-      {state?.published.current &&
-      !state.published.current.isFromCurrentSyllabus ? (
+      {state?.published.currentPublishedStructure &&
+      state.published.isCurrentPublishedStructureStale ? (
         <p className="mt-4 flex items-center gap-2 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
           <AlertCircle className="h-4 w-4" />
           当前正式版本来自旧教学大纲文件。新文件需重新解析、审核并显式发布。

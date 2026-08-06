@@ -21,6 +21,12 @@ import {
 } from "@/services/knowledge-graph/constants";
 import { KnowledgeGraphOperationError } from "@/services/knowledge-graph/errors";
 import {
+  currentPublishedSyllabusOrThrow,
+  getCurrentPublishedSyllabusForKnowledgeGraph,
+  loadTeacherCourseForKnowledgeGraph,
+} from "@/services/knowledge-graph/syllabus-source";
+import { findOrCreateTeacherKnowledgeGraphDraft } from "@/services/knowledge-graph/task-repository";
+import {
   deterministicGraph,
   mergeRelated,
 } from "@/services/knowledge-graph/generator";
@@ -115,17 +121,14 @@ export async function generateTeacherKnowledgeGraph(
   context: AuditRequestContext,
   dependencies: { provider?: AIProvider } = {},
 ) {
-  const course = await courseOrThrow(teacherId, courseId);
-  if (!course.currentPublishedSyllabusStructureId)
-    throw new KnowledgeGraphOperationError(
-      "请先审核并发布正式教学大纲结构。",
-      409,
-      "PUBLISHED_SYLLABUS_REQUIRED",
-    );
+  const source = await getCurrentPublishedSyllabusForKnowledgeGraph(
+    teacherId,
+    courseId,
+  );
   let draft = await prisma.knowledgeGraphDraft.findUnique({
     where: {
       sourceSyllabusStructureId_generatorVersion: {
-        sourceSyllabusStructureId: course.currentPublishedSyllabusStructureId,
+        sourceSyllabusStructureId: source.id,
         generatorVersion: KNOWLEDGE_GRAPH_GENERATOR_VERSION,
       },
     },
@@ -142,13 +145,13 @@ export async function generateTeacherKnowledgeGraph(
     (await prisma.knowledgeGraphDraft.upsert({
       where: {
         sourceSyllabusStructureId_generatorVersion: {
-          sourceSyllabusStructureId: course.currentPublishedSyllabusStructureId,
+          sourceSyllabusStructureId: source.id,
           generatorVersion: KNOWLEDGE_GRAPH_GENERATOR_VERSION,
         },
       },
       create: {
         courseId,
-        sourceSyllabusStructureId: course.currentPublishedSyllabusStructureId,
+        sourceSyllabusStructureId: source.id,
         requestedById: teacherId,
         generatorVersion: KNOWLEDGE_GRAPH_GENERATOR_VERSION,
         promptVersion: KNOWLEDGE_GRAPH_PROMPT_VERSION,
@@ -182,15 +185,6 @@ export async function generateTeacherKnowledgeGraph(
     };
   const provider = dependencies.provider ?? createAIProvider();
   try {
-    const source = await prisma.publishedSyllabusStructure.findFirst({
-      where: { id: course.currentPublishedSyllabusStructureId, courseId },
-    });
-    if (!source)
-      throw new KnowledgeGraphOperationError(
-        "正式教学大纲结构不存在。",
-        409,
-        "PUBLISHED_SYLLABUS_REQUIRED",
-      );
     const syllabus = publishableSyllabusStructureSchema.parse(
       source.structureJson,
     );
@@ -256,30 +250,10 @@ export async function queueTeacherKnowledgeGraph(
   teacherId: string,
   courseId: string,
 ) {
-  const course = await courseOrThrow(teacherId, courseId);
-  if (!course.currentPublishedSyllabusStructureId)
-    throw new KnowledgeGraphOperationError(
-      "请先审核并发布正式教学大纲结构。",
-      409,
-      "PUBLISHED_SYLLABUS_REQUIRED",
-    );
-  const draft = await prisma.knowledgeGraphDraft.upsert({
-    where: {
-      sourceSyllabusStructureId_generatorVersion: {
-        sourceSyllabusStructureId: course.currentPublishedSyllabusStructureId,
-        generatorVersion: KNOWLEDGE_GRAPH_GENERATOR_VERSION,
-      },
-    },
-    create: {
-      courseId,
-      sourceSyllabusStructureId: course.currentPublishedSyllabusStructureId,
-      requestedById: teacherId,
-      generatorVersion: KNOWLEDGE_GRAPH_GENERATOR_VERSION,
-      promptVersion: KNOWLEDGE_GRAPH_PROMPT_VERSION,
-      ruleVersion: KNOWLEDGE_GRAPH_RULE_VERSION,
-    },
-    update: {},
-  });
+  const draft = await findOrCreateTeacherKnowledgeGraphDraft(
+    teacherId,
+    courseId,
+  );
   return {
     reused:
       draft.status === KnowledgeGraphStatus.SUCCEEDED ||
@@ -404,14 +378,21 @@ export async function getTeacherKnowledgeGraph(
   teacherId: string,
   courseId: string,
 ) {
-  const course = await courseOrThrow(teacherId, courseId);
+  const course = await loadTeacherCourseForKnowledgeGraph(teacherId, courseId);
+  const currentSource = course.currentPublishedSyllabusStructure;
+  const isCurrentSourceUsable = Boolean(
+    currentSource &&
+      course.syllabi[0] &&
+      currentSource.syllabusId === course.syllabi[0].id,
+  );
+  const currentSourceId =
+    isCurrentSourceUsable && currentSource ? currentSource.id : null;
   const [draft, published] = await Promise.all([
-    course.currentPublishedSyllabusStructureId
+    currentSourceId
       ? prisma.knowledgeGraphDraft.findUnique({
           where: {
             sourceSyllabusStructureId_generatorVersion: {
-              sourceSyllabusStructureId:
-                course.currentPublishedSyllabusStructureId,
+              sourceSyllabusStructureId: currentSourceId,
               generatorVersion: KNOWLEDGE_GRAPH_GENERATOR_VERSION,
             },
           },
@@ -439,12 +420,13 @@ export async function getTeacherKnowledgeGraph(
   const history = published.map((item) => ({
     ...item,
     structure: parseGraph(item.structureJson),
-    isSourceCurrent:
-      item.sourceSyllabusStructureId ===
-      course.currentPublishedSyllabusStructureId,
+    isSourceCurrent: item.sourceSyllabusStructureId === currentSourceId,
   }));
   return {
-    sourceSyllabusStructureId: course.currentPublishedSyllabusStructureId,
+    sourceSyllabusStructureId: currentSourceId,
+    isSyllabusSourceStale: Boolean(
+      course.currentPublishedSyllabusStructureId && !isCurrentSourceUsable,
+    ),
     draft: mapDraft,
     review: review
       ? { ...review, structure: parseGraph(review.structureJson) }
@@ -476,13 +458,16 @@ async function publishKnowledgeGraphTransaction(
         return { ...existing, structure: parseGraph(existing.structureJson) };
       await tx.$queryRaw`SELECT "id" FROM "Course" WHERE "id" = ${courseId} FOR UPDATE`;
       course = await courseOrThrow(teacherId, courseId, tx);
+      const currentSyllabusStructure = currentPublishedSyllabusOrThrow(
+        await loadTeacherCourseForKnowledgeGraph(teacherId, courseId, tx),
+      );
       const draft = await tx.knowledgeGraphDraft.findFirst({
         where: { id: draftId, courseId },
       });
       if (!draft) throw new ResourceNotFoundError("知识图谱草稿不存在。");
       if (
         draft.sourceSyllabusStructureId !==
-        course.currentPublishedSyllabusStructureId
+        currentSyllabusStructure.id
       )
         throw new KnowledgeGraphOperationError(
           "该图谱草稿来自旧正式大纲，请重新生成。",

@@ -28,17 +28,20 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
     const parses = await getTeacherSyllabusParses(teacher.id, parsedId.data);
-    const [review, published] = await Promise.all([
+    const review =
       parses.current?.status === "SUCCEEDED" &&
       parses.current.hasFieldSourceRefs
-        ? getLatestTeacherSyllabusReview(
+        ? await getLatestTeacherSyllabusReview(
             teacher.id,
             parsedId.data,
             parses.current.id,
           )
-        : null,
-      getTeacherPublishedSyllabi(teacher.id, parsedId.data),
-    ]);
+        : null;
+    const published = await getTeacherPublishedSyllabi(
+      teacher.id,
+      parsedId.data,
+      review?.id ?? null,
+    );
     return apiSuccess({ ...parses, review, published });
   } catch (error: unknown) {
     return syllabusParseApiError(error);
