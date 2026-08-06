@@ -143,7 +143,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         [
           {
             role: "system",
-            content: `只根据给定知识点提出少量 RELATED 无向关系。只返回 {\"related\":[{\"from\":节点key,\"to\":节点key,\"description\":说明或null,\"confidence\":0到1}]}。不得添加节点、先修或包含关系。${repair}`,
+            content: `只根据给定知识点提出少量 RELATED 无向关系。只返回严格 JSON 对象：{\"related\":[{\"from\":节点key,\"to\":节点key,\"description\":说明或null,\"confidence\":0到1}]}。不得添加节点、先修或包含关系。${repair}`,
           },
           {
             role: "user",

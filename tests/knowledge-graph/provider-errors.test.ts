@@ -74,6 +74,19 @@ test(
         "messages" in result.requestBody &&
         "response_format" in result.requestBody,
     );
+    const messages = (
+      result.requestBody as {
+        messages?: Array<{ content?: unknown }>;
+      }
+    ).messages;
+    assert.match(
+      messages
+        ?.map((message) =>
+          typeof message.content === "string" ? message.content : "",
+        )
+        .join(" ") ?? "",
+      /json/iu,
+    );
   },
 );
 
