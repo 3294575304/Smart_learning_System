@@ -12,12 +12,13 @@ export function apiError(
   error: string,
   status: number,
   fieldErrors?: Record<string, string[]>,
+  code?: string,
 ): NextResponse {
   return NextResponse.json(
     {
       success: false,
       error,
-      ...(status === 503 ? { code: "SYSTEM_MAINTENANCE" } : {}),
+      ...(code || status === 503 ? { code: code ?? "SYSTEM_MAINTENANCE" } : {}),
       ...(fieldErrors ? { fieldErrors } : {}),
     },
     { status },

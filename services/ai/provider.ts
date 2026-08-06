@@ -11,6 +11,7 @@ export interface AIProviderResponse {
   content: unknown;
   requestId: string | null;
   finishReason: string | null;
+  parseBranch?: string;
   usage: {
     promptTokens: number | null;
     completionTokens: number | null;
@@ -19,20 +20,39 @@ export interface AIProviderResponse {
   responseLength: number;
 }
 
+export type AIEndpointType = "chat-completions" | "responses";
+
+export type AIProviderErrorCode =
+  | "PROVIDER_NOT_CONFIGURED"
+  | "PROVIDER_UNAUTHORIZED"
+  | "PROVIDER_FORBIDDEN"
+  | "PROVIDER_MODEL_NOT_FOUND"
+  | "PROVIDER_RATE_LIMITED"
+  | "PROVIDER_TIMEOUT"
+  | "PROVIDER_HTTP_ERROR"
+  | "PROVIDER_EMPTY_RESPONSE"
+  | "PROVIDER_UNREADABLE_RESPONSE"
+  | "PROVIDER_BAD_RESPONSE"
+  | "PROVIDER_SCHEMA_INVALID"
+  | "PROVIDER_UNAVAILABLE";
+
+export interface AIProviderErrorMetadata {
+  provider?: string;
+  model?: string;
+  endpointType?: AIEndpointType;
+  httpStatus?: number | null;
+  contentType?: string | null;
+  requestId?: string | null;
+  parseBranch?: string | null;
+  responseSummary?: string;
+}
+
 export class AIProviderRequestError extends Error {
   constructor(
     message: string,
-    readonly code:
-      | "PROVIDER_NOT_CONFIGURED"
-      | "PROVIDER_UNAUTHORIZED"
-      | "PROVIDER_FORBIDDEN"
-      | "PROVIDER_MODEL_NOT_FOUND"
-      | "PROVIDER_RATE_LIMITED"
-      | "PROVIDER_TIMEOUT"
-      | "PROVIDER_BAD_RESPONSE"
-      | "PROVIDER_SCHEMA_INVALID"
-      | "PROVIDER_UNAVAILABLE",
+    readonly code: AIProviderErrorCode,
     readonly requestId: string | null = null,
+    readonly metadata: AIProviderErrorMetadata = {},
   ) {
     super(message);
     this.name = "AIProviderRequestError";

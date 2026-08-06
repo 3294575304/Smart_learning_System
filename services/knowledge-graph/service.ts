@@ -266,6 +266,173 @@ export async function queueTeacherKnowledgeGraph(
   };
 }
 
+export async function queueTeacherKnowledgeGraphAiEnhancement(
+  teacherId: string,
+  courseId: string,
+  draftId: string,
+) {
+  const currentSource = await getCurrentPublishedSyllabusForKnowledgeGraph(
+    teacherId,
+    courseId,
+  );
+  const draft = await prisma.knowledgeGraphDraft.findFirst({
+    where: { id: draftId, courseId },
+  });
+  if (!draft) throw new ResourceNotFoundError("知识图谱草稿不存在。");
+  if (
+    draft.status !== KnowledgeGraphStatus.SUCCEEDED ||
+    !draft.deterministicStructureJson ||
+    !draft.generatedStructureJson
+  )
+    throw new KnowledgeGraphOperationError(
+      "基础知识图谱草稿尚未生成成功。",
+      409,
+      "GRAPH_BASE_NOT_READY",
+    );
+  if (draft.sourceSyllabusStructureId !== currentSource.id)
+    throw new KnowledgeGraphOperationError(
+      "该图谱草稿来自旧正式大纲，请重新生成。",
+      409,
+      "GRAPH_SOURCE_SYLLABUS_STALE",
+    );
+  if (draft.aiEnhancementStatus === AIEnhancementStatus.PROCESSING)
+    return { reused: true, shouldExecute: false, draft };
+  if (draft.aiEnhancementStatus !== AIEnhancementStatus.FAILED)
+    throw new KnowledgeGraphOperationError(
+      "只有 AI 增强失败的基础草稿需要重试。",
+      409,
+      "AI_ENHANCEMENT_RETRY_NOT_REQUIRED",
+    );
+  const claimed = await prisma.knowledgeGraphDraft.updateMany({
+    where: {
+      id: draft.id,
+      aiEnhancementStatus: AIEnhancementStatus.FAILED,
+    },
+    data: {
+      aiEnhancementStatus: AIEnhancementStatus.PROCESSING,
+      aiWarningCode: null,
+      aiWarningMessage: null,
+      aiAttemptCount: 0,
+      aiFinishedAt: null,
+      executionCount: { increment: 1 },
+    },
+  });
+  const queued = await prisma.knowledgeGraphDraft.findUniqueOrThrow({
+    where: { id: draft.id },
+  });
+  return {
+    reused: claimed.count !== 1,
+    shouldExecute: claimed.count === 1,
+    draft: queued,
+  };
+}
+
+export async function executeTeacherKnowledgeGraphAiEnhancement(
+  teacherId: string,
+  courseId: string,
+  draftId: string,
+  context: AuditRequestContext,
+  dependencies: {
+    provider?: AIProvider;
+    logger?: Pick<Console, "error">;
+  } = {},
+) {
+  const logger = dependencies.logger ?? console;
+  try {
+    const currentSource = await getCurrentPublishedSyllabusForKnowledgeGraph(
+      teacherId,
+      courseId,
+    );
+    const draft = await prisma.knowledgeGraphDraft.findFirst({
+      where: { id: draftId, courseId },
+    });
+    if (!draft) throw new ResourceNotFoundError("知识图谱草稿不存在。");
+    if (
+      draft.status !== KnowledgeGraphStatus.SUCCEEDED ||
+      draft.aiEnhancementStatus !== AIEnhancementStatus.PROCESSING ||
+      !draft.deterministicStructureJson ||
+      !draft.generatedStructureJson
+    )
+      throw new KnowledgeGraphOperationError(
+        "AI 增强重试任务状态无效。",
+        409,
+        "AI_ENHANCEMENT_RETRY_STATE_INVALID",
+      );
+    if (draft.sourceSyllabusStructureId !== currentSource.id)
+      throw new KnowledgeGraphOperationError(
+        "该图谱草稿来自旧正式大纲，请重新生成。",
+        409,
+        "GRAPH_SOURCE_SYLLABUS_STALE",
+      );
+    const base = parseGraph(draft.deterministicStructureJson);
+    const ai = await runOptionalKnowledgeGraphAiEnhancement(
+      base,
+      () => dependencies.provider ?? createAIProvider(),
+    );
+    const structure = mergeRelated(base, ai.inference);
+    const saved = await prisma.$transaction(async (tx) => {
+      const persisted = await tx.knowledgeGraphDraft.update({
+        where: { id: draft.id },
+        data: {
+          provider: ai.provider?.name ?? null,
+          model: ai.provider?.model ?? null,
+          retryCount: Math.max(0, ai.attemptCount - 1),
+          aiEnhancementStatus: ai.status,
+          aiWarningCode: ai.warningCode,
+          aiWarningMessage: ai.warningMessage,
+          aiAttemptCount: ai.attemptCount,
+          aiFinishedAt: new Date(),
+          aiInferenceJson: json(ai.inference),
+          generatedStructureJson: json(structure),
+          failureCount: ai.status === AIEnhancementStatus.FAILED ? 1 : 0,
+          successCount: structure.nodes.length + structure.edges.length,
+        },
+      });
+      await writeGovernanceAuditLog(tx, {
+        actorId: teacherId,
+        action: AuditAction.KNOWLEDGE_GRAPH_GENERATED,
+        targetType: AuditTargetType.KNOWLEDGE_GRAPH_DRAFT,
+        targetId: persisted.id,
+        summary: "重试知识图谱 AI RELATED 增强",
+        beforeData: { aiEnhancementStatus: AIEnhancementStatus.FAILED },
+        afterData: {
+          courseId,
+          aiEnhancementStatus: ai.status,
+          aiWarningCode: ai.warningCode,
+        },
+        context,
+      });
+      return persisted;
+    });
+    return { ...saved, structure };
+  } catch (error) {
+    await prisma.knowledgeGraphDraft.updateMany({
+      where: {
+        id: draftId,
+        courseId,
+        aiEnhancementStatus: AIEnhancementStatus.PROCESSING,
+      },
+      data: {
+        aiEnhancementStatus: AIEnhancementStatus.FAILED,
+        aiWarningCode: "AI_ENHANCEMENT_RETRY_FAILED",
+        aiWarningMessage: "AI 增强重试失败，基础草稿仍可审核和发布。",
+        aiFinishedAt: new Date(),
+        failureCount: 1,
+      },
+    });
+    logger.error("[knowledge-graph-ai-enhancement-retry-failed]", {
+      courseId,
+      draftId,
+      errorCode:
+        error instanceof KnowledgeGraphOperationError
+          ? error.code
+          : "AI_ENHANCEMENT_RETRY_FAILED",
+      errorClass: error instanceof Error ? error.name : "UnknownError",
+    });
+    throw error;
+  }
+}
+
 function protectedEvidence(
   graph: KnowledgeGraphStructure,
 ): Map<string, string> {
@@ -404,7 +571,7 @@ export async function getTeacherKnowledgeGraph(
       orderBy: { versionNumber: "desc" },
     }),
   ]);
-  const review =
+  let review =
     draft?.status === KnowledgeGraphStatus.SUCCEEDED
       ? await prisma.knowledgeGraphReviewRevision.findFirst({
           where: {
@@ -414,6 +581,13 @@ export async function getTeacherKnowledgeGraph(
           orderBy: { revisionNumber: "desc" },
         })
       : null;
+  if (
+    review &&
+    draft?.aiEnhancementStatus === AIEnhancementStatus.SUCCEEDED &&
+    draft.aiFinishedAt &&
+    review.createdAt < draft.aiFinishedAt
+  )
+    review = null;
   const hasPersistedDraft = Boolean(draft?.generatedStructureJson);
   if (draft?.status === KnowledgeGraphStatus.SUCCEEDED && !hasPersistedDraft)
     console.error("[knowledge-graph-succeeded-without-draft]", {
@@ -476,6 +650,12 @@ export function knowledgeGraphGenerationErrorMessage(code: string | null) {
       return "AI 服务请求过于频繁。";
     case "PROVIDER_TIMEOUT":
       return "AI 服务响应超时，请稍后重试。";
+    case "PROVIDER_HTTP_ERROR":
+      return "AI 服务返回了 HTTP 错误，请联系管理员检查上游状态。";
+    case "PROVIDER_EMPTY_RESPONSE":
+      return "AI 服务返回了空响应，请稍后重试。";
+    case "PROVIDER_UNREADABLE_RESPONSE":
+      return "AI 服务响应无法读取，请联系管理员检查接口类型。";
     case "PROVIDER_UNSUPPORTED":
       return "当前 AI 服务不支持知识图谱生成。";
     case "PROVIDER_BAD_RESPONSE":
@@ -495,14 +675,41 @@ async function publishKnowledgeGraphTransaction(
   teacherId: string,
   courseId: string,
   draftId: string,
-  reviewRevisionId: string,
+  input: {
+    reviewRevisionId: string;
+    expectedRevisionNumber: number;
+    publishedSyllabusStructureId: string;
+  },
   context: AuditRequestContext,
 ) {
   return prisma.$transaction(
     async (tx) => {
       let course = await courseOrThrow(teacherId, courseId, tx);
-      const existing = await tx.publishedKnowledgeGraphVersion.findUnique({
-        where: { reviewRevisionId },
+      let draft = await tx.knowledgeGraphDraft.findFirst({
+        where: { id: draftId, courseId },
+      });
+      if (!draft) throw new ResourceNotFoundError("知识图谱草稿不存在。");
+      assertPublishableGraphDraft(draft);
+      let review = await tx.knowledgeGraphReviewRevision.findFirst({
+        where: {
+          id: input.reviewRevisionId,
+          graphDraftId: draftId,
+          courseId,
+        },
+      });
+      if (!review) throw new ResourceNotFoundError("知识图谱审核修订不存在。");
+      if (review.revisionNumber !== input.expectedRevisionNumber)
+        throw new KnowledgeGraphOperationError(
+          "审核修订号与发布请求不一致，请重新加载。",
+          409,
+          "GRAPH_REVISION_CONFLICT",
+        );
+      const existing = await tx.publishedKnowledgeGraphVersion.findFirst({
+        where: {
+          reviewRevisionId: input.reviewRevisionId,
+          courseId,
+          graphDraftId: draftId,
+        },
       });
       if (existing)
         return { ...existing, structure: parseGraph(existing.structureJson) };
@@ -511,30 +718,46 @@ async function publishKnowledgeGraphTransaction(
       const currentSyllabusStructure = currentPublishedSyllabusOrThrow(
         await loadTeacherCourseForKnowledgeGraph(teacherId, courseId, tx),
       );
-      const draft = await tx.knowledgeGraphDraft.findFirst({
+      if (currentSyllabusStructure.id !== input.publishedSyllabusStructureId)
+        throw new KnowledgeGraphOperationError(
+          "正式教学大纲版本已变化，请重新加载图谱。",
+          409,
+          "GRAPH_SOURCE_CONTEXT_CONFLICT",
+        );
+      draft = await tx.knowledgeGraphDraft.findFirst({
         where: { id: draftId, courseId },
       });
       if (!draft) throw new ResourceNotFoundError("知识图谱草稿不存在。");
+      assertPublishableGraphDraft(draft);
       if (draft.sourceSyllabusStructureId !== currentSyllabusStructure.id)
         throw new KnowledgeGraphOperationError(
           "该图谱草稿来自旧正式大纲，请重新生成。",
           409,
           "GRAPH_SOURCE_SYLLABUS_STALE",
         );
-      const review = await tx.knowledgeGraphReviewRevision.findFirst({
-        where: { id: reviewRevisionId, graphDraftId: draftId, courseId },
+      review = await tx.knowledgeGraphReviewRevision.findFirst({
+        where: {
+          id: input.reviewRevisionId,
+          graphDraftId: draftId,
+          courseId,
+          sourceSyllabusStructureId: currentSyllabusStructure.id,
+        },
       });
       if (!review) throw new ResourceNotFoundError("知识图谱审核修订不存在。");
       const latest = await tx.knowledgeGraphReviewRevision.findFirst({
         where: { graphDraftId: draftId },
         orderBy: { revisionNumber: "desc" },
-        select: { id: true },
+        select: { id: true, revisionNumber: true },
       });
-      if (latest?.id !== review.id)
+      if (
+        review.revisionNumber !== input.expectedRevisionNumber ||
+        latest?.id !== review.id ||
+        latest.revisionNumber !== input.expectedRevisionNumber
+      )
         throw new KnowledgeGraphOperationError(
-          "只能发布最新审核修订。",
+          "审核稿已被更新，请重新加载后发布。",
           409,
-          "GRAPH_REVIEW_STALE",
+          "GRAPH_REVISION_CONFLICT",
         );
       const structure = parseGraph(review.structureJson);
       const previous = await tx.publishedKnowledgeGraphVersion.findFirst({
@@ -588,8 +811,8 @@ async function publishKnowledgeGraphTransaction(
         await tx.publishedKnowledgeGraphEdge.create({
           data: {
             graphVersionId: version.id,
-            fromNodeId: nodeIds.get(edge.from)!,
-            toNodeId: nodeIds.get(edge.to)!,
+            fromNodeId: publishedNodeId(nodeIds, edge.from),
+            toNodeId: publishedNodeId(nodeIds, edge.to),
             relationType: edge.type,
             description: edge.description,
             sourceType: edge.sourceType,
@@ -626,11 +849,41 @@ async function publishKnowledgeGraphTransaction(
   );
 }
 
+function assertPublishableGraphDraft(draft: {
+  status: KnowledgeGraphStatus;
+  generatedStructureJson: Prisma.JsonValue | null;
+}) {
+  if (
+    draft.status !== KnowledgeGraphStatus.SUCCEEDED ||
+    !draft.generatedStructureJson
+  )
+    throw new KnowledgeGraphOperationError(
+      "基础知识图谱草稿尚未生成成功，不能发布。",
+      409,
+      "GRAPH_BASE_NOT_READY",
+    );
+}
+
+function publishedNodeId(nodeIds: Map<string, string>, key: string) {
+  const id = nodeIds.get(key);
+  if (!id)
+    throw new KnowledgeGraphOperationError(
+      "图谱关系引用了不存在的节点。",
+      400,
+      "GRAPH_STRUCTURE_INVALID",
+    );
+  return id;
+}
+
 export async function publishTeacherKnowledgeGraph(
   teacherId: string,
   courseId: string,
   draftId: string,
-  reviewRevisionId: string,
+  input: {
+    reviewRevisionId: string;
+    expectedRevisionNumber: number;
+    publishedSyllabusStructureId: string;
+  },
   context: AuditRequestContext,
 ) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -639,16 +892,50 @@ export async function publishTeacherKnowledgeGraph(
         teacherId,
         courseId,
         draftId,
-        reviewRevisionId,
+        input,
         context,
       );
     } catch (error) {
       if (
-        attempt === 0 &&
         error instanceof Prisma.PrismaClientKnownRequestError &&
         (error.code === "P2034" || error.code === "P2002")
+      ) {
+        const existing = await prisma.publishedKnowledgeGraphVersion.findFirst({
+          where: {
+            reviewRevisionId: input.reviewRevisionId,
+            courseId,
+            graphDraftId: draftId,
+          },
+        });
+        if (existing)
+          return { ...existing, structure: parseGraph(existing.structureJson) };
+        if (attempt === 0) continue;
+        throw new KnowledgeGraphOperationError(
+          "发布发生并发冲突，请重新加载后重试。",
+          409,
+          "GRAPH_PUBLISH_CONFLICT",
+        );
+      }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        (error.code === "P2003" || error.code === "P2025")
       )
-        continue;
+        throw new KnowledgeGraphOperationError(
+          "图谱引用的正式数据已变化，请重新加载后重试。",
+          409,
+          "GRAPH_REFERENCE_CONFLICT",
+        );
+      if (error instanceof KnowledgeGraphOperationError) throw error;
+      if (error instanceof ResourceNotFoundError) throw error;
+      console.error("[knowledge-graph-publish-failed]", {
+        courseId,
+        draftId,
+        errorClass: error instanceof Error ? error.name : "UnknownError",
+        prismaCode:
+          error instanceof Prisma.PrismaClientKnownRequestError
+            ? error.code
+            : null,
+      });
       throw error;
     }
   }

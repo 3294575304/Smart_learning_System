@@ -32,7 +32,7 @@ export async function POST(request: Request, context: Context) {
         user.id,
         courseId.data,
         draftId.data,
-        input.data.reviewRevisionId,
+        input.data,
         auditRequestContext(request),
       ),
     );

@@ -8,6 +8,7 @@ import {
   type KnowledgeGraphGenerationStatus,
 } from "@/components/courses/knowledge-graph-generation-state";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
+import type { ActionResult } from "@/types/action-result";
 
 interface State {
   sourceSyllabusStructureId: string | null;
@@ -49,6 +50,15 @@ const sourceLabel = {
   TEACHER: "教师新增",
 } as const;
 
+function apiFailureMessage(
+  result: Extract<ActionResult<unknown>, { success: false }>,
+) {
+  const code =
+    result.code ?? (result.status ? `HTTP_${result.status}` : "NETWORK_ERROR");
+  const recovery = result.status === 409 ? " 请刷新当前图谱状态后重试。" : "";
+  return `${code}：${result.error}${recovery}`;
+}
+
 export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
   const [state, setState] = useState<State | null>(null);
   const [graph, setGraph] = useState<KnowledgeGraphStructure | null>(null);
@@ -59,38 +69,41 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    setLoading(true);
-    const result = await requestApi<State>(
-      `/api/teacher/courses/${courseId}/knowledge-graph`,
-    );
-    setLoading(false);
-    if (!result.success) return setError(result.error);
-    setState(result.data);
-    setGraph(
-      structuredClone(
-        result.data.review?.structure ?? result.data.draft?.structure ?? null,
-      ),
-    );
-    setDirty(false);
-    const presentation = presentKnowledgeGraphGeneration(result.data.draft);
-    if (presentation.kind === "failed") {
-      setNotice(null);
-      setWarning(null);
-      setError(presentation.message);
-    } else if (presentation.kind === "warning") {
-      setError(null);
-      setNotice(null);
-      setWarning(presentation.message);
-    } else if (presentation.kind === "succeeded") {
-      setError(null);
-      setWarning(null);
-      setNotice(presentation.message);
-    } else {
-      setError(null);
-      if (presentation.kind === "generating") setNotice(null);
-    }
-  }, [courseId]);
+  const load = useCallback(
+    async (preserveNotice = false) => {
+      setLoading(true);
+      const result = await requestApi<State>(
+        `/api/teacher/courses/${courseId}/knowledge-graph`,
+      );
+      setLoading(false);
+      if (!result.success) return setError(apiFailureMessage(result));
+      setState(result.data);
+      setGraph(
+        structuredClone(
+          result.data.review?.structure ?? result.data.draft?.structure ?? null,
+        ),
+      );
+      setDirty(false);
+      const presentation = presentKnowledgeGraphGeneration(result.data.draft);
+      if (presentation.kind === "failed") {
+        setNotice(null);
+        setWarning(null);
+        setError(presentation.message);
+      } else if (presentation.kind === "warning") {
+        setError(null);
+        if (!preserveNotice) setNotice(null);
+        setWarning(presentation.message);
+      } else if (presentation.kind === "succeeded") {
+        setError(null);
+        setWarning(null);
+        if (!preserveNotice) setNotice(presentation.message);
+      } else {
+        setError(null);
+        if (presentation.kind === "generating") setNotice(null);
+      }
+    },
+    [courseId],
+  );
   useEffect(() => {
     void load();
   }, [load]);
@@ -98,12 +111,13 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     if (
       state?.draft?.status !== "PENDING" &&
       state?.draft?.status !== "PROCESSING" &&
-      state?.draft?.status !== "RUNNING"
+      state?.draft?.status !== "RUNNING" &&
+      state?.draft?.aiEnhancementStatus !== "PROCESSING"
     )
       return;
     const timer = window.setInterval(() => void load(), 2000);
     return () => window.clearInterval(timer);
-  }, [state?.draft?.status, load]);
+  }, [state?.draft?.status, state?.draft?.aiEnhancementStatus, load]);
   useEffect(() => {
     const guard = (event: BeforeUnloadEvent) => {
       if (dirty) event.preventDefault();
@@ -135,7 +149,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     setBusy(false);
     if (!result.success) {
       setNotice(null);
-      return setError(result.error);
+      return setError(apiFailureMessage(result));
     }
     setState((current) =>
       current
@@ -178,33 +192,65 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     if (!result.success)
       return setError(
         result.status === 409
-          ? `${result.error} 本地修改仍保留。`
-          : result.error,
+          ? `${apiFailureMessage(result)} 本地修改仍保留。`
+          : apiFailureMessage(result),
       );
     setNotice("知识图谱审核稿已保存。");
-    await load();
+    await load(true);
   }
   async function publish() {
     if (
       !state?.draft ||
       !state.review ||
+      !state.sourceSyllabusStructureId ||
       dirty ||
       !window.confirm("发布后将生成新的不可变知识图谱版本，确认发布吗？")
     )
       return;
     setBusy(true);
+    setError(null);
     const result = await requestApi<{ versionNumber: number }>(
       `/api/teacher/courses/${courseId}/knowledge-graph/drafts/${state.draft.id}/publish`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reviewRevisionId: state.review.id }),
+        body: JSON.stringify({
+          reviewRevisionId: state.review.id,
+          expectedRevisionNumber: state.review.revisionNumber,
+          publishedSyllabusStructureId: state.sourceSyllabusStructureId,
+        }),
       },
     );
     setBusy(false);
-    if (!result.success) return setError(result.error);
+    if (!result.success) return setError(apiFailureMessage(result));
     setNotice(`知识图谱第 ${result.data.versionNumber} 版已发布。`);
-    await load();
+    await load(true);
+  }
+  async function retryAiEnhancement() {
+    if (!state?.draft || state.draft.aiEnhancementStatus !== "FAILED") return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const result = await requestApi<{ draft: State["draft"] }>(
+      `/api/teacher/courses/${courseId}/knowledge-graph/drafts/${state.draft.id}/ai-enhancement`,
+      { method: "POST" },
+    );
+    setBusy(false);
+    if (!result.success) return setError(apiFailureMessage(result));
+    setState((current) =>
+      current?.draft
+        ? {
+            ...current,
+            draft: {
+              ...current.draft,
+              aiEnhancementStatus: "PROCESSING",
+              aiWarningCode: null,
+              aiWarningMessage: null,
+            },
+          }
+        : current,
+    );
+    setWarning("基础草稿已保留，正在重试 AI RELATED 关系推断。");
   }
   function rename(key: string, name: string) {
     setGraph((value) =>
@@ -231,10 +277,14 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
           </div>
           <button
             className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
-            disabled={busy || !state?.sourceSyllabusStructureId}
+            disabled={
+              busy ||
+              !state?.sourceSyllabusStructureId ||
+              state?.draft?.status === "SUCCEEDED"
+            }
             onClick={() => void generate()}
           >
-            {busy ? "处理中..." : "生成或重试草稿"}
+            {busy ? "处理中..." : "生成基础草稿"}
           </button>
         </div>
         {!state?.sourceSyllabusStructureId && !loading ? (
@@ -320,6 +370,21 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
             >
               发布知识图谱
             </button>
+            {state?.draft?.aiEnhancementStatus === "FAILED" ? (
+              <button
+                className="rounded-md border border-amber-300 px-4 py-2 text-sm text-amber-800 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => void retryAiEnhancement()}
+              >
+                重试 AI 增强
+              </button>
+            ) : null}
+            {state?.draft?.aiEnhancementStatus === "PROCESSING" ? (
+              <span className="flex items-center gap-1 text-sm text-amber-700">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                正在重试 AI 增强
+              </span>
+            ) : null}
             {dirty ? (
               <span className="text-sm text-amber-700">有未保存修改</span>
             ) : null}

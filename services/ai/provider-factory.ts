@@ -3,7 +3,10 @@ import "server-only";
 import { MockAIProvider } from "@/services/ai/mock-provider";
 import { OpenAICompatibleProvider } from "@/services/ai/openai-compatible";
 import type { AIProvider } from "@/services/ai/provider";
-import { AIProviderRequestError } from "@/services/ai/provider";
+import {
+  AIProviderRequestError,
+  type AIEndpointType,
+} from "@/services/ai/provider";
 
 export function createAIProvider(): AIProvider {
   const provider =
@@ -37,9 +40,20 @@ export function createAIProvider(): AIProvider {
     apiKey,
     baseUrl,
     model,
+    endpointType: parseEndpointType(process.env.AI_API_TYPE),
     syllabusMaxCompletionTokens,
     timeoutMs: parseTimeout(process.env.AI_TIMEOUT_MS),
   });
+}
+
+function parseEndpointType(value: string | undefined): AIEndpointType {
+  const normalized = value?.trim() || "chat-completions";
+  if (normalized === "chat-completions" || normalized === "responses")
+    return normalized;
+  throw new AIProviderRequestError(
+    `Unsupported AI_API_TYPE: ${normalized}`,
+    "PROVIDER_NOT_CONFIGURED",
+  );
 }
 
 function parseTimeout(value: string | undefined) {

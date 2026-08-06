@@ -22,3 +22,19 @@ export function knowledgeGraphSafeMessage(error: unknown) {
     ? error.message
     : getSafeErrorMessage(error);
 }
+export function knowledgeGraphErrorCode(error: unknown) {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    "status" in error &&
+    typeof (error as { status?: unknown }).status === "number"
+  )
+    return (error as { code: string }).code;
+  if (error instanceof Error) {
+    if (error.name === "AuthenticationError") return "AUTHENTICATION_REQUIRED";
+    if (error.name === "AuthorizationError") return "FORBIDDEN";
+    if (error.name === "ResourceNotFoundError") return "RESOURCE_NOT_FOUND";
+  }
+  return "INTERNAL_ERROR";
+}

@@ -74,6 +74,8 @@ export const saveKnowledgeGraphReviewSchema = z
 export const publishKnowledgeGraphSchema = z
   .object({
     reviewRevisionId: z.string().cuid(),
+    expectedRevisionNumber: z.number().int().positive(),
+    publishedSyllabusStructureId: z.string().cuid(),
   })
   .strict();
 

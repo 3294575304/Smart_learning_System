@@ -193,6 +193,7 @@ enum KnowledgeGraphStatus {
 
 enum AIEnhancementStatus {
   NOT_ATTEMPTED
+  PROCESSING
   SUCCEEDED
   FAILED
 }

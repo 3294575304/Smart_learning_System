@@ -570,6 +570,143 @@ async function main(): Promise<void> {
       published.data.id,
     );
 
+    const graphPath = `/api/teacher/courses/${createdCourse.data.id}/knowledge-graph`;
+    assert.equal((await requestJson(graphPath)).status, 401);
+    assert.equal((await requestJson(graphPath, adminCookie)).status, 403);
+    assert.equal((await requestJson(graphPath, studentCookie)).status, 403);
+    assert.equal((await requestJson(graphPath, teacherTwoCookie)).status, 404);
+    const graphQueue = await requestJson(graphPath, teacherCookie, "POST");
+    assert.equal(graphQueue.status, 202, await graphQueue.clone().text());
+    type GraphStateResponse = ApiSuccess<{
+      sourceSyllabusStructureId: string;
+      draft: {
+        id: string;
+        status: string;
+        structure: unknown;
+      } | null;
+      review: { id: string; revisionNumber: number } | null;
+      published: { current: { id: string } | null; history: unknown[] };
+    }>;
+    let graphState: GraphStateResponse | null = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const graphQuery = await requestJson(graphPath, teacherCookie);
+      assert.equal(graphQuery.status, 200, await graphQuery.clone().text());
+      graphState = (await graphQuery.json()) as GraphStateResponse;
+      if (graphState.data.draft?.status === "SUCCEEDED") break;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+    }
+    assert.equal(graphState?.data.draft?.status, "SUCCEEDED");
+    assert.ok(graphState?.data.draft?.structure);
+    if (!graphState?.data.draft)
+      throw new Error("Knowledge graph draft did not finish");
+    const graphDraft = graphState.data.draft;
+    await prisma.knowledgeGraphDraft.update({
+      where: { id: graphDraft.id },
+      data: {
+        aiEnhancementStatus: "FAILED",
+        aiWarningCode: "PROVIDER_HTTP_ERROR",
+        aiWarningMessage: "AI 服务返回了 HTTP 错误。",
+      },
+    });
+    const degradedGraphQuery = await requestJson(graphPath, teacherCookie);
+    const degradedGraphState = (await degradedGraphQuery.json()) as ApiSuccess<{
+      sourceSyllabusStructureId: string;
+      draft: { id: string; structure: unknown };
+    }>;
+    assert.ok(degradedGraphState.data.draft.structure);
+    const graphReviewPath = `${graphPath}/drafts/${graphDraft.id}/review`;
+    const graphReviewResponse = await requestJson(
+      graphReviewPath,
+      teacherCookie,
+      "PATCH",
+      {
+        expectedRevisionNumber: 0,
+        structure: degradedGraphState.data.draft.structure,
+      },
+    );
+    assert.equal(
+      graphReviewResponse.status,
+      200,
+      await graphReviewResponse.clone().text(),
+    );
+    const graphReview = (await graphReviewResponse.json()) as ApiSuccess<{
+      id: string;
+      revisionNumber: number;
+    }>;
+    const graphPublishPath = `${graphPath}/drafts/${graphDraft.id}/publish`;
+    const graphConflict = await requestJson(
+      graphPublishPath,
+      teacherCookie,
+      "POST",
+      {
+        reviewRevisionId: graphReview.data.id,
+        expectedRevisionNumber: 2,
+        publishedSyllabusStructureId:
+          degradedGraphState.data.sourceSyllabusStructureId,
+      },
+    );
+    assert.equal(graphConflict.status, 409);
+    assert.equal(
+      ((await graphConflict.json()) as { code: string }).code,
+      "GRAPH_REVISION_CONFLICT",
+    );
+    const graphPublishResponse = await requestJson(
+      graphPublishPath,
+      teacherCookie,
+      "POST",
+      {
+        reviewRevisionId: graphReview.data.id,
+        expectedRevisionNumber: 1,
+        publishedSyllabusStructureId:
+          degradedGraphState.data.sourceSyllabusStructureId,
+      },
+    );
+    assert.equal(
+      graphPublishResponse.status,
+      200,
+      await graphPublishResponse.clone().text(),
+    );
+    const graphPublished = (await graphPublishResponse.json()) as ApiSuccess<{
+      id: string;
+      versionNumber: number;
+    }>;
+    assert.equal(graphPublished.data.versionNumber, 1);
+    const graphReplay = await requestJson(
+      graphPublishPath,
+      teacherCookie,
+      "POST",
+      {
+        reviewRevisionId: graphReview.data.id,
+        expectedRevisionNumber: 1,
+        publishedSyllabusStructureId:
+          degradedGraphState.data.sourceSyllabusStructureId,
+      },
+    );
+    assert.equal(graphReplay.status, 200);
+    assert.equal(
+      ((await graphReplay.json()) as ApiSuccess<{ id: string }>).data.id,
+      graphPublished.data.id,
+    );
+    const graphAfterPublish = (await (
+      await requestJson(graphPath, teacherCookie)
+    ).json()) as ApiSuccess<{
+      published: { current: { id: string }; history: Array<{ id: string }> };
+    }>;
+    assert.equal(
+      graphAfterPublish.data.published.current.id,
+      graphPublished.data.id,
+    );
+    assert.equal(graphAfterPublish.data.published.history.length, 1);
+    assert.equal(
+      await prisma.auditLog.count({
+        where: {
+          action: "KNOWLEDGE_GRAPH_PUBLISHED",
+          targetId: graphPublished.data.id,
+        },
+      }),
+      1,
+    );
+
     assert.equal(
       (
         await requestMultipart(
@@ -1603,7 +1740,53 @@ async function main(): Promise<void> {
     if (createdCourseIds.length > 0) {
       await prisma.course.updateMany({
         where: { id: { in: createdCourseIds } },
-        data: { currentPublishedSyllabusStructureId: null },
+        data: {
+          currentPublishedSyllabusStructureId: null,
+          currentPublishedKnowledgeGraphVersionId: null,
+        },
+      });
+      const graphVersions =
+        await prisma.publishedKnowledgeGraphVersion.findMany({
+          where: { courseId: { in: createdCourseIds } },
+          select: { id: true },
+        });
+      const graphVersionIds = graphVersions.map((item) => item.id);
+      const graphReviews = await prisma.knowledgeGraphReviewRevision.findMany({
+        where: { courseId: { in: createdCourseIds } },
+        select: { id: true },
+      });
+      const graphDrafts = await prisma.knowledgeGraphDraft.findMany({
+        where: { courseId: { in: createdCourseIds } },
+        select: { id: true },
+      });
+      await prisma.auditLog.deleteMany({
+        where: {
+          targetId: {
+            in: [
+              ...graphVersionIds,
+              ...graphReviews.map((item) => item.id),
+              ...graphDrafts.map((item) => item.id),
+            ],
+          },
+        },
+      });
+      await prisma.publishedKnowledgeGraphEdge.deleteMany({
+        where: { graphVersionId: { in: graphVersionIds } },
+      });
+      await prisma.publishedKnowledgeGraphNode.deleteMany({
+        where: { graphVersionId: { in: graphVersionIds } },
+      });
+      await prisma.publishedKnowledgeGraphVersion.deleteMany({
+        where: { courseId: { in: createdCourseIds } },
+      });
+      await prisma.knowledgeGraphConcept.deleteMany({
+        where: { courseId: { in: createdCourseIds } },
+      });
+      await prisma.knowledgeGraphReviewRevision.deleteMany({
+        where: { courseId: { in: createdCourseIds } },
+      });
+      await prisma.knowledgeGraphDraft.deleteMany({
+        where: { courseId: { in: createdCourseIds } },
       });
       const [reviewRecords, publishedRecords] = await Promise.all([
         prisma.syllabusReviewRevision.findMany({

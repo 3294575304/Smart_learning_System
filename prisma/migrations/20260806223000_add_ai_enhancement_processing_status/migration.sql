@@ -1,0 +1,1 @@
+ALTER TYPE "AIEnhancementStatus" ADD VALUE 'PROCESSING';

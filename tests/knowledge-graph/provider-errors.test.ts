@@ -10,65 +10,203 @@ const graph = {
   edges: [],
 } as unknown as KnowledgeGraphStructure;
 
-async function captureCode(response: Response) {
+async function invoke(
+  response: Response,
+  endpointType: "chat-completions" | "responses" = "chat-completions",
+) {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => response;
+  let requestUrl = "";
+  let requestBody: unknown = null;
+  globalThis.fetch = async (input, init) => {
+    requestUrl = String(input);
+    requestBody = JSON.parse(String(init?.body));
+    return response;
+  };
   try {
     const provider = new OpenAICompatibleProvider({
       apiKey: "configured-secret",
-      baseUrl: "https://provider.example/v1/chat/completions",
+      baseUrl: "https://provider.example/v1",
       model: "model",
+      endpointType,
       timeoutMs: 100,
-      logger: { error: () => undefined },
+      logger: { error: () => undefined, info: () => undefined },
     });
-    await provider.inferKnowledgeGraphRelations!(graph, {
+    const content = await provider.inferKnowledgeGraphRelations!(graph, {
       signal: new AbortController().signal,
     });
-    return null;
+    return { content, requestUrl, requestBody, error: null };
   } catch (error) {
     assert.ok(error instanceof AIProviderRequestError);
-    return error.code;
+    return { content: null, requestUrl, requestBody, error };
   } finally {
     globalThis.fetch = originalFetch;
   }
 }
 
 test(
-  "OpenAI-compatible HTTP statuses map to safe provider codes",
+  "Chat Completions 按配置发送请求并解析 choices.message.content",
   { concurrency: false },
   async () => {
-    const cases = [
-      [401, "PROVIDER_UNAUTHORIZED"],
-      [403, "PROVIDER_FORBIDDEN"],
-      [404, "PROVIDER_MODEL_NOT_FOUND"],
-      [429, "PROVIDER_RATE_LIMITED"],
-      [503, "PROVIDER_UNAVAILABLE"],
-    ] as const;
-    for (const [status, code] of cases)
-      assert.equal(
-        await captureCode(
-          new Response(JSON.stringify({ error: "safe" }), {
-            status,
-            headers: { "content-type": "application/json" },
-          }),
-        ),
-        code,
-      );
+    const result = await invoke(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: '```json\n{"related":[]}\n```',
+              },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    assert.deepEqual(result.content, { related: [] });
+    assert.equal(
+      result.requestUrl,
+      "https://provider.example/v1/chat/completions",
+    );
+    assert.ok(
+      result.requestBody &&
+        typeof result.requestBody === "object" &&
+        "messages" in result.requestBody &&
+        "response_format" in result.requestBody,
+    );
   },
 );
 
 test(
-  "HTML success responses are rejected as PROVIDER_BAD_RESPONSE",
+  "Responses API 按配置发送请求并解析 output content text",
   { concurrency: false },
   async () => {
-    assert.equal(
-      await captureCode(
+    const result = await invoke(
+      new Response(
+        JSON.stringify({
+          status: "completed",
+          output: [
+            {
+              type: "message",
+              content: [{ type: "output_text", text: '{"related":[]}' }],
+            },
+          ],
+          usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+      "responses",
+    );
+    assert.deepEqual(result.content, { related: [] });
+    assert.equal(result.requestUrl, "https://provider.example/v1/responses");
+    assert.ok(
+      result.requestBody &&
+        typeof result.requestBody === "object" &&
+        "input" in result.requestBody &&
+        "text" in result.requestBody,
+    );
+  },
+);
+
+test(
+  "already structured compatible output is returned as an object",
+  { concurrency: false },
+  async () => {
+    const result = await invoke(
+      new Response(JSON.stringify({ related: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    assert.deepEqual(result.content, { related: [] });
+  },
+);
+
+test(
+  "SSE compatibility response uses the final JSON data event",
+  { concurrency: false },
+  async () => {
+    const result = await invoke(
+      new Response(
+        'data: {"choices":[{"message":{"content":"{\\"related\\":[]}"}}]}\n\ndata: [DONE]\n',
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      ),
+    );
+    assert.deepEqual(result.content, { related: [] });
+  },
+);
+
+test(
+  "HTTP, HTML, empty and malformed responses receive precise safe codes",
+  { concurrency: false },
+  async () => {
+    const cases: Array<[Response, string, string]> = [
+      [
+        new Response(JSON.stringify({ error: { message: "bad request" } }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        }),
+        "PROVIDER_HTTP_ERROR",
+        "http.error",
+      ],
+      [
         new Response("<html>login</html>", {
           status: 200,
           headers: { "content-type": "text/html" },
         }),
-      ),
-      "PROVIDER_BAD_RESPONSE",
+        "PROVIDER_UNREADABLE_RESPONSE",
+        "body.html",
+      ],
+      [
+        new Response("", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+        "PROVIDER_EMPTY_RESPONSE",
+        "body.empty",
+      ],
+      [
+        new Response("not-json", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+        "PROVIDER_UNREADABLE_RESPONSE",
+        "body.invalid-json",
+      ],
+      [
+        new Response(JSON.stringify({ error: { message: "logical error" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+        "PROVIDER_HTTP_ERROR",
+        "json.error-object",
+      ],
+    ];
+    for (const [response, code, branch] of cases) {
+      const result = await invoke(response);
+      assert.equal(result.error?.code, code);
+      assert.equal(result.error?.metadata.parseBranch, branch);
+      assert.equal(result.error?.metadata.httpStatus, response.status);
+      assert.ok(result.error?.metadata.responseSummary);
+    }
+  },
+);
+
+test(
+  "unsupported success envelope is classified as schema invalid",
+  { concurrency: false },
+  async () => {
+    const result = await invoke(
+      new Response(JSON.stringify({ object: "response", output: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+      "responses",
     );
+    assert.equal(result.error?.code, "PROVIDER_SCHEMA_INVALID");
+    assert.equal(result.error?.metadata.parseBranch, "envelope.unsupported");
   },
 );

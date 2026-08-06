@@ -3,7 +3,9 @@ import { z } from "zod";
 import { buildStudentAnalysisMessages } from "@/services/ai/prompt";
 import {
   AIProviderRequestError,
+  type AIEndpointType,
   type AIProvider,
+  type AIProviderErrorCode,
   type AIProviderOptions,
   type AIProviderResponse,
 } from "@/services/ai/provider";
@@ -12,31 +14,82 @@ import { buildSyllabusParseMessages } from "@/services/syllabus-parsing/prompt";
 import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 
-const completionResponseSchema = z.object({
-  choices: z
-    .array(
-      z.object({
-        message: z.object({ content: z.string() }),
-        finish_reason: z.string().nullable().optional(),
-      }),
-    )
-    .min(1),
-  usage: z
-    .object({
-      prompt_tokens: z.number().int().nonnegative().optional(),
-      completion_tokens: z.number().int().nonnegative().optional(),
-      total_tokens: z.number().int().nonnegative().optional(),
-    })
-    .optional(),
-});
+const chatResponseSchema = z
+  .object({
+    choices: z
+      .array(
+        z
+          .object({
+            message: z
+              .object({
+                content: z.unknown().optional(),
+                parsed: z.unknown().optional(),
+              })
+              .passthrough(),
+            finish_reason: z.string().nullable().optional(),
+          })
+          .passthrough(),
+      )
+      .min(1),
+    usage: z
+      .object({
+        prompt_tokens: z.number().int().nonnegative().optional(),
+        completion_tokens: z.number().int().nonnegative().optional(),
+        total_tokens: z.number().int().nonnegative().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+const responsesApiSchema = z
+  .object({
+    output_text: z.unknown().optional(),
+    output: z.array(z.unknown()).optional(),
+    status: z.string().optional(),
+    usage: z
+      .object({
+        input_tokens: z.number().int().nonnegative().optional(),
+        output_tokens: z.number().int().nonnegative().optional(),
+        total_tokens: z.number().int().nonnegative().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+const providerErrorSchema = z
+  .object({
+    error: z
+      .object({
+        message: z.string().optional(),
+        type: z.string().optional(),
+        code: z.union([z.string(), z.number()]).nullable().optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+type ProviderLogger = {
+  error: (message?: unknown, ...optionalParams: unknown[]) => void;
+  info?: (message?: unknown, ...optionalParams: unknown[]) => void;
+};
+
+interface ExtractedProviderContent {
+  content: unknown;
+  parseBranch: string;
+  finishReason: string | null;
+  usage: AIProviderResponse["usage"];
+}
 
 export interface OpenAICompatibleProviderConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  endpointType?: AIEndpointType;
   syllabusMaxCompletionTokens?: number;
   timeoutMs?: number;
-  logger?: Pick<Console, "error">;
+  logger?: ProviderLogger;
 }
 
 export class OpenAICompatibleProvider implements AIProvider {
@@ -44,15 +97,14 @@ export class OpenAICompatibleProvider implements AIProvider {
   readonly maxRetries = 0;
   readonly name = "openai-compatible";
   readonly model: string;
+  readonly endpointType: AIEndpointType;
   private readonly endpoint: string;
-  private readonly logger: Pick<Console, "error">;
+  private readonly logger: ProviderLogger;
 
   constructor(private readonly config: OpenAICompatibleProviderConfig) {
     this.model = config.model;
-    const normalized = config.baseUrl
-      .replace(/\/+$/u, "")
-      .replace(/\/chat\/completions$/u, "");
-    this.endpoint = `${normalized}/chat/completions`;
+    this.endpointType = config.endpointType ?? "chat-completions";
+    this.endpoint = endpointFor(config.baseUrl, this.endpointType);
     this.logger = config.logger ?? console;
   }
 
@@ -125,13 +177,14 @@ export class OpenAICompatibleProvider implements AIProvider {
           Authorization: `Bearer ${this.config.apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: this.model,
-          temperature: 0.2,
-          response_format: { type: "json_object" },
-          ...(maxCompletionTokens ? { max_tokens: maxCompletionTokens } : {}),
-          messages,
-        }),
+        body: JSON.stringify(
+          requestBody(
+            this.endpointType,
+            this.model,
+            messages,
+            maxCompletionTokens,
+          ),
+        ),
         signal,
       });
     } catch (error: unknown) {
@@ -143,127 +196,447 @@ export class OpenAICompatibleProvider implements AIProvider {
         throw new AIProviderRequestError(
           "AI provider request timed out",
           "PROVIDER_TIMEOUT",
+          null,
+          this.networkMetadata("network.timeout"),
         );
       }
       this.logNetworkDiagnostic("PROVIDER_UNAVAILABLE", error);
       throw new AIProviderRequestError(
         "AI provider is unavailable",
         "PROVIDER_UNAVAILABLE",
+        null,
+        this.networkMetadata("network.error"),
       );
     }
 
+    const requestId = providerRequestId(response);
+    const contentType = response.headers.get("content-type");
+    let responseText: string;
+    try {
+      responseText = await response.text();
+    } catch {
+      this.throwResponseError(
+        "PROVIDER_UNREADABLE_RESPONSE",
+        "AI provider response body could not be read",
+        response,
+        requestId,
+        "body.read-error",
+        "unreadable response body",
+      );
+    }
+
+    const trimmed = responseText.trim();
     if (!response.ok) {
-      const summary = await safeResponseSummary(response);
-      const code = providerHttpErrorCode(response.status);
-      this.logDiagnostic(code, response, summary);
-      throw new AIProviderRequestError(
+      const summary = safeResponseSummary(trimmed, contentType);
+      this.throwResponseError(
+        "PROVIDER_HTTP_ERROR",
         `AI provider returned HTTP ${response.status}`,
-        code,
-        response.headers.get("x-request-id"),
+        response,
+        requestId,
+        "http.error",
+        summary,
       );
     }
-    const contentType = response.headers.get("content-type") ?? "";
-    if (contentType.toLowerCase().includes("text/html")) {
-      const summary = await safeResponseSummary(response);
-      this.logDiagnostic("PROVIDER_BAD_RESPONSE", response, summary);
-      throw new AIProviderRequestError(
-        "AI provider returned a non-JSON response",
-        "PROVIDER_BAD_RESPONSE",
-        response.headers.get("x-request-id"),
+    if (!trimmed) {
+      this.throwResponseError(
+        "PROVIDER_EMPTY_RESPONSE",
+        "AI provider returned an empty response",
+        response,
+        requestId,
+        "body.empty",
+        "empty response body",
       );
     }
+    if (
+      contentType?.toLowerCase().includes("text/html") ||
+      /^\s*<(?:!doctype\s+html|html)\b/iu.test(trimmed)
+    ) {
+      this.throwResponseError(
+        "PROVIDER_UNREADABLE_RESPONSE",
+        "AI provider returned HTML instead of JSON",
+        response,
+        requestId,
+        "body.html",
+        safeResponseSummary(trimmed, contentType),
+      );
+    }
+
+    const isEventStream =
+      contentType?.toLowerCase().includes("text/event-stream") ||
+      /^data:/u.test(trimmed);
     let payload: unknown;
     try {
-      payload = await response.json();
+      payload = JSON.parse(isEventStream ? extractSseJson(trimmed) : trimmed);
     } catch {
-      this.logDiagnostic("PROVIDER_BAD_RESPONSE", response, "unreadable JSON");
-      throw new AIProviderRequestError(
-        "AI provider returned an unreadable response",
-        "PROVIDER_BAD_RESPONSE",
-        response.headers.get("x-request-id"),
-      );
-    }
-    const parsed = completionResponseSchema.safeParse(payload);
-    if (!parsed.success) {
-      this.logDiagnostic(
-        "PROVIDER_SCHEMA_INVALID",
+      this.throwResponseError(
+        "PROVIDER_UNREADABLE_RESPONSE",
+        "AI provider returned unreadable JSON",
         response,
-        parsed.error.issues
-          .slice(0, 3)
-          .map((issue) => issue.path.join("."))
-          .join(", "),
-      );
-      throw new AIProviderRequestError(
-        "AI provider returned an incompatible response",
-        "PROVIDER_SCHEMA_INVALID",
-        response.headers.get("x-request-id"),
+        requestId,
+        "body.invalid-json",
+        safeResponseSummary(trimmed, contentType),
       );
     }
-    const choice = parsed.data.choices[0];
+    const providerError = providerErrorSchema.safeParse(payload);
+    if (providerError.success) {
+      this.throwResponseError(
+        "PROVIDER_HTTP_ERROR",
+        "AI provider returned an error object",
+        response,
+        requestId,
+        "json.error-object",
+        safeResponseSummary(trimmed, contentType),
+      );
+    }
+
+    let extracted: ExtractedProviderContent;
+    try {
+      extracted = extractProviderContent(payload, this.endpointType);
+    } catch (error) {
+      const code =
+        error instanceof AIProviderRequestError
+          ? error.code
+          : "PROVIDER_SCHEMA_INVALID";
+      this.throwResponseError(
+        code,
+        error instanceof Error
+          ? error.message
+          : "AI provider response schema is incompatible",
+        response,
+        requestId,
+        error instanceof AIProviderRequestError
+          ? (error.metadata.parseBranch ?? "envelope.invalid")
+          : "envelope.invalid",
+        safeResponseSummary(trimmed, contentType),
+      );
+    }
+    if (isEventStream)
+      extracted = {
+        ...extracted,
+        parseBranch: `sse.${extracted.parseBranch}`,
+      };
+    this.logParsedResponse(response, requestId, extracted.parseBranch, payload);
     return {
-      content: choice.message.content,
-      requestId: response.headers.get("x-request-id"),
-      finishReason: choice.finish_reason ?? null,
-      usage: {
-        promptTokens: parsed.data.usage?.prompt_tokens ?? null,
-        completionTokens: parsed.data.usage?.completion_tokens ?? null,
-        totalTokens: parsed.data.usage?.total_tokens ?? null,
-      },
-      responseLength: choice.message.content.length,
+      content: extracted.content,
+      requestId,
+      finishReason: extracted.finishReason,
+      parseBranch: extracted.parseBranch,
+      usage: extracted.usage,
+      responseLength: responseText.length,
     };
   }
 
-  private logDiagnostic(
-    code: string,
+  private throwResponseError(
+    code: AIProviderErrorCode,
+    message: string,
     response: Response,
+    requestId: string | null,
+    parseBranch: string,
     responseSummary: string,
-  ) {
-    this.logger.error("[ai-provider-request-failed]", {
-      code,
+  ): never {
+    const metadata = {
       provider: this.name,
-      baseUrl: this.config.baseUrl,
       model: this.model,
-      timeoutMs: this.config.timeoutMs ?? 8_000,
-      apiKeyConfigured: Boolean(this.config.apiKey),
+      endpointType: this.endpointType,
       httpStatus: response.status,
-      responseContentType: response.headers.get("content-type"),
+      contentType: response.headers.get("content-type"),
+      requestId,
+      parseBranch,
       responseSummary,
+    };
+    this.logger.error("[ai-provider-response-failed]", { code, ...metadata });
+    throw new AIProviderRequestError(message, code, requestId, metadata);
+  }
+
+  private logParsedResponse(
+    response: Response,
+    requestId: string | null,
+    parseBranch: string,
+    payload: unknown,
+  ) {
+    this.logger.info?.("[ai-provider-response-parsed]", {
+      provider: this.name,
+      model: this.model,
+      endpointType: this.endpointType,
+      httpStatus: response.status,
+      contentType: response.headers.get("content-type"),
+      requestId,
+      parseBranch,
+      responseSummary: structuralSummary(payload),
     });
   }
 
   private logNetworkDiagnostic(code: string, error: unknown) {
     this.logger.error("[ai-provider-request-failed]", {
       code,
-      provider: this.name,
-      baseUrl: this.config.baseUrl,
-      model: this.model,
-      timeoutMs: this.config.timeoutMs ?? 8_000,
-      apiKeyConfigured: Boolean(this.config.apiKey),
-      httpStatus: null,
-      responseContentType: null,
+      ...this.networkMetadata("network.error"),
       responseSummary:
         error instanceof Error ? error.name.slice(0, 100) : "UnknownError",
     });
   }
-}
 
-function providerHttpErrorCode(status: number) {
-  if (status === 401) return "PROVIDER_UNAUTHORIZED" as const;
-  if (status === 403) return "PROVIDER_FORBIDDEN" as const;
-  if (status === 404) return "PROVIDER_MODEL_NOT_FOUND" as const;
-  if (status === 429) return "PROVIDER_RATE_LIMITED" as const;
-  return status >= 500
-    ? ("PROVIDER_UNAVAILABLE" as const)
-    : ("PROVIDER_BAD_RESPONSE" as const);
-}
-
-async function safeResponseSummary(response: Response) {
-  try {
-    return (await response.text())
-      .slice(0, 500)
-      .replace(/Bearer\s+\S+/giu, "Bearer [REDACTED]")
-      .replace(/(?:sk-|key[-_]?)[A-Za-z0-9_-]{8,}/giu, "[REDACTED]");
-  } catch {
-    return "unreadable response body";
+  private networkMetadata(parseBranch: string) {
+    return {
+      provider: this.name,
+      model: this.model,
+      endpointType: this.endpointType,
+      httpStatus: null,
+      contentType: null,
+      requestId: null,
+      parseBranch,
+    };
   }
+}
+
+function endpointFor(baseUrl: string, endpointType: AIEndpointType) {
+  const normalized = baseUrl.replace(/\/+$/u, "");
+  if (endpointType === "responses")
+    return /\/responses$/u.test(normalized)
+      ? normalized
+      : `${normalized.replace(/\/chat\/completions$/u, "")}/responses`;
+  return /\/chat\/completions$/u.test(normalized)
+    ? normalized
+    : `${normalized.replace(/\/responses$/u, "")}/chat/completions`;
+}
+
+function requestBody(
+  endpointType: AIEndpointType,
+  model: string,
+  messages: Array<{ role: "system" | "user"; content: string }>,
+  maxCompletionTokens?: number,
+) {
+  if (endpointType === "responses")
+    return {
+      model,
+      temperature: 0.2,
+      text: { format: { type: "json_object" } },
+      ...(maxCompletionTokens
+        ? { max_output_tokens: maxCompletionTokens }
+        : {}),
+      input: messages,
+    };
+  return {
+    model,
+    temperature: 0.2,
+    response_format: { type: "json_object" },
+    ...(maxCompletionTokens ? { max_tokens: maxCompletionTokens } : {}),
+    messages,
+  };
+}
+
+function extractProviderContent(
+  payload: unknown,
+  endpointType: AIEndpointType,
+): ExtractedProviderContent {
+  const extractors =
+    endpointType === "responses"
+      ? [extractResponsesContent, extractChatContent, extractDirectContent]
+      : [extractChatContent, extractResponsesContent, extractDirectContent];
+  for (const extractor of extractors) {
+    const result = extractor(payload);
+    if (result) return result;
+  }
+  throw new AIProviderRequestError(
+    "AI provider response schema is incompatible",
+    "PROVIDER_SCHEMA_INVALID",
+    null,
+    { parseBranch: "envelope.unsupported" },
+  );
+}
+
+function extractChatContent(payload: unknown): ExtractedProviderContent | null {
+  const parsed = chatResponseSchema.safeParse(payload);
+  if (!parsed.success) return null;
+  const choice = parsed.data.choices[0];
+  const candidate =
+    choice.message.parsed !== undefined
+      ? { value: choice.message.parsed, branch: "chat.message.parsed" }
+      : { value: choice.message.content, branch: "chat.message.content" };
+  const normalized = normalizeContent(candidate.value, candidate.branch);
+  return {
+    ...normalized,
+    finishReason: choice.finish_reason ?? null,
+    usage: {
+      promptTokens: parsed.data.usage?.prompt_tokens ?? null,
+      completionTokens: parsed.data.usage?.completion_tokens ?? null,
+      totalTokens: parsed.data.usage?.total_tokens ?? null,
+    },
+  };
+}
+
+function extractResponsesContent(
+  payload: unknown,
+): ExtractedProviderContent | null {
+  const parsed = responsesApiSchema.safeParse(payload);
+  if (!parsed.success) return null;
+  let candidate: { value: unknown; branch: string } | null = null;
+  if (parsed.data.output_text !== undefined)
+    candidate = {
+      value: parsed.data.output_text,
+      branch: "responses.output_text",
+    };
+  if (!candidate && parsed.data.output) {
+    for (const outputItem of parsed.data.output) {
+      if (!isRecord(outputItem) || !Array.isArray(outputItem.content)) continue;
+      for (const part of outputItem.content) {
+        if (!isRecord(part)) continue;
+        if (part.parsed !== undefined) {
+          candidate = {
+            value: part.parsed,
+            branch: "responses.output.content.parsed",
+          };
+          break;
+        }
+        if (part.json !== undefined) {
+          candidate = {
+            value: part.json,
+            branch: "responses.output.content.json",
+          };
+          break;
+        }
+        if (part.text !== undefined) {
+          candidate = {
+            value: part.text,
+            branch: "responses.output.content.text",
+          };
+          break;
+        }
+      }
+      if (candidate) break;
+    }
+  }
+  if (!candidate) return null;
+  const normalized = normalizeContent(candidate.value, candidate.branch);
+  return {
+    ...normalized,
+    finishReason: parsed.data.status ?? null,
+    usage: {
+      promptTokens: parsed.data.usage?.input_tokens ?? null,
+      completionTokens: parsed.data.usage?.output_tokens ?? null,
+      totalTokens: parsed.data.usage?.total_tokens ?? null,
+    },
+  };
+}
+
+function extractDirectContent(
+  payload: unknown,
+): ExtractedProviderContent | null {
+  if (!isRecord(payload)) return null;
+  if (
+    ["choices", "output", "output_text", "usage", "object"].some(
+      (key) => key in payload,
+    )
+  )
+    return null;
+  const value = payload.content !== undefined ? payload.content : payload;
+  const branch =
+    payload.content !== undefined ? "direct.content" : "direct.object";
+  return {
+    ...normalizeContent(value, branch),
+    finishReason: null,
+    usage: {
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+    },
+  };
+}
+
+function normalizeContent(
+  value: unknown,
+  branch: string,
+): Pick<ExtractedProviderContent, "content" | "parseBranch"> {
+  if (value === null || value === undefined || value === "")
+    throw new AIProviderRequestError(
+      "AI provider returned empty output content",
+      "PROVIDER_EMPTY_RESPONSE",
+      null,
+      { parseBranch: `${branch}.empty` },
+    );
+  if (typeof value === "string") {
+    const stripped = stripMarkdownFence(value);
+    try {
+      return {
+        content: JSON.parse(stripped),
+        parseBranch: `${branch}.json-string`,
+      };
+    } catch {
+      return { content: stripped, parseBranch: `${branch}.text` };
+    }
+  }
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((part) => (isRecord(part) ? part.text : null))
+      .filter((part): part is string => typeof part === "string");
+    if (parts.length > 0)
+      return normalizeContent(parts.join(""), `${branch}.parts`);
+  }
+  if (typeof value === "object")
+    return { content: value, parseBranch: `${branch}.object` };
+  throw new AIProviderRequestError(
+    "AI provider output content has an unsupported type",
+    "PROVIDER_SCHEMA_INVALID",
+    null,
+    { parseBranch: `${branch}.unsupported` },
+  );
+}
+
+function stripMarkdownFence(value: string) {
+  const trimmed = value.trim();
+  const match = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed);
+  return match?.[1]?.trim() ?? trimmed;
+}
+
+function extractSseJson(value: string) {
+  const events = value
+    .split(/\r?\n/u)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim())
+    .filter((line) => line && line !== "[DONE]");
+  const candidate = events.at(-1);
+  if (!candidate)
+    throw new SyntaxError("SSE response did not contain a JSON data event");
+  return candidate;
+}
+
+function providerRequestId(response: Response) {
+  return (
+    response.headers.get("x-request-id") ??
+    response.headers.get("request-id") ??
+    response.headers.get("x-trace-id")
+  );
+}
+
+function safeResponseSummary(value: string, contentType: string | null) {
+  const sanitized = value
+    .replace(/Bearer\s+\S+/giu, "Bearer [REDACTED]")
+    .replace(/(?:sk-|key[-_]?)[A-Za-z0-9_-]{8,}/giu, "[REDACTED]");
+  try {
+    const payload: unknown = JSON.parse(sanitized);
+    const error = providerErrorSchema.safeParse(payload);
+    if (error.success) {
+      const details = error.data.error;
+      return JSON.stringify({
+        kind: "error-object",
+        type: details.type ?? null,
+        code: details.code ?? null,
+        message: details.message?.slice(0, 160) ?? null,
+      });
+    }
+    return structuralSummary(payload);
+  } catch {
+    const prefix = sanitized.slice(0, 240).replace(/\s+/gu, " ");
+    return `${contentType ?? "unknown"}; ${prefix}`;
+  }
+}
+
+function structuralSummary(payload: unknown) {
+  if (Array.isArray(payload)) return `JSON array(length=${payload.length})`;
+  if (isRecord(payload))
+    return `JSON object(keys=${Object.keys(payload).slice(0, 20).join(",")})`;
+  return `JSON ${typeof payload}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

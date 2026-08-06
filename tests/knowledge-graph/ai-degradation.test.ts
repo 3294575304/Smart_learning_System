@@ -4,15 +4,58 @@ import test from "node:test";
 import { AIEnhancementStatus } from "@prisma/client";
 import type { AIProvider } from "@/services/ai/provider";
 import { runOptionalKnowledgeGraphAiEnhancement } from "@/services/knowledge-graph/ai-enhancement";
-import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
+import { deterministicGraph } from "@/services/knowledge-graph/generator";
+import type { SyllabusParseOutput } from "@/services/syllabus-parsing/schemas";
 
-const base = {
-  nodes: [
-    { key: "a", type: "KNOWLEDGE_POINT" },
-    { key: "b", type: "KNOWLEDGE_POINT" },
+const syllabus: SyllabusParseOutput = {
+  courseInfo: {
+    courseName: "Python",
+    courseCode: "PY",
+    credits: null,
+    totalHours: null,
+    theoryHours: null,
+    practiceHours: null,
+    description: null,
+    sourceRefs: [],
+  },
+  objectives: [],
+  chapters: [
+    {
+      code: "CH-1",
+      title: "基础",
+      description: null,
+      suggestedHours: null,
+      order: 1,
+      sourceRefs: [],
+      knowledgePoints: [
+        {
+          code: "A",
+          name: "A",
+          description: null,
+          importance: "CORE",
+          sourceRefs: [],
+        },
+        {
+          code: "B",
+          name: "B",
+          description: null,
+          importance: "CORE",
+          sourceRefs: [],
+        },
+      ],
+    },
   ],
-  edges: [],
-} as unknown as KnowledgeGraphStructure;
+  prerequisites: [],
+  keyTopics: [],
+  difficultTopics: [],
+  assessments: [],
+  objectiveAssessmentMappings: [],
+  materials: [],
+  warnings: [],
+};
+const base = deterministicGraph("ai-degradation", syllabus);
+const a = "syllabus:kp:A";
+const b = "syllabus:kp:B";
 
 function provider(responses: unknown[]): AIProvider {
   let index = 0;
@@ -32,7 +75,7 @@ function provider(responses: unknown[]): AIProvider {
 test("RELATED inference succeeds on the first attempt", async () => {
   const result = await runOptionalKnowledgeGraphAiEnhancement(base, () =>
     provider([
-      { related: [{ from: "a", to: "b", description: null, confidence: 0.8 }] },
+      { related: [{ from: a, to: b, description: null, confidence: 0.8 }] },
     ]),
   );
   assert.equal(result.status, AIEnhancementStatus.SUCCEEDED);
@@ -45,7 +88,7 @@ test("RELATED inference retries once and preserves a later success", async () =>
   const result = await runOptionalKnowledgeGraphAiEnhancement(base, () =>
     provider([
       new Error("temporary outage"),
-      { related: [{ from: "a", to: "b", description: null, confidence: 0.8 }] },
+      { related: [{ from: a, to: b, description: null, confidence: 0.8 }] },
     ]),
   );
   assert.equal(result.status, AIEnhancementStatus.SUCCEEDED);
@@ -69,6 +112,26 @@ test("invalid JSON retries once then records PROVIDER_SCHEMA_INVALID", async () 
   );
   assert.equal(result.status, AIEnhancementStatus.FAILED);
   assert.equal(result.attemptCount, 2);
+  assert.equal(result.warningCode, "PROVIDER_SCHEMA_INVALID");
+  assert.deepEqual(result.inference, { related: [] });
+});
+
+test("悬空 RELATED 建议重试后降级且不污染基础草稿", async () => {
+  const result = await runOptionalKnowledgeGraphAiEnhancement(base, () =>
+    provider([
+      {
+        related: [
+          { from: a, to: "missing", description: null, confidence: 0.8 },
+        ],
+      },
+      {
+        related: [
+          { from: "missing", to: b, description: null, confidence: 0.8 },
+        ],
+      },
+    ]),
+  );
+  assert.equal(result.status, AIEnhancementStatus.FAILED);
   assert.equal(result.warningCode, "PROVIDER_SCHEMA_INVALID");
   assert.deepEqual(result.inference, { related: [] });
 });

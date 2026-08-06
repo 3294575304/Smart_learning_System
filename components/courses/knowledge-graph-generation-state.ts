@@ -24,6 +24,10 @@ export type KnowledgeGraphGenerationPresentation =
 const safeGenerationErrors: Record<string, string> = {
   PROVIDER_ERROR: "AI 服务暂时不可用，请稍后重试。",
   PROVIDER_TIMEOUT: "AI 服务响应超时，请稍后重试。",
+  PROVIDER_HTTP_ERROR: "AI 服务返回了 HTTP 错误，请联系管理员检查上游状态。",
+  PROVIDER_EMPTY_RESPONSE: "AI 服务返回了空响应，请稍后重试。",
+  PROVIDER_UNREADABLE_RESPONSE:
+    "AI 服务响应无法读取，请联系管理员检查接口类型。",
   PROVIDER_UNSUPPORTED: "当前 AI 服务不支持知识图谱生成。",
   INVALID_PROVIDER_OUTPUT: "AI 服务返回的数据格式无效，请重试或联系管理员。",
   PUBLISHED_SYLLABUS_REQUIRED: "请先审核并发布正式教学大纲。",
@@ -62,16 +66,22 @@ export function presentKnowledgeGraphGeneration(
     };
   if (generation.status === "SUCCEEDED")
     return generation.structure
-      ? generation.aiEnhancementStatus === "FAILED"
+      ? generation.aiEnhancementStatus === "PROCESSING"
         ? {
             kind: "warning",
             message:
-              "基础知识图谱草稿已生成，但 AI RELATED 关系推断暂时不可用。当前草稿不包含 AI 建议关系，可审核后发布，也可稍后重试 AI 增强。" +
-              (generation.aiWarningCode
-                ? `（${generation.aiWarningCode}：${generation.aiWarningMessage ?? "请联系管理员查看服务端诊断。"}）`
-                : ""),
+              "基础知识图谱草稿已保留，正在重试 AI RELATED 关系推断。当前审核稿仍可保存和发布。",
           }
-        : { kind: "succeeded", message: "知识图谱草稿已生成，请审核后保存。" }
+        : generation.aiEnhancementStatus === "FAILED"
+          ? {
+              kind: "warning",
+              message:
+                "基础知识图谱草稿已生成，但 AI RELATED 关系推断暂时不可用。当前草稿不包含 AI 建议关系，可审核后发布，也可稍后重试 AI 增强。" +
+                (generation.aiWarningCode
+                  ? `（${generation.aiWarningCode}：${generation.aiWarningMessage ?? "请联系管理员查看服务端诊断。"}）`
+                  : ""),
+            }
+          : { kind: "succeeded", message: "知识图谱草稿已生成，请审核后保存。" }
       : {
           kind: "failed",
           message: safeKnowledgeGraphGenerationError(

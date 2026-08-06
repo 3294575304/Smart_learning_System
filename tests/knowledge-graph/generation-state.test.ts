@@ -57,6 +57,18 @@ test("a persisted deterministic draft with failed AI is reviewable with a warnin
   assert.match(result.message, /PROVIDER_TIMEOUT/u);
 });
 
+test("AI enhancement retry keeps the base draft reviewable", () => {
+  const result = presentKnowledgeGraphGeneration(
+    generation("SUCCEEDED", {
+      structure,
+      aiEnhancementStatus: "PROCESSING",
+    }),
+  );
+  assert.equal(result.kind, "warning");
+  assert.match(result.message, /基础知识图谱草稿已保留/u);
+  assert.match(result.message, /仍可保存和发布/u);
+});
+
 test("only SUCCEEDED with a persisted draft reports success", () => {
   assert.deepEqual(
     presentKnowledgeGraphGeneration(generation("SUCCEEDED", { structure })),
@@ -125,7 +137,7 @@ test("backend terminal-state and degradation invariants are explicit", async () 
   assert.match(source, /generatedStructureJson: Prisma\.JsonNull/u);
   assert.match(
     source,
-    /const review =\s+draft\?\.status === KnowledgeGraphStatus\.SUCCEEDED/u,
+    /let review =\s+draft\?\.status === KnowledgeGraphStatus\.SUCCEEDED/u,
   );
   assert.match(source, /createdAt: \{ gte: draft\.startedAt \}/u);
   assert.match(source, /knowledge-graph-succeeded-without-draft/u);

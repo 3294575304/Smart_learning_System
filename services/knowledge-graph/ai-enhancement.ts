@@ -7,10 +7,12 @@ import {
 } from "@/services/ai/provider";
 import { KNOWLEDGE_GRAPH_MAX_AI_ATTEMPTS } from "@/services/knowledge-graph/constants";
 import { KnowledgeGraphOperationError } from "@/services/knowledge-graph/errors";
+import { mergeRelated } from "@/services/knowledge-graph/generator";
 import {
   relatedInferenceSchema,
   type KnowledgeGraphStructure,
 } from "@/services/knowledge-graph/schemas";
+import { KnowledgeGraphValidationError } from "@/services/knowledge-graph/validation";
 
 export async function runOptionalKnowledgeGraphAiEnhancement(
   base: KnowledgeGraphStructure,
@@ -46,6 +48,10 @@ export async function runOptionalKnowledgeGraphAiEnhancement(
         const inference = relatedInferenceSchema.parse(
           typeof raw === "string" ? JSON.parse(raw) : raw,
         );
+        // Endpoint, duplicate, self-loop and graph invariants are part of AI
+        // output validation so invalid suggestions degrade instead of failing
+        // the deterministic draft after the retry loop has already ended.
+        mergeRelated(base, inference);
         return {
           status: AIEnhancementStatus.SUCCEEDED,
           provider,
@@ -88,6 +94,11 @@ function classifyAiEnhancementError(error: unknown) {
     return "PROVIDER_TIMEOUT";
   if (error instanceof ZodError || error instanceof SyntaxError)
     return "PROVIDER_SCHEMA_INVALID";
+  if (
+    error instanceof KnowledgeGraphValidationError ||
+    (error instanceof Error && error.message.startsWith("AI_RELATED_"))
+  )
+    return "PROVIDER_SCHEMA_INVALID";
   return "PROVIDER_UNAVAILABLE";
 }
 
@@ -99,6 +110,9 @@ function aiWarningMessage(code: string) {
     PROVIDER_MODEL_NOT_FOUND: "AI 模型不存在或接口地址不正确。",
     PROVIDER_RATE_LIMITED: "AI 服务请求过于频繁。",
     PROVIDER_TIMEOUT: "AI 服务响应超时。",
+    PROVIDER_HTTP_ERROR: "AI 服务返回了 HTTP 错误。",
+    PROVIDER_EMPTY_RESPONSE: "AI 服务返回了空响应。",
+    PROVIDER_UNREADABLE_RESPONSE: "AI 服务返回了不可读取的响应。",
     PROVIDER_BAD_RESPONSE: "AI 服务返回了无法读取的响应。",
     PROVIDER_SCHEMA_INVALID: "AI 返回的 RELATED 关系格式无效。",
     PROVIDER_UNAVAILABLE: "AI 服务暂时不可用。",
