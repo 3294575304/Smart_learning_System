@@ -69,4 +69,5 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   ATTENDANCE_SESSION_UPDATED: "更新签到场次",
   ATTENDANCE_SIGNED: "学生签到",
   ATTENDANCE_CORRECTED: "纠正出勤记录",
+  OUTCOME_ATTAINMENT_GENERATED: "生成课程目标达成度",
 };

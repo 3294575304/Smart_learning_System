@@ -1,14 +1,12 @@
 import { Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
-import { GradebookWorkspace } from "@/components/courses/gradebook-workspace";
+import { OutcomeAttainmentWorkspace } from "@/components/courses/outcome-attainment-workspace";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
 import { gradebookIdSchema } from "@/services/gradebook/schemas";
-
-export default async function GradebookPage({
+export default async function Page({
   params,
 }: {
   params: Promise<{ courseId: string; gradebookId: string }>;
@@ -21,21 +19,18 @@ export default async function GradebookPage({
   return (
     <section className="space-y-6">
       <PageHeader
-        title="班级成绩台账"
-        description="维护成绩证据、预览导入、复算并发布不可变正式结果。"
+        title="课程目标达成度"
+        description="从正式教学大纲目标和映射下钻到考核项目及学生成绩证据。"
         actions={
           <Link
             className="rounded-md border bg-white px-4 py-2 text-sm"
-            href={`/teacher/courses/${courseId.data}/gradebook`}
+            href={`/teacher/courses/${courseId.data}/gradebook/${gradebookId.data}`}
           >
-            返回台账列表
+            返回成绩台账
           </Link>
         }
       />
-      <GradebookWorkspace
-        gradebookId={gradebookId.data}
-        courseId={courseId.data}
-      />
+      <OutcomeAttainmentWorkspace gradebookId={gradebookId.data} />
     </section>
   );
 }

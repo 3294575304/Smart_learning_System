@@ -76,6 +76,7 @@ enum AuditAction {
   ATTENDANCE_SESSION_UPDATED
   ATTENDANCE_SIGNED
   ATTENDANCE_CORRECTED
+  OUTCOME_ATTAINMENT_GENERATED
 }
 
 enum QuestionGraphBindingType {
@@ -131,6 +132,13 @@ enum AuditTargetType {
   GRADEBOOK_PUBLICATION
   ATTENDANCE_SESSION
   ATTENDANCE_RECORD
+  OUTCOME_ATTAINMENT_RUN
+}
+
+enum OutcomeStudentStatus {
+  INCLUDED
+  EXCLUDED_MISSING
+  EXCLUDED_EXEMPT
 }
 
 enum AttendanceSessionStatus {
@@ -525,6 +533,8 @@ model User {
   createdAttendanceSessions          AttendanceSession[]                 @relation("AttendanceSessionTeacher")
   studentAttendanceRecords           AttendanceRecord[]                  @relation("AttendanceRecordStudent")
   attendanceRecordRevisions          AttendanceRecordRevision[]          @relation("AttendanceRevisionActor")
+  generatedOutcomeAttainmentRuns     CourseOutcomeAttainmentRun[]        @relation("OutcomeAttainmentGeneratedBy")
+  studentOutcomeAttainmentResults    StudentOutcomeAttainmentResult[]    @relation("OutcomeAttainmentStudent")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -766,6 +776,7 @@ model Course {
   gradebooks                            CourseGradebook[]
   gradeImportBatches                    GradeImportBatch[]
   attendanceSessions                    AttendanceSession[]
+  outcomeAttainmentRuns                 CourseOutcomeAttainmentRun[]
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -998,6 +1009,7 @@ model PublishedAssessmentScheme {
   publishedAssessmentOutcomeMappings PublishedAssessmentOutcomeMapping[]
   gradebooks                         CourseGradebook[]
   gradeCalculationRevisions          StudentCourseGradeRevision[]
+  outcomeAttainmentRuns              CourseOutcomeAttainmentRun[]
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
@@ -1017,8 +1029,9 @@ model PublishedCourseOutcome {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  scheme   PublishedAssessmentScheme           @relation(fields: [schemeId], references: [id], onDelete: Restrict)
-  mappings PublishedAssessmentOutcomeMapping[]
+  scheme            PublishedAssessmentScheme           @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  mappings          PublishedAssessmentOutcomeMapping[]
+  attainmentResults CourseOutcomeAttainmentResult[]
 
   @@unique([schemeId, code])
   @@unique([schemeId, sortOrder])
@@ -1093,6 +1106,7 @@ model CourseGradebook {
   calculationRevisions   StudentCourseGradeRevision[]
   publications           GradebookPublication[]              @relation("GradebookPublicationHistory")
   importBatches          GradeImportBatch[]
+  outcomeAttainmentRuns  CourseOutcomeAttainmentRun[]
 
   @@unique([courseId, classroomId, schemeId])
   @@index([courseId, classroomId, createdAt])
@@ -1260,12 +1274,13 @@ model StudentCourseGradeRevision {
   createdAt              DateTime                     @default(now())
   updatedAt              DateTime                     @updatedAt
 
-  state           StudentCourseGradeState       @relation(fields: [stateId], references: [id], onDelete: Restrict)
-  gradebook       CourseGradebook               @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
-  scheme          PublishedAssessmentScheme     @relation(fields: [schemeId], references: [id], onDelete: Restrict)
-  student         User                          @relation("StudentCourseGradeRevisions", fields: [studentId], references: [id], onDelete: Restrict)
-  calculatedBy    User                          @relation("CourseGradeCalculatedBy", fields: [calculatedById], references: [id], onDelete: Restrict)
-  publicationRows GradebookPublicationStudent[]
+  state                    StudentCourseGradeState          @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  gradebook                CourseGradebook                  @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  scheme                   PublishedAssessmentScheme        @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  student                  User                             @relation("StudentCourseGradeRevisions", fields: [studentId], references: [id], onDelete: Restrict)
+  calculatedBy             User                             @relation("CourseGradeCalculatedBy", fields: [calculatedById], references: [id], onDelete: Restrict)
+  publicationRows          GradebookPublicationStudent[]
+  outcomeAttainmentResults StudentOutcomeAttainmentResult[]
 
   @@unique([stateId, revisionNumber])
   @@unique([stateId, inputFingerprint])
@@ -1284,10 +1299,11 @@ model GradebookPublication {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  gradebook   CourseGradebook               @relation("GradebookPublicationHistory", fields: [gradebookId], references: [id], onDelete: Restrict)
-  currentFor  CourseGradebook?              @relation("CurrentGradebookPublication")
-  publishedBy User                          @relation("GradebookPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
-  students    GradebookPublicationStudent[]
+  gradebook             CourseGradebook               @relation("GradebookPublicationHistory", fields: [gradebookId], references: [id], onDelete: Restrict)
+  currentFor            CourseGradebook?              @relation("CurrentGradebookPublication")
+  publishedBy           User                          @relation("GradebookPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  students              GradebookPublicationStudent[]
+  outcomeAttainmentRuns CourseOutcomeAttainmentRun[]
 
   @@unique([gradebookId, versionNumber])
   @@unique([gradebookId, inputFingerprint])
@@ -1308,6 +1324,82 @@ model GradebookPublicationStudent {
 
   @@unique([publicationId, studentId])
   @@index([studentId, publicationId])
+  @@index([gradeRevisionId])
+}
+
+model CourseOutcomeAttainmentRun {
+  id                        String   @id @default(cuid())
+  courseId                  String
+  classroomId               String
+  gradebookId               String
+  schemeId                  String
+  gradebookPublicationId    String
+  sourceSyllabusStructureId String?
+  versionNumber             Int
+  inputFingerprint          String   @db.Char(64)
+  calculationRuleVersion    String   @db.VarChar(50)
+  inputSnapshotJson         Json
+  generatedById             String
+  calculatedAt              DateTime @default(now())
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  course      Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classroom   Classroom                       @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  gradebook   CourseGradebook                 @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  scheme      PublishedAssessmentScheme       @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  publication GradebookPublication            @relation(fields: [gradebookPublicationId], references: [id], onDelete: Restrict)
+  generatedBy User                            @relation("OutcomeAttainmentGeneratedBy", fields: [generatedById], references: [id], onDelete: Restrict)
+  results     CourseOutcomeAttainmentResult[]
+
+  @@unique([gradebookPublicationId, calculationRuleVersion])
+  @@unique([gradebookId, versionNumber])
+  @@index([courseId, classroomId, calculatedAt])
+  @@index([schemeId, calculatedAt])
+  @@index([sourceSyllabusStructureId])
+}
+
+model CourseOutcomeAttainmentResult {
+  id               String   @id @default(cuid())
+  runId            String
+  outcomeId        String
+  outcomeCode      String   @db.VarChar(100)
+  outcomeTitle     String   @db.VarChar(300)
+  threshold        Decimal  @db.Decimal(5, 2)
+  meanScore        Decimal? @db.Decimal(8, 4)
+  attainmentIndex  Decimal? @db.Decimal(8, 4)
+  attained         Boolean?
+  participantCount Int
+  excludedCount    Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  run      CourseOutcomeAttainmentRun       @relation(fields: [runId], references: [id], onDelete: Restrict)
+  outcome  PublishedCourseOutcome           @relation(fields: [outcomeId], references: [id], onDelete: Restrict)
+  students StudentOutcomeAttainmentResult[]
+
+  @@unique([runId, outcomeId])
+  @@index([outcomeId, createdAt])
+}
+
+model StudentOutcomeAttainmentResult {
+  id              String               @id @default(cuid())
+  resultId        String
+  studentId       String
+  gradeRevisionId String
+  status          OutcomeStudentStatus
+  score           Decimal?             @db.Decimal(8, 4)
+  attained        Boolean?
+  evidenceJson    Json
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  result        CourseOutcomeAttainmentResult @relation(fields: [resultId], references: [id], onDelete: Restrict)
+  student       User                          @relation("OutcomeAttainmentStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  gradeRevision StudentCourseGradeRevision    @relation(fields: [gradeRevisionId], references: [id], onDelete: Restrict)
+
+  @@unique([resultId, studentId])
+  @@index([studentId, createdAt])
   @@index([gradeRevisionId])
 }
 
@@ -1572,6 +1664,7 @@ model Classroom {
   gradebooks                 CourseGradebook[]
   gradeImportBatches         GradeImportBatch[]
   attendanceSessions         AttendanceSession[]
+  outcomeAttainmentRuns      CourseOutcomeAttainmentRun[]
 
   @@index([teacherId, status])
   @@index([courseId, status])

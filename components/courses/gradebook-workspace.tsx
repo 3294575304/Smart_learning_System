@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 type Revision = {
   revisionNumber: number;
@@ -62,7 +63,13 @@ async function requestJson(url: string, init?: RequestInit) {
   return payload.data;
 }
 
-export function GradebookWorkspace({ gradebookId }: { gradebookId: string }) {
+export function GradebookWorkspace({
+  gradebookId,
+  courseId,
+}: {
+  gradebookId: string;
+  courseId: string;
+}) {
   const [data, setData] = useState<Workspace | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -229,6 +236,12 @@ export function GradebookWorkspace({ gradebookId }: { gradebookId: string }) {
           >
             导出固定模板
           </a>
+          <Link
+            className="rounded-md border px-3 py-2 text-sm"
+            href={`/teacher/courses/${courseId}/gradebook/${gradebookId}/outcome-attainment`}
+          >
+            课程目标达成度
+          </Link>
         </div>
       </section>
       <section className="rounded-xl border bg-white p-5">
