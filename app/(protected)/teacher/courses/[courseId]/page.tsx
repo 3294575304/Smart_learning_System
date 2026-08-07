@@ -134,6 +134,19 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
           <CourseSyllabusReviewPanel courseId={course.id} />
 
           <div className="bg-card rounded-xl border p-5">
+            <h2 className="font-semibold">课程考核方案</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              从正式大纲生成考核项目、课程目标比例和评分标准，审核后发布版本。
+            </p>
+            <Link
+              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+              href={`/teacher/courses/${course.id}/assessment-scheme`}
+            >
+              进入考核方案
+            </Link>
+          </div>
+
+          <div className="bg-card rounded-xl border p-5">
             <h2 className="font-semibold">Python 课程知识图谱</h2>
             <p className="text-muted-foreground mt-1 text-sm">
               基于已发布的正式大纲结构生成、审核并发布版本化图谱。

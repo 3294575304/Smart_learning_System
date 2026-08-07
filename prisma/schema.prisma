@@ -62,6 +62,9 @@ enum AuditAction {
   KNOWLEDGE_GRAPH_PUBLISHED
   QUESTION_GRAPH_BINDINGS_UPDATED
   QUESTION_GRAPH_BINDINGS_CLEARED
+  ASSESSMENT_SCHEME_DRAFT_GENERATED
+  ASSESSMENT_SCHEME_REVIEW_SAVED
+  ASSESSMENT_SCHEME_PUBLISHED
 }
 
 enum QuestionGraphBindingType {
@@ -108,6 +111,26 @@ enum AuditTargetType {
   KNOWLEDGE_GRAPH_DRAFT
   KNOWLEDGE_GRAPH_REVIEW
   KNOWLEDGE_GRAPH_VERSION
+  ASSESSMENT_SCHEME_DRAFT
+  ASSESSMENT_SCHEME_REVIEW
+  ASSESSMENT_SCHEME_VERSION
+}
+
+enum AssessmentComponentType {
+  REGULAR_PERFORMANCE
+  COURSE_ASSIGNMENT
+  MIDTERM_EXAM
+  COURSE_EXPERIMENT
+  FINAL_EXAM
+  ATTENDANCE
+  OTHER
+}
+
+enum GradeSourceType {
+  PLATFORM_ASSIGNMENT
+  ATTENDANCE
+  MANUAL
+  TEMPLATE_IMPORT
 }
 
 enum NotificationType {
@@ -403,6 +426,9 @@ model User {
   matchedStudentImportRows      StudentImportRow[]                 @relation("StudentImportMatchedUser")
   createdStudentImportRows      StudentImportRow[]                 @relation("StudentImportCreatedUser")
   studentIdentity               StudentIdentity?
+  createdAssessmentSchemeDrafts AssessmentSchemeDraft[]            @relation("AssessmentSchemeDraftCreatedBy")
+  assessmentSchemeReviews       AssessmentSchemeReviewRevision[]   @relation("AssessmentSchemeReviewEditedBy")
+  publishedAssessmentSchemes    PublishedAssessmentScheme[]        @relation("AssessmentSchemePublishedBy")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -613,6 +639,7 @@ model Course {
   archivedAt                              DateTime?
   currentPublishedSyllabusStructureId     String?      @unique
   currentPublishedKnowledgeGraphVersionId String?      @unique
+  currentPublishedAssessmentSchemeId      String?      @unique
   createdAt                               DateTime     @default(now())
   updatedAt                               DateTime     @updatedAt
 
@@ -629,6 +656,10 @@ model Course {
   knowledgeGraphReviewRevisions         KnowledgeGraphReviewRevision[]
   publishedKnowledgeGraphVersions       PublishedKnowledgeGraphVersion[]    @relation("PublishedKnowledgeGraphCourse")
   currentPublishedKnowledgeGraphVersion PublishedKnowledgeGraphVersion?     @relation("CurrentPublishedKnowledgeGraph", fields: [currentPublishedKnowledgeGraphVersionId], references: [id], onDelete: SetNull)
+  assessmentSchemeDrafts                AssessmentSchemeDraft[]
+  assessmentSchemeReviewRevisions       AssessmentSchemeReviewRevision[]
+  publishedAssessmentSchemes            PublishedAssessmentScheme[]         @relation("PublishedAssessmentSchemeCourse")
+  currentPublishedAssessmentScheme      PublishedAssessmentScheme?          @relation("CurrentPublishedAssessmentScheme", fields: [currentPublishedAssessmentSchemeId], references: [id], onDelete: SetNull)
   knowledgeGraphConcepts                KnowledgeGraphConcept[]
   questionGraphBindingSets              QuestionKnowledgeGraphBindingSet[]
   questionGraphBindings                 QuestionKnowledgeGraphBinding[]
@@ -788,11 +819,151 @@ model PublishedSyllabusStructure {
   knowledgeGraphDrafts          KnowledgeGraphDraft[]
   knowledgeGraphReviewRevisions KnowledgeGraphReviewRevision[]
   publishedKnowledgeGraphs      PublishedKnowledgeGraphVersion[]
+  assessmentSchemeDrafts        AssessmentSchemeDraft[]
+  assessmentSchemeReviews       AssessmentSchemeReviewRevision[]
+  publishedAssessmentSchemes    PublishedAssessmentScheme[]
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
   @@index([syllabusId])
   @@index([publishedById, publishedAt])
+}
+
+model AssessmentSchemeDraft {
+  id                                 String   @id @default(cuid())
+  courseId                           String
+  sourcePublishedSyllabusStructureId String?
+  createdById                        String
+  revisionNumber                     Int      @default(1)
+  structureJson                      Json
+  sourceFingerprint                  String   @db.Char(64)
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
+
+  course                           Course                           @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  sourcePublishedSyllabusStructure PublishedSyllabusStructure?      @relation(fields: [sourcePublishedSyllabusStructureId], references: [id], onDelete: Restrict)
+  createdBy                        User                             @relation("AssessmentSchemeDraftCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewRevisions                  AssessmentSchemeReviewRevision[]
+
+  @@unique([courseId])
+  @@index([sourcePublishedSyllabusStructureId])
+  @@index([createdById, createdAt])
+}
+
+model AssessmentSchemeReviewRevision {
+  id                                 String   @id @default(cuid())
+  draftId                            String
+  courseId                           String
+  sourcePublishedSyllabusStructureId String?
+  editedById                         String
+  revisionNumber                     Int
+  structureJson                      Json
+  sourceFingerprint                  String   @db.Char(64)
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
+
+  draft                            AssessmentSchemeDraft       @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  course                           Course                      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  sourcePublishedSyllabusStructure PublishedSyllabusStructure? @relation(fields: [sourcePublishedSyllabusStructureId], references: [id], onDelete: Restrict)
+  editedBy                         User                        @relation("AssessmentSchemeReviewEditedBy", fields: [editedById], references: [id], onDelete: Restrict)
+  publishedScheme                  PublishedAssessmentScheme?
+
+  @@unique([draftId, revisionNumber])
+  @@index([courseId, createdAt])
+  @@index([sourcePublishedSyllabusStructureId])
+  @@index([editedById, createdAt])
+}
+
+model PublishedAssessmentScheme {
+  id                                 String   @id @default(cuid())
+  courseId                           String
+  sourcePublishedSyllabusStructureId String?
+  reviewRevisionId                   String   @unique
+  publishedById                      String
+  versionNumber                      Int
+  structureJson                      Json
+  sourceFingerprint                  String   @db.Char(64)
+  calculationRuleVersion             String   @db.VarChar(50)
+  publishedAt                        DateTime @default(now())
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
+
+  course                             Course                              @relation("PublishedAssessmentSchemeCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  currentForCourse                   Course?                             @relation("CurrentPublishedAssessmentScheme")
+  sourcePublishedSyllabusStructure   PublishedSyllabusStructure?         @relation(fields: [sourcePublishedSyllabusStructureId], references: [id], onDelete: Restrict)
+  reviewRevision                     AssessmentSchemeReviewRevision      @relation(fields: [reviewRevisionId], references: [id], onDelete: Restrict)
+  publishedBy                        User                                @relation("AssessmentSchemePublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  outcomes                           PublishedCourseOutcome[]
+  components                         PublishedAssessmentComponent[]
+  publishedAssessmentOutcomeMappings PublishedAssessmentOutcomeMapping[]
+
+  @@unique([courseId, versionNumber])
+  @@index([courseId, publishedAt])
+  @@index([sourcePublishedSyllabusStructureId])
+  @@index([publishedById, publishedAt])
+}
+
+model PublishedCourseOutcome {
+  id                  String   @id @default(cuid())
+  schemeId            String
+  code                String   @db.VarChar(100)
+  title               String   @db.VarChar(300)
+  description         String   @db.Text
+  attainmentThreshold Decimal  @db.Decimal(5, 2)
+  sortOrder           Int
+  sourceJson          Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  scheme   PublishedAssessmentScheme           @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  mappings PublishedAssessmentOutcomeMapping[]
+
+  @@unique([schemeId, code])
+  @@unique([schemeId, sortOrder])
+  @@index([schemeId, sortOrder])
+}
+
+model PublishedAssessmentComponent {
+  id         String                  @id @default(cuid())
+  schemeId   String
+  code       String                  @db.VarChar(100)
+  name       String                  @db.VarChar(300)
+  type       AssessmentComponentType
+  fullScore  Decimal                 @db.Decimal(8, 2)
+  weight     Decimal                 @db.Decimal(7, 4)
+  sourceType GradeSourceType
+  sortOrder  Int
+  enabled    Boolean                 @default(true)
+  sourceJson Json
+  rubricJson Json
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+
+  scheme   PublishedAssessmentScheme           @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  mappings PublishedAssessmentOutcomeMapping[]
+
+  @@unique([schemeId, code])
+  @@unique([schemeId, sortOrder])
+  @@index([schemeId, enabled, sortOrder])
+}
+
+model PublishedAssessmentOutcomeMapping {
+  id             String   @id @default(cuid())
+  schemeId       String
+  componentId    String
+  outcomeId      String
+  allocationRate Decimal  @db.Decimal(7, 4)
+  sourceJson     Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  scheme    PublishedAssessmentScheme    @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  component PublishedAssessmentComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  outcome   PublishedCourseOutcome       @relation(fields: [outcomeId], references: [id], onDelete: Restrict)
+
+  @@unique([componentId, outcomeId])
+  @@index([schemeId, componentId])
+  @@index([schemeId, outcomeId])
 }
 
 model KnowledgeGraphDraft {

@@ -156,7 +156,10 @@ interface WriteGovernanceAuditInput {
     | typeof AuditTargetType.SYLLABUS_STRUCTURE
     | typeof AuditTargetType.KNOWLEDGE_GRAPH_DRAFT
     | typeof AuditTargetType.KNOWLEDGE_GRAPH_REVIEW
-    | typeof AuditTargetType.KNOWLEDGE_GRAPH_VERSION;
+    | typeof AuditTargetType.KNOWLEDGE_GRAPH_VERSION
+    | typeof AuditTargetType.ASSESSMENT_SCHEME_DRAFT
+    | typeof AuditTargetType.ASSESSMENT_SCHEME_REVIEW
+    | typeof AuditTargetType.ASSESSMENT_SCHEME_VERSION;
   targetId: string;
   summary: string;
   beforeData: AuditConfigSnapshot | null;

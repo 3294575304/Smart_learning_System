@@ -1058,6 +1058,17 @@ export async function deleteTeacherCourse(
             );
           }
 
+          const publishedAssessmentSchemeCount =
+            await transaction.publishedAssessmentScheme.count({
+              where: { courseId },
+            });
+          if (publishedAssessmentSchemeCount > 0) {
+            throw new CourseOperationError(
+              "该课程已经发布正式考核方案，必须保留历史版本，不能删除。",
+              409,
+            );
+          }
+
           const [courseFiles, syllabi] = await Promise.all([
             transaction.courseFileVersion.findMany({
               where: { courseId },
@@ -1083,6 +1094,7 @@ export async function deleteTeacherCourse(
             data: {
               currentPublishedSyllabusStructureId: null,
               currentPublishedKnowledgeGraphVersionId: null,
+              currentPublishedAssessmentSchemeId: null,
             },
           });
           const graphVersions =
@@ -1113,6 +1125,12 @@ export async function deleteTeacherCourse(
             where: { courseId },
           });
           await transaction.knowledgeGraphConcept.deleteMany({
+            where: { courseId },
+          });
+          await transaction.assessmentSchemeReviewRevision.deleteMany({
+            where: { courseId },
+          });
+          await transaction.assessmentSchemeDraft.deleteMany({
             where: { courseId },
           });
           await transaction.publishedSyllabusStructure.deleteMany({
