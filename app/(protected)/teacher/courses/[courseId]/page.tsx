@@ -147,6 +147,19 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
           </div>
 
           <div className="bg-card rounded-xl border p-5">
+            <h2 className="font-semibold">成绩与出勤台账</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              管理班级成绩项目、平台作业同步、模板导入、正式成绩和课程目标达成度。
+            </p>
+            <Link
+              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+              href={`/teacher/courses/${course.id}/gradebook`}
+            >
+              进入成绩台账
+            </Link>
+          </div>
+
+          <div className="bg-card rounded-xl border p-5">
             <h2 className="font-semibold">Python 课程知识图谱</h2>
             <p className="text-muted-foreground mt-1 text-sm">
               基于已发布的正式大纲结构生成、审核并发布版本化图谱。

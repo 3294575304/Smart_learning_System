@@ -65,6 +65,13 @@ enum AuditAction {
   ASSESSMENT_SCHEME_DRAFT_GENERATED
   ASSESSMENT_SCHEME_REVIEW_SAVED
   ASSESSMENT_SCHEME_PUBLISHED
+  GRADEBOOK_CREATED
+  GRADE_ENTRY_CORRECTED
+  PLATFORM_GRADES_SYNCED
+  GRADE_IMPORT_PREVIEWED
+  GRADE_IMPORT_EXECUTED
+  GRADEBOOK_PUBLISHED
+  GRADE_EXPORT_DOWNLOADED
 }
 
 enum QuestionGraphBindingType {
@@ -114,6 +121,10 @@ enum AuditTargetType {
   ASSESSMENT_SCHEME_DRAFT
   ASSESSMENT_SCHEME_REVIEW
   ASSESSMENT_SCHEME_VERSION
+  GRADEBOOK
+  GRADE_ENTRY
+  GRADE_IMPORT_BATCH
+  GRADEBOOK_PUBLICATION
 }
 
 enum AssessmentComponentType {
@@ -131,6 +142,46 @@ enum GradeSourceType {
   ATTENDANCE
   MANUAL
   TEMPLATE_IMPORT
+}
+
+enum GradeValueStatus {
+  NOT_ENTERED
+  SCORED
+  ABSENT
+  DEFERRED
+  LEAVE
+  EXEMPT
+  CHEATING
+  OTHER
+}
+
+enum CourseGradeCalculationStatus {
+  COMPLETE
+  INCOMPLETE
+  EXEMPT
+}
+
+enum GradeImportBatchStatus {
+  PREVIEW_READY
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum GradeImportPreviewStatus {
+  VALID
+  UNKNOWN_STUDENT
+  DUPLICATE_STUDENT
+  COURSE_MISMATCH
+  INVALID
+}
+
+enum GradeImportExecutionStatus {
+  PENDING
+  APPLIED
+  SKIPPED
+  FAILED
 }
 
 enum NotificationType {
@@ -390,45 +441,59 @@ model User {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
-  profile                       UserProfile?
-  taughtClassrooms              Classroom[]                        @relation("ClassroomTeacher")
-  taughtCourses                 Course[]                           @relation("CourseTeacher")
-  classMemberships              ClassMembership[]                  @relation("ClassMembershipStudent")
-  createdQuestions              Question[]                         @relation("QuestionCreator")
-  createdKnowledgePoints        KnowledgePoint[]                   @relation("KnowledgePointCreator")
-  assignments                   Assignment[]                       @relation("AssignmentTeacher")
-  submissions                   Submission[]                       @relation("SubmissionStudent")
-  gradedAnswers                 StudentAnswer[]                    @relation("StudentAnswerGrader")
-  wrongQuestions                WrongQuestion[]                    @relation("WrongQuestionStudent")
-  knowledgeMasteries            StudentKnowledgeMastery[]          @relation("MasteryStudent")
-  requestedAIAnalyses           AIAnalysis[]                       @relation("AIAnalysisRequester")
-  studentAIAnalyses             AIAnalysis[]                       @relation("AIAnalysisStudent")
-  personalizedRecommendations   PersonalizedRecommendation[]
-  aiTutoringRecords             AITutoringRecord[]
-  authSessions                  AuthSession[]
-  auditLogs                     AuditLog[]                         @relation("AuditActor")
-  updatedSystemConfigs          SystemConfig[]                     @relation("SystemConfigUpdater")
-  notifications                 Notification[]                     @relation("NotificationRecipient")
-  createdAnnouncements          Announcement[]                     @relation("AnnouncementCreator")
-  publishedAnnouncements        Announcement[]                     @relation("AnnouncementPublisher")
-  uploadedCourseFiles           CourseFileVersion[]                @relation("CourseFileUploadedBy")
-  uploadedCourseSyllabi         CourseSyllabus[]                   @relation("CourseSyllabusUploadedBy")
-  requestedSyllabusParses       SyllabusParseDraft[]               @relation("SyllabusParseRequestedBy")
-  syllabusReviewRevisions       SyllabusReviewRevision[]           @relation("SyllabusReviewEditedBy")
-  publishedSyllabusStructures   PublishedSyllabusStructure[]       @relation("SyllabusStructurePublishedBy")
-  requestedKnowledgeGraphDrafts KnowledgeGraphDraft[]              @relation("KnowledgeGraphDraftRequestedBy")
-  knowledgeGraphReviewRevisions KnowledgeGraphReviewRevision[]     @relation("KnowledgeGraphReviewEditedBy")
-  publishedKnowledgeGraphs      PublishedKnowledgeGraphVersion[]   @relation("KnowledgeGraphPublishedBy")
-  createdQuestionGraphBindings  QuestionKnowledgeGraphBinding[]    @relation("QuestionGraphBindingCreator")
-  conceptAnswerEvidences        StudentAnswerConceptEvidence[]     @relation("ConceptEvidenceStudent")
-  courseConceptMasteryStates    StudentCourseConceptMasteryState[] @relation("CourseConceptMasteryStudent")
-  createdStudentImportBatches   StudentImportBatch[]               @relation("StudentImportBatchCreatedBy")
-  matchedStudentImportRows      StudentImportRow[]                 @relation("StudentImportMatchedUser")
-  createdStudentImportRows      StudentImportRow[]                 @relation("StudentImportCreatedUser")
-  studentIdentity               StudentIdentity?
-  createdAssessmentSchemeDrafts AssessmentSchemeDraft[]            @relation("AssessmentSchemeDraftCreatedBy")
-  assessmentSchemeReviews       AssessmentSchemeReviewRevision[]   @relation("AssessmentSchemeReviewEditedBy")
-  publishedAssessmentSchemes    PublishedAssessmentScheme[]        @relation("AssessmentSchemePublishedBy")
+  profile                            UserProfile?
+  taughtClassrooms                   Classroom[]                         @relation("ClassroomTeacher")
+  taughtCourses                      Course[]                            @relation("CourseTeacher")
+  classMemberships                   ClassMembership[]                   @relation("ClassMembershipStudent")
+  createdQuestions                   Question[]                          @relation("QuestionCreator")
+  createdKnowledgePoints             KnowledgePoint[]                    @relation("KnowledgePointCreator")
+  assignments                        Assignment[]                        @relation("AssignmentTeacher")
+  submissions                        Submission[]                        @relation("SubmissionStudent")
+  gradedAnswers                      StudentAnswer[]                     @relation("StudentAnswerGrader")
+  wrongQuestions                     WrongQuestion[]                     @relation("WrongQuestionStudent")
+  knowledgeMasteries                 StudentKnowledgeMastery[]           @relation("MasteryStudent")
+  requestedAIAnalyses                AIAnalysis[]                        @relation("AIAnalysisRequester")
+  studentAIAnalyses                  AIAnalysis[]                        @relation("AIAnalysisStudent")
+  personalizedRecommendations        PersonalizedRecommendation[]
+  aiTutoringRecords                  AITutoringRecord[]
+  authSessions                       AuthSession[]
+  auditLogs                          AuditLog[]                          @relation("AuditActor")
+  updatedSystemConfigs               SystemConfig[]                      @relation("SystemConfigUpdater")
+  notifications                      Notification[]                      @relation("NotificationRecipient")
+  createdAnnouncements               Announcement[]                      @relation("AnnouncementCreator")
+  publishedAnnouncements             Announcement[]                      @relation("AnnouncementPublisher")
+  uploadedCourseFiles                CourseFileVersion[]                 @relation("CourseFileUploadedBy")
+  uploadedCourseSyllabi              CourseSyllabus[]                    @relation("CourseSyllabusUploadedBy")
+  requestedSyllabusParses            SyllabusParseDraft[]                @relation("SyllabusParseRequestedBy")
+  syllabusReviewRevisions            SyllabusReviewRevision[]            @relation("SyllabusReviewEditedBy")
+  publishedSyllabusStructures        PublishedSyllabusStructure[]        @relation("SyllabusStructurePublishedBy")
+  requestedKnowledgeGraphDrafts      KnowledgeGraphDraft[]               @relation("KnowledgeGraphDraftRequestedBy")
+  knowledgeGraphReviewRevisions      KnowledgeGraphReviewRevision[]      @relation("KnowledgeGraphReviewEditedBy")
+  publishedKnowledgeGraphs           PublishedKnowledgeGraphVersion[]    @relation("KnowledgeGraphPublishedBy")
+  createdQuestionGraphBindings       QuestionKnowledgeGraphBinding[]     @relation("QuestionGraphBindingCreator")
+  conceptAnswerEvidences             StudentAnswerConceptEvidence[]      @relation("ConceptEvidenceStudent")
+  courseConceptMasteryStates         StudentCourseConceptMasteryState[]  @relation("CourseConceptMasteryStudent")
+  createdStudentImportBatches        StudentImportBatch[]                @relation("StudentImportBatchCreatedBy")
+  matchedStudentImportRows           StudentImportRow[]                  @relation("StudentImportMatchedUser")
+  createdStudentImportRows           StudentImportRow[]                  @relation("StudentImportCreatedUser")
+  studentIdentity                    StudentIdentity?
+  createdAssessmentSchemeDrafts      AssessmentSchemeDraft[]             @relation("AssessmentSchemeDraftCreatedBy")
+  assessmentSchemeReviews            AssessmentSchemeReviewRevision[]    @relation("AssessmentSchemeReviewEditedBy")
+  publishedAssessmentSchemes         PublishedAssessmentScheme[]         @relation("AssessmentSchemePublishedBy")
+  createdGradebooks                  CourseGradebook[]                   @relation("GradebookCreatedBy")
+  studentGradeEntries                StudentGradeEntry[]                 @relation("StudentGradeEntries")
+  studentGradeEntryRevisions         StudentGradeEntryRevision[]         @relation("StudentGradeEntryRevisions")
+  changedGradeEntryRevisions         StudentGradeEntryRevision[]         @relation("GradeEntryRevisionChangedBy")
+  studentFinalGradeOverrides         StudentFinalGradeOverride[]         @relation("StudentFinalGradeOverrides")
+  studentFinalGradeOverrideRevisions StudentFinalGradeOverrideRevision[] @relation("StudentFinalGradeOverrideRevisions")
+  changedFinalGradeOverrides         StudentFinalGradeOverrideRevision[] @relation("FinalGradeOverrideChangedBy")
+  studentCourseGradeStates           StudentCourseGradeState[]           @relation("StudentCourseGradeStates")
+  studentCourseGradeRevisions        StudentCourseGradeRevision[]        @relation("StudentCourseGradeRevisions")
+  calculatedCourseGradeRevisions     StudentCourseGradeRevision[]        @relation("CourseGradeCalculatedBy")
+  publishedGradebooks                GradebookPublication[]              @relation("GradebookPublishedBy")
+  gradebookPublicationRows           GradebookPublicationStudent[]       @relation("GradebookPublicationStudents")
+  createdGradeImportBatches          GradeImportBatch[]                  @relation("GradeImportCreatedBy")
+  matchedGradeImportRows             GradeImportRow[]                    @relation("GradeImportMatchedStudent")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -667,6 +732,8 @@ model Course {
   conceptAnswerEvidences                StudentAnswerConceptEvidence[]
   studentConceptMasteryStates           StudentCourseConceptMasteryState[]
   studentImportBatches                  StudentImportBatch[]                @relation("StudentImportCourse")
+  gradebooks                            CourseGradebook[]
+  gradeImportBatches                    GradeImportBatch[]
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -697,6 +764,7 @@ model CourseFileVersion {
   uploadedBy              User                 @relation("CourseFileUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
   sourceImportBatches     StudentImportBatch[] @relation("StudentImportSourceFile")
   accountSheetImportBatch StudentImportBatch?  @relation("StudentImportAccountSheet")
+  gradeImportBatches      GradeImportBatch[]   @relation("GradeImportSourceFile")
 
   @@unique([courseId, fileKind, fileKey, versionNumber])
   @@unique([classroomId, fileKind, fileKey, versionNumber])
@@ -896,6 +964,8 @@ model PublishedAssessmentScheme {
   outcomes                           PublishedCourseOutcome[]
   components                         PublishedAssessmentComponent[]
   publishedAssessmentOutcomeMappings PublishedAssessmentOutcomeMapping[]
+  gradebooks                         CourseGradebook[]
+  gradeCalculationRevisions          StudentCourseGradeRevision[]
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
@@ -939,8 +1009,9 @@ model PublishedAssessmentComponent {
   createdAt  DateTime                @default(now())
   updatedAt  DateTime                @updatedAt
 
-  scheme   PublishedAssessmentScheme           @relation(fields: [schemeId], references: [id], onDelete: Restrict)
-  mappings PublishedAssessmentOutcomeMapping[]
+  scheme     PublishedAssessmentScheme           @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  mappings   PublishedAssessmentOutcomeMapping[]
+  gradeItems GradeItem[]
 
   @@unique([schemeId, code])
   @@unique([schemeId, sortOrder])
@@ -964,6 +1035,315 @@ model PublishedAssessmentOutcomeMapping {
   @@unique([componentId, outcomeId])
   @@index([schemeId, componentId])
   @@index([schemeId, outcomeId])
+}
+
+model CourseGradebook {
+  id                   String   @id @default(cuid())
+  courseId             String
+  classroomId          String
+  schemeId             String
+  createdById          String
+  currentPublicationId String?  @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  course                 Course                              @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classroom              Classroom                           @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  scheme                 PublishedAssessmentScheme           @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  createdBy              User                                @relation("GradebookCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  currentPublication     GradebookPublication?               @relation("CurrentGradebookPublication", fields: [currentPublicationId], references: [id], onDelete: SetNull)
+  gradeItems             GradeItem[]
+  gradeEntries           StudentGradeEntry[]
+  gradeRevisions         StudentGradeEntryRevision[]
+  finalOverrides         StudentFinalGradeOverride[]
+  finalOverrideRevisions StudentFinalGradeOverrideRevision[]
+  calculationStates      StudentCourseGradeState[]
+  calculationRevisions   StudentCourseGradeRevision[]
+  publications           GradebookPublication[]              @relation("GradebookPublicationHistory")
+  importBatches          GradeImportBatch[]
+
+  @@unique([courseId, classroomId, schemeId])
+  @@index([courseId, classroomId, createdAt])
+  @@index([schemeId, createdAt])
+  @@index([createdById, createdAt])
+}
+
+model GradeItem {
+  id           String          @id @default(cuid())
+  gradebookId  String
+  componentId  String
+  assignmentId String?
+  sourceKey    String          @db.VarChar(191)
+  name         String          @db.VarChar(300)
+  maxScore     Decimal         @db.Decimal(10, 4)
+  itemWeight   Decimal         @default(1) @db.Decimal(10, 4)
+  sourceType   GradeSourceType
+  sortOrder    Int
+  enabled      Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  gradebook  CourseGradebook              @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  component  PublishedAssessmentComponent @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  assignment Assignment?                  @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  entries    StudentGradeEntry[]
+  revisions  StudentGradeEntryRevision[]
+
+  @@unique([gradebookId, sourceKey])
+  @@index([gradebookId, componentId, enabled, sortOrder])
+  @@index([assignmentId])
+}
+
+model StudentGradeEntry {
+  id                    String   @id @default(cuid())
+  gradebookId           String
+  gradeItemId           String
+  studentId             String
+  currentRevisionNumber Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  gradebook CourseGradebook             @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  gradeItem GradeItem                   @relation(fields: [gradeItemId], references: [id], onDelete: Restrict)
+  student   User                        @relation("StudentGradeEntries", fields: [studentId], references: [id], onDelete: Restrict)
+  revisions StudentGradeEntryRevision[]
+
+  @@unique([gradeItemId, studentId])
+  @@index([gradebookId, studentId])
+  @@index([studentId, updatedAt])
+}
+
+model StudentGradeEntryRevision {
+  id                 String           @id @default(cuid())
+  entryId            String
+  gradebookId        String
+  gradeItemId        String
+  studentId          String
+  revisionNumber     Int
+  status             GradeValueStatus
+  score              Decimal?         @db.Decimal(10, 4)
+  sourceType         GradeSourceType
+  sourceAssignmentId String?
+  sourceSubmissionId String?
+  sourceFingerprint  String           @db.Char(64)
+  changedById        String
+  reason             String?          @db.VarChar(500)
+  effectiveAt        DateTime         @default(now())
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  entry            StudentGradeEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+  gradebook        CourseGradebook   @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  gradeItem        GradeItem         @relation(fields: [gradeItemId], references: [id], onDelete: Restrict)
+  student          User              @relation("StudentGradeEntryRevisions", fields: [studentId], references: [id], onDelete: Restrict)
+  changedBy        User              @relation("GradeEntryRevisionChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+  sourceAssignment Assignment?       @relation("GradeRevisionSourceAssignment", fields: [sourceAssignmentId], references: [id], onDelete: Restrict)
+  sourceSubmission Submission?       @relation("GradeRevisionSourceSubmission", fields: [sourceSubmissionId], references: [id], onDelete: Restrict)
+
+  @@unique([entryId, revisionNumber])
+  @@unique([entryId, sourceFingerprint])
+  @@index([gradebookId, studentId, createdAt])
+  @@index([gradeItemId, status, createdAt])
+  @@index([sourceAssignmentId])
+  @@index([sourceSubmissionId])
+  @@index([changedById, createdAt])
+}
+
+model StudentFinalGradeOverride {
+  id                    String   @id @default(cuid())
+  gradebookId           String
+  studentId             String
+  currentRevisionNumber Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  gradebook CourseGradebook                     @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  student   User                                @relation("StudentFinalGradeOverrides", fields: [studentId], references: [id], onDelete: Restrict)
+  revisions StudentFinalGradeOverrideRevision[]
+
+  @@unique([gradebookId, studentId])
+  @@index([studentId, updatedAt])
+}
+
+model StudentFinalGradeOverrideRevision {
+  id                String           @id @default(cuid())
+  overrideId        String
+  gradebookId       String
+  studentId         String
+  revisionNumber    Int
+  status            GradeValueStatus
+  score             Decimal?         @db.Decimal(10, 4)
+  sourceType        GradeSourceType
+  sourceFingerprint String           @db.Char(64)
+  sourceImportRowId String?          @unique
+  changedById       String
+  reason            String?          @db.VarChar(500)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  override        StudentFinalGradeOverride @relation(fields: [overrideId], references: [id], onDelete: Restrict)
+  gradebook       CourseGradebook           @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  student         User                      @relation("StudentFinalGradeOverrideRevisions", fields: [studentId], references: [id], onDelete: Restrict)
+  changedBy       User                      @relation("FinalGradeOverrideChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+  sourceImportRow GradeImportRow?           @relation(fields: [sourceImportRowId], references: [id], onDelete: Restrict)
+
+  @@unique([overrideId, revisionNumber])
+  @@unique([overrideId, sourceFingerprint])
+  @@index([gradebookId, studentId, createdAt])
+  @@index([changedById, createdAt])
+}
+
+model StudentCourseGradeState {
+  id          String   @id @default(cuid())
+  gradebookId String
+  studentId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  gradebook CourseGradebook              @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  student   User                         @relation("StudentCourseGradeStates", fields: [studentId], references: [id], onDelete: Restrict)
+  revisions StudentCourseGradeRevision[]
+
+  @@unique([gradebookId, studentId])
+  @@index([studentId, updatedAt])
+}
+
+model StudentCourseGradeRevision {
+  id                     String                       @id @default(cuid())
+  stateId                String
+  gradebookId            String
+  schemeId               String
+  studentId              String
+  revisionNumber         Int
+  inputFingerprint       String                       @db.Char(64)
+  calculationRuleVersion String                       @db.VarChar(50)
+  status                 CourseGradeCalculationStatus
+  calculatedScore        Decimal?                     @db.Decimal(10, 4)
+  effectiveStatus        GradeValueStatus
+  effectiveScore         Decimal?                     @db.Decimal(10, 4)
+  componentResultsJson   Json
+  inputSnapshotJson      Json
+  calculatedById         String
+  calculatedAt           DateTime                     @default(now())
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+
+  state           StudentCourseGradeState       @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  gradebook       CourseGradebook               @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  scheme          PublishedAssessmentScheme     @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  student         User                          @relation("StudentCourseGradeRevisions", fields: [studentId], references: [id], onDelete: Restrict)
+  calculatedBy    User                          @relation("CourseGradeCalculatedBy", fields: [calculatedById], references: [id], onDelete: Restrict)
+  publicationRows GradebookPublicationStudent[]
+
+  @@unique([stateId, revisionNumber])
+  @@unique([stateId, inputFingerprint])
+  @@index([gradebookId, studentId, calculatedAt])
+  @@index([schemeId, calculatedAt])
+  @@index([calculatedById, calculatedAt])
+}
+
+model GradebookPublication {
+  id               String   @id @default(cuid())
+  gradebookId      String
+  versionNumber    Int
+  inputFingerprint String   @db.Char(64)
+  publishedById    String
+  publishedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  gradebook   CourseGradebook               @relation("GradebookPublicationHistory", fields: [gradebookId], references: [id], onDelete: Restrict)
+  currentFor  CourseGradebook?              @relation("CurrentGradebookPublication")
+  publishedBy User                          @relation("GradebookPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  students    GradebookPublicationStudent[]
+
+  @@unique([gradebookId, versionNumber])
+  @@unique([gradebookId, inputFingerprint])
+  @@index([publishedById, publishedAt])
+}
+
+model GradebookPublicationStudent {
+  id              String   @id @default(cuid())
+  publicationId   String
+  studentId       String
+  gradeRevisionId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  publication   GradebookPublication       @relation(fields: [publicationId], references: [id], onDelete: Restrict)
+  student       User                       @relation("GradebookPublicationStudents", fields: [studentId], references: [id], onDelete: Restrict)
+  gradeRevision StudentCourseGradeRevision @relation(fields: [gradeRevisionId], references: [id], onDelete: Restrict)
+
+  @@unique([publicationId, studentId])
+  @@index([studentId, publicationId])
+  @@index([gradeRevisionId])
+}
+
+model GradeImportBatch {
+  id                  String                 @id @default(cuid())
+  courseId            String
+  classroomId         String
+  gradebookId         String
+  sourceFileVersionId String
+  createdById         String
+  status              GradeImportBatchStatus @default(PREVIEW_READY)
+  idempotencyKey      String                 @db.VarChar(191)
+  sourceFileName      String                 @db.VarChar(255)
+  sourceFileChecksum  String                 @db.Char(64)
+  sourceSheetName     String                 @db.VarChar(100)
+  templateVersion     String                 @db.VarChar(50)
+  totalRows           Int                    @default(0)
+  validRows           Int                    @default(0)
+  invalidRows         Int                    @default(0)
+  appliedRows         Int                    @default(0)
+  failedRows          Int                    @default(0)
+  previewedAt         DateTime               @default(now())
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  course            Course            @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classroom         Classroom         @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  gradebook         CourseGradebook   @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  sourceFileVersion CourseFileVersion @relation("GradeImportSourceFile", fields: [sourceFileVersionId], references: [id], onDelete: Restrict)
+  createdBy         User              @relation("GradeImportCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  rows              GradeImportRow[]
+
+  @@unique([gradebookId, idempotencyKey])
+  @@index([courseId, classroomId, status, createdAt])
+  @@index([sourceFileVersionId])
+  @@index([createdById, createdAt])
+}
+
+model GradeImportRow {
+  id               String                     @id @default(cuid())
+  batchId          String
+  rowNumber        Int
+  rawRow           Json
+  studentNo        String                     @db.VarChar(50)
+  studentName      String                     @db.VarChar(100)
+  finalScore       Decimal?                   @db.Decimal(10, 4)
+  specialStatus    GradeValueStatus
+  specialReason    String?                    @db.VarChar(500)
+  matchedStudentId String?
+  previewStatus    GradeImportPreviewStatus
+  executionStatus  GradeImportExecutionStatus @default(PENDING)
+  errorCode        String?                    @db.VarChar(100)
+  errorDetail      Json?
+  processedAt      DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  batch            GradeImportBatch                   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  matchedStudent   User?                              @relation("GradeImportMatchedStudent", fields: [matchedStudentId], references: [id], onDelete: Restrict)
+  overrideRevision StudentFinalGradeOverrideRevision?
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, previewStatus])
+  @@index([batchId, executionStatus])
+  @@index([batchId, studentNo])
+  @@index([matchedStudentId])
 }
 
 model KnowledgeGraphDraft {
@@ -1157,6 +1537,8 @@ model Classroom {
   courseFileVersions         CourseFileVersion[]                  @relation("CourseFileClassroom")
   studentImportBatches       StudentImportBatch[]                 @relation("StudentImportBatchClassroom")
   studentIdentityAssignments StudentIdentityClassroomAssignment[]
+  gradebooks                 CourseGradebook[]
+  gradeImportBatches         GradeImportBatch[]
 
   @@index([teacherId, status])
   @@index([courseId, status])
@@ -1437,6 +1819,8 @@ model Assignment {
   submissions            Submission[]
   conceptSnapshots       AssignmentQuestionConceptSnapshot[]
   conceptAnswerEvidences StudentAnswerConceptEvidence[]
+  gradeItems             GradeItem[]
+  sourceGradeRevisions   StudentGradeEntryRevision[]         @relation("GradeRevisionSourceAssignment")
 
   @@index([classroomId, status, dueAt])
   @@index([teacherId, status, createdAt])
@@ -1575,6 +1959,7 @@ model Submission {
   student                User                           @relation("SubmissionStudent", fields: [studentId], references: [id], onDelete: Restrict)
   answers                StudentAnswer[]
   conceptAnswerEvidences StudentAnswerConceptEvidence[]
+  sourceGradeRevisions   StudentGradeEntryRevision[]    @relation("GradeRevisionSourceSubmission")
 
   @@unique([assignmentId, studentId, attemptNumber])
   @@index([assignmentId, status, submittedAt])

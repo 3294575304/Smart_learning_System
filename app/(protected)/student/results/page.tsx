@@ -39,6 +39,15 @@ export default async function StudentResultsPage({ searchParams }: Props) {
         description="查看历次作业提交、成绩和正确率，进入详情可查看批改结果与学情分析。"
         title="我的成绩"
       />
+      <div className="rounded-xl border bg-white p-4 text-sm">
+        需要查看课程总评与特殊状态？
+        <Link
+          className="ml-2 font-medium underline"
+          href="/student/course-grades"
+        >
+          查看课程正式成绩
+        </Link>
+      </div>
       {results.items.length === 0 ? (
         <EmptyState
           action={

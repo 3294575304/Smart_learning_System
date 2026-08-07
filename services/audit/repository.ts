@@ -159,7 +159,11 @@ interface WriteGovernanceAuditInput {
     | typeof AuditTargetType.KNOWLEDGE_GRAPH_VERSION
     | typeof AuditTargetType.ASSESSMENT_SCHEME_DRAFT
     | typeof AuditTargetType.ASSESSMENT_SCHEME_REVIEW
-    | typeof AuditTargetType.ASSESSMENT_SCHEME_VERSION;
+    | typeof AuditTargetType.ASSESSMENT_SCHEME_VERSION
+    | typeof AuditTargetType.GRADEBOOK
+    | typeof AuditTargetType.GRADE_ENTRY
+    | typeof AuditTargetType.GRADE_IMPORT_BATCH
+    | typeof AuditTargetType.GRADEBOOK_PUBLICATION;
   targetId: string;
   summary: string;
   beforeData: AuditConfigSnapshot | null;
