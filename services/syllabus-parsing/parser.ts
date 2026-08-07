@@ -117,6 +117,24 @@ function applyDeterministicWarnings(
       "Theory and practice hours do not equal total hours; teacher review required.",
     );
   }
+  const practiceItemHours = output.practiceItems.map(
+    (item) => item.suggestedHours,
+  );
+  if (
+    practiceHours !== null &&
+    practiceItemHours.length > 0 &&
+    practiceItemHours.every((hours) => hours !== null)
+  ) {
+    const itemTotal = practiceItemHours.reduce<number>(
+      (sum, hours) => sum + (hours ?? 0),
+      0,
+    );
+    if (Math.abs(itemTotal - practiceHours) > 0.01) {
+      warnings.add(
+        `Practice item hours total ${itemTotal}, not ${practiceHours}; teacher review required.`,
+      );
+    }
+  }
   return { ...output, warnings: [...warnings] };
 }
 
@@ -276,7 +294,7 @@ export async function parseSyllabusStructure(
           continue;
         }
         throw new SyllabusParseOperationError(
-          "AI output failed schema validation.",
+          "AI 输出未通过结构校验，教学大纲结构化解析失败。",
           502,
           "INVALID_AI_OUTPUT",
           { attempts },

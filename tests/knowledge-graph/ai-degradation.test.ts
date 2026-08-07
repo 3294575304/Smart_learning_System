@@ -45,6 +45,7 @@ const syllabus: SyllabusParseOutput = {
       ],
     },
   ],
+  practiceItems: [],
   prerequisites: [],
   keyTopics: [],
   difficultTopics: [],

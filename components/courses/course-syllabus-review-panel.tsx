@@ -548,6 +548,92 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
           </div>
 
           <div className="rounded-lg border p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-medium">实践教学项目</h3>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  实验、实训和课程设计与理论章节分开审核。
+                </p>
+              </div>
+              <span className="text-sm text-gray-500">
+                {structure.practiceItems.length} 项 · 共{" "}
+                {structure.practiceItems.reduce(
+                  (sum, item) => sum + (item.suggestedHours ?? 0),
+                  0,
+                )}{" "}
+                学时
+              </span>
+            </div>
+            {structure.practiceItems.length ? (
+              <div className="mt-3 space-y-2">
+                {structure.practiceItems.map((item, index) => (
+                  <div
+                    className="grid gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-[120px_1fr_100px_1fr_auto]"
+                    key={item.code + "-" + index}
+                  >
+                    <input
+                      aria-label="实践项目编码"
+                      className={inputClass}
+                      value={item.code}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.practiceItems[index]!.code = event.target.value;
+                        })
+                      }
+                    />
+                    <input
+                      aria-label="实践项目名称"
+                      className={inputClass}
+                      value={item.title}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.practiceItems[index]!.title =
+                            event.target.value;
+                        })
+                      }
+                    />
+                    <input
+                      aria-label="实践项目学时"
+                      className={inputClass}
+                      min="0"
+                      type="number"
+                      value={item.suggestedHours ?? ""}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.practiceItems[index]!.suggestedHours = event
+                            .target.value
+                            ? Number(event.target.value)
+                            : null;
+                        })
+                      }
+                    />
+                    <input
+                      aria-label="关联章节编码"
+                      className={inputClass}
+                      placeholder="CH-1, CH-2"
+                      value={item.relatedChapterCodes.join(", ")}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.practiceItems[index]!.relatedChapterCodes =
+                            event.target.value
+                              .split(",")
+                              .map((value) => value.trim())
+                              .filter(Boolean);
+                        })
+                      }
+                    />
+                    <SourceRefs refs={item.sourceRefs} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground mt-3 text-sm">
+                未解析到实践教学项目；如大纲包含实验，请重新解析或人工补充。
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-lg border p-4">
             <h3 className="font-medium">考核项目与课程目标映射</h3>
             <div className="mt-3 space-y-2">
               {structure.assessments.map((assessment, index) => (

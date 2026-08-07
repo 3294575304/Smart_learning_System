@@ -20,6 +20,10 @@ test("教学大纲审核界面包含来源、保存、发布、脏状态和历�
   assert.match(source, /不会生成知识图谱/u);
   assert.match(source, /历史解析稿与正式版本/u);
   assert.match(source, /解析失败/u);
+  assert.match(source, /实践教学项目/u);
+  assert.match(source, /structure\.practiceItems\.length/u);
+  assert.match(source, /实践项目学时/u);
+  assert.match(source, /关联章节编码/u);
   assert.match(source, /useState<ParseState \| null>\(null\)/u);
   assert.match(source, /useEffect\(\(\) => \{\s+void load\(\)/u);
   assert.match(source, /currentPublishedSyllabusStructureId/u);

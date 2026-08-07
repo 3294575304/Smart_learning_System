@@ -86,6 +86,7 @@ export class MockAIProvider implements AIProvider {
           ],
         },
       ],
+      practiceItems: [],
       prerequisites: [],
       keyTopics: [],
       difficultTopics: [],

@@ -30,8 +30,8 @@ import {
   markParseSucceeded,
 } from "@/services/syllabus-parsing/repository";
 import {
-  syllabusParseOutputSchema,
   syllabusParseOutputV1Schema,
+  storedSyllabusParseOutputSchema,
   type SyllabusParseOutput,
   type SyllabusParseOutputV1,
 } from "@/services/syllabus-parsing/schemas";
@@ -65,7 +65,7 @@ function resultFromDraft(
   const schema =
     draft.parserVersion === "syllabus-parser-v1"
       ? syllabusParseOutputV1Schema
-      : syllabusParseOutputSchema;
+      : storedSyllabusParseOutputSchema;
   const parsed = schema.safeParse(draft.structuredResult);
   if (!parsed.success) {
     throw new SyllabusParseOperationError(

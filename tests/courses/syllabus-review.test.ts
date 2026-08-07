@@ -360,6 +360,7 @@ test("发布校验拒绝空必填项、重复标识、悬空映射和非 100% �
         ],
       },
     ],
+    practiceItems: [],
     prerequisites: [],
     keyTopics: [],
     difficultTopics: [],

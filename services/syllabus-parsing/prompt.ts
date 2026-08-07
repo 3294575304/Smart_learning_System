@@ -17,6 +17,7 @@ courseInfo={courseName:string|null,courseCode:string|null,description:string|nul
 objectives=Objective[]，Objective={code:string,title:string,description:string,sourceRefs:Ref[]}；description 不允许 null，使用原文课程目标的简短描述。
 chapters=Chapter[]，Chapter={code:string,title:string,description:string|null,suggestedHours:number|null,order:正整数,knowledgePoints:KnowledgePoint[],sourceRefs:Ref[]}。
 KnowledgePoint={code:string,name:string,description:string|null,importance:"CORE"|"NORMAL"|"EXTENDED",sourceRefs:Ref[]}。
+practiceItems=PracticeItem[]，PracticeItem={code:string,title:string,description:string|null,suggestedHours:number|null,relatedChapterCodes:string[],sourceRefs:Ref[]}；实验、实训或课程设计项目必须单独提取，不得混入理论章节。
 prerequisites=Prerequisite[]，Prerequisite={fromKnowledgePointCode:string,toKnowledgePointCode:string,description:string|null,sourceRefs:Ref[]}。
 keyTopics 和 difficultTopics 均为 Topic[]，Topic={knowledgePointCode:string|null,name:string,description:string|null,sourceRefs:Ref[]}。
 assessments=Assessment[]，Assessment={code:string,name:string,type:string,weight:number|null,description:string|null,sourceRefs:Ref[]}。
@@ -32,7 +33,7 @@ warnings=string[]。Ref={page:正整数,verified:false}，仅在必要时增加 
 5. 无法确定的课程字段和权重用 null；weight 使用百分数值，如 10% 输出 10。
 6. importance 只能是 CORE、NORMAL、EXTENDED。
 7. 稳定编码使用 OBJ-1、CH-1、KP-1-1、ASSESS-1 等短格式。
-8. 所有引用编码必须真实存在：映射引用 objectives/assessments 的 code，先修和 Topic 引用 knowledgePoints 的 code。
+8. 所有引用编码必须真实存在：映射引用 objectives/assessments 的 code，先修和 Topic 引用 knowledgePoints 的 code，practiceItems.relatedChapterCodes 引用 chapters 的 code。
 9. 同类 code 和章节 order 不得重复。JSON 必须完整闭合，完整性优先于补充细节。${repair}`,
     },
     {

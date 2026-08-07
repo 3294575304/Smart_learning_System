@@ -14,7 +14,8 @@ import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors"
 import { SYLLABUS_PARSER_VERSION } from "@/services/syllabus-parsing/constants";
 import {
   publishableSyllabusStructureSchema,
-  syllabusParseOutputSchema,
+  storedPublishableSyllabusStructureSchema,
+  storedSyllabusParseOutputSchema,
   type SaveSyllabusReviewInput,
   type SyllabusParseOutput,
 } from "@/services/syllabus-parsing/schemas";
@@ -139,7 +140,9 @@ function reviewView(record: {
   createdAt: Date;
   updatedAt: Date;
 }) {
-  const parsed = syllabusParseOutputSchema.safeParse(record.structureJson);
+  const parsed = storedSyllabusParseOutputSchema.safeParse(
+    record.structureJson,
+  );
   if (!parsed.success) {
     throw new SyllabusParseOperationError(
       "已保存的审核修订无法读取。",
@@ -167,7 +170,7 @@ function publishedView(
   },
   currentSyllabusId: string | null,
 ) {
-  const parsed = publishableSyllabusStructureSchema.safeParse(
+  const parsed = storedPublishableSyllabusStructureSchema.safeParse(
     record.structureJson,
   );
   if (!parsed.success) {
@@ -247,7 +250,9 @@ async function editableDraftOrThrow(
       "LEGACY_PARSE_READ_ONLY",
     );
   }
-  const original = syllabusParseOutputSchema.safeParse(draft.structuredResult);
+  const original = storedSyllabusParseOutputSchema.safeParse(
+    draft.structuredResult,
+  );
   if (!original.success) {
     throw new SyllabusParseOperationError(
       "解析草稿结构无效，请重新解析。",

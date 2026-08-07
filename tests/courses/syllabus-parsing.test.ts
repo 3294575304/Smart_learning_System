@@ -22,9 +22,11 @@ import { parseSyllabusStructure } from "@/services/syllabus-parsing/parser";
 import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
 import { markParseSucceeded } from "@/services/syllabus-parsing/repository";
 import { buildSyllabusParseMessages } from "@/services/syllabus-parsing/prompt";
-import type {
-  SyllabusParseInput,
-  SyllabusParseOutput,
+import {
+  storedSyllabusParseOutputSchema,
+  syllabusParseOutputSchema,
+  type SyllabusParseInput,
+  type SyllabusParseOutput,
 } from "@/services/syllabus-parsing/schemas";
 import {
   createTeacherSyllabusParse,
@@ -75,6 +77,7 @@ const validOutput: SyllabusParseOutput = {
       ],
     },
   ],
+  practiceItems: [],
   prerequisites: [],
   keyTopics: [],
   difficultTopics: [],
@@ -169,6 +172,117 @@ test("strict AI JSON validation retries once and accepts a repaired output", asy
   assert.equal(calls, 2);
   assert.equal(result.retryCount, 1);
   assert.deepEqual(result.output, validOutput);
+});
+
+test("2024 Python 固定样本验收结构覆盖目标、章节、实验、学时和考核权重", async () => {
+  const expected = structuredClone(validOutput);
+  expected.objectives = Array.from({ length: 3 }, (_, index) => ({
+    code: "OBJ-" + (index + 1),
+    title: ["知识", "能力", "素养"][index]!,
+    description: "课程目标 " + (index + 1),
+    sourceRefs: [{ page: 3, verified: false }],
+  }));
+  expected.chapters = Array.from({ length: 11 }, (_, index) => ({
+    code: "CH-" + (index + 1),
+    title: "第 " + (index + 1) + " 章",
+    description: null,
+    suggestedHours: index === 0 || index === 1 ? 1 : 2,
+    order: index + 1,
+    knowledgePoints: [
+      {
+        code: "KP-" + (index + 1) + "-1",
+        name: "知识点 " + (index + 1),
+        description: null,
+        importance: "CORE" as const,
+        sourceRefs: [
+          { page: Math.min(6, 3 + Math.floor(index / 3)), verified: false },
+        ],
+      },
+    ],
+    sourceRefs: [
+      { page: Math.min(6, 3 + Math.floor(index / 3)), verified: false },
+    ],
+  }));
+  expected.practiceItems = Array.from({ length: 8 }, (_, index) => ({
+    code: "EXP-" + (index + 1),
+    title: "实验 " + (index + 1),
+    description: null,
+    suggestedHours: index < 4 ? 1 : 2,
+    relatedChapterCodes: ["CH-" + Math.min(11, index + 2)],
+    sourceRefs: [{ page: index < 6 ? 7 : 8, verified: false }],
+  }));
+  expected.assessments = [
+    ["平时表现", 10],
+    ["课程作业", 5],
+    ["期中考试", 5],
+    ["课程实验", 20],
+    ["期末考试", 60],
+  ].map(([name, weight], index) => ({
+    code: "ASSESS-" + (index + 1),
+    name: String(name),
+    type: "COURSE_ASSESSMENT",
+    weight: Number(weight),
+    description: null,
+    sourceRefs: [{ page: 9, verified: false }],
+  }));
+  expected.objectiveAssessmentMappings = [];
+  const execution = await parseSyllabusStructure(
+    providerWith(() => expected),
+    {
+      courseHint: {
+        name: "Python 程序设计",
+        courseNo: "PYTHON-2024",
+        term: "2026-2027-1",
+      },
+      pages: Array.from({ length: 11 }, (_, index) => ({
+        pageNumber: index + 1,
+        text: "固定样本第 " + (index + 1) + " 页",
+      })),
+    },
+  );
+
+  assert.equal(execution.output.objectives.length, 3);
+  assert.equal(execution.output.chapters.length, 11);
+  assert.equal(
+    execution.output.chapters.reduce(
+      (sum, chapter) => sum + (chapter.suggestedHours ?? 0),
+      0,
+    ),
+    20,
+  );
+  assert.equal(execution.output.practiceItems.length, 8);
+  assert.equal(
+    execution.output.practiceItems.reduce(
+      (sum, item) => sum + (item.suggestedHours ?? 0),
+      0,
+    ),
+    12,
+  );
+  assert.deepEqual(
+    execution.output.assessments.map((item) => [item.name, item.weight]),
+    [
+      ["平时表现", 10],
+      ["课程作业", 5],
+      ["期中考试", 5],
+      ["课程实验", 20],
+      ["期末考试", 60],
+    ],
+  );
+  assert.match(
+    buildSyllabusParseMessages({
+      courseHint: { name: "Python", courseNo: "PY", term: "2026-1" },
+      pages: [{ pageNumber: 1, text: "实践教学内容" }],
+    })[0]!.content,
+    /practiceItems/u,
+  );
+});
+
+test("v3 AI 输出必须显式包含实践项目且旧存量结构只读兼容", () => {
+  const legacy = structuredClone(validOutput) as Record<string, unknown>;
+  delete legacy.practiceItems;
+  assert.equal(syllabusParseOutputSchema.safeParse(legacy).success, false);
+  const stored = storedSyllabusParseOutputSchema.parse(legacy);
+  assert.deepEqual(stored.practiceItems, []);
 });
 
 test("invalid JSON retries once and then reports INVALID_AI_JSON", async () => {
@@ -393,7 +507,7 @@ test("two invalid AI outputs fail without creating a fabricated fallback", async
           pages: extracted.pages,
         },
       ),
-    /schema validation/u,
+    /结构化解析失败/u,
   );
   assert.equal(calls, 2);
 });

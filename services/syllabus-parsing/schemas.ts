@@ -121,6 +121,17 @@ const syllabusChapterSchema = z
   })
   .strict();
 
+const syllabusPracticeItemSchema = z
+  .object({
+    code: codeSchema,
+    title: nameSchema,
+    description: nullableText,
+    suggestedHours: nullableNumber,
+    relatedChapterCodes: z.array(codeSchema).max(100),
+    ...sourced,
+  })
+  .strict();
+
 const syllabusPrerequisiteSchema = z
   .object({
     fromKnowledgePointCode: codeSchema,
@@ -186,6 +197,7 @@ export const syllabusParseOutputSchema = z
     courseInfo: syllabusCourseInfoSchema,
     objectives: z.array(syllabusObjectiveSchema).max(100),
     chapters: z.array(syllabusChapterSchema).max(200),
+    practiceItems: z.array(syllabusPracticeItemSchema).max(200),
     prerequisites: z.array(syllabusPrerequisiteSchema).max(500),
     keyTopics: z.array(syllabusTopicSchema).max(300),
     difficultTopics: z.array(syllabusTopicSchema).max(300),
@@ -217,6 +229,12 @@ export const syllabusParseOutputSchema = z
       context,
     );
     addDuplicateIssue(
+      value.practiceItems.map((item) => item.code),
+      ["practiceItems"],
+      "实践项目编码不能重复",
+      context,
+    );
+    addDuplicateIssue(
       value.chapters.flatMap((chapter) =>
         chapter.knowledgePoints.map((point) => point.code),
       ),
@@ -236,6 +254,23 @@ export const syllabusParseOutputSchema = z
       "教材与参考资料编码不能重复",
       context,
     );
+    const chapterCodes = new Set(value.chapters.map((item) => item.code));
+    value.practiceItems.forEach((item, itemIndex) => {
+      item.relatedChapterCodes.forEach((chapterCode, chapterIndex) => {
+        if (!chapterCodes.has(chapterCode)) {
+          context.addIssue({
+            code: "custom",
+            path: [
+              "practiceItems",
+              itemIndex,
+              "relatedChapterCodes",
+              chapterIndex,
+            ],
+            message: "实践项目关联的章节编码不存在",
+          });
+        }
+      });
+    });
   });
 
 export const publishableSyllabusStructureSchema =
@@ -350,6 +385,28 @@ export const publishableSyllabusStructureSchema =
       }
     }
   });
+
+function withLegacyPracticeItems(value: unknown): unknown {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    !Object.prototype.hasOwnProperty.call(value, "practiceItems")
+  ) {
+    return { ...value, practiceItems: [] };
+  }
+  return value;
+}
+
+export const storedSyllabusParseOutputSchema = z.preprocess(
+  withLegacyPracticeItems,
+  syllabusParseOutputSchema,
+);
+
+export const storedPublishableSyllabusStructureSchema = z.preprocess(
+  withLegacyPracticeItems,
+  publishableSyllabusStructureSchema,
+);
 
 export const saveSyllabusReviewSchema = z
   .object({

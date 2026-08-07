@@ -48,6 +48,7 @@ const syllabus: SyllabusParseOutput = {
       ],
     },
   ],
+  practiceItems: [],
   prerequisites: [
     {
       fromKnowledgePointCode: "K1",
