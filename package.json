@@ -14,7 +14,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
     "db:setup": "prisma migrate dev && prisma db seed",
-    "test": "tsx --test tests/auth/*.test.ts tests/admin/*.test.ts tests/classrooms/*.test.ts tests/courses/*.test.ts tests/course-files/*.test.ts tests/questions/*.test.ts tests/assignments/*.test.ts tests/assignment-results/*.test.ts tests/assessment-schemes/*.test.ts tests/gradebook/*.test.ts tests/ai-analysis/*.test.ts tests/recommendations/*.test.ts tests/notifications/*.test.ts tests/wrong-questions/*.test.ts tests/knowledge-graph/*.test.ts tests/concept-mastery/*.test.ts tests/integration/*.test.ts",
+    "test": "tsx --test tests/auth/*.test.ts tests/admin/*.test.ts tests/classrooms/*.test.ts tests/courses/*.test.ts tests/course-files/*.test.ts tests/questions/*.test.ts tests/assignments/*.test.ts tests/assignment-results/*.test.ts tests/assessment-schemes/*.test.ts tests/gradebook/*.test.ts tests/attendance/*.test.ts tests/ai-analysis/*.test.ts tests/recommendations/*.test.ts tests/notifications/*.test.ts tests/wrong-questions/*.test.ts tests/knowledge-graph/*.test.ts tests/concept-mastery/*.test.ts tests/integration/*.test.ts",
     "test:http-integration": "tsx tests/integration/http/run.ts",
     "test:integration": "tsx tests/integration/recommendations/run.ts",
     "test:all": "npm test && npm run test:integration"

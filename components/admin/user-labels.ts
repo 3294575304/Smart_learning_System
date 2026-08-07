@@ -65,4 +65,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   GRADE_IMPORT_EXECUTED: "执行成绩导入",
   GRADEBOOK_PUBLISHED: "发布课程成绩",
   GRADE_EXPORT_DOWNLOADED: "导出课程成绩",
+  ATTENDANCE_SESSION_CREATED: "创建签到场次",
+  ATTENDANCE_SESSION_UPDATED: "更新签到场次",
+  ATTENDANCE_SIGNED: "学生签到",
+  ATTENDANCE_CORRECTED: "纠正出勤记录",
 };

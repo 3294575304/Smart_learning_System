@@ -157,6 +157,12 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
             >
               进入成绩台账
             </Link>
+            <Link
+              className="mt-4 ml-2 inline-flex rounded-md border px-4 py-2 text-sm font-medium"
+              href={`/teacher/courses/${course.id}/attendance`}
+            >
+              进入出勤台账
+            </Link>
           </div>
 
           <div className="bg-card rounded-xl border p-5">

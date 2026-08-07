@@ -47,6 +47,9 @@ export default async function StudentResultsPage({ searchParams }: Props) {
         >
           查看课程正式成绩
         </Link>
+        <Link className="ml-4 font-medium underline" href="/student/attendance">
+          查看我的出勤
+        </Link>
       </div>
       {results.items.length === 0 ? (
         <EmptyState

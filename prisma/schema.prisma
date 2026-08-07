@@ -72,6 +72,10 @@ enum AuditAction {
   GRADE_IMPORT_EXECUTED
   GRADEBOOK_PUBLISHED
   GRADE_EXPORT_DOWNLOADED
+  ATTENDANCE_SESSION_CREATED
+  ATTENDANCE_SESSION_UPDATED
+  ATTENDANCE_SIGNED
+  ATTENDANCE_CORRECTED
 }
 
 enum QuestionGraphBindingType {
@@ -125,6 +129,30 @@ enum AuditTargetType {
   GRADE_ENTRY
   GRADE_IMPORT_BATCH
   GRADEBOOK_PUBLICATION
+  ATTENDANCE_SESSION
+  ATTENDANCE_RECORD
+}
+
+enum AttendanceSessionStatus {
+  SCHEDULED
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PENDING
+  PRESENT
+  LATE
+  EARLY_LEAVE
+  LEAVE
+  ABSENT
+}
+
+enum AttendanceRecordSource {
+  SYSTEM
+  STUDENT_SIGN_IN
+  TEACHER_CORRECTION
 }
 
 enum AssessmentComponentType {
@@ -494,6 +522,9 @@ model User {
   gradebookPublicationRows           GradebookPublicationStudent[]       @relation("GradebookPublicationStudents")
   createdGradeImportBatches          GradeImportBatch[]                  @relation("GradeImportCreatedBy")
   matchedGradeImportRows             GradeImportRow[]                    @relation("GradeImportMatchedStudent")
+  createdAttendanceSessions          AttendanceSession[]                 @relation("AttendanceSessionTeacher")
+  studentAttendanceRecords           AttendanceRecord[]                  @relation("AttendanceRecordStudent")
+  attendanceRecordRevisions          AttendanceRecordRevision[]          @relation("AttendanceRevisionActor")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -734,6 +765,7 @@ model Course {
   studentImportBatches                  StudentImportBatch[]                @relation("StudentImportCourse")
   gradebooks                            CourseGradebook[]
   gradeImportBatches                    GradeImportBatch[]
+  attendanceSessions                    AttendanceSession[]
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -1539,6 +1571,7 @@ model Classroom {
   studentIdentityAssignments StudentIdentityClassroomAssignment[]
   gradebooks                 CourseGradebook[]
   gradeImportBatches         GradeImportBatch[]
+  attendanceSessions         AttendanceSession[]
 
   @@index([teacherId, status])
   @@index([courseId, status])
@@ -1563,6 +1596,73 @@ model ClassMembership {
   @@unique([classroomId, studentId])
   @@index([studentId, status])
   @@index([classroomId, status])
+}
+
+model AttendanceSession {
+  id             String                  @id @default(cuid())
+  courseId       String
+  classroomId    String
+  teacherId      String
+  title          String                  @db.VarChar(120)
+  status         AttendanceSessionStatus @default(SCHEDULED)
+  startsAt       DateTime
+  signInOpensAt  DateTime
+  lateAfter      DateTime
+  signInClosesAt DateTime
+  endedAt        DateTime?
+  cancelledAt    DateTime?
+  revision       Int                     @default(0)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  course    Course             @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classroom Classroom          @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  teacher   User               @relation("AttendanceSessionTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  records   AttendanceRecord[]
+
+  @@index([courseId, status, startsAt])
+  @@index([classroomId, status, startsAt])
+  @@index([teacherId, createdAt])
+}
+
+model AttendanceRecord {
+  id                    String           @id @default(cuid())
+  sessionId             String
+  studentId             String
+  currentStatus         AttendanceStatus @default(PENDING)
+  currentRevisionNumber Int              @default(0)
+  signedAt              DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  session   AttendanceSession          @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  student   User                       @relation("AttendanceRecordStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  revisions AttendanceRecordRevision[]
+
+  @@unique([sessionId, studentId])
+  @@index([studentId, createdAt])
+  @@index([sessionId, currentStatus])
+}
+
+model AttendanceRecordRevision {
+  id             String                 @id @default(cuid())
+  recordId       String
+  revisionNumber Int
+  previousStatus AttendanceStatus
+  newStatus      AttendanceStatus
+  source         AttendanceRecordSource
+  actorId        String
+  reason         String?                @db.VarChar(500)
+  occurredAt     DateTime               @default(now())
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  record AttendanceRecord @relation(fields: [recordId], references: [id], onDelete: Restrict)
+  actor  User             @relation("AttendanceRevisionActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@unique([recordId, revisionNumber])
+  @@index([actorId, occurredAt])
+  @@index([newStatus, occurredAt])
 }
 
 model StudentImportBatch {
