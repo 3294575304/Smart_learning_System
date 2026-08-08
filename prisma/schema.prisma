@@ -100,6 +100,23 @@ enum ConceptEvidenceGradingSource {
   MANUAL_GRADING
 }
 
+enum BackgroundJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum LearningEventType {
+  ASSESSMENT_GRADED
+  ASSESSMENT_REVOKED
+}
+
+enum LearningEventSourceType {
+  STUDENT_ANSWER
+}
+
 enum CourseConceptMasteryLevel {
   NEEDS_SUPPORT
   DEVELOPING
@@ -535,6 +552,8 @@ model User {
   attendanceRecordRevisions          AttendanceRecordRevision[]          @relation("AttendanceRevisionActor")
   generatedOutcomeAttainmentRuns     CourseOutcomeAttainmentRun[]        @relation("OutcomeAttainmentGeneratedBy")
   studentOutcomeAttainmentResults    StudentOutcomeAttainmentResult[]    @relation("OutcomeAttainmentStudent")
+  requestedBackgroundJobs            BackgroundJob[]                     @relation("BackgroundJobRequester")
+  learningEvents                     LearningEvent[]                     @relation("LearningEventStudent")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -607,6 +626,65 @@ model NotificationJobRun {
 
   @@index([type, startedAt])
   @@index([status, startedAt])
+}
+
+model BackgroundJob {
+  id                String              @id @default(cuid())
+  type              String              @db.VarChar(100)
+  status            BackgroundJobStatus @default(PENDING)
+  requestedById     String?
+  courseId          String?
+  idempotencyKey    String              @db.VarChar(191)
+  inputFingerprint  String              @db.Char(64)
+  input             Json
+  progress          Int                 @default(0)
+  attemptCount      Int                 @default(0)
+  maxAttempts       Int                 @default(3)
+  nextAttemptAt     DateTime            @default(now())
+  currentLeaseId    String?             @db.VarChar(64)
+  errorCode         String?             @db.VarChar(100)
+  retryable         Boolean?
+  result            Json?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  cancelRequestedAt DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  requestedBy User?                  @relation("BackgroundJobRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  course      Course?                @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  attempts    BackgroundJobAttempt[]
+
+  @@unique([type, idempotencyKey])
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([courseId, status, createdAt])
+  @@index([requestedById, createdAt])
+  @@index([currentLeaseId])
+}
+
+model BackgroundJobAttempt {
+  id              String    @id @default(cuid())
+  jobId           String
+  attemptNumber   Int
+  leaseId         String    @unique @db.VarChar(64)
+  workerId        String    @db.VarChar(191)
+  executorVersion String    @db.VarChar(100)
+  startedAt       DateTime  @default(now())
+  heartbeatAt     DateTime  @default(now())
+  expiresAt       DateTime
+  completedAt     DateTime?
+  errorCode       String?   @db.VarChar(100)
+  retryable       Boolean?
+  resourceUsage   Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  job BackgroundJob @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  @@unique([jobId, attemptNumber])
+  @@index([jobId, startedAt])
+  @@index([expiresAt, completedAt])
+  @@index([workerId, startedAt])
 }
 
 model SystemConfig {
@@ -777,6 +855,8 @@ model Course {
   gradeImportBatches                    GradeImportBatch[]
   attendanceSessions                    AttendanceSession[]
   outcomeAttainmentRuns                 CourseOutcomeAttainmentRun[]
+  backgroundJobs                        BackgroundJob[]
+  learningEvents                        LearningEvent[]
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -1576,6 +1656,7 @@ model KnowledgeGraphConcept {
   assignmentQuestionSnapshots AssignmentQuestionConceptSnapshot[]
   answerEvidences             StudentAnswerConceptEvidence[]
   masteryEntries              StudentCourseConceptMasteryEntry[]
+  learningEventConcepts       LearningEventConcept[]
 
   @@unique([courseId, stableKey])
   @@index([courseId, createdAt])
@@ -2117,6 +2198,7 @@ model AssignmentQuestionConceptSnapshot {
   publishedGraphVersion PublishedKnowledgeGraphVersion? @relation("AssignmentConceptSnapshotPublishedVersion", fields: [publishedGraphVersionId], references: [id], onDelete: Restrict)
   resolvedNode          PublishedKnowledgeGraphNode?    @relation("AssignmentConceptSnapshotResolvedNode", fields: [resolvedNodeId], references: [id], onDelete: Restrict)
   answerEvidences       StudentAnswerConceptEvidence[]
+  learningEventConcepts LearningEventConcept[]
 
   @@unique([assignmentQuestionId, conceptId])
   @@index([assignmentId, resolutionStatus])
@@ -2226,6 +2308,7 @@ model StudentAnswerConceptEvidence {
   normalizedScore                     Decimal?                      @db.Decimal(7, 4)
   gradedAt                            DateTime?
   supersedesEvidenceId                String?                       @unique
+  learningEventId                     String?
   createdAt                           DateTime                      @default(now())
   updatedAt                           DateTime                      @updatedAt
 
@@ -2240,6 +2323,7 @@ model StudentAnswerConceptEvidence {
   concept                           KnowledgeGraphConcept             @relation(fields: [conceptId], references: [id], onDelete: Restrict)
   supersedesEvidence                StudentAnswerConceptEvidence?     @relation("ConceptEvidenceSupersession", fields: [supersedesEvidenceId], references: [id], onDelete: Restrict)
   supersededBy                      StudentAnswerConceptEvidence?     @relation("ConceptEvidenceSupersession")
+  learningEvent                     LearningEvent?                    @relation(fields: [learningEventId], references: [id], onDelete: Restrict)
 
   @@unique([studentAnswerId, conceptId, revision])
   @@index([studentId, courseId, conceptId, revision])
@@ -2247,6 +2331,60 @@ model StudentAnswerConceptEvidence {
   @@index([assignmentQuestionConceptSnapshotId])
   @@index([submissionId])
   @@index([courseId, createdAt])
+  @@index([learningEventId])
+}
+
+model LearningEvent {
+  id                String                  @id @default(cuid())
+  studentId         String
+  courseId          String
+  eventType         LearningEventType
+  schemaVersion     String                  @db.VarChar(50)
+  sourceType        LearningEventSourceType
+  sourceId          String                  @db.VarChar(191)
+  sourceRevision    Int
+  occurredAt        DateTime
+  idempotencyKey    String                  @db.VarChar(191)
+  inputFingerprint  String                  @db.Char(64)
+  ruleVersion       String                  @db.VarChar(50)
+  supersedesEventId String?                 @unique
+  payload           Json
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  student           User                           @relation("LearningEventStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  course            Course                         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  supersedesEvent   LearningEvent?                 @relation("LearningEventSupersession", fields: [supersedesEventId], references: [id], onDelete: Restrict)
+  supersededBy      LearningEvent?                 @relation("LearningEventSupersession")
+  concepts          LearningEventConcept[]
+  projectedEvidence StudentAnswerConceptEvidence[]
+
+  @@unique([eventType, idempotencyKey])
+  @@unique([sourceType, sourceId, sourceRevision])
+  @@index([studentId, courseId, occurredAt])
+  @@index([courseId, eventType, occurredAt])
+  @@index([sourceType, sourceId, createdAt])
+}
+
+model LearningEventConcept {
+  id                                  String                   @id @default(cuid())
+  learningEventId                     String
+  conceptId                           String
+  bindingType                         QuestionGraphBindingType
+  assignmentQuestionConceptSnapshotId String
+  score                               Decimal?                 @db.Decimal(12, 4)
+  maxScore                            Decimal?                 @db.Decimal(12, 4)
+  weight                              Decimal?                 @db.Decimal(7, 4)
+  createdAt                           DateTime                 @default(now())
+  updatedAt                           DateTime                 @updatedAt
+
+  learningEvent                     LearningEvent                     @relation(fields: [learningEventId], references: [id], onDelete: Restrict)
+  concept                           KnowledgeGraphConcept             @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  assignmentQuestionConceptSnapshot AssignmentQuestionConceptSnapshot @relation(fields: [assignmentQuestionConceptSnapshotId], references: [id], onDelete: Restrict)
+
+  @@unique([learningEventId, conceptId])
+  @@index([conceptId, learningEventId])
+  @@index([assignmentQuestionConceptSnapshotId])
 }
 
 model WrongQuestion {
