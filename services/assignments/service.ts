@@ -43,8 +43,7 @@ import type {
   TeacherAssignmentView,
 } from "@/services/assignments/types";
 import { freezeAssignmentQuestionConcepts } from "@/services/concept-mastery/assignment-snapshot";
-import { synchronizeAnswersConceptEvidence } from "@/services/concept-mastery/evidence";
-import { recalculateStudentCourseConceptMastery } from "@/services/concept-mastery/service";
+import { appendAssessmentLearningEventsAndProjectEvidence } from "@/services/learning-events/assessment";
 import { notifyAssignmentPublished } from "@/services/notifications/events/assignment";
 
 const teacherAssignmentInclude = {
@@ -1095,17 +1094,10 @@ export async function submitStudentAssignment(
         percentage,
       },
     });
-    const masteryContext = await synchronizeAnswersConceptEvidence(
+    await appendAssessmentLearningEventsAndProjectEvidence(
       transaction,
       answerIds,
     );
-    if (masteryContext) {
-      await recalculateStudentCourseConceptMastery(
-        transaction,
-        masteryContext.studentId,
-        masteryContext.courseId,
-      );
-    }
   }, "提交状态已发生变化，请刷新后重试");
   return getStudentSubmissionResult(studentId, submissionId);
 }

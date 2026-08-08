@@ -29,8 +29,7 @@ import type {
 import { writeTeachingAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { synchronizeAnswersConceptEvidence } from "@/services/concept-mastery/evidence";
-import { recalculateStudentCourseConceptMastery } from "@/services/concept-mastery/service";
+import { appendAssessmentLearningEventsAndProjectEvidence } from "@/services/learning-events/assessment";
 import { notifyAssignmentGraded } from "@/services/notifications/events/assignment";
 import { logNotificationFailure } from "@/services/notifications/logging";
 
@@ -343,17 +342,9 @@ export async function saveManualAnswerGrade(
     if (updated.count !== 1) {
       throw new AssignmentOperationError("评分状态已发生变化，请刷新后重试");
     }
-    const masteryContext = await synchronizeAnswersConceptEvidence(
-      transaction,
-      [answer.id],
-    );
-    if (masteryContext) {
-      await recalculateStudentCourseConceptMastery(
-        transaction,
-        masteryContext.studentId,
-        masteryContext.courseId,
-      );
-    }
+    await appendAssessmentLearningEventsAndProjectEvidence(transaction, [
+      answer.id,
+    ]);
   }, "评分状态已发生变化，请刷新后重试");
 
   return getTeacherSubmissionForGrading(teacherId, assignmentId, submissionId);
@@ -504,17 +495,10 @@ export async function completeSubmissionGrading(
         "提交批改状态已发生变化，请刷新后重试",
       );
     }
-    const masteryContext = await synchronizeAnswersConceptEvidence(
+    await appendAssessmentLearningEventsAndProjectEvidence(
       transaction,
       answerIds,
     );
-    if (masteryContext) {
-      await recalculateStudentCourseConceptMastery(
-        transaction,
-        masteryContext.studentId,
-        masteryContext.courseId,
-      );
-    }
     await writeTeachingAuditLog(transaction, {
       actorId: teacherId,
       action: AuditAction.SUBMISSION_GRADING_COMPLETED,
