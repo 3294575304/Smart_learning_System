@@ -865,6 +865,90 @@ async function main(): Promise<void> {
       }),
       1,
     );
+    const assessmentEvents = await prisma.learningEvent.findMany({
+      where: { sourceId: subjectiveAnswer.id },
+      orderBy: { sourceRevision: "asc" },
+      include: { concepts: true, projectedEvidence: true },
+    });
+    assert.equal(assessmentEvents.length >= 2, true);
+    assert.equal(assessmentEvents.at(-1)?.eventType, "ASSESSMENT_REVOKED");
+    assert.equal(
+      assessmentEvents.at(-1)?.supersedesEventId,
+      assessmentEvents.at(-2)?.id,
+    );
+    assert.equal(assessmentEvents.at(-1)?.concepts.length, 1);
+    assert.equal(assessmentEvents.at(-1)?.projectedEvidence.length, 1);
+    const countsBeforeReplay = {
+      events: await prisma.learningEvent.count({
+        where: { sourceId: subjectiveAnswer.id },
+      }),
+      evidence: await prisma.studentAnswerConceptEvidence.count({
+        where: { studentAnswerId: subjectiveAnswer.id },
+      }),
+      mastery: await prisma.studentCourseConceptMasteryRevision.count({
+        where: { state: { studentId: student.id, courseId: course.id } },
+      }),
+    };
+    await prisma.$transaction(async (transaction) => {
+      await synchronizeAnswerConceptEvidence(transaction, subjectiveAnswer.id);
+      await recalculateStudentCourseConceptMastery(
+        transaction,
+        student.id,
+        course.id,
+      );
+    });
+    assert.deepEqual(
+      {
+        events: await prisma.learningEvent.count({
+          where: { sourceId: subjectiveAnswer.id },
+        }),
+        evidence: await prisma.studentAnswerConceptEvidence.count({
+          where: { studentAnswerId: subjectiveAnswer.id },
+        }),
+        mastery: await prisma.studentCourseConceptMasteryRevision.count({
+          where: { state: { studentId: student.id, courseId: course.id } },
+        }),
+      },
+      countsBeforeReplay,
+    );
+
+    await assert.rejects(
+      prisma.$transaction(async (transaction) => {
+        await transaction.studentAnswer.update({
+          where: { id: subjectiveAnswer.id },
+          data: {
+            gradingStatus: GradingStatus.GRADED,
+            score: 8,
+            gradedAt: new Date(),
+          },
+        });
+        await synchronizeAnswerConceptEvidence(
+          transaction,
+          subjectiveAnswer.id,
+        );
+        await recalculateStudentCourseConceptMastery(
+          transaction,
+          student.id,
+          course.id,
+        );
+        throw new Error("force learning-event projection rollback");
+      }),
+      /force learning-event projection rollback/,
+    );
+    assert.deepEqual(
+      {
+        events: await prisma.learningEvent.count({
+          where: { sourceId: subjectiveAnswer.id },
+        }),
+        evidence: await prisma.studentAnswerConceptEvidence.count({
+          where: { studentAnswerId: subjectiveAnswer.id },
+        }),
+        mastery: await prisma.studentCourseConceptMasteryRevision.count({
+          where: { state: { studentId: student.id, courseId: course.id } },
+        }),
+      },
+      countsBeforeReplay,
+    );
 
     console.log(
       "Concept mastery HTTP integration passed: immutable snapshots, auto/manual evidence, regrading, revocation, version resolution, and authorization.",
