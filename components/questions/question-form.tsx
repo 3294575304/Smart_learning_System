@@ -114,6 +114,8 @@ export function QuestionForm({
         acceptableAnswers: [""],
         caseSensitive: false,
       });
+    } else if (nextType === QuestionType.PYTHON_PROGRAMMING) {
+      form.setValue("answer", { kind: "PROGRAMMING" });
     } else {
       form.setValue("answer", { kind: "REFERENCE", value: "" });
     }
@@ -367,6 +369,13 @@ export function QuestionForm({
             }
           />
         </label>
+      ) : null}
+
+      {type === QuestionType.PYTHON_PROGRAMMING &&
+      answer.kind === "PROGRAMMING" ? (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+          保存题目基本信息后，请在编辑页继续维护标准代码、初始代码、公开样例、隐藏用例和资源限制。判题配置每次保存都会生成不可变修订。
+        </div>
       ) : null}
 
       <label className="block space-y-2">

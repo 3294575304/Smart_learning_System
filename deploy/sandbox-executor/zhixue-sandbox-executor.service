@@ -1,0 +1,43 @@
+[Unit]
+Description=Zhixue isolated Python sandbox executor
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sandboxexec
+Group=sandboxexec
+SupplementaryGroups=docker
+EnvironmentFile=/etc/zhixue-sandbox-executor.env
+ExecStart=/usr/local/bin/node /opt/zhixue-sandbox-executor/server.js
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=30s
+UMask=0077
+StateDirectory=zhixue-sandbox-executor
+WorkingDirectory=/var/lib/zhixue-sandbox-executor
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/zhixue-sandbox-executor
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+LimitNOFILE=4096
+TasksMax=128
+MemoryMax=384M
+
+[Install]
+WantedBy=multi-user.target

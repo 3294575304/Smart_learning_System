@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { LearningAnalysisCard } from "@/components/learning-analysis/learning-analysis-card";
+import { ProgrammingAttemptStatus } from "@/components/assignments/programming-attempt-status";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentSubmissionResult } from "@/services/assignments/service";
@@ -52,6 +53,17 @@ export default async function ResultPage({ params }: Props) {
             </p>
           </div>
         )}
+        {result.programmingAttempts.length > 0 ? (
+          <div className="space-y-4">
+            {result.programmingAttempts.map((attempt) => (
+              <ProgrammingAttemptStatus
+                assignmentQuestionId={attempt.assignmentQuestionId}
+                attemptId={attempt.id}
+                key={attempt.id}
+              />
+            ))}
+          </div>
+        ) : null}
         {result.isPublished ? (
           <div className="space-y-4">
             {result.answers.map((answer) => (

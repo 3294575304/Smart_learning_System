@@ -240,7 +240,15 @@ export async function completeBackgroundJob<T>(
   }, SERIALIZABLE);
 }
 
-export async function failBackgroundJob(jobId: string, rawInput: unknown) {
+export async function failBackgroundJob<T>(
+  jobId: string,
+  rawInput: unknown,
+  projectFailure?: (
+    transaction: Prisma.TransactionClient,
+    job: { id: string; type: string; input: Prisma.JsonValue },
+    willRetry: boolean,
+  ) => Promise<T>,
+) {
   const input = failBackgroundJobSchema.parse(rawInput);
   return prisma.$transaction(async (transaction) => {
     const now = new Date();
@@ -250,10 +258,19 @@ export async function failBackgroundJob(jobId: string, rawInput: unknown) {
         status: BackgroundJobStatus.RUNNING,
         currentLeaseId: input.leaseId,
       },
-      select: { id: true, attemptCount: true, maxAttempts: true },
+      select: {
+        id: true,
+        type: true,
+        input: true,
+        attemptCount: true,
+        maxAttempts: true,
+      },
     });
     if (!job) throw new BackgroundJobLeaseLostError();
     const willRetry = input.retryable && job.attemptCount < job.maxAttempts;
+    const projected = projectFailure
+      ? await projectFailure(transaction, job, willRetry)
+      : undefined;
     const attempt = await transaction.backgroundJobAttempt.updateMany({
       where: {
         jobId,
@@ -295,6 +312,7 @@ export async function failBackgroundJob(jobId: string, rawInput: unknown) {
       jobId,
       willRetry,
       nextAttemptAt: willRetry ? nextAttemptAt : null,
+      projected,
     };
   }, SERIALIZABLE);
 }

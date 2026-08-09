@@ -166,6 +166,19 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
           </div>
 
           <div className="bg-card rounded-xl border p-5">
+            <h2 className="font-semibold">课程画像与证据</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              查看班级概览、学生确定性画像、概念掌握度与原始评分证据。
+            </p>
+            <Link
+              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+              href={`/teacher/courses/${course.id}/profiles`}
+            >
+              进入课程画像
+            </Link>
+          </div>
+
+          <div className="bg-card rounded-xl border p-5">
             <h2 className="font-semibold">Python 课程知识图谱</h2>
             <p className="text-muted-foreground mt-1 text-sm">
               基于已发布的正式大纲结构生成、审核并发布版本化图谱。
@@ -175,6 +188,12 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
               href={`/teacher/courses/${course.id}/knowledge-graph`}
             >
               进入知识图谱
+            </Link>
+            <Link
+              className="mt-4 ml-2 inline-flex rounded-md border px-4 py-2 text-sm font-medium"
+              href={`/teacher/courses/${course.id}/question-mapping`}
+            >
+              批量题目映射
             </Link>
           </div>
 

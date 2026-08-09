@@ -16,6 +16,7 @@ export function deriveAIHealthStatus(
 export function deriveOverallHealthStatus(input: {
   database: SystemHealthStatus;
   ai: SystemHealthStatus;
+  sandbox?: SystemHealthStatus;
   activeAdminAvailable: boolean;
   stalePendingAITaskCount: number;
 }): "HEALTHY" | "DEGRADED" | "UNAVAILABLE" {
@@ -24,6 +25,8 @@ export function deriveOverallHealthStatus(input: {
     input.database === "DEGRADED" ||
     input.ai === "DEGRADED" ||
     input.ai === "UNAVAILABLE" ||
+    input.sandbox === "DEGRADED" ||
+    input.sandbox === "UNAVAILABLE" ||
     !input.activeAdminAvailable ||
     input.stalePendingAITaskCount > 0
   ) {

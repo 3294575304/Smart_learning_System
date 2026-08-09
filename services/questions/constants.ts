@@ -6,4 +6,5 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   TRUE_FALSE: "判断题",
   FILL_BLANK: "填空题",
   SHORT_ANSWER: "简答题",
+  PYTHON_PROGRAMMING: "Python 编程题",
 };

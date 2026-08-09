@@ -1,0 +1,12 @@
+{
+  "name": "zhixue-programming-judge-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

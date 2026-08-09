@@ -15,6 +15,7 @@ export const sandboxExecutionRequestSchema = z
     requestId: z.string().uuid(),
     language: z.literal("PYTHON"),
     sourceCode: z.string().min(1).max(200_000),
+    stdin: z.string().max(65_536).default(""),
     networkAccess: z.literal(false),
     limits: sandboxLimitsSchema,
     metadata: z
@@ -52,11 +53,11 @@ export const sandboxTestResultSchema = z
 
 export const sandboxResourceUsageSchema = z
   .object({
-    cpuTimeMs: z.number().int().nonnegative(),
+    cpuTimeMs: z.number().int().nonnegative().nullable(),
     wallTimeMs: z.number().int().nonnegative(),
-    peakMemoryBytes: z.number().int().nonnegative(),
+    peakMemoryBytes: z.number().int().nonnegative().nullable(),
     outputBytes: z.number().int().nonnegative(),
-    processCount: z.number().int().nonnegative(),
+    processCount: z.number().int().nonnegative().nullable(),
   })
   .strict();
 
@@ -81,6 +82,17 @@ export const sandboxSubmissionReceiptSchema = z
   })
   .strict();
 
+export const sandboxHealthSchema = z
+  .object({
+    status: z.literal("ok"),
+    executorVersion: z.string().min(1).max(100),
+    active: z.number().int().nonnegative(),
+    queued: z.number().int().nonnegative(),
+    maxConcurrency: z.number().int().positive(),
+    maxQueueDepth: z.number().int().positive(),
+  })
+  .strict();
+
 export type SandboxExecutionRequest = z.infer<
   typeof sandboxExecutionRequestSchema
 >;
@@ -90,3 +102,4 @@ export type SandboxExecutionResult = z.infer<
 export type SandboxSubmissionReceipt = z.infer<
   typeof sandboxSubmissionReceiptSchema
 >;
+export type SandboxHealth = z.infer<typeof sandboxHealthSchema>;

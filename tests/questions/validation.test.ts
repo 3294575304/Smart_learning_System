@@ -27,7 +27,7 @@ function baseInput() {
   };
 }
 
-test("五种题型的有效答案结构均可通过校验", () => {
+test("六种题型的有效答案结构均可通过校验", () => {
   const inputs = [
     baseInput(),
     {
@@ -56,6 +56,12 @@ test("五种题型的有效答案结构均可通过校验", () => {
       type: QuestionType.SHORT_ANSWER,
       options: [],
       answer: { kind: "REFERENCE" as const, value: "参考答案" },
+    },
+    {
+      ...baseInput(),
+      type: QuestionType.PYTHON_PROGRAMMING,
+      options: [],
+      answer: { kind: "PROGRAMMING" as const },
     },
   ];
   for (const input of inputs) {

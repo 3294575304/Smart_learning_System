@@ -1,0 +1,130 @@
+{
+  "verifiedAt": "2026-08-09T04:00:12.226Z",
+  "passed": true,
+  "executor": {
+    "version": "zhixue-sandbox-executor-0.1.0+20260808",
+    "runtime": "gVisor runsc release-20260803.0",
+    "platform": "systrap",
+    "python": "3.10.4",
+    "runtimeImageId": "sha256:a0f153bbe42f461279579527727de96bef45c1f88ef6e3d7bedc86733ad2b0a4",
+    "transport": "SSH tunnel to loopback-only executor API"
+  },
+  "results": [
+    {
+      "name": "network-disabled",
+      "passed": true,
+      "executionId": "exec_f2b907d9-0268-4218-927c-561f3f7ab987",
+      "status": "SUCCEEDED",
+      "errorType": "NONE",
+      "resourceUsage": {
+        "cpuTimeMs": 0,
+        "wallTimeMs": 687,
+        "peakMemoryBytes": 0,
+        "outputBytes": 8,
+        "processCount": 0
+      }
+    },
+    {
+      "name": "cpu-limit",
+      "passed": true,
+      "executionId": "exec_f109e8cb-f9b9-4b38-893b-b0b2bff94f47",
+      "status": "FAILED",
+      "errorType": "TIME_LIMIT",
+      "resourceUsage": {
+        "cpuTimeMs": 0,
+        "wallTimeMs": 1578,
+        "peakMemoryBytes": 0,
+        "outputBytes": 0,
+        "processCount": 0
+      }
+    },
+    {
+      "name": "wall-time-limit",
+      "passed": true,
+      "executionId": "exec_c302c9d9-1d3b-4750-9435-9ff2b4a82fba",
+      "status": "FAILED",
+      "errorType": "TIME_LIMIT",
+      "resourceUsage": {
+        "cpuTimeMs": 0,
+        "wallTimeMs": 1813,
+        "peakMemoryBytes": 0,
+        "outputBytes": 0,
+        "processCount": 0
+      }
+    },
+    {
+      "name": "memory-limit",
+      "passed": true,
+      "executionId": "exec_4a5016fa-afbf-413c-910f-11ea3cd0cab6",
+      "status": "FAILED",
+      "errorType": "MEMORY_LIMIT",
+      "resourceUsage": {
+        "cpuTimeMs": 0,
+        "wallTimeMs": 602,
+        "peakMemoryBytes": 0,
+        "outputBytes": 0,
+        "processCount": 0
+      }
+    },
+    {
+      "name": "filesystem-isolation",
+      "passed": true,
+      "executionId": "exec_5b774953-6e9f-4ddd-837d-5752908462d4",
+      "status": "SUCCEEDED",
+      "errorType": "NONE",
+      "resourceUsage": {
+        "cpuTimeMs": 0,
+        "wallTimeMs": 587,
+        "peakMemoryBytes": 0,
+        "outputBytes": 8,
+        "processCount": 0
+      }
+    },
+    {
+      "name": "process-limit",
+      "passed": true,
+      "executionId": "exec_db371cf1-51c5-4fbc-9ffa-3fac3259e3f1",
+      "status": "FAILED",
+      "errorType": "PROCESS_LIMIT",
+      "resourceUsage": {
+        "cpuTimeMs": 0,
+        "wallTimeMs": 616,
+        "peakMemoryBytes": 0,
+        "outputBytes": 352,
+        "processCount": 0
+      }
+    },
+    {
+      "name": "output-limit",
+      "passed": true,
+      "executionId": "exec_d90c84ae-864c-48a4-ad4a-dcb0772b8412",
+      "status": "FAILED",
+      "errorType": "OUTPUT_LIMIT",
+      "resourceUsage": {
+        "cpuTimeMs": 0,
+        "wallTimeMs": 672,
+        "peakMemoryBytes": 0,
+        "outputBytes": 8192,
+        "processCount": 0
+      }
+    },
+    {
+      "name": "host-secrets-hidden",
+      "passed": true,
+      "executionId": "exec_438339bb-9836-4714-ad97-7942fdb47138",
+      "status": "SUCCEEDED",
+      "errorType": "NONE",
+      "resourceUsage": {
+        "cpuTimeMs": 0,
+        "wallTimeMs": 580,
+        "peakMemoryBytes": 0,
+        "outputBytes": 5,
+        "processCount": 0
+      }
+    }
+  ],
+  "limitations": [
+    "Docker stats did not produce non-zero CPU, peak-memory, or process samples for these short-lived gVisor executions; V1.0 Python judging must improve resource metering before it claims precise usage values.",
+    "The executor API is intentionally bound to 127.0.0.1 and was verified through an SSH tunnel; production application connectivity still requires a private network or authenticated TLS ingress."
+  ]
+}

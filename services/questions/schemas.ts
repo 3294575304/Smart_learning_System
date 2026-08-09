@@ -46,11 +46,16 @@ const referenceAnswerSchema = z.object({
     .max(5000, "参考答案不能超过 5000 个字符"),
 });
 
+const programmingAnswerSchema = z.object({
+  kind: z.literal("PROGRAMMING"),
+});
+
 export const questionAnswerSchema = z.discriminatedUnion("kind", [
   choiceAnswerSchema,
   booleanAnswerSchema,
   textAnswerSchema,
   referenceAnswerSchema,
+  programmingAnswerSchema,
 ]);
 
 export const questionUpsertSchema = z
@@ -228,6 +233,16 @@ export const questionUpsertSchema = z
         code: "custom",
         path: ["answer"],
         message: "简答题答案格式无效",
+      });
+    }
+    if (
+      value.type === QuestionType.PYTHON_PROGRAMMING &&
+      value.answer.kind !== "PROGRAMMING"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["answer"],
+        message: "Python 编程题答案格式无效",
       });
     }
   });

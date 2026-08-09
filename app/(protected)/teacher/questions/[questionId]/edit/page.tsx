@@ -1,9 +1,10 @@
-import { Role } from "@prisma/client";
+import { QuestionType, Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { QuestionForm } from "@/components/questions/question-form";
 import { QuestionGraphBindingPanel } from "@/components/questions/question-graph-binding-panel";
+import { ProgrammingConfigPanel } from "@/components/questions/programming-config-panel";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { questionIdSchema } from "@/services/questions/schemas";
@@ -51,6 +52,9 @@ export default async function EditQuestionPage({
           mode="edit"
           question={question}
         />
+        {question.type === QuestionType.PYTHON_PROGRAMMING ? (
+          <ProgrammingConfigPanel questionId={question.id} />
+        ) : null}
         <QuestionGraphBindingPanel courses={courses} questionId={question.id} />
       </section>
     );

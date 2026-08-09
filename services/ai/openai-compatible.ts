@@ -13,6 +13,7 @@ import type { StudentAnalysisInput } from "@/services/ai/schemas";
 import { buildSyllabusParseMessages } from "@/services/syllabus-parsing/prompt";
 import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
+import type { QuestionMappingAIInput } from "@/services/question-mapping/schemas";
 
 const chatResponseSchema = z
   .object({
@@ -157,6 +158,30 @@ export class OpenAICompatibleProvider implements AIProvider {
                   description,
                 })),
             }),
+          },
+        ],
+        options.signal,
+      )
+    ).content;
+  }
+
+  async mapQuestionsToConcepts(
+    input: QuestionMappingAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    const repair = options.validationError
+      ? `上次输出无效：${options.validationError}。请修复。`
+      : "";
+    return (
+      await this.completeJson(
+        [
+          {
+            role: "system",
+            content: `你只负责生成题目到课程 Concept 的候选映射。只返回严格 JSON：{"mappings":[{"questionId":"...","candidates":[{"conceptId":"...","confidence":0到1,"reason":"..."}]}]}。每题最多 3 个候选；不得编造输入之外的 ID；不得输出答案、测试用例或声称候选已确认。${repair}`,
+          },
+          {
+            role: "user",
+            content: JSON.stringify(input),
           },
         ],
         options.signal,

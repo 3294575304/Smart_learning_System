@@ -53,6 +53,7 @@ export async function appendAssessmentLearningEventAndProjectEvidence(
       maxScore: true,
       gradedAt: true,
       conceptEvidenceRevision: true,
+      assessmentRevisionKey: true,
       submission: {
         select: {
           studentId: true,
@@ -165,6 +166,7 @@ export async function appendAssessmentLearningEventAndProjectEvidence(
     : ConceptEvidenceStatus.REVOKED;
   const fingerprint = conceptMasteryFingerprint({
     studentAnswerId,
+    assessmentRevisionKey: answer.assessmentRevisionKey,
     status: nextStatus,
     gradingSource: valid ? source : null,
     score: valid ? answer.score?.toFixed(CONCEPT_EVIDENCE_SCORE_SCALE) : null,
@@ -212,6 +214,7 @@ export async function appendAssessmentLearningEventAndProjectEvidence(
 
   const payload = assessmentLearningEventPayloadSchema.parse({
     studentAnswerId,
+    assessmentRevisionKey: answer.assessmentRevisionKey,
     evidenceStatus: nextStatus,
     gradingSource: valid ? source : null,
     score: valid ? answer.score?.toFixed(CONCEPT_EVIDENCE_SCORE_SCALE) : null,

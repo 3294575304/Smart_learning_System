@@ -112,6 +112,35 @@ test("autosave accepts an omitted or zero response time", () => {
   assert.equal(zero.success, true);
 });
 
+test("autosave accepts bounded Python source code", () => {
+  assert.equal(
+    autosaveAnswersSchema.safeParse({
+      version: 0,
+      answers: [
+        {
+          assignmentQuestionId: questionId,
+          kind: "CODE",
+          value: "print('hello')",
+        },
+      ],
+    }).success,
+    true,
+  );
+  assert.equal(
+    autosaveAnswersSchema.safeParse({
+      version: 0,
+      answers: [
+        {
+          assignmentQuestionId: questionId,
+          kind: "CODE",
+          value: "x".repeat(200_001),
+        },
+      ],
+    }).success,
+    false,
+  );
+});
+
 test("autosave rejects negative, fractional, and over-limit response times", () => {
   for (const responseTimeMs of [-1, 1.5, 86_400_001]) {
     const parsed = autosaveAnswersSchema.safeParse({

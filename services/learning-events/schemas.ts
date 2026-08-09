@@ -3,6 +3,7 @@ import { z } from "zod";
 export const assessmentLearningEventPayloadSchema = z
   .object({
     studentAnswerId: z.string().cuid(),
+    assessmentRevisionKey: z.string().max(191).nullable().optional(),
     evidenceStatus: z.enum(["VALID", "REVOKED"]),
     gradingSource: z.enum(["AUTO_GRADING", "MANUAL_GRADING"]).nullable(),
     score: z

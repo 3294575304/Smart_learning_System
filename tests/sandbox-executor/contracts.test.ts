@@ -15,6 +15,7 @@ test("executor requests require disabled network and bounded resources", () => {
     requestId: "1eb5fcd2-82d6-42eb-8905-93c9ce642eb7",
     language: "PYTHON",
     sourceCode: "print('ok')",
+    stdin: "",
     networkAccess: false,
     limits: {
       cpuTimeMs: 500,

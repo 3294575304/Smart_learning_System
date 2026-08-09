@@ -107,6 +107,7 @@ export async function runSandboxSecurityCapabilityProbe(
         requestId: randomUUID(),
         language: "PYTHON",
         sourceCode: probe.sourceCode,
+        stdin: "",
         networkAccess: false,
         limits: constrainedLimits,
         metadata: { purpose: "SECURITY_PROBE" },

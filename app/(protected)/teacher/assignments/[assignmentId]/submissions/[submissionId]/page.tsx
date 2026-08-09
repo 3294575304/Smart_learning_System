@@ -9,6 +9,7 @@ import { notFound } from "next/navigation";
 
 import { CompleteGradingButton } from "@/components/assignment-results/complete-grading-button";
 import { ManualGradeForm } from "@/components/assignment-results/manual-grade-form";
+import { ProgrammingAttemptActions } from "@/components/assignment-results/programming-attempt-actions";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import {
@@ -42,6 +43,11 @@ export default async function SubmissionGradingPage({ params }: Props) {
       (answer) =>
         answer.type === QuestionType.SHORT_ANSWER &&
         answer.gradingStatus === GradingStatus.MANUAL_REVIEW_REQUIRED,
+    ).length;
+    const pendingProgrammingCount = submission.answers.filter(
+      (answer) =>
+        answer.type === QuestionType.PYTHON_PROGRAMMING &&
+        answer.programmingAttempt?.status !== "SUCCEEDED",
     ).length;
     return (
       <section className="space-y-6">
@@ -86,8 +92,8 @@ export default async function SubmissionGradingPage({ params }: Props) {
           </div>
         ) : (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            仍有 {pendingManualCount}{" "}
-            道主观题待评分。全部单题保存后，再完成整份批改。
+            仍有 {pendingManualCount} 道主观题待评分、{pendingProgrammingCount}{" "}
+            道编程题待完成判题。全部单题完成后，再完成整份批改。
           </div>
         )}
 
@@ -99,6 +105,8 @@ export default async function SubmissionGradingPage({ params }: Props) {
           ) : (
             submission.answers.map((answer) => {
               const isManual = answer.type === QuestionType.SHORT_ANSWER;
+              const isProgramming =
+                answer.type === QuestionType.PYTHON_PROGRAMMING;
               const canEdit =
                 isManual &&
                 submission.status === SubmissionStatus.PENDING_REVIEW;
@@ -120,7 +128,9 @@ export default async function SubmissionGradingPage({ params }: Props) {
                       <p className="font-medium">
                         {isManual
                           ? `${answer.manualScore ?? "待批"} / ${answer.maxScore}`
-                          : `${answer.automaticScore ?? 0} / ${answer.maxScore}`}
+                          : isProgramming && answer.automaticScore === null
+                            ? `判题中 / ${answer.maxScore}`
+                            : `${answer.automaticScore ?? 0} / ${answer.maxScore}`}
                       </p>
                       <p className="text-muted-foreground mt-1">
                         {gradingStatusLabels[answer.gradingStatus]}
@@ -143,11 +153,16 @@ export default async function SubmissionGradingPage({ params }: Props) {
                       </dd>
                     </div>
                   </dl>
-                  {!isManual ? (
+                  {!isManual && !isProgramming ? (
                     <p className="mt-3 text-sm">
                       自动判分：
                       {answer.isCorrect ? "回答正确" : "回答错误"}
                     </p>
+                  ) : null}
+                  {isProgramming ? (
+                    <ProgrammingAttemptActions
+                      attempt={answer.programmingAttempt}
+                    />
                   ) : null}
                   {canEdit ? (
                     <ManualGradeForm

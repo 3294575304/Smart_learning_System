@@ -58,6 +58,9 @@ function withQuestionId(
     }
     return { questionId, kind: answer.kind, value: answer.value };
   }
+  if (answer.kind === "CODE") {
+    throw new Error("推荐练习暂不直接执行编程题，请进入原作业完成判题");
+  }
   return { questionId, kind: answer.kind, value: answer.value };
 }
 
@@ -260,6 +263,7 @@ export function RecommendationPractice({ recommendation }: Props) {
                   );
                   return;
                 }
+                if (answer.kind === "CODE") return;
                 form.setValue("answer", answer, {
                   shouldDirty: true,
                   shouldValidate: true,

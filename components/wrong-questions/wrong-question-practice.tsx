@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GradingStatus } from "@prisma/client";
+import { GradingStatus, QuestionType } from "@prisma/client";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
@@ -31,6 +31,9 @@ function practiceInput(
     }
     return { answer: { kind: answer.kind, value: answer.value } };
   }
+  if (answer.kind === "CODE") {
+    return { answer: { kind: "TEXT", value: answer.value } };
+  }
   return { answer };
 }
 
@@ -59,6 +62,15 @@ export function WrongQuestionPractice({
     resolver: zodResolver(wrongQuestionPracticeSchema),
     defaultValues: practiceInput(createEmptyQuestionAnswer(answerableQuestion)),
   });
+
+  if (question.type === QuestionType.PYTHON_PROGRAMMING) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+        Python
+        错题需要回到原作业，通过公开样例运行或正式提交重新判题；这里不会把代码当作普通文本答案评分。
+      </div>
+    );
+  }
 
   async function submit(input: WrongQuestionPracticeInput) {
     setServerError(null);

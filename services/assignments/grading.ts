@@ -60,6 +60,15 @@ export function savedAnswerInput(
           value: answer.booleanAnswer,
         };
   }
+  if (question.type === QuestionType.PYTHON_PROGRAMMING) {
+    return answer.textAnswer === null
+      ? { assignmentQuestionId: question.id, kind: "EMPTY" }
+      : {
+          assignmentQuestionId: question.id,
+          kind: "CODE",
+          value: answer.textAnswer,
+        };
+  }
   return answer.textAnswer === null
     ? { assignmentQuestionId: question.id, kind: "EMPTY" }
     : {
@@ -87,6 +96,13 @@ export function gradeAnswer(
   question: GradingQuestion,
   answer: SavedAnswerInput,
 ): GradingResult {
+  if (question.type === QuestionType.PYTHON_PROGRAMMING) {
+    return {
+      gradingStatus: GradingStatus.UNGRADED,
+      score: null,
+      isCorrect: null,
+    };
+  }
   if (question.type === QuestionType.SHORT_ANSWER) {
     return {
       gradingStatus: GradingStatus.MANUAL_REVIEW_REQUIRED,

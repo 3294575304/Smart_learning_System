@@ -14,7 +14,8 @@ export type QuestionAnswer =
       acceptableAnswers: string[];
       caseSensitive: boolean;
     }
-  | { kind: "REFERENCE"; value: string };
+  | { kind: "REFERENCE"; value: string }
+  | { kind: "PROGRAMMING" };
 
 export interface QuestionOptionData {
   id?: string;

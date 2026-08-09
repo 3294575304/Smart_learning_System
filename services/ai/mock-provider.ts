@@ -6,6 +6,8 @@ import type {
   SyllabusParseOutput,
 } from "@/services/syllabus-parsing/schemas";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
+import type { QuestionMappingAIInput } from "@/services/question-mapping/schemas";
+import { localQuestionConceptCandidates } from "@/services/question-mapping/candidates";
 
 export type MockAIResponder = (
   input: StudentAnalysisInput,
@@ -105,5 +107,33 @@ export class MockAIProvider implements AIProvider {
     if (options.signal.aborted)
       throw new DOMException("AI request aborted", "AbortError");
     return { related: [] };
+  }
+
+  async mapQuestionsToConcepts(
+    input: QuestionMappingAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    if (options.signal.aborted) {
+      throw new DOMException("AI request aborted", "AbortError");
+    }
+    return {
+      mappings: input.questions.map((question) => ({
+        questionId: question.id,
+        candidates: localQuestionConceptCandidates(
+          { title: question.title, content: question.content, tags: [] },
+          input.concepts.map((concept) => ({
+            id: concept.id,
+            conceptId: concept.id,
+            code: concept.code,
+            name: concept.name,
+            description: concept.description,
+          })),
+        ).map((candidate) => ({
+          conceptId: candidate.conceptId,
+          confidence: candidate.confidence,
+          reason: candidate.reason,
+        })),
+      })),
+    };
   }
 }

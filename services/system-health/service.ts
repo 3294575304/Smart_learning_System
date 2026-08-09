@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { checkAIHealth } from "@/services/system-health/ai-check";
 import { checkDatabaseHealth } from "@/services/system-health/database-check";
 import { deriveOverallHealthStatus } from "@/services/system-health/metrics";
+import { checkSandboxHealth } from "@/services/system-health/sandbox-check";
 import type { SystemHealthResult } from "@/services/system-health/types";
 import { getSystemConfig } from "@/services/system-config/service";
 
@@ -20,6 +21,7 @@ export async function getSystemHealth(
     activeAdminCount,
     staleAnalysisCount,
     staleTutoringCount,
+    sandbox,
   ] = await Promise.all([
     checkDatabaseHealth(),
     getSystemConfig(),
@@ -38,6 +40,7 @@ export async function getSystemHealth(
         createdAt: { lt: new Date(now.getTime() - STALE_AI_TASK_MS) },
       },
     }),
+    checkSandboxHealth(),
   ]);
   const ai = await checkAIHealth(config.aiAnalysisEnabled, now);
   const activeAdminAvailable = activeAdminCount > 0;
@@ -46,12 +49,14 @@ export async function getSystemHealth(
     status: deriveOverallHealthStatus({
       database: database.status,
       ai: ai.status,
+      sandbox: sandbox.status,
       activeAdminAvailable,
       stalePendingAITaskCount,
     }),
     checkedAt: now.toISOString(),
     database,
     ai,
+    sandbox,
     config: {
       platformName: config.platformName,
       maintenanceMode: config.maintenanceMode,

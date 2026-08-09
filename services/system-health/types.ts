@@ -16,11 +16,22 @@ export interface AIHealth {
   lastIssueAt: string | null;
 }
 
+export interface SandboxHealth {
+  status: SystemHealthStatus;
+  configurationComplete: boolean;
+  executorVersion: string | null;
+  active: number | null;
+  queued: number | null;
+  maxConcurrency: number | null;
+  maxQueueDepth: number | null;
+}
+
 export interface SystemHealthResult {
   status: Extract<SystemHealthStatus, "HEALTHY" | "DEGRADED" | "UNAVAILABLE">;
   checkedAt: string;
   database: DatabaseHealth;
   ai: AIHealth;
+  sandbox: SandboxHealth;
   config: {
     platformName: string;
     maintenanceMode: boolean;

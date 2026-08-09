@@ -3,6 +3,7 @@ import "server-only";
 import {
   sandboxExecutionRequestSchema,
   sandboxExecutionResultSchema,
+  sandboxHealthSchema,
   sandboxSubmissionReceiptSchema,
   type SandboxExecutionRequest,
 } from "@/services/sandbox-executor/schemas";
@@ -15,6 +16,16 @@ function executorConfiguration() {
     throw new Error("Sandbox executor is not configured");
   }
   return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey };
+}
+
+export class SandboxExecutorHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly retryAfterMs: number | null,
+  ) {
+    super(`Sandbox executor returned ${status}`);
+    this.name = "SandboxExecutorHttpError";
+  }
 }
 
 export class HttpSandboxExecutor implements SandboxExecutor {
@@ -32,8 +43,16 @@ export class HttpSandboxExecutor implements SandboxExecutor {
       signal: AbortSignal.timeout(10_000),
       cache: "no-store",
     });
-    if (!response.ok)
-      throw new Error(`Sandbox executor returned ${response.status}`);
+    if (!response.ok) {
+      const retryAfter = response.headers.get("retry-after");
+      const retryAfterSeconds = retryAfter ? Number(retryAfter) : Number.NaN;
+      throw new SandboxExecutorHttpError(
+        response.status,
+        Number.isFinite(retryAfterSeconds)
+          ? Math.max(0, retryAfterSeconds * 1_000)
+          : null,
+      );
+    }
     if (response.status === 204) return null;
     return response.json();
   }
@@ -61,5 +80,9 @@ export class HttpSandboxExecutor implements SandboxExecutor {
         method: "POST",
       },
     );
+  }
+
+  async health() {
+    return sandboxHealthSchema.parse(await this.request("/health"));
   }
 }

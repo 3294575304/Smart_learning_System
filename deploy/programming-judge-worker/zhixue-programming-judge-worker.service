@@ -1,0 +1,38 @@
+[Unit]
+Description=Zhixue programming judge worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zhixue-worker
+Group=zhixue-worker
+EnvironmentFile=/etc/zhixue-programming-judge-worker.env
+ExecStart=/usr/local/bin/node /opt/zhixue-programming-judge-worker/main.js
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=30s
+UMask=0077
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+LimitNOFILE=1024
+TasksMax=32
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

@@ -54,6 +54,9 @@ type QuestionRecord = Prisma.QuestionGetPayload<{
 }>;
 
 function answerFromRecord(question: QuestionRecord): QuestionAnswer {
+  if (question.type === QuestionType.PYTHON_PROGRAMMING) {
+    return { kind: "PROGRAMMING" };
+  }
   if (
     question.type === QuestionType.SINGLE_CHOICE ||
     question.type === QuestionType.MULTIPLE_CHOICE
@@ -169,6 +172,15 @@ function persistenceFields(input: QuestionUpsertData) {
       ...base,
       referenceAnswer: input.answer.value,
       gradingConfig: { mode: "MANUAL", manualReviewRequired: true },
+    };
+  }
+  if (input.answer.kind === "PROGRAMMING") {
+    return {
+      ...base,
+      gradingConfig: {
+        mode: "ASYNC_PROGRAMMING",
+        configStoredSeparately: true,
+      },
     };
   }
   return base;

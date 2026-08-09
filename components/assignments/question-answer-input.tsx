@@ -19,7 +19,8 @@ export interface AnswerableQuestion {
 export type QuestionAnswerState =
   | { kind: "CHOICE"; optionIds: string[] }
   | { kind: "BOOLEAN"; value: boolean | null }
-  | { kind: "TEXT"; value: string };
+  | { kind: "TEXT"; value: string }
+  | { kind: "CODE"; value: string };
 
 interface Props {
   answer: QuestionAnswerState;
@@ -39,6 +40,9 @@ export function createEmptyQuestionAnswer(
   }
   if (question.type === QuestionType.TRUE_FALSE) {
     return { kind: "BOOLEAN", value: null };
+  }
+  if (question.type === QuestionType.PYTHON_PROGRAMMING) {
+    return { kind: "CODE", value: "" };
   }
   return { kind: "TEXT", value: "" };
 }
@@ -99,6 +103,24 @@ export function QuestionAnswerInput({
           </label>
         ))}
       </fieldset>
+    );
+  }
+
+  if (
+    question.type === QuestionType.PYTHON_PROGRAMMING &&
+    answer.kind === "CODE"
+  ) {
+    return (
+      <textarea
+        aria-label="Python 代码"
+        className="mt-4 min-h-72 w-full rounded-md border bg-slate-950 p-4 font-mono text-sm text-slate-100 disabled:opacity-60"
+        disabled={disabled}
+        onChange={(event) =>
+          onChange({ kind: "CODE", value: event.target.value })
+        }
+        spellCheck={false}
+        value={answer.value}
+      />
     );
   }
 

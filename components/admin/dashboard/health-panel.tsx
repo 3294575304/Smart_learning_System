@@ -86,6 +86,17 @@ export function HealthPanel({
             </div>
           </div>
           <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+            <span className="text-sm font-medium">Python 隔离执行器</span>
+            <div className="text-right">
+              <StatusBadge status={data.sandbox.status} />
+              <p className="text-muted-foreground mt-1 text-xs">
+                {data.sandbox.queued === null
+                  ? "未取得队列状态"
+                  : `运行 ${data.sandbox.active}/${data.sandbox.maxConcurrency} · 排队 ${data.sandbox.queued}/${data.sandbox.maxQueueDepth}`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
             <span className="flex items-center gap-3 text-sm font-medium">
               <Bot aria-hidden="true" className="h-4 w-4" />
               AI 服务

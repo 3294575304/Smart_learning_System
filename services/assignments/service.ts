@@ -43,6 +43,8 @@ import type {
   TeacherAssignmentView,
 } from "@/services/assignments/types";
 import { freezeAssignmentQuestionConcepts } from "@/services/concept-mastery/assignment-snapshot";
+import { freezeAssignmentProgrammingConfigs } from "@/services/programming-questions/assignment-snapshot";
+import { createFormalProgrammingAttempt } from "@/services/programming-attempts/service";
 import { appendAssessmentLearningEventsAndProjectEvidence } from "@/services/learning-events/assessment";
 import { notifyAssignmentPublished } from "@/services/notifications/events/assignment";
 
@@ -441,6 +443,7 @@ export async function publishAssignment(
       assignmentId,
       assignment.classroom.courseId,
     );
+    await freezeAssignmentProgrammingConfigs(transaction, assignmentId);
     await transaction.assignment.update({
       where: { id: assignmentId },
       data: { status: AssignmentStatus.PUBLISHED, totalPoints },
@@ -687,6 +690,7 @@ const submissionDraftInclude = {
     include: {
       classroom: {
         select: {
+          courseId: true,
           memberships: {
             select: { studentId: true, status: true },
           },
@@ -771,7 +775,9 @@ function validateAnswerShape(
       ? "CHOICE"
       : question.typeSnapshot === QuestionType.TRUE_FALSE
         ? "BOOLEAN"
-        : "TEXT";
+        : question.typeSnapshot === QuestionType.PYTHON_PROGRAMMING
+          ? "CODE"
+          : "TEXT";
   if (answer.kind !== expectedKind) {
     throw new AssignmentOperationError("答案类型与题型不匹配", 400);
   }
@@ -917,7 +923,10 @@ export async function saveStudentAnswers(
           },
         },
         update: {
-          textAnswer: answer.kind === "TEXT" ? answer.value : null,
+          textAnswer:
+            answer.kind === "TEXT" || answer.kind === "CODE"
+              ? answer.value
+              : null,
           booleanAnswer: answer.kind === "BOOLEAN" ? answer.value : null,
           responseTimeMs: answer.responseTimeMs,
           gradingStatus: GradingStatus.UNGRADED,
@@ -928,7 +937,10 @@ export async function saveStudentAnswers(
         create: {
           submissionId,
           assignmentQuestionId: answer.assignmentQuestionId,
-          textAnswer: answer.kind === "TEXT" ? answer.value : null,
+          textAnswer:
+            answer.kind === "TEXT" || answer.kind === "CODE"
+              ? answer.value
+              : null,
           booleanAnswer: answer.kind === "BOOLEAN" ? answer.value : null,
           responseTimeMs: answer.responseTimeMs,
           maxScore: question.points,
@@ -956,6 +968,7 @@ const gradingSubmissionInclude = {
     include: {
       classroom: {
         select: {
+          courseId: true,
           memberships: {
             select: { studentId: true, status: true },
           },
@@ -1037,6 +1050,9 @@ export async function submitStudentAssignment(
       if (result.gradingStatus === GradingStatus.MANUAL_REVIEW_REQUIRED) {
         requiresManualReview = true;
       }
+      if (question.typeSnapshot === QuestionType.PYTHON_PROGRAMMING) {
+        requiresManualReview = true;
+      }
       const persisted = await transaction.studentAnswer.upsert({
         where: {
           submissionId_assignmentQuestionId: {
@@ -1065,6 +1081,15 @@ export async function submitStudentAssignment(
         select: { id: true },
       });
       answerIds.push(persisted.id);
+      if (question.typeSnapshot === QuestionType.PYTHON_PROGRAMMING) {
+        await createFormalProgrammingAttempt(transaction, {
+          studentAnswerId: persisted.id,
+          assignmentQuestionId: question.id,
+          studentId,
+          sourceCode: currentAnswer?.textAnswer ?? "",
+          courseId: submission.assignment.classroom.courseId,
+        });
+      }
       if (result.isCorrect === false) {
         await transaction.wrongQuestion.upsert({
           where: { studentAnswerId: persisted.id },
@@ -1124,6 +1149,12 @@ export async function getStudentSubmissionResult(
       answers: {
         orderBy: { assignmentQuestion: { sortOrder: "asc" } },
         include: {
+          programmingAttempts: {
+            where: { kind: "FORMAL_JUDGE" },
+            orderBy: { revisionNumber: "desc" },
+            take: 1,
+            select: { id: true, assignmentQuestionId: true, status: true },
+          },
           selectedOptions: {
             orderBy: { assignmentQuestionOption: { sortOrder: "asc" } },
             select: {
@@ -1163,6 +1194,9 @@ export async function getStudentSubmissionResult(
     maxScore: isPublished ? decimalNumber(submission.maxScore) : null,
     percentage: isPublished ? decimalNumber(submission.percentage) : null,
     isPublished,
+    programmingAttempts: submission.answers.flatMap(
+      (answer) => answer.programmingAttempts,
+    ),
     answers: isPublished
       ? submission.answers.map((answer) => ({
           id: answer.id,

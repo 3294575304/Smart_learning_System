@@ -54,6 +54,9 @@ export function formatStudentAnswer(
 }
 
 export function formatCorrectAnswer(question: PresentedQuestion): string {
+  if (question.typeSnapshot === QuestionType.PYTHON_PROGRAMMING) {
+    return "由作业发布时冻结的测试用例判定";
+  }
   if (
     question.typeSnapshot === QuestionType.SINGLE_CHOICE ||
     question.typeSnapshot === QuestionType.MULTIPLE_CHOICE

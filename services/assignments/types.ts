@@ -70,6 +70,11 @@ export interface SubmissionResultView {
   maxScore: number | null;
   percentage: number | null;
   isPublished: boolean;
+  programmingAttempts: Array<{
+    id: string;
+    assignmentQuestionId: string;
+    status: string;
+  }>;
   answers: Array<{
     id: string;
     assignmentQuestionId: string;
@@ -139,6 +144,15 @@ export interface TeacherSubmissionAnswerView {
   gradingStatus: GradingStatus;
   teacherFeedback: string | null;
   explanation: string;
+  programmingAttempt: {
+    id: string;
+    status: string;
+    score: number | null;
+    maxScore: number;
+    errorType: string | null;
+    safeErrorSummary: string | null;
+    revisionNumber: number;
+  } | null;
 }
 
 export interface TeacherSubmissionDetail {

@@ -120,6 +120,7 @@ test("AI 无记录为 UNKNOWN，关闭和异常状态不伪造健康", () => {
     deriveOverallHealthStatus({
       database: "HEALTHY",
       ai: "DISABLED",
+      sandbox: "DISABLED",
       activeAdminAvailable: true,
       stalePendingAITaskCount: 0,
     }),

@@ -131,6 +131,10 @@ const answerSchema = z.discriminatedUnion("kind", [
     kind: z.literal("TEXT"),
     value: z.string().max(10000, "答案不能超过 10000 个字符"),
   }),
+  answerBase.extend({
+    kind: z.literal("CODE"),
+    value: z.string().max(200_000, "Python 代码不能超过 200000 个字符"),
+  }),
 ]);
 
 export const autosaveAnswersSchema = z.object({

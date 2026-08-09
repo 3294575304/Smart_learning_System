@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { TrendChart } from "@/components/dashboard/trend-chart";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { getStudentLearningOverview } from "@/services/dashboard/student-dashboard";
+import { listStudentLearnerProfileCourses } from "@/services/learner-profiles/service";
 
 const INSIGHT_LABELS: Record<AIInsightType, string> = {
   STRENGTH: "优势",
@@ -17,7 +18,10 @@ const INSIGHT_LABELS: Record<AIInsightType, string> = {
 
 export default async function StudentAnalyticsPage() {
   const student = await requirePageRole(Role.STUDENT);
-  const overview = await getStudentLearningOverview(student.id);
+  const [overview, profileCourses] = await Promise.all([
+    getStudentLearningOverview(student.id),
+    listStudentLearnerProfileCourses(student.id),
+  ]);
 
   return (
     <section className="space-y-6">
@@ -33,6 +37,28 @@ export default async function StudentAnalyticsPage() {
         description="基于已批改作业、知识点掌握度和已有 AI 分析了解当前学习状态。"
         title="学情分析"
       />
+
+      <section className="bg-card rounded-xl border p-5 sm:p-6">
+        <h2 className="font-semibold">课程画像</h2>
+        <p className="text-muted-foreground mt-1 text-sm">
+          查看按课程冻结的画像快照、证据状态和评分证据下钻。
+        </p>
+        {profileCourses.length ? (
+          <div className="mt-4 flex flex-wrap gap-3">
+            {profileCourses.map((course) => (
+              <Link
+                className="rounded-md border bg-white px-4 py-2 text-sm font-medium"
+                href={`/student/courses/${course.id}/profile`}
+                key={course.id}
+              >
+                {course.name} · {course.term}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground mt-4 text-sm">暂无已关联课程。</p>
+        )}
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <section className="bg-card rounded-xl border p-5 sm:p-6">

@@ -1,0 +1,25 @@
+{
+  "date": "2026-08-09",
+  "gate": "iteration-five-d-external-ai-question-mapping",
+  "passed": true,
+  "authorization": "The operator explicitly authorized sending question text and Concept metadata to the configured external AI service.",
+  "dataClassification": {
+    "probeData": "synthetic question text and synthetic Concept metadata only",
+    "studentDataSent": false,
+    "answersOrTestCasesSent": false,
+    "rawProviderResponseStored": false
+  },
+  "provider": "openai-compatible",
+  "model": "deepseek-chat",
+  "checks": {
+    "httpRequestSucceeded": true,
+    "strictJsonContractAccepted": true,
+    "questionIdsRestrictedToInput": true,
+    "conceptIdsRestrictedToInput": true,
+    "candidateLimitEnforced": true
+  },
+  "resultSummary": {
+    "mappingCount": 1,
+    "candidateCount": 2
+  }
+}

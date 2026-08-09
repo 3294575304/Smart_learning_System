@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
+import { ProgrammingQuestionInput } from "@/components/assignments/programming-question-input";
 import {
   QuestionAnswerInput,
   type QuestionAnswerState,
@@ -81,6 +82,9 @@ function initialAnswers(
           { kind: "BOOLEAN", value: answer?.booleanAnswer ?? null },
         ];
       }
+      if (question.type === QuestionType.PYTHON_PROGRAMMING) {
+        return [question.id, { kind: "CODE", value: answer?.textAnswer ?? "" }];
+      }
       return [question.id, { kind: "TEXT", value: answer?.textAnswer ?? "" }];
     }),
   );
@@ -116,7 +120,7 @@ function apiAnswers(
       ? { assignmentQuestionId, kind: "EMPTY", responseTimeMs }
       : {
           assignmentQuestionId,
-          kind: "TEXT",
+          kind: answer.kind === "CODE" ? "CODE" : "TEXT",
           value: answer.value,
           responseTimeMs,
         };
@@ -385,7 +389,20 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
                 <p className="mt-4 text-sm whitespace-pre-wrap">
                   {question.content}
                 </p>
-                {answer ? (
+                {answer?.kind === "CODE" &&
+                question.type === QuestionType.PYTHON_PROGRAMMING ? (
+                  <ProgrammingQuestionInput
+                    assignmentQuestionId={question.id}
+                    code={answer.value}
+                    onChange={(code) =>
+                      setAnswers((current) => ({
+                        ...current,
+                        [question.id]: { kind: "CODE", value: code },
+                      }))
+                    }
+                    submissionId={submission.id}
+                  />
+                ) : answer ? (
                   <QuestionAnswerInput
                     answer={answer}
                     onChange={(nextAnswer) =>

@@ -62,6 +62,20 @@ const gradingDetailInclude = {
   answers: {
     orderBy: { assignmentQuestion: { sortOrder: "asc" as const } },
     include: {
+      programmingAttempts: {
+        where: { kind: "FORMAL_JUDGE" as const },
+        orderBy: { revisionNumber: "desc" as const },
+        take: 1,
+        select: {
+          id: true,
+          status: true,
+          score: true,
+          maxScore: true,
+          overallErrorType: true,
+          safeErrorSummary: true,
+          revisionNumber: true,
+        },
+      },
       selectedOptions: {
         orderBy: { assignmentQuestionOption: { sortOrder: "asc" as const } },
         select: {
@@ -145,6 +159,17 @@ function detailFromRecord(
       gradingStatus: answer.gradingStatus,
       teacherFeedback: answer.teacherFeedback,
       explanation: answer.assignmentQuestion.explanationSnapshot,
+      programmingAttempt: answer.programmingAttempts[0]
+        ? {
+            id: answer.programmingAttempts[0].id,
+            status: answer.programmingAttempts[0].status,
+            score: decimalNumber(answer.programmingAttempts[0].score),
+            maxScore: answer.programmingAttempts[0].maxScore.toNumber(),
+            errorType: answer.programmingAttempts[0].overallErrorType,
+            safeErrorSummary: answer.programmingAttempts[0].safeErrorSummary,
+            revisionNumber: answer.programmingAttempts[0].revisionNumber,
+          }
+        : null,
     })),
   };
 }
@@ -396,6 +421,41 @@ export async function completeSubmissionGrading(
         ) {
           throw new AssignmentOperationError(
             `第 ${question.sortOrder} 题尚未完成有效人工评分`,
+          );
+        }
+        totalScore = totalScore.add(answer.score);
+        if (answer.score.lt(question.points)) {
+          await transaction.wrongQuestion.upsert({
+            where: { studentAnswerId: answer.id },
+            update: { isResolved: false, resolvedAt: null },
+            create: {
+              studentId: submission.studentId,
+              studentAnswerId: answer.id,
+              assignmentQuestionId: question.id,
+            },
+          });
+        } else {
+          await transaction.wrongQuestion.deleteMany({
+            where: { studentAnswerId: answer.id },
+          });
+        }
+        answerIds.push(answer.id);
+        continue;
+      }
+
+      if (question.typeSnapshot === QuestionType.PYTHON_PROGRAMMING) {
+        const latestAttempt = answer?.programmingAttempts[0];
+        if (
+          !answer ||
+          !latestAttempt ||
+          latestAttempt.status !== "SUCCEEDED" ||
+          answer.gradingStatus !== GradingStatus.AUTO_GRADED ||
+          answer.score === null ||
+          answer.score.lt(0) ||
+          answer.score.gt(question.points)
+        ) {
+          throw new AssignmentOperationError(
+            `第 ${question.sortOrder} 题尚未完成有效的 Python 判题`,
           );
         }
         totalScore = totalScore.add(answer.score);
