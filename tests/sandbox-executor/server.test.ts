@@ -7,7 +7,9 @@ import {
 } from "../../services/sandbox-executor-server/src/contract";
 import {
   classifySandboxOutcome,
+  cpuUlimit,
   parseDockerBytes,
+  positiveMeasuredValue,
 } from "../../services/sandbox-executor-server/src/runner";
 
 const validRequest = {
@@ -87,11 +89,26 @@ test("executor classifies bounded resource failures before runtime errors", () =
   assert.equal(parseDockerBytes("1.5MiB"), 1.5 * 1024 * 1024);
 });
 
-test("executor maps a non-OOM hard CPU kill to a time limit", () => {
+test("executor distinguishes an early OOM-style kill from a wall timeout", () => {
+  assert.equal(cpuUlimit(500), "1:2");
+  assert.equal(cpuUlimit(1_500), "2:3");
   assert.equal(
     classifySandboxOutcome({
       cancelled: false,
       timedOut: false,
+      outputLimited: false,
+      oomKilled: false,
+      exitCode: 137,
+      stderr: "",
+      peakProcessCount: 1,
+      processLimit: 2,
+    }),
+    "MEMORY_LIMIT",
+  );
+  assert.equal(
+    classifySandboxOutcome({
+      cancelled: false,
+      timedOut: true,
       outputLimited: false,
       oomKilled: false,
       exitCode: 137,
@@ -105,6 +122,9 @@ test("executor maps a non-OOM hard CPU kill to a time limit", () => {
 
 test("unavailable resource samples remain null instead of looking like zero", () => {
   assert.equal(parseDockerBytes(""), null);
+  assert.equal(positiveMeasuredValue(0), null);
+  assert.equal(positiveMeasuredValue(Number.NaN), null);
+  assert.equal(positiveMeasuredValue(1), 1);
   assert.equal(
     classifySandboxOutcome({
       cancelled: false,

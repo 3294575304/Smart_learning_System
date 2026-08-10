@@ -7,6 +7,11 @@ const migrationUrl = new URL(
   import.meta.url,
 );
 
+const answerShapeMigrationUrl = new URL(
+  "../../prisma/migrations/20260809230000_allow_python_question_answer_shapes/migration.sql",
+  import.meta.url,
+);
+
 test("Python 题型 migration 纯追加并冻结明确配置字段", async () => {
   const sql = await readFile(migrationUrl, "utf8");
   assert.match(sql, /ADD VALUE IF NOT EXISTS 'PYTHON_PROGRAMMING'/u);
@@ -15,4 +20,15 @@ test("Python 题型 migration 纯追加并冻结明确配置字段", async () =>
   assert.match(sql, /"testCasesHash" CHAR\(64\) NOT NULL/u);
   assert.match(sql, /"executorRuleVersion" VARCHAR\(100\) NOT NULL/u);
   assert.doesNotMatch(sql, /^\s*(?:DROP|DELETE|TRUNCATE|UPDATE|INSERT)\b/imu);
+});
+
+test("Python 题型 migration 更新题目与作业快照答案形状约束", async () => {
+  const sql = await readFile(answerShapeMigrationUrl, "utf8");
+  assert.match(sql, /DROP CONSTRAINT "Question_answer_shape_check"/u);
+  assert.match(sql, /DROP CONSTRAINT "AssignmentQuestion_answer_shape_check"/u);
+  assert.match(sql, /"type" = 'PYTHON_PROGRAMMING'/u);
+  assert.match(sql, /"typeSnapshot" = 'PYTHON_PROGRAMMING'/u);
+  assert.match(sql, /^BEGIN;/mu);
+  assert.match(sql, /^COMMIT;/mu);
+  assert.doesNotMatch(sql, /^\s*(?:DELETE|TRUNCATE|UPDATE|INSERT)\b/imu);
 });

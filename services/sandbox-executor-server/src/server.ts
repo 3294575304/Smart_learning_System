@@ -75,6 +75,7 @@ async function main() {
   const config = readExecutorConfig();
   await mkdir(config.workRoot, { recursive: true, mode: 0o700 });
   const runner = new DockerSandboxRunner(config);
+  const startupCleanup = await runner.cleanupStaleSandboxes();
   const records = new Map<string, ExecutionRecord>();
   const requestIds = new Map<string, string>();
   const queue: string[] = [];
@@ -264,6 +265,7 @@ async function main() {
         version: config.executorVersion,
         maxConcurrency: config.maxConcurrency,
         maxQueueDepth: config.maxQueueDepth,
+        startupCleanup,
       }),
     );
   });

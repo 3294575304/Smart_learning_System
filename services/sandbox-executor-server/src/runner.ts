@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -48,6 +48,15 @@ export function parseDockerBytes(value: string) {
   return factor === undefined ? null : Math.round(amount * factor);
 }
 
+export function positiveMeasuredValue(value: number) {
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function cpuUlimit(cpuTimeMs: number) {
+  const softSeconds = Math.max(1, Math.ceil(cpuTimeMs / 1000));
+  return `${softSeconds}:${softSeconds + 1}`;
+}
+
 export function classifySandboxOutcome(input: {
   cancelled: boolean;
   timedOut: boolean;
@@ -62,6 +71,7 @@ export function classifySandboxOutcome(input: {
   if (input.outputLimited) return "OUTPUT_LIMIT";
   if (
     input.oomKilled ||
+    (input.exitCode === 137 && !input.timedOut) ||
     /MemoryError|Cannot allocate memory/iu.test(input.stderr)
   )
     return "MEMORY_LIMIT";
@@ -72,8 +82,7 @@ export function classifySandboxOutcome(input: {
     /Resource temporarily unavailable|BlockingIOError/iu.test(input.stderr)
   )
     return "PROCESS_LIMIT";
-  if (input.timedOut || input.exitCode === 137 || input.exitCode === 152)
-    return "TIME_LIMIT";
+  if (input.timedOut || input.exitCode === 152) return "TIME_LIMIT";
   if (input.exitCode === 0) return "NONE";
   if (/SyntaxError|IndentationError|TabError/iu.test(input.stderr))
     return "SYNTAX_ERROR";
@@ -97,6 +106,28 @@ export class DockerSandboxRunner {
   private readonly cancelled = new Set<string>();
 
   constructor(private readonly config: ExecutorConfig) {}
+
+  async cleanupStaleSandboxes() {
+    const { stdout } = await execFileAsync(
+      this.config.dockerBinary,
+      ["ps", "--all", "--quiet", "--filter", "label=zhixue.sandbox=true"],
+      { maxBuffer: 64 * 1024, timeout: 5_000, windowsHide: true },
+    );
+    const containerIds = stdout.trim().split(/\s+/u).filter(Boolean);
+    if (containerIds.length > 0) {
+      await this.docker(["rm", "--force", ...containerIds]);
+    }
+    const workEntries = await readdir(this.config.workRoot);
+    await Promise.all(
+      workEntries.map((entry) =>
+        rm(join(this.config.workRoot, entry), { recursive: true, force: true }),
+      ),
+    );
+    return {
+      containerCount: containerIds.length,
+      workEntryCount: workEntries.length,
+    };
+  }
 
   async cancel(executionId: string) {
     this.cancelled.add(executionId);
@@ -124,10 +155,6 @@ export class DockerSandboxRunner {
       });
       await chmod(sourcePath, 0o444);
 
-      const cpuSeconds = Math.max(
-        1,
-        Math.ceil(request.limits.cpuTimeMs / 1000),
-      );
       const memory = String(request.limits.memoryBytes);
       const runtimeProcessLimit = request.limits.processCount + 32;
       await this.docker([
@@ -154,7 +181,7 @@ export class DockerSandboxRunner {
         "--cpus",
         "1",
         "--ulimit",
-        `cpu=${cpuSeconds}:${cpuSeconds}`,
+        `cpu=${cpuUlimit(request.limits.cpuTimeMs)}`,
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,nodev,size=16777216",
         "--mount",
@@ -380,21 +407,24 @@ export class DockerSandboxRunner {
       const cpuPercent = Number.parseFloat(cpu.replace("%", "").trim());
       const sampledAt = Date.now();
       const elapsed = Math.max(0, sampledAt - metrics.lastSampleAt);
-      if (Number.isFinite(cpuPercent)) {
+      const measuredCpuPercent = positiveMeasuredValue(cpuPercent);
+      if (measuredCpuPercent !== null) {
         metrics.cpuTimeMs =
-          (metrics.cpuTimeMs ?? 0) + (cpuPercent / 100) * elapsed;
+          (metrics.cpuTimeMs ?? 0) + (measuredCpuPercent / 100) * elapsed;
       }
       metrics.lastSampleAt = sampledAt;
-      if (usedMemory !== null) {
+      const measuredMemory = positiveMeasuredValue(usedMemory ?? Number.NaN);
+      if (measuredMemory !== null) {
         metrics.peakMemoryBytes = Math.max(
           metrics.peakMemoryBytes ?? 0,
-          usedMemory,
+          measuredMemory,
         );
       }
-      if (Number.isFinite(processCount)) {
+      const measuredProcessCount = positiveMeasuredValue(processCount);
+      if (measuredProcessCount !== null) {
         metrics.processCount = Math.max(
           metrics.processCount ?? 0,
-          processCount,
+          measuredProcessCount,
         );
       }
     } catch {
