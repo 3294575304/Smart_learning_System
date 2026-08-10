@@ -2,7 +2,7 @@
 
 > 日期：2026-08-10
 > 范围：五 B0、五 B1、五 B2、五 B3、五 C、五 D、五 E
-> 结论：B0–B3、C、D 的代码纵切已实现，外部 AI 真实契约探测通过；远程 gVisor 安全能力复测 8/8 和 Python 判题真实纵向集成均已通过，E 的本地与测试数据库门禁通过。常驻生产 worker 和浏览器人工演示尚未完成，迭代五整体暂不标记完成。
+> 结论：B0–B3、C、D 的代码纵切已实现，外部 AI 真实契约探测通过；远程 gVisor 安全能力复测 8/8 和 Python 判题真实纵向集成均已通过，E 的本地与测试数据库门禁通过。本机 Next.js、PostgreSQL、登录态常驻 worker 和 SSH 隧道已部署；浏览器人工演示及无人登录开机自启尚未完成，迭代五整体暂不标记完成。
 
 ## 实现状态
 
@@ -65,9 +65,9 @@
 
 ## 尚未关闭的门禁
 
-1. 当前材料只提供本地应用/数据库配置，没有可供远程 worker 访问的生产 `APPLICATION_INTERNAL_URL`；因此 systemd worker 安装资产和真实纵向验收均已完成，但常驻生产 worker 尚未部署。
+1. 本机已使用当前 Windows 用户登录计划任务运行 Next.js、SSH 隧道和判题 worker；重新登录可自动恢复，但无人登录时的开机自启尚未配置。若后续部署正式服务器，仍需改为专用服务账户或 Windows/Linux 服务。
 2. 尚未进行浏览器人工演示：教师建题/发布、学生公开运行/正式提交、判题完成、证据与画像下钻的完整交互链。
 
-远程执行器继续只监听 `127.0.0.1:8788`，没有开放裸 HTTP 公网端口。仓库已补充 `deploy/programming-judge-worker/install-worker-service.sh`，待生产应用地址确定后，以 root 所有、`0600` 环境文件和加固 systemd 单元部署常驻 worker。
+远程执行器继续只监听 `127.0.0.1:8788`，没有开放裸 HTTP 公网端口。本机应用只监听 `127.0.0.1:3000`，运行时密钥保存在 Git 忽略且限制 ACL 的 `.data/local-deployment`。Linux 正式服务器仍可使用 `deploy/programming-judge-worker/install-worker-service.sh` 和加固 systemd 单元部署。
 
 只有上述生产拓扑和人工演示门禁关闭后，才能把“迭代五整体”标记为完成并进入课程图谱驱动推荐。

@@ -1,0 +1,33 @@
+{
+  "verifiedAt": "2026-08-10T08:49:07.7801636Z",
+  "passed": true,
+  "topology": {
+    "application": "Next.js production server on 127.0.0.1:3000",
+    "database": "PostgreSQL 18 Windows service on localhost:5432",
+    "worker": "one local programming judge worker",
+    "executorTransport": "persistent SSH local forward on 127.0.0.1:18788",
+    "executor": "remote loopback-only gVisor executor on 8.133.167.139:8788"
+  },
+  "persistence": {
+    "mode": "current-user Windows logon scheduled tasks",
+    "tasks": ["Zhixue-Next", "Zhixue-SSH-Tunnel", "Zhixue-Judge-Worker"],
+    "restartDrillPassed": true,
+    "unattendedBeforeLogin": false
+  },
+  "checks": {
+    "runningTasks": 3,
+    "applicationHttpStatus": 200,
+    "postgresqlStatus": "Running",
+    "executorStatus": "ok",
+    "workerProcessCount": 1,
+    "nonEmptyErrorLogCount": 0,
+    "databaseMigrationCount": 44,
+    "realProgrammingRuntime": "passed: public run, hidden judge, grade and concept evidence"
+  },
+  "security": {
+    "applicationBinding": "loopback only",
+    "executorBinding": "loopback only through SSH",
+    "runtimeConfiguration": "Git-ignored file with restricted Windows ACL",
+    "secretsIncludedInEvidence": false
+  }
+}
