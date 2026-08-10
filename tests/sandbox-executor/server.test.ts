@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -38,6 +39,25 @@ test("executor server validates the application request contract strictly", () =
     validateExecutionRequest({ ...validRequest, unexpected: "field" }),
     null,
   );
+});
+
+test("executor preserves container stdin for programming test cases", async () => {
+  const source = await readFile(
+    new URL(
+      "../../services/sandbox-executor-server/src/runner.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /"create",\s*"--name",\s*containerName,\s*"--interactive"/u,
+  );
+  assert.match(
+    source,
+    /\["start",\s*"--attach",\s*"--interactive",\s*containerName\]/u,
+  );
+  assert.match(source, /child\.stdin\.end\(request\.stdin\)/u);
 });
 
 test("executor request fingerprints do not depend on JSON property order", () => {
@@ -82,6 +102,19 @@ test("executor classifies bounded resource failures before runtime errors", () =
       exitCode: 1,
       stderr: "BlockingIOError: Resource temporarily unavailable",
       peakProcessCount: 2,
+      processLimit: 2,
+    }),
+    "PROCESS_LIMIT",
+  );
+  assert.equal(
+    classifySandboxOutcome({
+      cancelled: false,
+      timedOut: false,
+      outputLimited: false,
+      oomKilled: false,
+      exitCode: 2,
+      stderr: "Traceback (most recent call last):\n",
+      peakProcessCount: null,
       processLimit: 2,
     }),
     "PROCESS_LIMIT",

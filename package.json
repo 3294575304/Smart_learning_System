@@ -19,6 +19,7 @@
     "test:integration": "tsx tests/integration/recommendations/run.ts",
     "test:all": "npm test && npm run test:integration",
     "test:sandbox-capabilities": "node --conditions=react-server --import tsx scripts/verify-sandbox-capabilities.ts",
+    "test:programming-runtime": "tsx tests/programming-attempts/real-runtime.ts",
     "build:sandbox-executor": "tsc -p services/sandbox-executor-server/tsconfig.json",
     "build:programming-judge-worker": "tsc -p services/programming-judge-worker/tsconfig.json"
   },

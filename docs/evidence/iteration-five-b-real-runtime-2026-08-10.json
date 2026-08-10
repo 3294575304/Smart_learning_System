@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-08-10T07:39:31.000Z",
+  "passed": true,
+  "topology": [
+    "isolated PostgreSQL test schema",
+    "Next.js production server",
+    "independent programming judge worker",
+    "SSH tunnel to loopback-only executor API",
+    "remote gVisor Python executor"
+  ],
+  "checks": [
+    "applied all 44 migrations to an isolated schema and completed seed",
+    "teacher created a Python question and immutable public/hidden test configuration",
+    "assignment publication froze the programming configuration revision",
+    "student public run executed Python with stdin on the remote gVisor node",
+    "formal submission executed public and hidden tests asynchronously",
+    "hidden inputs, expected outputs, stdout, and stderr were absent from the student DTO",
+    "deterministic score and submission status were projected",
+    "learning event and course Concept evidence were appended"
+  ],
+  "result": "Programming runtime HTTP integration passed (real remote executor): public run, hidden judge, grade and concept evidence."
+}

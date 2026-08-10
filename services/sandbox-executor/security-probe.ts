@@ -58,7 +58,7 @@ const probes: readonly ProbeDefinition[] = [
   {
     name: "process-limit",
     sourceCode:
-      "import os\nchildren=[]\nfor _ in range(16):\n children.append(os.fork())\nprint('FORKED',len(children))",
+      "import os,sys,time\nchildren=[]\ntry:\n for _ in range(16):\n  pid=os.fork()\n  if pid==0:\n   time.sleep(10)\n   os._exit(0)\n  children.append(pid)\nexcept OSError as error:\n print('PROCESS_LIMIT:',type(error).__name__,file=sys.stderr,flush=True)\n raise SystemExit(73)\nprint('PROCESS_LIMIT_MISSING:',len(children),flush=True)\nraise SystemExit(74)",
     verify: (result) =>
       result.errorType === "PROCESS_LIMIT" ||
       result.errorType === "SECURITY_VIOLATION",

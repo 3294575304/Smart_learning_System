@@ -79,7 +79,14 @@ export function classifySandboxOutcome(input: {
     (input.exitCode !== 0 &&
       input.peakProcessCount !== null &&
       input.peakProcessCount >= input.processLimit + 32) ||
-    /Resource temporarily unavailable|BlockingIOError/iu.test(input.stderr)
+    /PROCESS_LIMIT|Resource temporarily unavailable|BlockingIOError/iu.test(
+      input.stderr,
+    ) ||
+    // gVisor may stop a short fork fan-out before Docker stats samples it and
+    // before Python flushes the remainder of the BlockingIOError traceback.
+    (input.exitCode === 2 &&
+      input.peakProcessCount === null &&
+      input.stderr.trim() === "Traceback (most recent call last):")
   )
     return "PROCESS_LIMIT";
   if (input.timedOut || input.exitCode === 152) return "TIME_LIMIT";
@@ -161,6 +168,7 @@ export class DockerSandboxRunner {
         "create",
         "--name",
         containerName,
+        "--interactive",
         "--runtime",
         this.config.dockerRuntime,
         "--network",
