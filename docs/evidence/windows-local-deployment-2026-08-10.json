@@ -1,5 +1,5 @@
 {
-  "verifiedAt": "2026-08-10T08:49:07.7801636Z",
+  "verifiedAt": "2026-08-10T09:26:32.5996055Z",
   "passed": true,
   "topology": {
     "application": "Next.js production server on 127.0.0.1:3000",
@@ -12,6 +12,7 @@
     "mode": "current-user Windows logon scheduled tasks",
     "tasks": ["Zhixue-Next", "Zhixue-SSH-Tunnel", "Zhixue-Judge-Worker"],
     "restartDrillPassed": true,
+    "stopOnIdleEnd": false,
     "unattendedBeforeLogin": false
   },
   "checks": {
@@ -21,7 +22,11 @@
     "executorStatus": "ok",
     "workerProcessCount": 1,
     "nonEmptyErrorLogCount": 0,
+    "productionBuildDirectory": ".data/next-production",
+    "productionManifestValid": true,
     "databaseMigrationCount": 44,
+    "pendingOrRunningProgrammingAttempts": 0,
+    "recoveredPublicRun": "SUCCEEDED at 100 percent with one worker attempt",
     "realProgrammingRuntime": "passed: public run, hidden judge, grade and concept evidence"
   },
   "security": {

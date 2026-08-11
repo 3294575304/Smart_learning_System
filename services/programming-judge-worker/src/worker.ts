@@ -24,6 +24,14 @@ function deterministicUuid(value: string) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
 }
 
+export function programmingExecutionRequestId(
+  jobId: string,
+  inputFingerprint: string,
+  testCaseId: string,
+) {
+  return deterministicUuid(`${jobId}:${inputFingerprint}:${testCaseId}`);
+}
+
 function normalizeOutput(value: string) {
   return value.replace(/\r\n?/gu, "\n").trimEnd();
 }
@@ -182,8 +190,10 @@ export class ProgrammingJudgeWorker {
           Math.max(1, Math.floor((index / payload.testCases.length) * 90)),
         );
         const request = {
-          requestId: deterministicUuid(
-            `${payload.inputFingerprint}:${testCase.id}`,
+          requestId: programmingExecutionRequestId(
+            job.id,
+            payload.inputFingerprint,
+            testCase.id,
           ),
           sourceCode: payload.sourceCode.trim() ? payload.sourceCode : "pass\n",
           stdin: testCase.stdin,

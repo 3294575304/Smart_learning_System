@@ -1,6 +1,6 @@
 # V1.0 迭代五阶段性专项验收记录
 
-> 本文件保留 2026-08-07 基础链路验收时点的历史结论。五 B–E 的最新实现与门禁状态见 `docs/ITERATION-FIVE-B-E-IMPLEMENTATION.md`，不要再以本文中的“尚未完成”列表判断当前代码状态。
+> 本文件保留 2026-08-07 基础链路验收时点的历史结论。迭代五最终结论见 `docs/ITERATION-FIVE-FINAL-ACCEPTANCE.md`；五 B–E 的实现过程见 `docs/ITERATION-FIVE-B-E-IMPLEMENTATION.md`。不要再以本文中的“尚未完成”列表判断当前代码状态。
 
 > 验收日期：2026-08-08
 >

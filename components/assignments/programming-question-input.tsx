@@ -134,7 +134,9 @@ export function ProgrammingQuestionInput({
         ) : null}
         {attempt && !terminal.has(attempt.status) ? (
           <span className="text-sm text-gray-500">
-            执行中 · {attempt.progress}%
+            {error
+              ? "状态查询中断，请重试查询"
+              : `执行中 · ${attempt.progress}%`}
           </span>
         ) : null}
       </div>

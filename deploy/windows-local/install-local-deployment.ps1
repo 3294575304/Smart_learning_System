@@ -2,7 +2,8 @@ param(
   [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path,
   [string]$SandboxHost = "8.133.167.139",
   [string]$SshKeyPath = "",
-  [string]$KnownHostsPath = "C:\Users\HONOR\.ssh\codex_sandbox_known_hosts_20260808"
+  [string]$KnownHostsPath = "C:\Users\HONOR\.ssh\codex_sandbox_known_hosts_20260808",
+  [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,13 +47,58 @@ foreach ($path in @($RepoRoot, $SshKeyPath, $KnownHostsPath)) {
 }
 
 $nodeExecutable = (Get-Command node.exe -ErrorAction Stop).Source
+$npmExecutable = (Get-Command npm.cmd -ErrorAction Stop).Source
 $sshExecutable = (Get-Command ssh.exe -ErrorAction Stop).Source
 $powershellExecutable = (Get-Command powershell.exe -ErrorAction Stop).Source
 $runtimeRoot = Join-Path $RepoRoot ".data/local-deployment"
 $logRoot = Join-Path $runtimeRoot "logs"
 $configPath = Join-Path $runtimeRoot "service-config.json"
 $workerBuildRoot = Join-Path $RepoRoot ".data/programming-judge-worker-build"
+$nextBuildDirectory = ".data/next-production"
+$nextBuildRoot = Join-Path $RepoRoot $nextBuildDirectory
 New-Item -ItemType Directory -Force -Path $runtimeRoot, $logRoot | Out-Null
+if (-not $SkipBuild) {
+  Push-Location $RepoRoot
+  $previousDistDir = $env:NEXT_DIST_DIR
+  $generatedTypeFiles = @(
+    (Join-Path $RepoRoot "next-env.d.ts"),
+    (Join-Path $RepoRoot "tsconfig.json")
+  )
+  $originalTypeFiles = @{}
+  foreach ($generatedTypeFile in $generatedTypeFiles) {
+    $originalTypeFiles[$generatedTypeFile] = [System.IO.File]::ReadAllBytes($generatedTypeFile)
+  }
+  try {
+    $env:NEXT_DIST_DIR = $nextBuildDirectory
+    & $npmExecutable run build
+    if ($LASTEXITCODE -ne 0) {
+      throw "Next.js production build failed"
+    }
+    & $npmExecutable run build:programming-judge-worker
+    if ($LASTEXITCODE -ne 0) {
+      throw "Programming judge worker build failed"
+    }
+  } finally {
+    foreach ($generatedTypeFile in $generatedTypeFiles) {
+      [System.IO.File]::WriteAllBytes(
+        $generatedTypeFile,
+        [byte[]]$originalTypeFiles[$generatedTypeFile]
+      )
+    }
+    $env:NEXT_DIST_DIR = $previousDistDir
+    Pop-Location
+  }
+}
+$routesManifestPath = Join-Path $nextBuildRoot "routes-manifest.json"
+if (-not (Test-Path -LiteralPath $routesManifestPath)) {
+  throw "Next.js production routes manifest is missing"
+}
+$routesManifest = Get-Content -LiteralPath $routesManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($null -eq $routesManifest.dataRoutes -or
+    $null -eq $routesManifest.dynamicRoutes -or
+    $null -eq $routesManifest.staticRoutes) {
+  throw "Next.js production routes manifest is invalid"
+}
 if (-not (Test-Path -LiteralPath (Join-Path $workerBuildRoot "main.js"))) {
   throw "Programming judge worker build is missing"
 }
@@ -95,6 +141,7 @@ $config = [ordered]@{
   sandboxHost = $SandboxHost
   environment = [ordered]@{
     NODE_ENV = "production"
+    NEXT_DIST_DIR = $nextBuildDirectory
     BACKGROUND_JOB_WORKER_SECRET = $workerSecret
     APPLICATION_INTERNAL_URL = "http://127.0.0.1:3000"
     SANDBOX_EXECUTOR_URL = "http://127.0.0.1:18788"
@@ -169,6 +216,7 @@ $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interact
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries `
+  -DontStopOnIdleEnd `
   -ExecutionTimeLimit ([TimeSpan]::Zero) `
   -MultipleInstances IgnoreNew `
   -RestartCount 999 `
