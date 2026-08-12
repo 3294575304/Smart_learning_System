@@ -128,6 +128,9 @@ export function LearnerProfileDetail({ profile }: { profile: Profile }) {
                             className="rounded bg-slate-50 p-3"
                             key={item.evidenceId}
                           >
+                            {item.sourceType === "RECOMMENDATION_PRACTICE"
+                              ? "推荐练习"
+                              : "正式作业"}{" "}
                             作业 {item.assignmentId} · 题目{" "}
                             {item.assignmentQuestionId} · 评分修订{" "}
                             {item.revision} · {item.score}/{item.maxScore} ·

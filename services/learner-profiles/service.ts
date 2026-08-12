@@ -63,218 +63,222 @@ async function assertTeacherAccess(
   return course;
 }
 
-async function ensureSnapshot(studentId: string, courseId: string) {
-  return prisma.$transaction(
-    async (transaction) => {
-      const [course, masteryState, watermark, attendanceRecords] =
-        await Promise.all([
-          transaction.course.findUniqueOrThrow({
-            where: { id: courseId },
+export async function ensureLearnerProfileSnapshot(
+  transaction: Prisma.TransactionClient,
+  studentId: string,
+  courseId: string,
+) {
+  const [course, masteryState, watermark, attendanceRecords] =
+    await Promise.all([
+      transaction.course.findUniqueOrThrow({
+        where: { id: courseId },
+        select: {
+          id: true,
+          name: true,
+          currentPublishedKnowledgeGraphVersion: {
             select: {
               id: true,
-              name: true,
-              currentPublishedKnowledgeGraphVersion: {
+              versionNumber: true,
+              nodes: {
+                orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
                 select: {
-                  id: true,
-                  versionNumber: true,
-                  nodes: {
-                    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-                    select: {
-                      conceptId: true,
-                      code: true,
-                      name: true,
-                    },
-                  },
+                  conceptId: true,
+                  code: true,
+                  name: true,
                 },
               },
             },
-          }),
-          transaction.studentCourseConceptMasteryState.findUnique({
-            where: { studentId_courseId: { studentId, courseId } },
-            select: {
-              revisions: {
-                orderBy: { revisionNumber: "desc" },
-                take: 1,
-                select: {
-                  id: true,
-                  inputFingerprint: true,
-                  calculationRuleVersion: true,
-                  entries: {
-                    orderBy: { conceptId: "asc" },
-                    select: {
-                      conceptId: true,
-                      evidenceCount: true,
-                      masteryScore: true,
-                      lastEvidenceAt: true,
-                      concept: { select: { stableKey: true } },
-                    },
-                  },
-                },
-              },
-            },
-          }),
-          transaction.learningEvent.findFirst({
-            where: { studentId, courseId },
-            orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-            select: { id: true, occurredAt: true },
-          }),
-          transaction.attendanceRecord.findMany({
-            where: {
-              studentId,
-              session: {
-                courseId,
-                status: AttendanceSessionStatus.CLOSED,
-              },
-            },
-            orderBy: [{ session: { startsAt: "asc" } }, { id: "asc" }],
-            select: {
-              id: true,
-              currentStatus: true,
-              currentRevisionNumber: true,
-              updatedAt: true,
-            },
-          }),
-        ]);
-
-      const graph = course.currentPublishedKnowledgeGraphVersion;
-      const mastery = masteryState?.revisions[0] ?? null;
-      const masteryByConcept = new Map(
-        (mastery?.entries ?? []).map((entry) => [entry.conceptId, entry]),
-      );
-      const allConceptIds = new Set([
-        ...(graph?.nodes.map((node) => node.conceptId) ?? []),
-        ...(mastery?.entries.map((entry) => entry.conceptId) ?? []),
-      ]);
-      const concepts = [...allConceptIds].sort().map((conceptId) => {
-        const entry = masteryByConcept.get(conceptId);
-        const count = entry?.evidenceCount ?? 0;
-        return {
-          conceptId,
-          evidenceCount: count,
-          evidenceState: learnerProfileEvidenceState(count),
-          confidence: evidenceConfidence(count),
-          masteryScore: entry?.masteryScore ?? null,
-          evidenceUpdatedAt: entry?.lastEvidenceAt ?? null,
-        };
-      });
-      const conclusive = concepts.filter(
-        (item) => item.evidenceState === LearnerProfileEvidenceState.CONCLUSIVE,
-      );
-      const conclusiveAverage = conclusive.length
-        ? new Prisma.Decimal(
-            conclusive.reduce(
-              (sum, item) => sum + (item.masteryScore?.toNumber() ?? 0),
-              0,
-            ) / conclusive.length,
-          )
-            .toDecimalPlaces(2)
-            .toNumber()
-        : null;
-      const objectiveState =
-        conclusive.length > 0
-          ? LearnerProfileEvidenceState.CONCLUSIVE
-          : concepts.some((item) => item.evidenceCount > 0)
-            ? LearnerProfileEvidenceState.INSUFFICIENT_EVIDENCE
-            : LearnerProfileEvidenceState.NO_EVIDENCE;
-      const attendance = calculateAttendanceRate(
-        attendanceRecords.map((record) => record.currentStatus),
-      );
-      const attendanceState = learnerProfileEvidenceState(
-        attendance.denominator,
-      );
-      const attendanceDimension = {
-        evidenceState: attendanceState,
-        evidenceCount: attendance.denominator,
-        rate: attendance.rate === null ? null : Number(attendance.rate),
-        earnedCredits: Number(attendance.earned),
-        updatedAt: attendanceRecords.at(-1)?.updatedAt.toISOString() ?? null,
-      };
-      const unavailableDimension = {
-        evidenceState: LearnerProfileEvidenceState.NO_EVIDENCE,
-        evidenceCount: 0,
-        conclusion: null,
-        sourceStatus: "NOT_COLLECTED",
-      };
-      const objectiveMasteryDimension = {
-        evidenceState: objectiveState,
-        conceptCount: concepts.length,
-        conclusiveConceptCount: conclusive.length,
-        insufficientConceptCount: concepts.filter(
-          (item) =>
-            item.evidenceState ===
-            LearnerProfileEvidenceState.INSUFFICIENT_EVIDENCE,
-        ).length,
-        noEvidenceConceptCount: concepts.filter(
-          (item) =>
-            item.evidenceState === LearnerProfileEvidenceState.NO_EVIDENCE,
-        ).length,
-        conclusiveAverageMastery: conclusiveAverage,
-      };
-      const summary =
-        objectiveState === LearnerProfileEvidenceState.NO_EVIDENCE
-          ? "当前没有可用于形成客观掌握度结论的正式评分证据。"
-          : objectiveState === LearnerProfileEvidenceState.INSUFFICIENT_EVIDENCE
-            ? "当前已有少量正式评分证据，但尚不足以形成稳定的课程掌握度结论。"
-            : `当前有 ${conclusive.length} 个知识概念达到可形成结论的证据门槛；结论仅反映客观评分证据。`;
-      const inputFingerprint = learnerProfileFingerprint({
-        ruleVersion: LEARNER_PROFILE_RULE_VERSION,
-        graphVersionId: graph?.id ?? null,
-        masteryRevision: mastery
-          ? {
-              id: mastery.id,
-              fingerprint: mastery.inputFingerprint,
-              ruleVersion: mastery.calculationRuleVersion,
-            }
-          : null,
-        eventWatermark: watermark
-          ? { id: watermark.id, occurredAt: watermark.occurredAt.toISOString() }
-          : null,
-        attendance: attendanceRecords.map((record) => ({
-          id: record.id,
-          revision: record.currentRevisionNumber,
-          status: record.currentStatus,
-        })),
-        activity: unavailableDimension,
-        reflection: unavailableDimension,
-      });
-      const existing = await transaction.learnerProfileSnapshot.findUnique({
-        where: {
-          studentId_courseId_inputFingerprint: {
-            studentId,
-            courseId,
-            inputFingerprint,
           },
         },
-        select: { id: true },
-      });
-      if (existing) return existing.id;
-      const latest = await transaction.learnerProfileSnapshot.findFirst({
-        where: { studentId, courseId },
-        orderBy: { revisionNumber: "desc" },
-        select: { revisionNumber: true },
-      });
-      const created = await transaction.learnerProfileSnapshot.create({
-        data: {
-          studentId,
-          courseId,
-          revisionNumber: (latest?.revisionNumber ?? 0) + 1,
-          inputFingerprint,
-          calculationRuleVersion: LEARNER_PROFILE_RULE_VERSION,
-          eventWatermarkId: watermark?.id ?? null,
-          eventWatermarkOccurredAt: watermark?.occurredAt ?? null,
-          graphVersionId: graph?.id ?? null,
-          masteryRevisionId: mastery?.id ?? null,
-          attendanceDimension,
-          activityDimension: unavailableDimension,
-          reflectionDimension: unavailableDimension,
-          objectiveMasteryDimension,
-          summary,
-          concepts: { create: concepts },
+      }),
+      transaction.studentCourseConceptMasteryState.findUnique({
+        where: { studentId_courseId: { studentId, courseId } },
+        select: {
+          revisions: {
+            orderBy: { revisionNumber: "desc" },
+            take: 1,
+            select: {
+              id: true,
+              inputFingerprint: true,
+              calculationRuleVersion: true,
+              entries: {
+                orderBy: { conceptId: "asc" },
+                select: {
+                  conceptId: true,
+                  evidenceCount: true,
+                  masteryScore: true,
+                  lastEvidenceAt: true,
+                  concept: { select: { stableKey: true } },
+                },
+              },
+            },
+          },
         },
-        select: { id: true },
-      });
-      return created.id;
+      }),
+      transaction.learningEvent.findFirst({
+        where: { studentId, courseId },
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        select: { id: true, occurredAt: true },
+      }),
+      transaction.attendanceRecord.findMany({
+        where: {
+          studentId,
+          session: {
+            courseId,
+            status: AttendanceSessionStatus.CLOSED,
+          },
+        },
+        orderBy: [{ session: { startsAt: "asc" } }, { id: "asc" }],
+        select: {
+          id: true,
+          currentStatus: true,
+          currentRevisionNumber: true,
+          updatedAt: true,
+        },
+      }),
+    ]);
+
+  const graph = course.currentPublishedKnowledgeGraphVersion;
+  const mastery = masteryState?.revisions[0] ?? null;
+  const masteryByConcept = new Map(
+    (mastery?.entries ?? []).map((entry) => [entry.conceptId, entry]),
+  );
+  const allConceptIds = new Set([
+    ...(graph?.nodes.map((node) => node.conceptId) ?? []),
+    ...(mastery?.entries.map((entry) => entry.conceptId) ?? []),
+  ]);
+  const concepts = [...allConceptIds].sort().map((conceptId) => {
+    const entry = masteryByConcept.get(conceptId);
+    const count = entry?.evidenceCount ?? 0;
+    return {
+      conceptId,
+      evidenceCount: count,
+      evidenceState: learnerProfileEvidenceState(count),
+      confidence: evidenceConfidence(count),
+      masteryScore: entry?.masteryScore ?? null,
+      evidenceUpdatedAt: entry?.lastEvidenceAt ?? null,
+    };
+  });
+  const conclusive = concepts.filter(
+    (item) => item.evidenceState === LearnerProfileEvidenceState.CONCLUSIVE,
+  );
+  const conclusiveAverage = conclusive.length
+    ? new Prisma.Decimal(
+        conclusive.reduce(
+          (sum, item) => sum + (item.masteryScore?.toNumber() ?? 0),
+          0,
+        ) / conclusive.length,
+      )
+        .toDecimalPlaces(2)
+        .toNumber()
+    : null;
+  const objectiveState =
+    conclusive.length > 0
+      ? LearnerProfileEvidenceState.CONCLUSIVE
+      : concepts.some((item) => item.evidenceCount > 0)
+        ? LearnerProfileEvidenceState.INSUFFICIENT_EVIDENCE
+        : LearnerProfileEvidenceState.NO_EVIDENCE;
+  const attendance = calculateAttendanceRate(
+    attendanceRecords.map((record) => record.currentStatus),
+  );
+  const attendanceState = learnerProfileEvidenceState(attendance.denominator);
+  const attendanceDimension = {
+    evidenceState: attendanceState,
+    evidenceCount: attendance.denominator,
+    rate: attendance.rate === null ? null : Number(attendance.rate),
+    earnedCredits: Number(attendance.earned),
+    updatedAt: attendanceRecords.at(-1)?.updatedAt.toISOString() ?? null,
+  };
+  const unavailableDimension = {
+    evidenceState: LearnerProfileEvidenceState.NO_EVIDENCE,
+    evidenceCount: 0,
+    conclusion: null,
+    sourceStatus: "NOT_COLLECTED",
+  };
+  const objectiveMasteryDimension = {
+    evidenceState: objectiveState,
+    conceptCount: concepts.length,
+    conclusiveConceptCount: conclusive.length,
+    insufficientConceptCount: concepts.filter(
+      (item) =>
+        item.evidenceState ===
+        LearnerProfileEvidenceState.INSUFFICIENT_EVIDENCE,
+    ).length,
+    noEvidenceConceptCount: concepts.filter(
+      (item) => item.evidenceState === LearnerProfileEvidenceState.NO_EVIDENCE,
+    ).length,
+    conclusiveAverageMastery: conclusiveAverage,
+  };
+  const summary =
+    objectiveState === LearnerProfileEvidenceState.NO_EVIDENCE
+      ? "当前没有可用于形成客观掌握度结论的正式评分证据。"
+      : objectiveState === LearnerProfileEvidenceState.INSUFFICIENT_EVIDENCE
+        ? "当前已有少量正式评分证据，但尚不足以形成稳定的课程掌握度结论。"
+        : `当前有 ${conclusive.length} 个知识概念达到可形成结论的证据门槛；结论仅反映客观评分证据。`;
+  const inputFingerprint = learnerProfileFingerprint({
+    ruleVersion: LEARNER_PROFILE_RULE_VERSION,
+    graphVersionId: graph?.id ?? null,
+    masteryRevision: mastery
+      ? {
+          id: mastery.id,
+          fingerprint: mastery.inputFingerprint,
+          ruleVersion: mastery.calculationRuleVersion,
+        }
+      : null,
+    eventWatermark: watermark
+      ? { id: watermark.id, occurredAt: watermark.occurredAt.toISOString() }
+      : null,
+    attendance: attendanceRecords.map((record) => ({
+      id: record.id,
+      revision: record.currentRevisionNumber,
+      status: record.currentStatus,
+    })),
+    activity: unavailableDimension,
+    reflection: unavailableDimension,
+  });
+  const existing = await transaction.learnerProfileSnapshot.findUnique({
+    where: {
+      studentId_courseId_inputFingerprint: {
+        studentId,
+        courseId,
+        inputFingerprint,
+      },
     },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+  const latest = await transaction.learnerProfileSnapshot.findFirst({
+    where: { studentId, courseId },
+    orderBy: { revisionNumber: "desc" },
+    select: { revisionNumber: true },
+  });
+  const created = await transaction.learnerProfileSnapshot.create({
+    data: {
+      studentId,
+      courseId,
+      revisionNumber: (latest?.revisionNumber ?? 0) + 1,
+      inputFingerprint,
+      calculationRuleVersion: LEARNER_PROFILE_RULE_VERSION,
+      eventWatermarkId: watermark?.id ?? null,
+      eventWatermarkOccurredAt: watermark?.occurredAt ?? null,
+      graphVersionId: graph?.id ?? null,
+      masteryRevisionId: mastery?.id ?? null,
+      attendanceDimension,
+      activityDimension: unavailableDimension,
+      reflectionDimension: unavailableDimension,
+      objectiveMasteryDimension,
+      summary,
+      concepts: { create: concepts },
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+async function ensureSnapshot(studentId: string, courseId: string) {
+  return prisma.$transaction(
+    (transaction) =>
+      ensureLearnerProfileSnapshot(transaction, studentId, courseId),
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
 }

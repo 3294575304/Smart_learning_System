@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import {
@@ -16,7 +16,9 @@ import {
   QuestionStatus,
   QuestionType,
   QuestionVisibility,
+  Role,
   SyllabusParseStatus,
+  UserStatus,
 } from "@prisma/client";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
@@ -33,6 +35,9 @@ import {
 } from "@/services/assignments/service";
 import { synchronizeAnswerConceptEvidence } from "@/services/concept-mastery/evidence";
 import { recalculateStudentCourseConceptMastery } from "@/services/concept-mastery/service";
+import { createCourseRecommendations } from "@/services/course-recommendations/service";
+import { submitRecommendationPractice } from "@/services/recommendations/practice";
+import { startRecommendation } from "@/services/recommendations/service";
 import { assertIsolatedIntegrationEnvironment } from "../integration/database";
 
 interface ApiSuccess<T> {
@@ -318,6 +323,22 @@ async function main(): Promise<void> {
         },
       },
     });
+    const recommendationStudent = await prisma.user.create({
+      data: {
+        email: `recommendation-${suffix}@example.test`,
+        passwordHash: "integration-test-password-hash",
+        role: Role.STUDENT,
+        status: UserStatus.ACTIVE,
+        profile: { create: { displayName: "Recommendation student" } },
+      },
+    });
+    await prisma.classMembership.create({
+      data: {
+        classroomId: classroom.id,
+        studentId: recommendationStudent.id,
+        status: MembershipStatus.ACTIVE,
+      },
+    });
     const concepts = await Promise.all(
       ["variables", "expressions"].map((stableKey) =>
         prisma.knowledgeGraphConcept.create({
@@ -416,6 +437,105 @@ async function main(): Promise<void> {
         },
       },
     });
+
+    const progress = await prisma.courseTeachingProgressRevision.create({
+      data: {
+        courseId: course.id,
+        graphVersionId: graphV1.id,
+        createdById: teacher.id,
+        revisionNumber: 1,
+        inputFingerprint: "a".repeat(64),
+        concepts: {
+          create: concepts.map((concept, index) => ({
+            conceptId: concept.id,
+            publishedNodeId: graphV1.nodes[index]!.id,
+          })),
+        },
+      },
+    });
+    await prisma.course.update({
+      where: { id: course.id },
+      data: { currentTeachingProgressRevisionId: progress.id },
+    });
+    const courseRecommendation = await createCourseRecommendations(
+      {
+        id: recommendationStudent.id,
+        email: recommendationStudent.email,
+        role: recommendationStudent.role,
+        displayName: recommendationStudent.email,
+        mustChangePassword: false,
+      },
+      course.id,
+      {
+        classroomId: classroom.id,
+        conceptIds: [concepts[0]!.id],
+        questionTypes: [QuestionType.TRUE_FALSE],
+        count: 1,
+        difficulty: 2,
+      },
+      new Date("2026-08-12T03:00:00.000Z"),
+    );
+    const recommendationId = courseRecommendation.items[0]!.id;
+    await startRecommendation(
+      {
+        id: recommendationStudent.id,
+        email: recommendationStudent.email,
+        role: recommendationStudent.role,
+        displayName: recommendationStudent.email,
+        mustChangePassword: false,
+      },
+      recommendationId,
+      new Date("2026-08-12T03:01:00.000Z"),
+    );
+    await submitRecommendationPractice(
+      {
+        id: recommendationStudent.id,
+        email: recommendationStudent.email,
+        role: recommendationStudent.role,
+        displayName: recommendationStudent.email,
+        mustChangePassword: false,
+      },
+      recommendationId,
+      {
+        idempotencyKey: randomUUID(),
+        answers: [
+          {
+            questionId: objectiveQuestion.id,
+            kind: "BOOLEAN",
+            value: true,
+            responseTimeMs: 1000,
+          },
+        ],
+      },
+      new Date("2026-08-12T03:02:00.000Z"),
+    );
+    const [frozenRecommendationBindings, recommendationEvidence, event] =
+      await Promise.all([
+        prisma.courseRecommendationConceptSnapshot.findMany({
+          where: { recommendationId },
+        }),
+        prisma.recommendationConceptEvidence.findMany({
+          where: { recommendationId },
+        }),
+        prisma.learningEvent.findFirst({
+          where: {
+            sourceType: "RECOMMENDATION_PRACTICE_ANSWER",
+            sourceId: {
+              in: (
+                await prisma.recommendationPracticeAnswer.findMany({
+                  where: { recommendationId },
+                  select: { id: true },
+                })
+              ).map((answer) => answer.id),
+            },
+          },
+        }),
+      ]);
+    assert.equal(frozenRecommendationBindings.length, 1);
+    assert.equal(recommendationEvidence.length, 1);
+    assert.equal(recommendationEvidence[0]!.conceptId, concepts[0]!.id);
+    assert.equal(recommendationEvidence[0]!.normalizedScore?.toNumber(), 100);
+    assert.ok(event);
 
     const draft = await createDraftAssignment(teacher.id, {
       classroomId: classroom.id,

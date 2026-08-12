@@ -117,10 +117,13 @@ enum BackgroundJobStatus {
 enum LearningEventType {
   ASSESSMENT_GRADED
   ASSESSMENT_REVOKED
+  RECOMMENDATION_PRACTICE_GRADED
+  RECOMMENDATION_PRACTICE_REVOKED
 }
 
 enum LearningEventSourceType {
   STUDENT_ANSWER
+  RECOMMENDATION_PRACTICE_ANSWER
 }
 
 enum CourseConceptMasteryLevel {
@@ -613,6 +616,7 @@ model User {
   createdTeachingProgressRevisions   CourseTeachingProgressRevision[]     @relation("CourseTeachingProgressCreatedBy")
   createdRecommendationPolicies      CourseRecommendationPolicyRevision[] @relation("CourseRecommendationPolicyCreatedBy")
   courseRecommendationCycles         CourseRecommendationCycle[]          @relation("CourseRecommendationStudent")
+  recommendationConceptEvidences     RecommendationConceptEvidence[]      @relation("RecommendationConceptEvidenceStudent")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -889,30 +893,31 @@ model Course {
   createdAt                               DateTime     @default(now())
   updatedAt                               DateTime     @updatedAt
 
-  template                              CourseTemplate                       @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  teacher                               User                                 @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
-  classrooms                            Classroom[]                          @relation("ClassroomCourse")
-  courseFileVersions                    CourseFileVersion[]                  @relation("CourseFileCourse")
-  syllabi                               CourseSyllabus[]                     @relation("CourseSyllabusCourse")
+  template                              CourseTemplate                        @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  teacher                               User                                  @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  classrooms                            Classroom[]                           @relation("ClassroomCourse")
+  courseFileVersions                    CourseFileVersion[]                   @relation("CourseFileCourse")
+  syllabi                               CourseSyllabus[]                      @relation("CourseSyllabusCourse")
   syllabusParseDrafts                   SyllabusParseDraft[]
   syllabusReviewRevisions               SyllabusReviewRevision[]
-  publishedSyllabusStructures           PublishedSyllabusStructure[]         @relation("PublishedSyllabusStructureCourse")
-  currentPublishedSyllabusStructure     PublishedSyllabusStructure?          @relation("CurrentPublishedSyllabusStructure", fields: [currentPublishedSyllabusStructureId], references: [id], onDelete: SetNull)
+  publishedSyllabusStructures           PublishedSyllabusStructure[]          @relation("PublishedSyllabusStructureCourse")
+  currentPublishedSyllabusStructure     PublishedSyllabusStructure?           @relation("CurrentPublishedSyllabusStructure", fields: [currentPublishedSyllabusStructureId], references: [id], onDelete: SetNull)
   knowledgeGraphDrafts                  KnowledgeGraphDraft[]
   knowledgeGraphReviewRevisions         KnowledgeGraphReviewRevision[]
-  publishedKnowledgeGraphVersions       PublishedKnowledgeGraphVersion[]     @relation("PublishedKnowledgeGraphCourse")
-  currentPublishedKnowledgeGraphVersion PublishedKnowledgeGraphVersion?      @relation("CurrentPublishedKnowledgeGraph", fields: [currentPublishedKnowledgeGraphVersionId], references: [id], onDelete: SetNull)
+  publishedKnowledgeGraphVersions       PublishedKnowledgeGraphVersion[]      @relation("PublishedKnowledgeGraphCourse")
+  currentPublishedKnowledgeGraphVersion PublishedKnowledgeGraphVersion?       @relation("CurrentPublishedKnowledgeGraph", fields: [currentPublishedKnowledgeGraphVersionId], references: [id], onDelete: SetNull)
   assessmentSchemeDrafts                AssessmentSchemeDraft[]
   assessmentSchemeReviewRevisions       AssessmentSchemeReviewRevision[]
-  publishedAssessmentSchemes            PublishedAssessmentScheme[]          @relation("PublishedAssessmentSchemeCourse")
-  currentPublishedAssessmentScheme      PublishedAssessmentScheme?           @relation("CurrentPublishedAssessmentScheme", fields: [currentPublishedAssessmentSchemeId], references: [id], onDelete: SetNull)
+  publishedAssessmentSchemes            PublishedAssessmentScheme[]           @relation("PublishedAssessmentSchemeCourse")
+  currentPublishedAssessmentScheme      PublishedAssessmentScheme?            @relation("CurrentPublishedAssessmentScheme", fields: [currentPublishedAssessmentSchemeId], references: [id], onDelete: SetNull)
   knowledgeGraphConcepts                KnowledgeGraphConcept[]
   questionGraphBindingSets              QuestionKnowledgeGraphBindingSet[]
   questionGraphBindings                 QuestionKnowledgeGraphBinding[]
   assignmentQuestionConceptSnapshots    AssignmentQuestionConceptSnapshot[]
   conceptAnswerEvidences                StudentAnswerConceptEvidence[]
+  recommendationConceptEvidences        RecommendationConceptEvidence[]
   studentConceptMasteryStates           StudentCourseConceptMasteryState[]
-  studentImportBatches                  StudentImportBatch[]                 @relation("StudentImportCourse")
+  studentImportBatches                  StudentImportBatch[]                  @relation("StudentImportCourse")
   gradebooks                            CourseGradebook[]
   gradeImportBatches                    GradeImportBatch[]
   attendanceSessions                    AttendanceSession[]
@@ -921,11 +926,12 @@ model Course {
   learningEvents                        LearningEvent[]
   learnerProfileSnapshots               LearnerProfileSnapshot[]
   aiQuestionMappingBatches              AIQuestionMappingBatch[]
-  teachingProgressRevisions             CourseTeachingProgressRevision[]     @relation("CourseTeachingProgress")
-  currentTeachingProgressRevision       CourseTeachingProgressRevision?      @relation("CurrentCourseTeachingProgress", fields: [currentTeachingProgressRevisionId], references: [id], onDelete: SetNull)
-  recommendationPolicyRevisions         CourseRecommendationPolicyRevision[] @relation("CourseRecommendationPolicies")
-  currentRecommendationPolicyRevision   CourseRecommendationPolicyRevision?  @relation("CurrentCourseRecommendationPolicy", fields: [currentRecommendationPolicyRevisionId], references: [id], onDelete: SetNull)
+  teachingProgressRevisions             CourseTeachingProgressRevision[]      @relation("CourseTeachingProgress")
+  currentTeachingProgressRevision       CourseTeachingProgressRevision?       @relation("CurrentCourseTeachingProgress", fields: [currentTeachingProgressRevisionId], references: [id], onDelete: SetNull)
+  recommendationPolicyRevisions         CourseRecommendationPolicyRevision[]  @relation("CourseRecommendationPolicies")
+  currentRecommendationPolicyRevision   CourseRecommendationPolicyRevision?   @relation("CurrentCourseRecommendationPolicy", fields: [currentRecommendationPolicyRevisionId], references: [id], onDelete: SetNull)
   recommendationCycles                  CourseRecommendationCycle[]
+  courseRecommendationConceptSnapshots  CourseRecommendationConceptSnapshot[]
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -1695,21 +1701,23 @@ model PublishedKnowledgeGraphVersion {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
-  course                       Course                              @relation("PublishedKnowledgeGraphCourse", fields: [courseId], references: [id], onDelete: Restrict)
-  currentForCourse             Course?                             @relation("CurrentPublishedKnowledgeGraph")
-  sourceSyllabusStructure      PublishedSyllabusStructure          @relation(fields: [sourceSyllabusStructureId], references: [id], onDelete: Restrict)
-  graphDraft                   KnowledgeGraphDraft                 @relation(fields: [graphDraftId], references: [id], onDelete: Restrict)
-  reviewRevision               KnowledgeGraphReviewRevision        @relation(fields: [reviewRevisionId], references: [id], onDelete: Restrict)
-  publishedBy                  User                                @relation("KnowledgeGraphPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
-  nodes                        PublishedKnowledgeGraphNode[]
-  edges                        PublishedKnowledgeGraphEdge[]
-  sourceQuestionBindings       QuestionKnowledgeGraphBinding[]     @relation("QuestionGraphBindingSourceVersion")
-  sourceAssignmentSnapshots    AssignmentQuestionConceptSnapshot[] @relation("AssignmentConceptSnapshotSourceVersion")
-  publishedAssignmentSnapshots AssignmentQuestionConceptSnapshot[] @relation("AssignmentConceptSnapshotPublishedVersion")
-  learnerProfileSnapshots      LearnerProfileSnapshot[]
-  aiQuestionMappingBatches     AIQuestionMappingBatch[]
-  teachingProgressRevisions    CourseTeachingProgressRevision[]
-  recommendationCycles         CourseRecommendationCycle[]
+  course                           Course                                @relation("PublishedKnowledgeGraphCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  currentForCourse                 Course?                               @relation("CurrentPublishedKnowledgeGraph")
+  sourceSyllabusStructure          PublishedSyllabusStructure            @relation(fields: [sourceSyllabusStructureId], references: [id], onDelete: Restrict)
+  graphDraft                       KnowledgeGraphDraft                   @relation(fields: [graphDraftId], references: [id], onDelete: Restrict)
+  reviewRevision                   KnowledgeGraphReviewRevision          @relation(fields: [reviewRevisionId], references: [id], onDelete: Restrict)
+  publishedBy                      User                                  @relation("KnowledgeGraphPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  nodes                            PublishedKnowledgeGraphNode[]
+  edges                            PublishedKnowledgeGraphEdge[]
+  sourceQuestionBindings           QuestionKnowledgeGraphBinding[]       @relation("QuestionGraphBindingSourceVersion")
+  sourceAssignmentSnapshots        AssignmentQuestionConceptSnapshot[]   @relation("AssignmentConceptSnapshotSourceVersion")
+  publishedAssignmentSnapshots     AssignmentQuestionConceptSnapshot[]   @relation("AssignmentConceptSnapshotPublishedVersion")
+  learnerProfileSnapshots          LearnerProfileSnapshot[]
+  aiQuestionMappingBatches         AIQuestionMappingBatch[]
+  teachingProgressRevisions        CourseTeachingProgressRevision[]
+  recommendationCycles             CourseRecommendationCycle[]
+  sourceRecommendationSnapshots    CourseRecommendationConceptSnapshot[] @relation("RecommendationSnapshotSourceVersion")
+  publishedRecommendationSnapshots CourseRecommendationConceptSnapshot[] @relation("RecommendationSnapshotPublishedVersion")
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
@@ -1723,7 +1731,7 @@ model KnowledgeGraphConcept {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  course                       Course                              @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  course                       Course                                @relation(fields: [courseId], references: [id], onDelete: Restrict)
   nodes                        PublishedKnowledgeGraphNode[]
   questionBindings             QuestionKnowledgeGraphBinding[]
   assignmentQuestionSnapshots  AssignmentQuestionConceptSnapshot[]
@@ -1733,7 +1741,9 @@ model KnowledgeGraphConcept {
   learnerProfileConceptEntries LearnerProfileConceptEntry[]
   aiQuestionMappingCandidates  AIQuestionMappingCandidate[]
   teachingProgressConcepts     CourseTeachingProgressConcept[]
-  targetedRecommendations      PersonalizedRecommendation[]        @relation("RecommendationTargetConcept")
+  targetedRecommendations      PersonalizedRecommendation[]          @relation("RecommendationTargetConcept")
+  recommendationSnapshots      CourseRecommendationConceptSnapshot[]
+  recommendationEvidences      RecommendationConceptEvidence[]
 
   @@unique([courseId, stableKey])
   @@index([courseId, createdAt])
@@ -1760,15 +1770,17 @@ model PublishedKnowledgeGraphNode {
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
 
-  graphVersion                PublishedKnowledgeGraphVersion      @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
-  concept                     KnowledgeGraphConcept               @relation(fields: [conceptId], references: [id], onDelete: Restrict)
-  outgoingEdges               PublishedKnowledgeGraphEdge[]       @relation("KnowledgeGraphEdgeFrom")
-  incomingEdges               PublishedKnowledgeGraphEdge[]       @relation("KnowledgeGraphEdgeTo")
-  sourceQuestionBindings      QuestionKnowledgeGraphBinding[]     @relation("QuestionGraphBindingSourceNode")
-  sourceAssignmentSnapshots   AssignmentQuestionConceptSnapshot[] @relation("AssignmentConceptSnapshotSourceNode")
-  resolvedAssignmentSnapshots AssignmentQuestionConceptSnapshot[] @relation("AssignmentConceptSnapshotResolvedNode")
-  aiQuestionMappingCandidates AIQuestionMappingCandidate[]
-  teachingProgressConcepts    CourseTeachingProgressConcept[]
+  graphVersion                    PublishedKnowledgeGraphVersion        @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
+  concept                         KnowledgeGraphConcept                 @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  outgoingEdges                   PublishedKnowledgeGraphEdge[]         @relation("KnowledgeGraphEdgeFrom")
+  incomingEdges                   PublishedKnowledgeGraphEdge[]         @relation("KnowledgeGraphEdgeTo")
+  sourceQuestionBindings          QuestionKnowledgeGraphBinding[]       @relation("QuestionGraphBindingSourceNode")
+  sourceAssignmentSnapshots       AssignmentQuestionConceptSnapshot[]   @relation("AssignmentConceptSnapshotSourceNode")
+  resolvedAssignmentSnapshots     AssignmentQuestionConceptSnapshot[]   @relation("AssignmentConceptSnapshotResolvedNode")
+  aiQuestionMappingCandidates     AIQuestionMappingCandidate[]
+  teachingProgressConcepts        CourseTeachingProgressConcept[]
+  sourceRecommendationSnapshots   CourseRecommendationConceptSnapshot[] @relation("RecommendationSnapshotSourceNode")
+  resolvedRecommendationSnapshots CourseRecommendationConceptSnapshot[] @relation("RecommendationSnapshotResolvedNode")
 
   @@unique([graphVersionId, code])
   @@unique([graphVersionId, conceptId])
@@ -2057,20 +2069,22 @@ model Question {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  creator                      User                                @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  options                      QuestionOption[]
-  knowledgePointLinks          QuestionKnowledgePoint[]
-  assignmentQuestions          AssignmentQuestion[]
-  recommendations              PersonalizedRecommendation[]
-  practiceAnswers              RecommendationPracticeAnswer[]      @relation("RecommendationPracticeQuestion")
-  recommendationWrongQuestions WrongQuestion[]                     @relation("WrongQuestionSourceQuestion")
-  aiTutoringRecords            AITutoringRecord[]
-  graphBindingSets             QuestionKnowledgeGraphBindingSet[]
-  graphBindings                QuestionKnowledgeGraphBinding[]
-  assignmentConceptSnapshots   AssignmentQuestionConceptSnapshot[] @relation("AssignmentConceptSnapshotQuestion")
-  conceptAnswerEvidences       StudentAnswerConceptEvidence[]      @relation("ConceptEvidenceQuestion")
-  programmingConfigRevisions   ProgrammingQuestionConfigRevision[]
-  aiQuestionMappingCandidates  AIQuestionMappingCandidate[]
+  creator                        User                                  @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  options                        QuestionOption[]
+  knowledgePointLinks            QuestionKnowledgePoint[]
+  assignmentQuestions            AssignmentQuestion[]
+  recommendations                PersonalizedRecommendation[]
+  practiceAnswers                RecommendationPracticeAnswer[]        @relation("RecommendationPracticeQuestion")
+  recommendationWrongQuestions   WrongQuestion[]                       @relation("WrongQuestionSourceQuestion")
+  aiTutoringRecords              AITutoringRecord[]
+  graphBindingSets               QuestionKnowledgeGraphBindingSet[]
+  graphBindings                  QuestionKnowledgeGraphBinding[]
+  assignmentConceptSnapshots     AssignmentQuestionConceptSnapshot[]   @relation("AssignmentConceptSnapshotQuestion")
+  conceptAnswerEvidences         StudentAnswerConceptEvidence[]        @relation("ConceptEvidenceQuestion")
+  recommendationConceptSnapshots CourseRecommendationConceptSnapshot[] @relation("RecommendationSnapshotQuestion")
+  recommendationConceptEvidences RecommendationConceptEvidence[]       @relation("RecommendationConceptEvidenceQuestion")
+  programmingConfigRevisions     ProgrammingQuestionConfigRevision[]
+  aiQuestionMappingCandidates    AIQuestionMappingCandidate[]
 
   @@index([creatorId, status, deletedAt, createdAt])
   @@index([visibility, status, deletedAt, type, difficulty])
@@ -2627,12 +2641,13 @@ model LearningEvent {
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
 
-  student           User                           @relation("LearningEventStudent", fields: [studentId], references: [id], onDelete: Restrict)
-  course            Course                         @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  supersedesEvent   LearningEvent?                 @relation("LearningEventSupersession", fields: [supersedesEventId], references: [id], onDelete: Restrict)
-  supersededBy      LearningEvent?                 @relation("LearningEventSupersession")
-  concepts          LearningEventConcept[]
-  projectedEvidence StudentAnswerConceptEvidence[]
+  student                         User                            @relation("LearningEventStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  course                          Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  supersedesEvent                 LearningEvent?                  @relation("LearningEventSupersession", fields: [supersedesEventId], references: [id], onDelete: Restrict)
+  supersededBy                    LearningEvent?                  @relation("LearningEventSupersession")
+  concepts                        LearningEventConcept[]
+  projectedEvidence               StudentAnswerConceptEvidence[]
+  projectedRecommendationEvidence RecommendationConceptEvidence[]
 
   @@unique([eventType, idempotencyKey])
   @@unique([sourceType, sourceId, sourceRevision])
@@ -2646,20 +2661,23 @@ model LearningEventConcept {
   learningEventId                     String
   conceptId                           String
   bindingType                         QuestionGraphBindingType
-  assignmentQuestionConceptSnapshotId String
+  assignmentQuestionConceptSnapshotId String?
+  recommendationConceptSnapshotId     String?
   score                               Decimal?                 @db.Decimal(12, 4)
   maxScore                            Decimal?                 @db.Decimal(12, 4)
   weight                              Decimal?                 @db.Decimal(7, 4)
   createdAt                           DateTime                 @default(now())
   updatedAt                           DateTime                 @updatedAt
 
-  learningEvent                     LearningEvent                     @relation(fields: [learningEventId], references: [id], onDelete: Restrict)
-  concept                           KnowledgeGraphConcept             @relation(fields: [conceptId], references: [id], onDelete: Restrict)
-  assignmentQuestionConceptSnapshot AssignmentQuestionConceptSnapshot @relation(fields: [assignmentQuestionConceptSnapshotId], references: [id], onDelete: Restrict)
+  learningEvent                     LearningEvent                        @relation(fields: [learningEventId], references: [id], onDelete: Restrict)
+  concept                           KnowledgeGraphConcept                @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  assignmentQuestionConceptSnapshot AssignmentQuestionConceptSnapshot?   @relation(fields: [assignmentQuestionConceptSnapshotId], references: [id], onDelete: Restrict)
+  recommendationConceptSnapshot     CourseRecommendationConceptSnapshot? @relation(fields: [recommendationConceptSnapshotId], references: [id], onDelete: Restrict)
 
   @@unique([learningEventId, conceptId])
   @@index([conceptId, learningEventId])
   @@index([assignmentQuestionConceptSnapshotId])
+  @@index([recommendationConceptSnapshotId])
 }
 
 model WrongQuestion {
@@ -2931,6 +2949,80 @@ model CourseRecommendationCycle {
   @@index([classroomId, generatedAt])
 }
 
+model CourseRecommendationConceptSnapshot {
+  id                      String                            @id @default(cuid())
+  recommendationId        String
+  questionId              String
+  courseId                String
+  conceptId               String
+  bindingType             QuestionGraphBindingType
+  bindingSetRevision      Int
+  sourceGraphVersionId    String
+  sourceNodeId            String
+  publishedGraphVersionId String
+  resolvedNodeId          String
+  resolutionStatus        AssignmentConceptResolutionStatus
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+
+  recommendation        PersonalizedRecommendation      @relation(fields: [recommendationId], references: [id], onDelete: Restrict)
+  question              Question                        @relation("RecommendationSnapshotQuestion", fields: [questionId], references: [id], onDelete: Restrict)
+  course                Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  concept               KnowledgeGraphConcept           @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  sourceGraphVersion    PublishedKnowledgeGraphVersion  @relation("RecommendationSnapshotSourceVersion", fields: [sourceGraphVersionId], references: [id], onDelete: Restrict)
+  sourceNode            PublishedKnowledgeGraphNode     @relation("RecommendationSnapshotSourceNode", fields: [sourceNodeId], references: [id], onDelete: Restrict)
+  publishedGraphVersion PublishedKnowledgeGraphVersion  @relation("RecommendationSnapshotPublishedVersion", fields: [publishedGraphVersionId], references: [id], onDelete: Restrict)
+  resolvedNode          PublishedKnowledgeGraphNode     @relation("RecommendationSnapshotResolvedNode", fields: [resolvedNodeId], references: [id], onDelete: Restrict)
+  evidences             RecommendationConceptEvidence[]
+  learningEventConcepts LearningEventConcept[]
+
+  @@unique([recommendationId, conceptId])
+  @@index([courseId, conceptId])
+  @@index([questionId])
+  @@index([sourceGraphVersionId])
+  @@index([publishedGraphVersionId])
+}
+
+model RecommendationConceptEvidence {
+  id                              String                   @id @default(cuid())
+  studentId                       String
+  courseId                        String
+  recommendationId                String
+  recommendationPracticeAnswerId  String
+  questionId                      String
+  recommendationConceptSnapshotId String
+  conceptId                       String
+  bindingType                     QuestionGraphBindingType
+  revision                        Int
+  inputFingerprint                String                   @db.Char(64)
+  status                          ConceptEvidenceStatus
+  score                           Decimal?                 @db.Decimal(12, 4)
+  maxScore                        Decimal?                 @db.Decimal(12, 4)
+  normalizedScore                 Decimal?                 @db.Decimal(7, 4)
+  gradedAt                        DateTime?
+  supersedesEvidenceId            String?                  @unique
+  learningEventId                 String
+  createdAt                       DateTime                 @default(now())
+  updatedAt                       DateTime                 @updatedAt
+
+  student                       User                                @relation("RecommendationConceptEvidenceStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  course                        Course                              @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  recommendation                PersonalizedRecommendation          @relation(fields: [recommendationId], references: [id], onDelete: Restrict)
+  recommendationPracticeAnswer  RecommendationPracticeAnswer        @relation(fields: [recommendationPracticeAnswerId], references: [id], onDelete: Restrict)
+  question                      Question                            @relation("RecommendationConceptEvidenceQuestion", fields: [questionId], references: [id], onDelete: Restrict)
+  recommendationConceptSnapshot CourseRecommendationConceptSnapshot @relation(fields: [recommendationConceptSnapshotId], references: [id], onDelete: Restrict)
+  concept                       KnowledgeGraphConcept               @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  supersedesEvidence            RecommendationConceptEvidence?      @relation("RecommendationEvidenceSupersession", fields: [supersedesEvidenceId], references: [id], onDelete: Restrict)
+  supersededBy                  RecommendationConceptEvidence?      @relation("RecommendationEvidenceSupersession")
+  learningEvent                 LearningEvent                       @relation(fields: [learningEventId], references: [id], onDelete: Restrict)
+
+  @@unique([recommendationPracticeAnswerId, conceptId, revision])
+  @@index([studentId, courseId, conceptId, revision])
+  @@index([recommendationId, revision])
+  @@index([recommendationConceptSnapshotId])
+  @@index([learningEventId])
+}
+
 model AIAnalysis {
   id            String          @id @default(cuid())
   requestKey    String          @unique
@@ -3018,13 +3110,15 @@ model PersonalizedRecommendation {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
-  student        User                          @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  question       Question                      @relation(fields: [questionId], references: [id], onDelete: Restrict)
-  knowledgePoint KnowledgePoint?               @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
-  analysis       AIAnalysis?                   @relation(fields: [analysisId], references: [id], onDelete: SetNull)
-  courseCycle    CourseRecommendationCycle?    @relation(fields: [courseCycleId], references: [id], onDelete: Restrict)
-  targetConcept  KnowledgeGraphConcept?        @relation("RecommendationTargetConcept", fields: [targetConceptId], references: [id], onDelete: Restrict)
-  practiceAnswer RecommendationPracticeAnswer?
+  student          User                                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  question         Question                              @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  knowledgePoint   KnowledgePoint?                       @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+  analysis         AIAnalysis?                           @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  courseCycle      CourseRecommendationCycle?            @relation(fields: [courseCycleId], references: [id], onDelete: Restrict)
+  targetConcept    KnowledgeGraphConcept?                @relation("RecommendationTargetConcept", fields: [targetConceptId], references: [id], onDelete: Restrict)
+  practiceAnswer   RecommendationPracticeAnswer?
+  conceptSnapshots CourseRecommendationConceptSnapshot[]
+  conceptEvidences RecommendationConceptEvidence[]
 
   @@unique([studentId, questionId, cycleKey])
   @@index([studentId, status, priority, createdAt])
@@ -3050,9 +3144,10 @@ model RecommendationPracticeAnswer {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  recommendation PersonalizedRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
-  question       Question                   @relation("RecommendationPracticeQuestion", fields: [questionId], references: [id], onDelete: Restrict)
-  wrongQuestion  WrongQuestion?             @relation("RecommendationWrongAnswer")
+  recommendation   PersonalizedRecommendation      @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  question         Question                        @relation("RecommendationPracticeQuestion", fields: [questionId], references: [id], onDelete: Restrict)
+  wrongQuestion    WrongQuestion?                  @relation("RecommendationWrongAnswer")
+  conceptEvidences RecommendationConceptEvidence[]
 
   @@index([questionId, isCorrect])
   @@index([createdAt])

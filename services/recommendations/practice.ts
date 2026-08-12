@@ -15,6 +15,8 @@ import {
 import type { SavedAnswerInput } from "@/services/assignments/schemas";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import type { AuthenticatedUser } from "@/services/auth/types";
+import { ensureLearnerProfileSnapshot } from "@/services/learner-profiles/service";
+import { appendRecommendationPracticeLearningEvent } from "@/services/learning-events/recommendation-practice";
 import { RecommendationOperationError } from "@/services/recommendations/errors";
 import { applyRecommendationMasteryUpdates } from "@/services/recommendations/mastery";
 import { assertCanAccessRecommendation } from "@/services/recommendations/policy";
@@ -287,6 +289,17 @@ async function completePracticeTransaction(
         isCorrect: grading.isCorrect,
         now,
       });
+      const projection = await appendRecommendationPracticeLearningEvent(
+        transaction,
+        answer.id,
+      );
+      if (projection) {
+        await ensureLearnerProfileSnapshot(
+          transaction,
+          actor.id,
+          projection.courseId,
+        );
+      }
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );

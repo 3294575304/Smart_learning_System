@@ -28,6 +28,20 @@ type EffectiveEvidence = Prisma.StudentAnswerConceptEvidenceGetPayload<{
   };
 }>;
 
+type EffectiveRecommendationEvidence =
+  Prisma.RecommendationConceptEvidenceGetPayload<{
+    include: {
+      recommendationConceptSnapshot: {
+        include: {
+          sourceGraphVersion: { select: { versionNumber: true } };
+          sourceNode: { select: { code: true; name: true } };
+          publishedGraphVersion: { select: { versionNumber: true } };
+          resolvedNode: { select: { code: true; name: true } };
+        };
+      };
+    };
+  }>;
+
 async function latestConceptEvidence(
   transaction: Prisma.TransactionClient,
   studentId: string,
@@ -59,6 +73,37 @@ async function latestConceptEvidence(
   return [...current.values()];
 }
 
+async function latestRecommendationConceptEvidence(
+  transaction: Prisma.TransactionClient,
+  studentId: string,
+  courseId: string,
+): Promise<EffectiveRecommendationEvidence[]> {
+  const rows = await transaction.recommendationConceptEvidence.findMany({
+    where: { studentId, courseId },
+    orderBy: [
+      { recommendationPracticeAnswerId: "asc" },
+      { conceptId: "asc" },
+      { revision: "desc" },
+    ],
+    include: {
+      recommendationConceptSnapshot: {
+        include: {
+          sourceGraphVersion: { select: { versionNumber: true } },
+          sourceNode: { select: { code: true, name: true } },
+          publishedGraphVersion: { select: { versionNumber: true } },
+          resolvedNode: { select: { code: true, name: true } },
+        },
+      },
+    },
+  });
+  const current = new Map<string, EffectiveRecommendationEvidence>();
+  for (const row of rows) {
+    const key = `${row.recommendationPracticeAnswerId}:${row.conceptId}`;
+    if (!current.has(key)) current.set(key, row);
+  }
+  return [...current.values()];
+}
+
 function validConceptEvidence(rows: readonly EffectiveEvidence[]) {
   return rows.filter(
     (row) =>
@@ -83,12 +128,22 @@ export async function recalculateStudentCourseConceptMastery(
     studentId,
     courseId,
   );
+  const latestRecommendationEvidence =
+    await latestRecommendationConceptEvidence(transaction, studentId, courseId);
   const evidence = validConceptEvidence(latestEvidence);
+  const recommendationEvidence = latestRecommendationEvidence.filter(
+    (row) =>
+      row.status === ConceptEvidenceStatus.VALID &&
+      row.score !== null &&
+      row.maxScore !== null &&
+      row.gradedAt !== null,
+  );
   let state = await transaction.studentCourseConceptMasteryState.findUnique({
     where: { studentId_courseId: { studentId, courseId } },
     select: { id: true },
   });
-  if (!state && evidence.length === 0) return null;
+  if (!state && evidence.length === 0 && recommendationEvidence.length === 0)
+    return null;
   if (!state) {
     state = await transaction.studentCourseConceptMasteryState.create({
       data: { studentId, courseId },
@@ -104,10 +159,11 @@ export async function recalculateStudentCourseConceptMastery(
 
   const inputFingerprint = conceptMasteryFingerprint({
     ruleVersion: CONCEPT_MASTERY_RULE_VERSION,
-    evidence: latestEvidence
-      .map((row) => ({
+    evidence: [
+      ...latestEvidence.map((row) => ({
+        sourceType: "STUDENT_ANSWER",
         id: row.id,
-        studentAnswerId: row.studentAnswerId,
+        sourceAnswerId: row.studentAnswerId,
         conceptId: row.conceptId,
         revision: row.revision,
         status: row.status,
@@ -115,12 +171,25 @@ export async function recalculateStudentCourseConceptMastery(
         maxScore: row.maxScore?.toFixed(4) ?? null,
         gradingSource: row.gradingSource,
         gradedAt: row.gradedAt?.toISOString() ?? null,
-      }))
-      .sort(
-        (left, right) =>
-          left.conceptId.localeCompare(right.conceptId) ||
-          left.studentAnswerId.localeCompare(right.studentAnswerId),
-      ),
+      })),
+      ...latestRecommendationEvidence.map((row) => ({
+        sourceType: "RECOMMENDATION_PRACTICE_ANSWER",
+        id: row.id,
+        sourceAnswerId: row.recommendationPracticeAnswerId,
+        conceptId: row.conceptId,
+        revision: row.revision,
+        status: row.status,
+        score: row.score?.toFixed(4) ?? null,
+        maxScore: row.maxScore?.toFixed(4) ?? null,
+        gradingSource: "DETERMINISTIC_RECOMMENDATION",
+        gradedAt: row.gradedAt?.toISOString() ?? null,
+      })),
+    ].sort(
+      (left, right) =>
+        left.conceptId.localeCompare(right.conceptId) ||
+        left.sourceType.localeCompare(right.sourceType) ||
+        left.sourceAnswerId.localeCompare(right.sourceAnswerId),
+    ),
   });
   const latest =
     await transaction.studentCourseConceptMasteryRevision.findFirst({
@@ -136,16 +205,24 @@ export async function recalculateStudentCourseConceptMastery(
     };
   }
 
-  const aggregates = calculateConceptMastery(
-    evidence.map((row) => ({
+  const aggregates = calculateConceptMastery([
+    ...evidence.map((row) => ({
       id: row.id,
-      studentAnswerId: row.studentAnswerId,
+      sourceAnswerId: `assignment:${row.studentAnswerId}`,
       conceptId: row.conceptId,
       score: row.score!,
       maxScore: row.maxScore!,
       gradedAt: row.gradedAt!,
     })),
-  );
+    ...recommendationEvidence.map((row) => ({
+      id: row.id,
+      sourceAnswerId: `recommendation:${row.recommendationPracticeAnswerId}`,
+      conceptId: row.conceptId,
+      score: row.score!,
+      maxScore: row.maxScore!,
+      gradedAt: row.gradedAt!,
+    })),
+  ]);
   const revision = await transaction.studentCourseConceptMasteryRevision.create(
     {
       data: {
@@ -272,33 +349,117 @@ async function masteryView(studentId: string, courseId: string) {
   }
 
   const conceptIds = revision.entries.map((entry) => entry.conceptId);
-  const [currentNodes, evidence] = await Promise.all([
-    currentGraph
-      ? prisma.publishedKnowledgeGraphNode.findMany({
-          where: {
-            graphVersionId: currentGraph.id,
-            conceptId: { in: conceptIds },
-          },
-          select: {
-            id: true,
-            conceptId: true,
-            code: true,
-            name: true,
-            nodeType: true,
-          },
-        })
-      : Promise.resolve([]),
-    prisma.$transaction((transaction) =>
-      latestConceptEvidence(transaction, studentId, courseId).then(
-        validConceptEvidence,
+  const [currentNodes, assignmentEvidence, recommendationEvidence] =
+    await Promise.all([
+      currentGraph
+        ? prisma.publishedKnowledgeGraphNode.findMany({
+            where: {
+              graphVersionId: currentGraph.id,
+              conceptId: { in: conceptIds },
+            },
+            select: {
+              id: true,
+              conceptId: true,
+              code: true,
+              name: true,
+              nodeType: true,
+            },
+          })
+        : Promise.resolve([]),
+      prisma.$transaction((transaction) =>
+        latestConceptEvidence(transaction, studentId, courseId).then(
+          validConceptEvidence,
+        ),
       ),
-    ),
-  ]);
+      prisma.$transaction((transaction) =>
+        latestRecommendationConceptEvidence(
+          transaction,
+          studentId,
+          courseId,
+        ).then((rows) =>
+          rows.filter(
+            (row) =>
+              row.status === ConceptEvidenceStatus.VALID &&
+              row.score !== null &&
+              row.maxScore !== null &&
+              row.gradedAt !== null,
+          ),
+        ),
+      ),
+    ]);
   const currentNodeByConcept = new Map(
     currentNodes.map((node) => [node.conceptId, node]),
   );
-  const evidenceByConcept = new Map<string, EffectiveEvidence[]>();
-  for (const row of evidence) {
+  type TraceEvidence = {
+    sourceType: "ASSIGNMENT" | "RECOMMENDATION_PRACTICE";
+    id: string;
+    revision: number;
+    conceptId: string;
+    bindingType: string;
+    score: Prisma.Decimal;
+    maxScore: Prisma.Decimal;
+    normalizedScore: Prisma.Decimal;
+    gradedAt: Date;
+    sourceGraphVersionId: string;
+    sourceGraphVersionNumber: number;
+    sourceNodeId: string;
+    sourceNodeCode: string;
+    sourceNodeName: string;
+    assignmentId?: string;
+    assignmentQuestionId?: string;
+    submissionId?: string;
+    studentAnswerId?: string;
+    recommendationId?: string;
+    recommendationPracticeAnswerId?: string;
+    questionId?: string;
+  };
+  const evidenceByConcept = new Map<string, TraceEvidence[]>();
+  const traces: TraceEvidence[] = [
+    ...assignmentEvidence.map((row) => ({
+      sourceType: "ASSIGNMENT" as const,
+      id: row.id,
+      revision: row.revision,
+      conceptId: row.conceptId,
+      bindingType: row.bindingType,
+      score: row.score!,
+      maxScore: row.maxScore!,
+      normalizedScore: row.normalizedScore!,
+      gradedAt: row.gradedAt!,
+      sourceGraphVersionId:
+        row.assignmentQuestionConceptSnapshot.sourceGraphVersionId,
+      sourceGraphVersionNumber:
+        row.assignmentQuestionConceptSnapshot.sourceGraphVersion.versionNumber,
+      sourceNodeId: row.assignmentQuestionConceptSnapshot.sourceNodeId,
+      sourceNodeCode: row.assignmentQuestionConceptSnapshot.sourceNode.code,
+      sourceNodeName: row.assignmentQuestionConceptSnapshot.sourceNode.name,
+      assignmentId: row.assignmentId,
+      assignmentQuestionId: row.assignmentQuestionId,
+      submissionId: row.submissionId,
+      studentAnswerId: row.studentAnswerId,
+    })),
+    ...recommendationEvidence.map((row) => ({
+      sourceType: "RECOMMENDATION_PRACTICE" as const,
+      id: row.id,
+      revision: row.revision,
+      conceptId: row.conceptId,
+      bindingType: row.bindingType,
+      score: row.score!,
+      maxScore: row.maxScore!,
+      normalizedScore: row.normalizedScore!,
+      gradedAt: row.gradedAt!,
+      sourceGraphVersionId:
+        row.recommendationConceptSnapshot.sourceGraphVersionId,
+      sourceGraphVersionNumber:
+        row.recommendationConceptSnapshot.sourceGraphVersion.versionNumber,
+      sourceNodeId: row.recommendationConceptSnapshot.sourceNodeId,
+      sourceNodeCode: row.recommendationConceptSnapshot.sourceNode.code,
+      sourceNodeName: row.recommendationConceptSnapshot.sourceNode.name,
+      recommendationId: row.recommendationId,
+      recommendationPracticeAnswerId: row.recommendationPracticeAnswerId,
+      questionId: row.questionId,
+    })),
+  ];
+  for (const row of traces) {
     const rows = evidenceByConcept.get(row.conceptId) ?? [];
     rows.push(row);
     evidenceByConcept.set(row.conceptId, rows);
@@ -336,17 +497,16 @@ async function masteryView(studentId: string, courseId: string) {
         }
       >();
       for (const row of rows) {
-        const snapshot = row.assignmentQuestionConceptSnapshot;
-        const key = `${snapshot.sourceGraphVersionId}:${snapshot.sourceNodeId}:${row.bindingType}`;
+        const key = `${row.sourceGraphVersionId}:${row.sourceNodeId}:${row.bindingType}`;
         const current = sourceGroups.get(key);
         if (current) current.evidenceCount += 1;
         else
           sourceGroups.set(key, {
-            sourceGraphVersionId: snapshot.sourceGraphVersionId,
-            sourceGraphVersionNumber: snapshot.sourceGraphVersion.versionNumber,
-            sourceNodeId: snapshot.sourceNodeId,
-            sourceNodeCode: snapshot.sourceNode.code,
-            sourceNodeName: snapshot.sourceNode.name,
+            sourceGraphVersionId: row.sourceGraphVersionId,
+            sourceGraphVersionNumber: row.sourceGraphVersionNumber,
+            sourceNodeId: row.sourceNodeId,
+            sourceNodeCode: row.sourceNodeCode,
+            sourceNodeName: row.sourceNodeName,
             bindingType: row.bindingType,
             evidenceCount: 1,
           });
@@ -379,15 +539,20 @@ async function masteryView(studentId: string, courseId: string) {
           latestReferences: rows
             .slice(0, CONCEPT_MASTERY_TRACE_LIMIT)
             .map((row) => ({
+              sourceType: row.sourceType,
               evidenceId: row.id,
               revision: row.revision,
-              assignmentId: row.assignmentId,
-              assignmentQuestionId: row.assignmentQuestionId,
+              assignmentId: row.assignmentId ?? row.recommendationId,
+              assignmentQuestionId:
+                row.assignmentQuestionId ?? row.questionId,
               submissionId: row.submissionId,
               studentAnswerId: row.studentAnswerId,
-              sourceGraphVersionId:
-                row.assignmentQuestionConceptSnapshot.sourceGraphVersionId,
-              sourceNodeId: row.assignmentQuestionConceptSnapshot.sourceNodeId,
+              recommendationId: row.recommendationId,
+              recommendationPracticeAnswerId:
+                row.recommendationPracticeAnswerId,
+              questionId: row.questionId,
+              sourceGraphVersionId: row.sourceGraphVersionId,
+              sourceNodeId: row.sourceNodeId,
               bindingType: row.bindingType,
               score: row.score!.toNumber(),
               maxScore: row.maxScore!.toNumber(),

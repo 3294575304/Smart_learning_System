@@ -18,7 +18,7 @@ function evidence(
 ): EffectiveConceptEvidence {
   return {
     id,
-    studentAnswerId,
+    sourceAnswerId: studentAnswerId,
     conceptId,
     score: new Prisma.Decimal(score),
     maxScore: new Prisma.Decimal(maxScore),

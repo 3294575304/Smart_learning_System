@@ -4,7 +4,7 @@ import { CONCEPT_MASTERY_SCORE_SCALE } from "@/services/concept-mastery/constant
 
 export interface EffectiveConceptEvidence {
   id: string;
-  studentAnswerId: string;
+  sourceAnswerId: string;
   conceptId: string;
   score: Prisma.Decimal;
   maxScore: Prisma.Decimal;
@@ -76,7 +76,7 @@ export function calculateConceptMastery(
           conceptId,
           evidenceCount: usable.length,
           distinctAnswerCount: new Set(
-            usable.map((item) => item.studentAnswerId),
+            usable.map((item) => item.sourceAnswerId),
           ).size,
           earnedPoints,
           availablePoints,

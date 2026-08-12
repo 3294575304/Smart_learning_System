@@ -22,3 +22,14 @@ export const assessmentLearningEventPayloadSchema = z
 export type AssessmentLearningEventPayload = z.infer<
   typeof assessmentLearningEventPayloadSchema
 >;
+
+export const recommendationPracticeLearningEventPayloadSchema = z
+  .object({
+    recommendationId: z.string().cuid(),
+    recommendationPracticeAnswerId: z.string().cuid(),
+    score: z.string().regex(/^\d+(\.\d+)?$/),
+    maxScore: z.string().regex(/^\d+(\.\d+)?$/),
+    isCorrect: z.boolean(),
+    conceptSnapshotCount: z.number().int().positive(),
+  })
+  .strict();

@@ -460,12 +460,15 @@ export async function createCourseRecommendations(
             select: {
               conceptId: true,
               bindingType: true,
+              sourceGraphVersionId: true,
+              sourceNodeId: true,
+              bindingSet: { select: { revision: true } },
               concept: {
                 select: {
                   nodes: {
                     where: { graphVersionId: graph.id },
                     take: 1,
-                    select: { name: true, sortOrder: true },
+                    select: { id: true, name: true, sortOrder: true },
                   },
                 },
               },
@@ -517,31 +520,58 @@ export async function createCourseRecommendations(
         },
       });
       for (const item of scored) {
-        await transaction.personalizedRecommendation.upsert({
-          where: {
-            studentId_questionId_cycleKey: {
+        const recommendation =
+          await transaction.personalizedRecommendation.upsert({
+            where: {
+              studentId_questionId_cycleKey: {
+                studentId: actor.id,
+                questionId: item.question.id,
+                cycleKey,
+              },
+            },
+            update: {},
+            create: {
               studentId: actor.id,
               questionId: item.question.id,
+              courseCycleId: cycle.id,
+              targetConceptId: item.targetConceptId,
               cycleKey,
+              source: RecommendationSource.RULE,
+              status: RecommendationStatus.PENDING,
+              reason: item.reason,
+              reasonCodes: item.reasonCodes,
+              targetDifficulty: input.difficulty,
+              priority: item.score,
+              rankingScore: item.score,
+              expiresAt,
             },
-          },
-          update: {},
-          create: {
-            studentId: actor.id,
-            questionId: item.question.id,
-            courseCycleId: cycle.id,
-            targetConceptId: item.targetConceptId,
-            cycleKey,
-            source: RecommendationSource.RULE,
-            status: RecommendationStatus.PENDING,
-            reason: item.reason,
-            reasonCodes: item.reasonCodes,
-            targetDifficulty: input.difficulty,
-            priority: item.score,
-            rankingScore: item.score,
-            expiresAt,
-          },
+          });
+        const snapshots = item.question.graphBindings.flatMap((binding) => {
+          const resolvedNode = binding.concept.nodes[0];
+          return resolvedNode
+            ? [
+                {
+                  recommendationId: recommendation.id,
+                  questionId: item.question.id,
+                  courseId,
+                  conceptId: binding.conceptId,
+                  bindingType: binding.bindingType,
+                  bindingSetRevision: binding.bindingSet.revision,
+                  sourceGraphVersionId: binding.sourceGraphVersionId,
+                  sourceNodeId: binding.sourceNodeId,
+                  publishedGraphVersionId: graph.id,
+                  resolvedNodeId: resolvedNode.id,
+                  resolutionStatus: "RESOLVED" as const,
+                },
+              ]
+            : [];
         });
+        if (snapshots.length) {
+          await transaction.courseRecommendationConceptSnapshot.createMany({
+            data: snapshots,
+            skipDuplicates: true,
+          });
+        }
       }
       return courseRecommendationCycleView(
         transaction,
