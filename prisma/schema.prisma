@@ -64,6 +64,7 @@ enum AuditAction {
   QUESTION_GRAPH_BINDINGS_CLEARED
   AI_QUESTION_MAPPING_BATCH_CREATED
   AI_QUESTION_MAPPING_BATCH_CONFIRMED
+  COURSE_TEACHING_PROGRESS_UPDATED
   PROGRAMMING_CONFIG_REVISION_CREATED
   PROGRAMMING_ATTEMPT_REJUDGED
   PROGRAMMING_ATTEMPT_REVOKED
@@ -545,70 +546,73 @@ model User {
   updatedAt          DateTime   @updatedAt
 
   profile                            UserProfile?
-  taughtClassrooms                   Classroom[]                         @relation("ClassroomTeacher")
-  taughtCourses                      Course[]                            @relation("CourseTeacher")
-  classMemberships                   ClassMembership[]                   @relation("ClassMembershipStudent")
-  createdQuestions                   Question[]                          @relation("QuestionCreator")
-  createdKnowledgePoints             KnowledgePoint[]                    @relation("KnowledgePointCreator")
-  assignments                        Assignment[]                        @relation("AssignmentTeacher")
-  submissions                        Submission[]                        @relation("SubmissionStudent")
-  gradedAnswers                      StudentAnswer[]                     @relation("StudentAnswerGrader")
-  wrongQuestions                     WrongQuestion[]                     @relation("WrongQuestionStudent")
-  knowledgeMasteries                 StudentKnowledgeMastery[]           @relation("MasteryStudent")
-  requestedAIAnalyses                AIAnalysis[]                        @relation("AIAnalysisRequester")
-  studentAIAnalyses                  AIAnalysis[]                        @relation("AIAnalysisStudent")
+  taughtClassrooms                   Classroom[]                          @relation("ClassroomTeacher")
+  taughtCourses                      Course[]                             @relation("CourseTeacher")
+  classMemberships                   ClassMembership[]                    @relation("ClassMembershipStudent")
+  createdQuestions                   Question[]                           @relation("QuestionCreator")
+  createdKnowledgePoints             KnowledgePoint[]                     @relation("KnowledgePointCreator")
+  assignments                        Assignment[]                         @relation("AssignmentTeacher")
+  submissions                        Submission[]                         @relation("SubmissionStudent")
+  gradedAnswers                      StudentAnswer[]                      @relation("StudentAnswerGrader")
+  wrongQuestions                     WrongQuestion[]                      @relation("WrongQuestionStudent")
+  knowledgeMasteries                 StudentKnowledgeMastery[]            @relation("MasteryStudent")
+  requestedAIAnalyses                AIAnalysis[]                         @relation("AIAnalysisRequester")
+  studentAIAnalyses                  AIAnalysis[]                         @relation("AIAnalysisStudent")
   personalizedRecommendations        PersonalizedRecommendation[]
   aiTutoringRecords                  AITutoringRecord[]
   authSessions                       AuthSession[]
-  auditLogs                          AuditLog[]                          @relation("AuditActor")
-  updatedSystemConfigs               SystemConfig[]                      @relation("SystemConfigUpdater")
-  notifications                      Notification[]                      @relation("NotificationRecipient")
-  createdAnnouncements               Announcement[]                      @relation("AnnouncementCreator")
-  publishedAnnouncements             Announcement[]                      @relation("AnnouncementPublisher")
-  uploadedCourseFiles                CourseFileVersion[]                 @relation("CourseFileUploadedBy")
-  uploadedCourseSyllabi              CourseSyllabus[]                    @relation("CourseSyllabusUploadedBy")
-  requestedSyllabusParses            SyllabusParseDraft[]                @relation("SyllabusParseRequestedBy")
-  syllabusReviewRevisions            SyllabusReviewRevision[]            @relation("SyllabusReviewEditedBy")
-  publishedSyllabusStructures        PublishedSyllabusStructure[]        @relation("SyllabusStructurePublishedBy")
-  requestedKnowledgeGraphDrafts      KnowledgeGraphDraft[]               @relation("KnowledgeGraphDraftRequestedBy")
-  knowledgeGraphReviewRevisions      KnowledgeGraphReviewRevision[]      @relation("KnowledgeGraphReviewEditedBy")
-  publishedKnowledgeGraphs           PublishedKnowledgeGraphVersion[]    @relation("KnowledgeGraphPublishedBy")
-  createdQuestionGraphBindings       QuestionKnowledgeGraphBinding[]     @relation("QuestionGraphBindingCreator")
-  conceptAnswerEvidences             StudentAnswerConceptEvidence[]      @relation("ConceptEvidenceStudent")
-  courseConceptMasteryStates         StudentCourseConceptMasteryState[]  @relation("CourseConceptMasteryStudent")
-  createdStudentImportBatches        StudentImportBatch[]                @relation("StudentImportBatchCreatedBy")
-  matchedStudentImportRows           StudentImportRow[]                  @relation("StudentImportMatchedUser")
-  createdStudentImportRows           StudentImportRow[]                  @relation("StudentImportCreatedUser")
+  auditLogs                          AuditLog[]                           @relation("AuditActor")
+  updatedSystemConfigs               SystemConfig[]                       @relation("SystemConfigUpdater")
+  notifications                      Notification[]                       @relation("NotificationRecipient")
+  createdAnnouncements               Announcement[]                       @relation("AnnouncementCreator")
+  publishedAnnouncements             Announcement[]                       @relation("AnnouncementPublisher")
+  uploadedCourseFiles                CourseFileVersion[]                  @relation("CourseFileUploadedBy")
+  uploadedCourseSyllabi              CourseSyllabus[]                     @relation("CourseSyllabusUploadedBy")
+  requestedSyllabusParses            SyllabusParseDraft[]                 @relation("SyllabusParseRequestedBy")
+  syllabusReviewRevisions            SyllabusReviewRevision[]             @relation("SyllabusReviewEditedBy")
+  publishedSyllabusStructures        PublishedSyllabusStructure[]         @relation("SyllabusStructurePublishedBy")
+  requestedKnowledgeGraphDrafts      KnowledgeGraphDraft[]                @relation("KnowledgeGraphDraftRequestedBy")
+  knowledgeGraphReviewRevisions      KnowledgeGraphReviewRevision[]       @relation("KnowledgeGraphReviewEditedBy")
+  publishedKnowledgeGraphs           PublishedKnowledgeGraphVersion[]     @relation("KnowledgeGraphPublishedBy")
+  createdQuestionGraphBindings       QuestionKnowledgeGraphBinding[]      @relation("QuestionGraphBindingCreator")
+  conceptAnswerEvidences             StudentAnswerConceptEvidence[]       @relation("ConceptEvidenceStudent")
+  courseConceptMasteryStates         StudentCourseConceptMasteryState[]   @relation("CourseConceptMasteryStudent")
+  createdStudentImportBatches        StudentImportBatch[]                 @relation("StudentImportBatchCreatedBy")
+  matchedStudentImportRows           StudentImportRow[]                   @relation("StudentImportMatchedUser")
+  createdStudentImportRows           StudentImportRow[]                   @relation("StudentImportCreatedUser")
   studentIdentity                    StudentIdentity?
-  createdAssessmentSchemeDrafts      AssessmentSchemeDraft[]             @relation("AssessmentSchemeDraftCreatedBy")
-  assessmentSchemeReviews            AssessmentSchemeReviewRevision[]    @relation("AssessmentSchemeReviewEditedBy")
-  publishedAssessmentSchemes         PublishedAssessmentScheme[]         @relation("AssessmentSchemePublishedBy")
-  createdGradebooks                  CourseGradebook[]                   @relation("GradebookCreatedBy")
-  studentGradeEntries                StudentGradeEntry[]                 @relation("StudentGradeEntries")
-  studentGradeEntryRevisions         StudentGradeEntryRevision[]         @relation("StudentGradeEntryRevisions")
-  changedGradeEntryRevisions         StudentGradeEntryRevision[]         @relation("GradeEntryRevisionChangedBy")
-  studentFinalGradeOverrides         StudentFinalGradeOverride[]         @relation("StudentFinalGradeOverrides")
-  studentFinalGradeOverrideRevisions StudentFinalGradeOverrideRevision[] @relation("StudentFinalGradeOverrideRevisions")
-  changedFinalGradeOverrides         StudentFinalGradeOverrideRevision[] @relation("FinalGradeOverrideChangedBy")
-  studentCourseGradeStates           StudentCourseGradeState[]           @relation("StudentCourseGradeStates")
-  studentCourseGradeRevisions        StudentCourseGradeRevision[]        @relation("StudentCourseGradeRevisions")
-  calculatedCourseGradeRevisions     StudentCourseGradeRevision[]        @relation("CourseGradeCalculatedBy")
-  publishedGradebooks                GradebookPublication[]              @relation("GradebookPublishedBy")
-  gradebookPublicationRows           GradebookPublicationStudent[]       @relation("GradebookPublicationStudents")
-  createdGradeImportBatches          GradeImportBatch[]                  @relation("GradeImportCreatedBy")
-  matchedGradeImportRows             GradeImportRow[]                    @relation("GradeImportMatchedStudent")
-  createdAttendanceSessions          AttendanceSession[]                 @relation("AttendanceSessionTeacher")
-  studentAttendanceRecords           AttendanceRecord[]                  @relation("AttendanceRecordStudent")
-  attendanceRecordRevisions          AttendanceRecordRevision[]          @relation("AttendanceRevisionActor")
-  generatedOutcomeAttainmentRuns     CourseOutcomeAttainmentRun[]        @relation("OutcomeAttainmentGeneratedBy")
-  studentOutcomeAttainmentResults    StudentOutcomeAttainmentResult[]    @relation("OutcomeAttainmentStudent")
-  requestedBackgroundJobs            BackgroundJob[]                     @relation("BackgroundJobRequester")
-  learningEvents                     LearningEvent[]                     @relation("LearningEventStudent")
-  programmingConfigRevisions         ProgrammingQuestionConfigRevision[] @relation("ProgrammingConfigCreatedBy")
-  programmingAttempts                ProgrammingAttempt[]                @relation("ProgrammingAttemptStudent")
-  createdProgrammingAttempts         ProgrammingAttempt[]                @relation("ProgrammingAttemptCreatedBy")
-  learnerProfileSnapshots            LearnerProfileSnapshot[]            @relation("LearnerProfileStudent")
-  createdAIQuestionMappingBatches    AIQuestionMappingBatch[]            @relation("AIQuestionMappingBatchCreator")
+  createdAssessmentSchemeDrafts      AssessmentSchemeDraft[]              @relation("AssessmentSchemeDraftCreatedBy")
+  assessmentSchemeReviews            AssessmentSchemeReviewRevision[]     @relation("AssessmentSchemeReviewEditedBy")
+  publishedAssessmentSchemes         PublishedAssessmentScheme[]          @relation("AssessmentSchemePublishedBy")
+  createdGradebooks                  CourseGradebook[]                    @relation("GradebookCreatedBy")
+  studentGradeEntries                StudentGradeEntry[]                  @relation("StudentGradeEntries")
+  studentGradeEntryRevisions         StudentGradeEntryRevision[]          @relation("StudentGradeEntryRevisions")
+  changedGradeEntryRevisions         StudentGradeEntryRevision[]          @relation("GradeEntryRevisionChangedBy")
+  studentFinalGradeOverrides         StudentFinalGradeOverride[]          @relation("StudentFinalGradeOverrides")
+  studentFinalGradeOverrideRevisions StudentFinalGradeOverrideRevision[]  @relation("StudentFinalGradeOverrideRevisions")
+  changedFinalGradeOverrides         StudentFinalGradeOverrideRevision[]  @relation("FinalGradeOverrideChangedBy")
+  studentCourseGradeStates           StudentCourseGradeState[]            @relation("StudentCourseGradeStates")
+  studentCourseGradeRevisions        StudentCourseGradeRevision[]         @relation("StudentCourseGradeRevisions")
+  calculatedCourseGradeRevisions     StudentCourseGradeRevision[]         @relation("CourseGradeCalculatedBy")
+  publishedGradebooks                GradebookPublication[]               @relation("GradebookPublishedBy")
+  gradebookPublicationRows           GradebookPublicationStudent[]        @relation("GradebookPublicationStudents")
+  createdGradeImportBatches          GradeImportBatch[]                   @relation("GradeImportCreatedBy")
+  matchedGradeImportRows             GradeImportRow[]                     @relation("GradeImportMatchedStudent")
+  createdAttendanceSessions          AttendanceSession[]                  @relation("AttendanceSessionTeacher")
+  studentAttendanceRecords           AttendanceRecord[]                   @relation("AttendanceRecordStudent")
+  attendanceRecordRevisions          AttendanceRecordRevision[]           @relation("AttendanceRevisionActor")
+  generatedOutcomeAttainmentRuns     CourseOutcomeAttainmentRun[]         @relation("OutcomeAttainmentGeneratedBy")
+  studentOutcomeAttainmentResults    StudentOutcomeAttainmentResult[]     @relation("OutcomeAttainmentStudent")
+  requestedBackgroundJobs            BackgroundJob[]                      @relation("BackgroundJobRequester")
+  learningEvents                     LearningEvent[]                      @relation("LearningEventStudent")
+  programmingConfigRevisions         ProgrammingQuestionConfigRevision[]  @relation("ProgrammingConfigCreatedBy")
+  programmingAttempts                ProgrammingAttempt[]                 @relation("ProgrammingAttemptStudent")
+  createdProgrammingAttempts         ProgrammingAttempt[]                 @relation("ProgrammingAttemptCreatedBy")
+  learnerProfileSnapshots            LearnerProfileSnapshot[]             @relation("LearnerProfileStudent")
+  createdAIQuestionMappingBatches    AIQuestionMappingBatch[]             @relation("AIQuestionMappingBatchCreator")
+  createdTeachingProgressRevisions   CourseTeachingProgressRevision[]     @relation("CourseTeachingProgressCreatedBy")
+  createdRecommendationPolicies      CourseRecommendationPolicyRevision[] @relation("CourseRecommendationPolicyCreatedBy")
+  courseRecommendationCycles         CourseRecommendationCycle[]          @relation("CourseRecommendationStudent")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -880,33 +884,35 @@ model Course {
   currentPublishedSyllabusStructureId     String?      @unique
   currentPublishedKnowledgeGraphVersionId String?      @unique
   currentPublishedAssessmentSchemeId      String?      @unique
+  currentTeachingProgressRevisionId       String?      @unique
+  currentRecommendationPolicyRevisionId   String?      @unique
   createdAt                               DateTime     @default(now())
   updatedAt                               DateTime     @updatedAt
 
-  template                              CourseTemplate                      @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  teacher                               User                                @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
-  classrooms                            Classroom[]                         @relation("ClassroomCourse")
-  courseFileVersions                    CourseFileVersion[]                 @relation("CourseFileCourse")
-  syllabi                               CourseSyllabus[]                    @relation("CourseSyllabusCourse")
+  template                              CourseTemplate                       @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  teacher                               User                                 @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  classrooms                            Classroom[]                          @relation("ClassroomCourse")
+  courseFileVersions                    CourseFileVersion[]                  @relation("CourseFileCourse")
+  syllabi                               CourseSyllabus[]                     @relation("CourseSyllabusCourse")
   syllabusParseDrafts                   SyllabusParseDraft[]
   syllabusReviewRevisions               SyllabusReviewRevision[]
-  publishedSyllabusStructures           PublishedSyllabusStructure[]        @relation("PublishedSyllabusStructureCourse")
-  currentPublishedSyllabusStructure     PublishedSyllabusStructure?         @relation("CurrentPublishedSyllabusStructure", fields: [currentPublishedSyllabusStructureId], references: [id], onDelete: SetNull)
+  publishedSyllabusStructures           PublishedSyllabusStructure[]         @relation("PublishedSyllabusStructureCourse")
+  currentPublishedSyllabusStructure     PublishedSyllabusStructure?          @relation("CurrentPublishedSyllabusStructure", fields: [currentPublishedSyllabusStructureId], references: [id], onDelete: SetNull)
   knowledgeGraphDrafts                  KnowledgeGraphDraft[]
   knowledgeGraphReviewRevisions         KnowledgeGraphReviewRevision[]
-  publishedKnowledgeGraphVersions       PublishedKnowledgeGraphVersion[]    @relation("PublishedKnowledgeGraphCourse")
-  currentPublishedKnowledgeGraphVersion PublishedKnowledgeGraphVersion?     @relation("CurrentPublishedKnowledgeGraph", fields: [currentPublishedKnowledgeGraphVersionId], references: [id], onDelete: SetNull)
+  publishedKnowledgeGraphVersions       PublishedKnowledgeGraphVersion[]     @relation("PublishedKnowledgeGraphCourse")
+  currentPublishedKnowledgeGraphVersion PublishedKnowledgeGraphVersion?      @relation("CurrentPublishedKnowledgeGraph", fields: [currentPublishedKnowledgeGraphVersionId], references: [id], onDelete: SetNull)
   assessmentSchemeDrafts                AssessmentSchemeDraft[]
   assessmentSchemeReviewRevisions       AssessmentSchemeReviewRevision[]
-  publishedAssessmentSchemes            PublishedAssessmentScheme[]         @relation("PublishedAssessmentSchemeCourse")
-  currentPublishedAssessmentScheme      PublishedAssessmentScheme?          @relation("CurrentPublishedAssessmentScheme", fields: [currentPublishedAssessmentSchemeId], references: [id], onDelete: SetNull)
+  publishedAssessmentSchemes            PublishedAssessmentScheme[]          @relation("PublishedAssessmentSchemeCourse")
+  currentPublishedAssessmentScheme      PublishedAssessmentScheme?           @relation("CurrentPublishedAssessmentScheme", fields: [currentPublishedAssessmentSchemeId], references: [id], onDelete: SetNull)
   knowledgeGraphConcepts                KnowledgeGraphConcept[]
   questionGraphBindingSets              QuestionKnowledgeGraphBindingSet[]
   questionGraphBindings                 QuestionKnowledgeGraphBinding[]
   assignmentQuestionConceptSnapshots    AssignmentQuestionConceptSnapshot[]
   conceptAnswerEvidences                StudentAnswerConceptEvidence[]
   studentConceptMasteryStates           StudentCourseConceptMasteryState[]
-  studentImportBatches                  StudentImportBatch[]                @relation("StudentImportCourse")
+  studentImportBatches                  StudentImportBatch[]                 @relation("StudentImportCourse")
   gradebooks                            CourseGradebook[]
   gradeImportBatches                    GradeImportBatch[]
   attendanceSessions                    AttendanceSession[]
@@ -915,6 +921,11 @@ model Course {
   learningEvents                        LearningEvent[]
   learnerProfileSnapshots               LearnerProfileSnapshot[]
   aiQuestionMappingBatches              AIQuestionMappingBatch[]
+  teachingProgressRevisions             CourseTeachingProgressRevision[]     @relation("CourseTeachingProgress")
+  currentTeachingProgressRevision       CourseTeachingProgressRevision?      @relation("CurrentCourseTeachingProgress", fields: [currentTeachingProgressRevisionId], references: [id], onDelete: SetNull)
+  recommendationPolicyRevisions         CourseRecommendationPolicyRevision[] @relation("CourseRecommendationPolicies")
+  currentRecommendationPolicyRevision   CourseRecommendationPolicyRevision?  @relation("CurrentCourseRecommendationPolicy", fields: [currentRecommendationPolicyRevisionId], references: [id], onDelete: SetNull)
+  recommendationCycles                  CourseRecommendationCycle[]
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -1697,6 +1708,8 @@ model PublishedKnowledgeGraphVersion {
   publishedAssignmentSnapshots AssignmentQuestionConceptSnapshot[] @relation("AssignmentConceptSnapshotPublishedVersion")
   learnerProfileSnapshots      LearnerProfileSnapshot[]
   aiQuestionMappingBatches     AIQuestionMappingBatch[]
+  teachingProgressRevisions    CourseTeachingProgressRevision[]
+  recommendationCycles         CourseRecommendationCycle[]
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
@@ -1719,6 +1732,8 @@ model KnowledgeGraphConcept {
   learningEventConcepts        LearningEventConcept[]
   learnerProfileConceptEntries LearnerProfileConceptEntry[]
   aiQuestionMappingCandidates  AIQuestionMappingCandidate[]
+  teachingProgressConcepts     CourseTeachingProgressConcept[]
+  targetedRecommendations      PersonalizedRecommendation[]        @relation("RecommendationTargetConcept")
 
   @@unique([courseId, stableKey])
   @@index([courseId, createdAt])
@@ -1753,6 +1768,7 @@ model PublishedKnowledgeGraphNode {
   sourceAssignmentSnapshots   AssignmentQuestionConceptSnapshot[] @relation("AssignmentConceptSnapshotSourceNode")
   resolvedAssignmentSnapshots AssignmentQuestionConceptSnapshot[] @relation("AssignmentConceptSnapshotResolvedNode")
   aiQuestionMappingCandidates AIQuestionMappingCandidate[]
+  teachingProgressConcepts    CourseTeachingProgressConcept[]
 
   @@unique([graphVersionId, code])
   @@unique([graphVersionId, conceptId])
@@ -1809,6 +1825,7 @@ model Classroom {
   gradeImportBatches         GradeImportBatch[]
   attendanceSessions         AttendanceSession[]
   outcomeAttainmentRuns      CourseOutcomeAttainmentRun[]
+  recommendationCycles       CourseRecommendationCycle[]
 
   @@index([teacherId, status])
   @@index([courseId, status])
@@ -2726,6 +2743,7 @@ model StudentCourseConceptMasteryRevision {
   state                   StudentCourseConceptMasteryState   @relation(fields: [stateId], references: [id], onDelete: Restrict)
   entries                 StudentCourseConceptMasteryEntry[]
   learnerProfileSnapshots LearnerProfileSnapshot[]
+  recommendationCycles    CourseRecommendationCycle[]
 
   @@unique([stateId, revisionNumber])
   @@unique([stateId, inputFingerprint])
@@ -2751,11 +2769,12 @@ model LearnerProfileSnapshot {
   createdAt                 DateTime  @default(now())
   updatedAt                 DateTime  @updatedAt
 
-  student         User                                 @relation("LearnerProfileStudent", fields: [studentId], references: [id], onDelete: Restrict)
-  course          Course                               @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  graphVersion    PublishedKnowledgeGraphVersion?      @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
-  masteryRevision StudentCourseConceptMasteryRevision? @relation(fields: [masteryRevisionId], references: [id], onDelete: Restrict)
-  concepts        LearnerProfileConceptEntry[]
+  student              User                                 @relation("LearnerProfileStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  course               Course                               @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  graphVersion         PublishedKnowledgeGraphVersion?      @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
+  masteryRevision      StudentCourseConceptMasteryRevision? @relation(fields: [masteryRevisionId], references: [id], onDelete: Restrict)
+  concepts             LearnerProfileConceptEntry[]
+  recommendationCycles CourseRecommendationCycle[]
 
   @@unique([studentId, courseId, revisionNumber])
   @@unique([studentId, courseId, inputFingerprint])
@@ -2805,6 +2824,111 @@ model StudentCourseConceptMasteryEntry {
   @@unique([masteryRevisionId, conceptId])
   @@index([conceptId, masteryScore])
   @@index([masteryRevisionId, level])
+}
+
+model CourseTeachingProgressRevision {
+  id               String   @id @default(cuid())
+  courseId         String
+  graphVersionId   String
+  createdById      String
+  revisionNumber   Int
+  inputFingerprint String   @db.Char(64)
+  note             String?  @db.VarChar(500)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  course               Course                          @relation("CourseTeachingProgress", fields: [courseId], references: [id], onDelete: Restrict)
+  currentForCourse     Course?                         @relation("CurrentCourseTeachingProgress")
+  graphVersion         PublishedKnowledgeGraphVersion  @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
+  createdBy            User                            @relation("CourseTeachingProgressCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  concepts             CourseTeachingProgressConcept[]
+  recommendationCycles CourseRecommendationCycle[]
+
+  @@unique([courseId, revisionNumber])
+  @@index([courseId, createdAt])
+  @@index([courseId, inputFingerprint])
+  @@index([graphVersionId])
+}
+
+model CourseTeachingProgressConcept {
+  id                 String   @id @default(cuid())
+  progressRevisionId String
+  conceptId          String
+  publishedNodeId    String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  progressRevision CourseTeachingProgressRevision @relation(fields: [progressRevisionId], references: [id], onDelete: Restrict)
+  concept          KnowledgeGraphConcept          @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  publishedNode    PublishedKnowledgeGraphNode    @relation(fields: [publishedNodeId], references: [id], onDelete: Restrict)
+
+  @@unique([progressRevisionId, conceptId])
+  @@unique([progressRevisionId, publishedNodeId])
+  @@index([conceptId])
+  @@index([publishedNodeId])
+}
+
+model CourseRecommendationPolicyRevision {
+  id                    String   @id @default(cuid())
+  courseId              String
+  createdById           String
+  revisionNumber        Int
+  ruleVersion           String   @db.VarChar(50)
+  inputFingerprint      String   @db.Char(64)
+  weaknessWeight        Int      @default(35)
+  prerequisiteWeight    Int      @default(20)
+  difficultyWeight      Int      @default(15)
+  errorPatternWeight    Int      @default(10)
+  freshnessWeight       Int      @default(10)
+  teacherPriorityWeight Int      @default(10)
+  recentWindowDays      Int      @default(14)
+  difficultyTolerance   Int      @default(1)
+  maxQuestionCount      Int      @default(20)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  course           Course                      @relation("CourseRecommendationPolicies", fields: [courseId], references: [id], onDelete: Restrict)
+  currentForCourse Course?                     @relation("CurrentCourseRecommendationPolicy")
+  createdBy        User                        @relation("CourseRecommendationPolicyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  cycles           CourseRecommendationCycle[]
+
+  @@unique([courseId, revisionNumber])
+  @@unique([courseId, inputFingerprint])
+  @@index([courseId, createdAt])
+}
+
+model CourseRecommendationCycle {
+  id                         String    @id @default(cuid())
+  studentId                  String
+  courseId                   String
+  classroomId                String
+  graphVersionId             String
+  profileSnapshotId          String?
+  masteryRevisionId          String?
+  teachingProgressRevisionId String
+  policyRevisionId           String
+  cycleKey                   String    @unique @db.VarChar(191)
+  inputFingerprint           String    @db.Char(64)
+  requestSnapshot            Json
+  generatedAt                DateTime  @default(now())
+  expiresAt                  DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  student          User                                 @relation("CourseRecommendationStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  course           Course                               @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classroom        Classroom                            @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  graphVersion     PublishedKnowledgeGraphVersion       @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
+  profileSnapshot  LearnerProfileSnapshot?              @relation(fields: [profileSnapshotId], references: [id], onDelete: Restrict)
+  masteryRevision  StudentCourseConceptMasteryRevision? @relation(fields: [masteryRevisionId], references: [id], onDelete: Restrict)
+  teachingProgress CourseTeachingProgressRevision       @relation(fields: [teachingProgressRevisionId], references: [id], onDelete: Restrict)
+  policyRevision   CourseRecommendationPolicyRevision   @relation(fields: [policyRevisionId], references: [id], onDelete: Restrict)
+  recommendations  PersonalizedRecommendation[]
+
+  @@unique([studentId, courseId, inputFingerprint])
+  @@index([studentId, courseId, generatedAt])
+  @@index([courseId, generatedAt])
+  @@index([classroomId, generatedAt])
 }
 
 model AIAnalysis {
@@ -2874,6 +2998,10 @@ model PersonalizedRecommendation {
   questionId       String
   knowledgePointId String?
   analysisId       String?
+  courseCycleId    String?
+  targetConceptId  String?
+  rankingScore     Decimal?             @db.Decimal(8, 2)
+  reasonCodes      String[]             @default([])
   cycleKey         String
   source           RecommendationSource
   status           RecommendationStatus @default(PENDING)
@@ -2894,12 +3022,16 @@ model PersonalizedRecommendation {
   question       Question                      @relation(fields: [questionId], references: [id], onDelete: Restrict)
   knowledgePoint KnowledgePoint?               @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
   analysis       AIAnalysis?                   @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  courseCycle    CourseRecommendationCycle?    @relation(fields: [courseCycleId], references: [id], onDelete: Restrict)
+  targetConcept  KnowledgeGraphConcept?        @relation("RecommendationTargetConcept", fields: [targetConceptId], references: [id], onDelete: Restrict)
   practiceAnswer RecommendationPracticeAnswer?
 
   @@unique([studentId, questionId, cycleKey])
   @@index([studentId, status, priority, createdAt])
   @@index([knowledgePointId, status])
   @@index([analysisId])
+  @@index([courseCycleId, priority])
+  @@index([targetConceptId, status])
   @@index([createdAt])
 }
 
