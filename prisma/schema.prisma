@@ -86,6 +86,9 @@ enum AuditAction {
   ATTENDANCE_SIGNED
   ATTENDANCE_CORRECTED
   OUTCOME_ATTAINMENT_GENERATED
+  QUALITY_REPORT_GENERATION_REQUESTED
+  QUALITY_REPORT_GENERATED
+  QUALITY_REPORT_DOWNLOADED
 }
 
 enum QuestionGraphBindingType {
@@ -174,6 +177,7 @@ enum AuditTargetType {
   ATTENDANCE_SESSION
   ATTENDANCE_RECORD
   OUTCOME_ATTAINMENT_RUN
+  QUALITY_REPORT
 }
 
 enum OutcomeStudentStatus {
@@ -323,9 +327,22 @@ enum CourseFileKind {
   MATERIAL
   PRACTICE_GUIDE
   REPORT_TEMPLATE
+  REPORT_GRADE_SOURCE
   IMPORT_SOURCE
   ACCOUNT_SHEET
   OTHER
+}
+
+enum QualityReportSourceType {
+  PLATFORM
+  UPLOAD
+}
+
+enum QualityReportStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
 }
 
 enum SyllabusParseStatus {
@@ -627,6 +644,7 @@ model User {
   courseRecommendationCycles         CourseRecommendationCycle[]          @relation("CourseRecommendationStudent")
   recommendationConceptEvidences     RecommendationConceptEvidence[]      @relation("RecommendationConceptEvidenceStudent")
   selfReflections                    StudentSelfReflection[]              @relation("StudentSelfReflectionStudent")
+  requestedQualityReports            CourseQualityReport[]                @relation("QualityReportRequestedBy")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -728,6 +746,7 @@ model BackgroundJob {
   course             Course?                @relation(fields: [courseId], references: [id], onDelete: Restrict)
   attempts           BackgroundJobAttempt[]
   programmingAttempt ProgrammingAttempt?
+  qualityReport      CourseQualityReport?
 
   @@unique([type, idempotencyKey])
   @@index([status, nextAttemptAt, createdAt])
@@ -943,6 +962,7 @@ model Course {
   recommendationCycles                  CourseRecommendationCycle[]
   courseRecommendationConceptSnapshots  CourseRecommendationConceptSnapshot[]
   selfReflections                       StudentSelfReflection[]
+  qualityReports                        CourseQualityReport[]
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -968,12 +988,13 @@ model CourseFileVersion {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  course                  Course?              @relation("CourseFileCourse", fields: [courseId], references: [id], onDelete: Restrict)
-  classroom               Classroom?           @relation("CourseFileClassroom", fields: [classroomId], references: [id], onDelete: Restrict)
-  uploadedBy              User                 @relation("CourseFileUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
-  sourceImportBatches     StudentImportBatch[] @relation("StudentImportSourceFile")
-  accountSheetImportBatch StudentImportBatch?  @relation("StudentImportAccountSheet")
-  gradeImportBatches      GradeImportBatch[]   @relation("GradeImportSourceFile")
+  course                  Course?               @relation("CourseFileCourse", fields: [courseId], references: [id], onDelete: Restrict)
+  classroom               Classroom?            @relation("CourseFileClassroom", fields: [classroomId], references: [id], onDelete: Restrict)
+  uploadedBy              User                  @relation("CourseFileUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  sourceImportBatches     StudentImportBatch[]  @relation("StudentImportSourceFile")
+  accountSheetImportBatch StudentImportBatch?   @relation("StudentImportAccountSheet")
+  gradeImportBatches      GradeImportBatch[]    @relation("GradeImportSourceFile")
+  qualityReportSources    CourseQualityReport[] @relation("QualityReportSourceFile")
 
   @@unique([courseId, fileKind, fileKey, versionNumber])
   @@unique([classroomId, fileKind, fileKey, versionNumber])
@@ -1273,6 +1294,7 @@ model CourseGradebook {
   publications           GradebookPublication[]              @relation("GradebookPublicationHistory")
   importBatches          GradeImportBatch[]
   outcomeAttainmentRuns  CourseOutcomeAttainmentRun[]
+  qualityReports         CourseQualityReport[]
 
   @@unique([courseId, classroomId, schemeId])
   @@index([courseId, classroomId, createdAt])
@@ -1510,13 +1532,14 @@ model CourseOutcomeAttainmentRun {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
-  course      Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  classroom   Classroom                       @relation(fields: [classroomId], references: [id], onDelete: Restrict)
-  gradebook   CourseGradebook                 @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
-  scheme      PublishedAssessmentScheme       @relation(fields: [schemeId], references: [id], onDelete: Restrict)
-  publication GradebookPublication            @relation(fields: [gradebookPublicationId], references: [id], onDelete: Restrict)
-  generatedBy User                            @relation("OutcomeAttainmentGeneratedBy", fields: [generatedById], references: [id], onDelete: Restrict)
-  results     CourseOutcomeAttainmentResult[]
+  course               Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classroom            Classroom                       @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  gradebook            CourseGradebook                 @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  scheme               PublishedAssessmentScheme       @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  publication          GradebookPublication            @relation(fields: [gradebookPublicationId], references: [id], onDelete: Restrict)
+  generatedBy          User                            @relation("OutcomeAttainmentGeneratedBy", fields: [generatedById], references: [id], onDelete: Restrict)
+  results              CourseOutcomeAttainmentResult[]
+  courseQualityReports CourseQualityReport[]
 
   @@unique([gradebookPublicationId, calculationRuleVersion])
   @@unique([gradebookId, versionNumber])
@@ -1567,6 +1590,61 @@ model StudentOutcomeAttainmentResult {
   @@unique([resultId, studentId])
   @@index([studentId, createdAt])
   @@index([gradeRevisionId])
+}
+
+model CourseQualityReport {
+  id                     String                  @id @default(cuid())
+  courseId               String
+  classroomId            String?
+  gradebookId            String?
+  outcomeAttainmentRunId String?
+  requestedById          String
+  backgroundJobId        String?                 @unique
+  sourceFileVersionId    String?
+  sourceType             QualityReportSourceType
+  status                 QualityReportStatus     @default(QUEUED)
+  versionNumber          Int
+  inputFingerprint       String                  @db.Char(64)
+  templateVersion        String                  @db.VarChar(50)
+  templateChecksumSha256 String                  @db.Char(64)
+  calculationRuleVersion String                  @db.VarChar(50)
+  promptVersion          String                  @db.VarChar(50)
+  aiProvider             String?                 @db.VarChar(100)
+  aiModel                String?                 @db.VarChar(120)
+  aiStatus               String                  @default("NOT_ATTEMPTED") @db.VarChar(30)
+  sourceSnapshotJson     Json
+  statisticsSnapshotJson Json?
+  narrativeSnapshotJson  Json?
+  docxStorageKey         String?                 @unique @db.VarChar(191)
+  docxFileName           String?                 @db.VarChar(255)
+  docxSizeBytes          Int?
+  docxChecksumSha256     String?                 @db.Char(64)
+  workbookStorageKey     String?                 @unique @db.VarChar(191)
+  workbookFileName       String?                 @db.VarChar(255)
+  workbookSizeBytes      Int?
+  workbookChecksumSha256 String?                 @db.Char(64)
+  errorCode              String?                 @db.VarChar(100)
+  startedAt              DateTime?
+  completedAt            DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  course               Course                      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classroom            Classroom?                  @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  gradebook            CourseGradebook?            @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
+  outcomeAttainmentRun CourseOutcomeAttainmentRun? @relation(fields: [outcomeAttainmentRunId], references: [id], onDelete: Restrict)
+  requestedBy          User                        @relation("QualityReportRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  backgroundJob        BackgroundJob?              @relation(fields: [backgroundJobId], references: [id], onDelete: Restrict)
+  sourceFileVersion    CourseFileVersion?          @relation("QualityReportSourceFile", fields: [sourceFileVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([courseId, versionNumber])
+  @@unique([courseId, inputFingerprint])
+  @@index([courseId, status, createdAt])
+  @@index([classroomId, createdAt])
+  @@index([gradebookId, createdAt])
+  @@index([requestedById, createdAt])
+  @@index([sourceFileVersionId])
+  @@index([outcomeAttainmentRunId])
 }
 
 model GradeImportBatch {
@@ -1848,6 +1926,7 @@ model Classroom {
   gradeImportBatches         GradeImportBatch[]
   attendanceSessions         AttendanceSession[]
   outcomeAttainmentRuns      CourseOutcomeAttainmentRun[]
+  qualityReports             CourseQualityReport[]
   recommendationCycles       CourseRecommendationCycle[]
 
   @@index([teacherId, status])

@@ -79,4 +79,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   ATTENDANCE_SIGNED: "学生签到",
   ATTENDANCE_CORRECTED: "纠正出勤记录",
   OUTCOME_ATTAINMENT_GENERATED: "生成课程目标达成度",
+  QUALITY_REPORT_GENERATION_REQUESTED: "请求生成教学质量报告",
+  QUALITY_REPORT_GENERATED: "生成教学质量报告",
+  QUALITY_REPORT_DOWNLOADED: "下载教学质量报告",
 };

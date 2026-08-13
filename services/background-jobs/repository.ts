@@ -142,6 +142,64 @@ export async function claimNextBackgroundJob(
   return null;
 }
 
+export async function claimBackgroundJobById(
+  jobId: string,
+  rawInput: ClaimBackgroundJobInput,
+) {
+  const input = claimBackgroundJobSchema.parse(rawInput);
+  return prisma.$transaction(async (transaction) => {
+    const now = new Date();
+    const candidate = await transaction.backgroundJob.findFirst({
+      where: {
+        id: jobId,
+        type: { in: input.acceptedTypes },
+        status: BackgroundJobStatus.PENDING,
+        currentLeaseId: null,
+        nextAttemptAt: { lte: now },
+      },
+    });
+    if (!candidate || candidate.attemptCount >= candidate.maxAttempts)
+      return null;
+    const leaseId = randomUUID();
+    const expiresAt = new Date(now.getTime() + input.leaseDurationMs);
+    const attemptNumber = candidate.attemptCount + 1;
+    const updated = await transaction.backgroundJob.updateMany({
+      where: {
+        id: jobId,
+        status: BackgroundJobStatus.PENDING,
+        currentLeaseId: null,
+        attemptCount: candidate.attemptCount,
+      },
+      data: {
+        status: BackgroundJobStatus.RUNNING,
+        currentLeaseId: leaseId,
+        attemptCount: attemptNumber,
+        progress: 0,
+        startedAt: candidate.startedAt ?? now,
+        errorCode: null,
+        retryable: null,
+      },
+    });
+    if (updated.count !== 1) return null;
+    await transaction.backgroundJobAttempt.create({
+      data: {
+        jobId,
+        attemptNumber,
+        leaseId,
+        workerId: input.workerId,
+        executorVersion: input.executorVersion,
+        startedAt: now,
+        heartbeatAt: now,
+        expiresAt,
+      },
+    });
+    return transaction.backgroundJob.findUnique({
+      where: { id: jobId },
+      include: { attempts: { where: { leaseId }, take: 1 } },
+    });
+  }, SERIALIZABLE);
+}
+
 export async function heartbeatBackgroundJob(jobId: string, rawInput: unknown) {
   const input = heartbeatBackgroundJobSchema.parse(rawInput);
   return prisma.$transaction(async (transaction) => {
