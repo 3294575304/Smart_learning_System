@@ -5,8 +5,11 @@ import {
 
 export interface CourseRecommendationPolicyWeights {
   weaknessWeight: number;
+  prerequisiteWeight?: number;
   difficultyWeight: number;
+  errorPatternWeight?: number;
   freshnessWeight: number;
+  teacherPriorityWeight?: number;
   difficultyTolerance: number;
 }
 
@@ -23,6 +26,9 @@ export interface CourseRecommendationCandidateInput<TQuestion> {
     bindingType: QuestionGraphBindingType;
     conceptName: string;
   }>;
+  prerequisiteGap?: boolean;
+  recentErrorMatch?: boolean;
+  teacherPriority?: boolean;
 }
 
 export interface ScoredCourseRecommendation<TQuestion> {
@@ -63,9 +69,20 @@ export function rankCourseRecommendationCandidates<TQuestion>(input: {
           Math.max(1, input.policy.difficultyTolerance + 1);
       const score = Math.round(
         weakness * (input.policy.weaknessWeight / 100) +
+          (candidate.prerequisiteGap ? 100 : 0) *
+            ((input.policy.prerequisiteWeight ?? 0) / 100) +
           difficultyFit * input.policy.difficultyWeight +
-          input.policy.freshnessWeight,
+          (candidate.recentErrorMatch ? 100 : 0) *
+            ((input.policy.errorPatternWeight ?? 0) / 100) +
+          input.policy.freshnessWeight +
+          (candidate.teacherPriority ? 100 : 0) *
+            ((input.policy.teacherPriorityWeight ?? 0) / 100),
       );
+      const supplementalCodes = [
+        ...(candidate.prerequisiteGap ? ["PREREQUISITE_GAP"] : []),
+        ...(candidate.recentErrorMatch ? ["RECENT_ERROR_MATCH"] : []),
+        ...(candidate.teacherPriority ? ["TEACHER_PRIORITY"] : []),
+      ];
       return {
         question: candidate.question,
         targetConceptId: primary.conceptId,
@@ -76,16 +93,18 @@ export function rankCourseRecommendationCandidates<TQuestion>(input: {
               "TEACHING_PROGRESS",
               "DIAGNOSTIC_EVIDENCE",
               "DIFFICULTY_MATCH",
+              ...supplementalCodes,
             ]
           : [
               "COURSE_SCOPE",
               "TEACHING_PROGRESS",
               "LOW_MASTERY",
               "DIFFICULTY_MATCH",
+              ...supplementalCodes,
             ],
         reason: diagnostic
-          ? `“${primary.conceptName}”当前证据不足，本题用于补充诊断证据；难度与所选范围匹配。`
-          : `“${primary.conceptName}”当前掌握度 ${masteryScore ?? 0}%，本题用于针对性巩固；难度与所选范围匹配。`,
+          ? `“${primary.conceptName}”当前证据不足，本题用于补充诊断证据；难度与所选范围匹配。${candidate.prerequisiteGap ? "同时优先补足先修缺口。" : ""}${candidate.teacherPriority ? "该题属于教师重点。" : ""}`
+          : `“${primary.conceptName}”当前掌握度 ${masteryScore ?? 0}%，本题用于针对性巩固；难度与所选范围匹配。${candidate.recentErrorMatch ? "近期同知识点错误提高了本题优先级。" : ""}${candidate.teacherPriority ? "该题属于教师重点。" : ""}`,
       };
     })
     .filter(

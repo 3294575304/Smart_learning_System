@@ -25,6 +25,7 @@ import {
 import { courseRecommendationFingerprint } from "@/services/course-recommendations/fingerprint";
 import type {
   CourseRecommendationGenerationInput,
+  CourseRecommendationPolicyInput,
   CourseTeachingProgressInput,
 } from "@/services/course-recommendations/schemas";
 import { RecommendationOperationError } from "@/services/recommendations/errors";
@@ -78,6 +79,71 @@ export async function getTeachingProgress(teacherId: string, courseId: string) {
     revision: course.currentTeachingProgressRevision,
     nodes: course.currentPublishedKnowledgeGraphVersion?.nodes ?? [],
   };
+}
+
+export async function listStudentPracticeCourses(studentId: string) {
+  const memberships = await prisma.classMembership.findMany({
+    where: {
+      studentId,
+      status: MembershipStatus.ACTIVE,
+      classroom: { status: "ACTIVE", courseId: { not: null } },
+    },
+    orderBy: { joinedAt: "desc" },
+    select: {
+      classroom: {
+        select: {
+          id: true,
+          name: true,
+          course: {
+            select: {
+              id: true,
+              name: true,
+              currentPublishedKnowledgeGraphVersion: {
+                select: { versionNumber: true },
+              },
+              currentTeachingProgressRevision: {
+                select: {
+                  revisionNumber: true,
+                  concepts: {
+                    orderBy: { publishedNode: { sortOrder: "asc" } },
+                    select: {
+                      conceptId: true,
+                      publishedNode: { select: { code: true, name: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  return memberships.flatMap(({ classroom }) =>
+    classroom.course
+      ? [
+          {
+            courseId: classroom.course.id,
+            courseName: classroom.course.name,
+            classroomId: classroom.id,
+            classroomName: classroom.name,
+            graphVersionNumber:
+              classroom.course.currentPublishedKnowledgeGraphVersion
+                ?.versionNumber ?? null,
+            progressRevisionNumber:
+              classroom.course.currentTeachingProgressRevision
+                ?.revisionNumber ?? null,
+            concepts: (
+              classroom.course.currentTeachingProgressRevision?.concepts ?? []
+            ).map((item) => ({
+              id: item.conceptId,
+              code: item.publishedNode.code,
+              name: item.publishedNode.name,
+            })),
+          },
+        ]
+      : [],
+  );
 }
 
 export async function updateTeachingProgress(
@@ -202,6 +268,114 @@ export async function updateTeachingProgress(
   };
 }
 
+export async function getRecommendationPolicy(
+  teacherId: string,
+  courseId: string,
+) {
+  const course = await prisma.course.findFirst({
+    where: ownedCourseWhere(teacherId, courseId),
+    select: { currentRecommendationPolicyRevision: true },
+  });
+  if (!course) throw new ResourceNotFoundError("课程不存在");
+  return (
+    course.currentRecommendationPolicyRevision ?? {
+      id: null,
+      revisionNumber: 0,
+      ruleVersion: COURSE_RECOMMENDATION_RULE_VERSION,
+      ...DEFAULT_COURSE_RECOMMENDATION_POLICY,
+    }
+  );
+}
+
+export async function updateRecommendationPolicy(
+  teacherId: string,
+  courseId: string,
+  input: CourseRecommendationPolicyInput,
+  context: AuditRequestContext,
+) {
+  return prisma.$transaction(
+    async (transaction) => {
+      const course = await transaction.course.findFirst({
+        where: ownedCourseWhere(teacherId, courseId),
+        select: { currentRecommendationPolicyRevision: true },
+      });
+      if (!course) throw new ResourceNotFoundError("课程不存在");
+      const currentRevision =
+        course.currentRecommendationPolicyRevision?.revisionNumber ?? 0;
+      if (input.expectedRevision !== currentRevision)
+        throw new RecommendationOperationError(
+          "推荐策略已被其他页面修改，请刷新后重试",
+          409,
+        );
+      const values = {
+        weaknessWeight: input.weaknessWeight,
+        prerequisiteWeight: input.prerequisiteWeight,
+        difficultyWeight: input.difficultyWeight,
+        errorPatternWeight: input.errorPatternWeight,
+        freshnessWeight: input.freshnessWeight,
+        teacherPriorityWeight: input.teacherPriorityWeight,
+        recentWindowDays: input.recentWindowDays,
+        difficultyTolerance: input.difficultyTolerance,
+        maxQuestionCount: input.maxQuestionCount,
+      };
+      const inputFingerprint = courseRecommendationFingerprint({
+        ruleVersion: COURSE_RECOMMENDATION_RULE_VERSION,
+        ...values,
+      });
+      const existing =
+        await transaction.courseRecommendationPolicyRevision.findUnique({
+          where: { courseId_inputFingerprint: { courseId, inputFingerprint } },
+        });
+      const revision =
+        existing ??
+        (await transaction.courseRecommendationPolicyRevision.create({
+          data: {
+            courseId,
+            createdById: teacherId,
+            revisionNumber: currentRevision + 1,
+            ruleVersion: COURSE_RECOMMENDATION_RULE_VERSION,
+            inputFingerprint,
+            ...values,
+          },
+        }));
+      await transaction.course.update({
+        where: { id: courseId },
+        data: { currentRecommendationPolicyRevisionId: revision.id },
+      });
+      await writeGovernanceAuditLog(transaction, {
+        actorId: teacherId,
+        action: AuditAction.COURSE_RECOMMENDATION_POLICY_UPDATED,
+        targetType: AuditTargetType.COURSE,
+        targetId: courseId,
+        summary: "更新课程推荐策略",
+        beforeData: course.currentRecommendationPolicyRevision
+          ? {
+              revisionNumber:
+                course.currentRecommendationPolicyRevision.revisionNumber,
+              weaknessWeight:
+                course.currentRecommendationPolicyRevision.weaknessWeight,
+              prerequisiteWeight:
+                course.currentRecommendationPolicyRevision.prerequisiteWeight,
+              difficultyWeight:
+                course.currentRecommendationPolicyRevision.difficultyWeight,
+              errorPatternWeight:
+                course.currentRecommendationPolicyRevision.errorPatternWeight,
+              freshnessWeight:
+                course.currentRecommendationPolicyRevision.freshnessWeight,
+              teacherPriorityWeight:
+                course.currentRecommendationPolicyRevision
+                  .teacherPriorityWeight,
+            }
+          : null,
+        afterData: { revisionNumber: revision.revisionNumber, ...values },
+        context,
+      });
+      return revision;
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+}
+
 async function ensureDefaultPolicy(
   transaction: Prisma.TransactionClient,
   courseId: string,
@@ -317,69 +491,82 @@ export async function createCourseRecommendations(
           `单次最多推荐 ${policy.maxQuestionCount} 道题`,
           400,
         );
-      const [profile, masteryState, recentAnswers, activeRecommendations] =
-        await Promise.all([
-          transaction.learnerProfileSnapshot.findFirst({
-            where: { studentId: actor.id, courseId, graphVersionId: graph.id },
-            orderBy: { revisionNumber: "desc" },
-            select: {
-              id: true,
-              inputFingerprint: true,
-              masteryRevisionId: true,
-              concepts: {
-                where: { conceptId: { in: requestedConceptIds } },
-                select: {
-                  conceptId: true,
-                  evidenceState: true,
-                  masteryScore: true,
-                  evidenceCount: true,
-                },
+      const [
+        profile,
+        masteryState,
+        recentAnswers,
+        activeRecommendations,
+        prerequisiteEdges,
+      ] = await Promise.all([
+        transaction.learnerProfileSnapshot.findFirst({
+          where: { studentId: actor.id, courseId, graphVersionId: graph.id },
+          orderBy: { revisionNumber: "desc" },
+          select: {
+            id: true,
+            inputFingerprint: true,
+            masteryRevisionId: true,
+            concepts: {
+              where: { conceptId: { in: requestedConceptIds } },
+              select: {
+                conceptId: true,
+                evidenceState: true,
+                masteryScore: true,
+                evidenceCount: true,
               },
             },
-          }),
-          transaction.studentCourseConceptMasteryState.findUnique({
-            where: { studentId_courseId: { studentId: actor.id, courseId } },
-            select: {
-              revisions: {
-                orderBy: { revisionNumber: "desc" },
-                take: 1,
-                select: { id: true, inputFingerprint: true },
-              },
+          },
+        }),
+        transaction.studentCourseConceptMasteryState.findUnique({
+          where: { studentId_courseId: { studentId: actor.id, courseId } },
+          select: {
+            revisions: {
+              orderBy: { revisionNumber: "desc" },
+              take: 1,
+              select: { id: true, inputFingerprint: true },
             },
-          }),
-          transaction.recommendationPracticeAnswer.findMany({
-            where: {
-              recommendation: {
-                studentId: actor.id,
-                courseCycle: { is: { courseId } },
-              },
-              createdAt: {
-                gte: new Date(
-                  now.getTime() - policy.recentWindowDays * 86_400_000,
-                ),
-              },
-            },
-            select: { questionId: true },
-          }),
-          transaction.personalizedRecommendation.findMany({
-            where: {
+          },
+        }),
+        transaction.recommendationPracticeAnswer.findMany({
+          where: {
+            recommendation: {
               studentId: actor.id,
-              status: {
-                in: [
-                  RecommendationStatus.PENDING,
-                  RecommendationStatus.STARTED,
-                ],
-              },
               courseCycle: { is: { courseId } },
-              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
             },
-            select: { questionId: true },
-          }),
-        ]);
+            createdAt: {
+              gte: new Date(
+                now.getTime() - policy.recentWindowDays * 86_400_000,
+              ),
+            },
+          },
+          select: { questionId: true },
+        }),
+        transaction.personalizedRecommendation.findMany({
+          where: {
+            studentId: actor.id,
+            status: {
+              in: [RecommendationStatus.PENDING, RecommendationStatus.STARTED],
+            },
+            courseCycle: { is: { courseId } },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+          select: { questionId: true },
+        }),
+        transaction.publishedKnowledgeGraphEdge.findMany({
+          where: {
+            graphVersionId: graph.id,
+            relationType: "PREREQUISITE",
+            toNode: { conceptId: { in: requestedConceptIds } },
+          },
+          select: {
+            fromNode: { select: { conceptId: true } },
+            toNode: { select: { conceptId: true } },
+          },
+        }),
+      ]);
       const mastery = masteryState?.revisions[0] ?? null;
       const allowedTypes = input.questionTypes.length
         ? input.questionTypes
-        : AUTO_GRADABLE_QUESTION_TYPES;
+        : [...AUTO_GRADABLE_QUESTION_TYPES, "PYTHON_PROGRAMMING" as const];
       const requestSnapshot = {
         courseId,
         classroomId: input.classroomId,
@@ -445,6 +632,14 @@ export async function createCourseRecommendations(
               concept: { nodes: { some: { graphVersionId: graph.id } } },
             },
           },
+          ...(allowedTypes.includes("PYTHON_PROGRAMMING")
+            ? {
+                OR: [
+                  { type: { not: "PYTHON_PROGRAMMING" } },
+                  { programmingConfigRevisions: { some: {} } },
+                ],
+              }
+            : {}),
         },
         orderBy: { id: "asc" },
         take: 1000,
@@ -454,6 +649,7 @@ export async function createCourseRecommendations(
           content: true,
           type: true,
           difficulty: true,
+          tags: true,
           graphBindings: {
             where: { courseId, conceptId: { in: requestedConceptIds } },
             orderBy: [{ bindingType: "asc" }, { conceptId: "asc" }],
@@ -486,6 +682,26 @@ export async function createCourseRecommendations(
               bindingType: binding.bindingType,
               conceptName: binding.concept.nodes[0]?.name ?? "课程知识点",
             })),
+          prerequisiteGap: question.graphBindings.some((binding) =>
+            prerequisiteEdges.some(
+              (edge) =>
+                edge.toNode.conceptId === binding.conceptId &&
+                !profile?.concepts.some(
+                  (item) =>
+                    item.conceptId === edge.fromNode.conceptId &&
+                    (item.masteryScore?.toNumber() ?? 0) >= 80,
+                ),
+            ),
+          ),
+          recentErrorMatch: question.graphBindings.some((binding) =>
+            profile?.concepts.some(
+              (item) =>
+                item.conceptId === binding.conceptId &&
+                item.evidenceState === "CONCLUSIVE" &&
+                (item.masteryScore?.toNumber() ?? 100) < 50,
+            ),
+          ),
+          teacherPriority: question.tags.includes("teacher-priority"),
         })),
         profiles: (profile?.concepts ?? []).map((item) => ({
           conceptId: item.conceptId,

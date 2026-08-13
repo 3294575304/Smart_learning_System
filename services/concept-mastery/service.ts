@@ -543,8 +543,7 @@ async function masteryView(studentId: string, courseId: string) {
               evidenceId: row.id,
               revision: row.revision,
               assignmentId: row.assignmentId ?? row.recommendationId,
-              assignmentQuestionId:
-                row.assignmentQuestionId ?? row.questionId,
+              assignmentQuestionId: row.assignmentQuestionId ?? row.questionId,
               submissionId: row.submissionId,
               studentAnswerId: row.studentAnswerId,
               recommendationId: row.recommendationId,

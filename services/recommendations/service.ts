@@ -188,6 +188,17 @@ function detailFromRecord(
     startedAt: record.startedAt?.toISOString() ?? null,
     completedAt: record.completedAt?.toISOString() ?? null,
     practiceResult: practiceResultFromRecord(record),
+    starterCode:
+      record.question.type === "PYTHON_PROGRAMMING"
+        ? (record.question.programmingConfigRevisions[0]?.starterCode ?? "")
+        : "",
+    programmingAttempt: record.programmingAttempts[0]
+      ? {
+          id: record.programmingAttempts[0].id,
+          status: record.programmingAttempts[0].status,
+          progress: record.programmingAttempts[0].backgroundJob?.progress ?? 0,
+        }
+      : null,
   };
 }
 
@@ -319,7 +330,10 @@ export async function startRecommendation(
   ) {
     throw new RecommendationOperationError("推荐题目当前不可用", 409);
   }
-  if (!isAutoGradableQuestionType(current.question.type)) {
+  if (
+    !isAutoGradableQuestionType(current.question.type) &&
+    current.question.type !== "PYTHON_PROGRAMMING"
+  ) {
     throw new RecommendationOperationError("当前题型暂不支持推荐练习", 409);
   }
 

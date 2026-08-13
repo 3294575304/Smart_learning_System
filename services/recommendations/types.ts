@@ -152,6 +152,12 @@ export interface RecommendationDetailView extends RecommendationListItemView {
   startedAt: string | null;
   completedAt: string | null;
   practiceResult: RecommendationPracticeResultView | null;
+  starterCode?: string;
+  programmingAttempt?: {
+    id: string;
+    status: string;
+    progress: number;
+  } | null;
 }
 
 export interface RecommendationPracticeAnswerResultView {

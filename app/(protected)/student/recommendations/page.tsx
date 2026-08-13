@@ -10,9 +10,13 @@ import {
   parseRecommendationFilter,
 } from "@/components/recommendations/recommendation-presenters";
 import { StartRecommendationButton } from "@/components/recommendations/start-recommendation-button";
+import { CoursePracticeCenter } from "@/components/recommendations/course-practice-center";
+import { SelfReflectionPanel } from "@/components/recommendations/self-reflection-panel";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { listStudentClassrooms } from "@/services/classrooms/service";
 import { listRecommendations } from "@/services/recommendations/service";
+import { listStudentPracticeCourses } from "@/services/course-recommendations/service";
+import { listSelfReflections } from "@/services/self-reflections/service";
 
 interface Props {
   searchParams: Promise<{
@@ -32,14 +36,19 @@ export default async function StudentRecommendationsPage({
   const query = await searchParams;
   const status = parseRecommendationFilter(query.status);
   const cursor = firstQueryValue(query.cursor);
-  const [result, classrooms] = await Promise.all([
+  const [result, classrooms, practiceCourses] = await Promise.all([
     listRecommendations(student, {
       ...(status ? { status } : {}),
       ...(cursor ? { cursor } : {}),
       limit: 12,
     }),
     listStudentClassrooms(student.id),
+    listStudentPracticeCourses(student.id),
   ]);
+  const reflectionCourse = practiceCourses[0]?.courseId ?? null;
+  const reflections = reflectionCourse
+    ? await listSelfReflections(student.id, reflectionCourse)
+    : [];
   const activeClassrooms = classrooms
     .filter((classroom) => classroom.status === ClassroomStatus.ACTIVE)
     .map((classroom) => ({ id: classroom.id, name: classroom.name }));
@@ -77,6 +86,15 @@ export default async function StudentRecommendationsPage({
       </header>
 
       <RecommendationFilters activeStatus={status} />
+
+      <CoursePracticeCenter courses={practiceCourses} />
+      {reflectionCourse ? (
+        <SelfReflectionPanel
+          classroomId={practiceCourses[0]!.classroomId}
+          courseId={reflectionCourse}
+          initialReflections={reflections}
+        />
+      ) : null}
 
       {result.items.length === 0 ? (
         <RecommendationEmptyState

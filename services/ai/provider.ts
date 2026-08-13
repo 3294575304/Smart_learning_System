@@ -2,6 +2,7 @@ import type { StudentAnalysisInput } from "@/services/ai/schemas";
 import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 import type { QuestionMappingAIInput } from "@/services/question-mapping/schemas";
+import type { SelfReflectionAIInput } from "@/services/self-reflections/schemas";
 
 export interface AIProviderOptions {
   signal: AbortSignal;
@@ -81,6 +82,11 @@ export interface AIProvider {
 
   mapQuestionsToConcepts?(
     input: QuestionMappingAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  structureSelfReflection?(
+    input: SelfReflectionAIInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 }

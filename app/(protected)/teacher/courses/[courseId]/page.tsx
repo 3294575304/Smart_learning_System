@@ -195,6 +195,12 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
             >
               批量题目映射
             </Link>
+            <Link
+              className="mt-4 ml-2 inline-flex rounded-md border px-4 py-2 text-sm font-medium"
+              href={`/teacher/courses/${course.id}/teaching-progress`}
+            >
+              配置教学进度
+            </Link>
           </div>
 
           <CourseStudentRosterImportCard

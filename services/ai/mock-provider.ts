@@ -8,6 +8,7 @@ import type {
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 import type { QuestionMappingAIInput } from "@/services/question-mapping/schemas";
 import { localQuestionConceptCandidates } from "@/services/question-mapping/candidates";
+import type { SelfReflectionAIInput } from "@/services/self-reflections/schemas";
 
 export type MockAIResponder = (
   input: StudentAnalysisInput,
@@ -134,6 +135,32 @@ export class MockAIProvider implements AIProvider {
           reason: candidate.reason,
         })),
       })),
+    };
+  }
+
+  async structureSelfReflection(
+    input: SelfReflectionAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    if (options.signal.aborted)
+      throw new DOMException("AI request aborted", "AbortError");
+    const matched = input.concepts.filter(
+      (concept) =>
+        input.text.includes(concept.name) || input.text.includes(concept.code),
+    );
+    return {
+      summary: input.text.slice(0, 500),
+      goals: [],
+      difficulties: matched.map((concept) => concept.name).slice(0, 10),
+      learningHabits: [],
+      practiceRequest: matched.length
+        ? {
+            conceptIds: matched.map((concept) => concept.id),
+            questionTypes: [],
+            count: 5,
+            difficulty: 2,
+          }
+        : null,
     };
   }
 }

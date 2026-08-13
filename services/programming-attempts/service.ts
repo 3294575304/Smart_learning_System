@@ -17,7 +17,10 @@ import {
 import { prisma } from "@/lib/prisma";
 import { AssignmentOperationError } from "@/services/assignments/errors";
 import { runAssignmentSerializable } from "@/services/assignments/transactions";
-import { writeTeachingAuditLog } from "@/services/audit/repository";
+import {
+  writeGovernanceAuditLog,
+  writeTeachingAuditLog,
+} from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { backgroundJobFingerprint } from "@/services/background-jobs/fingerprint";
 import {
@@ -26,12 +29,16 @@ import {
 } from "@/services/background-jobs/repository";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { appendAssessmentLearningEventsAndProjectEvidence } from "@/services/learning-events/assessment";
+import { appendRecommendationPracticeLearningEvent } from "@/services/learning-events/recommendation-practice";
+import { revokeRecommendationPracticeLearningEvent } from "@/services/learning-events/recommendation-practice";
+import { ensureLearnerProfileSnapshot } from "@/services/learner-profiles/service";
 import {
   normalizeProgramOutput,
   programmingAttemptFingerprint,
 } from "@/services/programming-attempts/fingerprint";
 import {
   createPublicProgrammingRunSchema,
+  createRecommendationProgrammingAttemptSchema,
   programmingCompleteEnvelopeSchema,
   programmingJobInputSchema,
   type ProgrammingJudgeResult,
@@ -78,8 +85,11 @@ function safePublicStderr(value: string) {
 async function createAttemptAndJob(
   transaction: Prisma.TransactionClient,
   input: {
-    studentAnswerId: string;
-    assignmentQuestionId: string;
+    studentAnswerId?: string;
+    assignmentQuestionId?: string;
+    recommendationId?: string;
+    questionId?: string;
+    configRevisionId?: string;
     studentId: string;
     createdById: string;
     sourceCode: string;
@@ -92,20 +102,28 @@ async function createAttemptAndJob(
     input.kind === ProgrammingAttemptKind.PUBLIC_RUN
       ? "PYTHON_PUBLIC_RUN"
       : "PYTHON_JUDGE";
-  const snapshot =
-    await transaction.assignmentProgrammingConfigSnapshot.findUnique({
-      where: { assignmentQuestionId: input.assignmentQuestionId },
-      include: { configRevision: { select: { totalPoints: true } } },
-    });
-  if (!snapshot) {
+  const snapshot = input.assignmentQuestionId
+    ? await transaction.assignmentProgrammingConfigSnapshot.findUnique({
+        where: { assignmentQuestionId: input.assignmentQuestionId },
+        include: { configRevision: true },
+      })
+    : null;
+  const configRevision = input.configRevisionId
+    ? await transaction.programmingQuestionConfigRevision.findUnique({
+        where: { id: input.configRevisionId },
+      })
+    : (snapshot?.configRevision ?? null);
+  if (!configRevision) {
     throw new AssignmentOperationError("该 Python 题缺少已冻结判题配置");
   }
   const inputFingerprint = programmingAttemptFingerprint({
     sourceCode: input.sourceCode,
     kind: input.kind,
-    configurationHash: snapshot.configurationHash,
-    testCasesHash: snapshot.testCasesHash,
-    ruleVersion: snapshot.executorRuleVersion,
+    configurationHash:
+      snapshot?.configurationHash ?? configRevision.configurationHash,
+    testCasesHash: snapshot?.testCasesHash ?? configRevision.testCasesHash,
+    ruleVersion:
+      snapshot?.executorRuleVersion ?? configRevision.executorRuleVersion,
   });
   const existingJob = await transaction.backgroundJob.findUnique({
     where: {
@@ -123,7 +141,9 @@ async function createAttemptAndJob(
     return existingJob.programmingAttempt;
   }
   const latest = await transaction.programmingAttempt.findFirst({
-    where: { studentAnswerId: input.studentAnswerId, kind: input.kind },
+    where: input.studentAnswerId
+      ? { studentAnswerId: input.studentAnswerId, kind: input.kind }
+      : { recommendationId: input.recommendationId, kind: input.kind },
     orderBy: { revisionNumber: "desc" },
     select: { id: true, revisionNumber: true },
   });
@@ -131,15 +151,19 @@ async function createAttemptAndJob(
     data: {
       studentAnswerId: input.studentAnswerId,
       assignmentQuestionId: input.assignmentQuestionId,
+      recommendationId: input.recommendationId,
+      questionId: input.questionId,
       studentId: input.studentId,
       createdById: input.createdById,
-      configSnapshotId: snapshot.id,
+      configSnapshotId: snapshot?.id,
+      configRevisionId: snapshot ? undefined : configRevision.id,
       kind: input.kind,
       revisionNumber: (latest?.revisionNumber ?? 0) + 1,
       sourceCode: input.sourceCode,
       inputFingerprint,
-      ruleVersion: snapshot.executorRuleVersion,
-      maxScore: snapshot.configRevision.totalPoints,
+      ruleVersion:
+        snapshot?.executorRuleVersion ?? configRevision.executorRuleVersion,
+      maxScore: configRevision.totalPoints,
       supersedesAttemptId: latest?.id ?? null,
     },
   });
@@ -255,6 +279,68 @@ export async function createFormalProgrammingAttempt(
   });
 }
 
+export async function createRecommendationProgrammingAttempt(
+  studentId: string,
+  recommendationId: string,
+  rawInput: unknown,
+) {
+  const input = createRecommendationProgrammingAttemptSchema.parse(rawInput);
+  return runAssignmentSerializable(async (transaction) => {
+    const recommendation =
+      await transaction.personalizedRecommendation.findFirst({
+        where: {
+          id: recommendationId,
+          studentId,
+          status: { in: ["PENDING", "STARTED"] },
+          question: {
+            type: QuestionType.PYTHON_PROGRAMMING,
+            status: "ACTIVE",
+            deletedAt: null,
+          },
+          courseCycle: { isNot: null },
+        },
+        select: {
+          id: true,
+          questionId: true,
+          status: true,
+          courseCycle: { select: { courseId: true } },
+          question: {
+            select: {
+              programmingConfigRevisions: {
+                orderBy: { revisionNumber: "desc" },
+                take: 1,
+                select: { id: true },
+              },
+            },
+          },
+        },
+      });
+    const configRevisionId =
+      recommendation?.question.programmingConfigRevisions[0]?.id;
+    const courseId = recommendation?.courseCycle?.courseId ?? null;
+    if (!recommendation || !configRevisionId || !courseId)
+      throw new ResourceNotFoundError("推荐练习不存在");
+    if (recommendation.status === "PENDING") {
+      await transaction.personalizedRecommendation.update({
+        where: { id: recommendation.id },
+        data: { status: "STARTED", startedAt: new Date() },
+      });
+    }
+    const attempt = await createAttemptAndJob(transaction, {
+      recommendationId: recommendation.id,
+      questionId: recommendation.questionId,
+      configRevisionId,
+      studentId,
+      createdById: studentId,
+      sourceCode: input.sourceCode,
+      kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+      courseId,
+      idempotencyKey: `recommendation:${recommendation.id}:${input.idempotencyKey}`,
+    });
+    return { attemptId: attempt.id, status: attempt.status };
+  }, "推荐判题请求发生冲突，请重试");
+}
+
 export async function getProgrammingAttemptPayload(attemptId: string) {
   return prisma.$transaction(async (transaction) => {
     const attempt = await transaction.programmingAttempt.findUnique({
@@ -266,6 +352,9 @@ export async function getProgrammingAttemptPayload(attemptId: string) {
               include: { testCases: { orderBy: { sortOrder: "asc" } } },
             },
           },
+        },
+        configRevision: {
+          include: { testCases: { orderBy: { sortOrder: "asc" } } },
         },
       },
     });
@@ -284,7 +373,10 @@ export async function getProgrammingAttemptPayload(attemptId: string) {
         startedAt: attempt.startedAt ?? now,
       },
     });
-    const allCases = attempt.configSnapshot.configRevision.testCases;
+    const config =
+      attempt.configSnapshot?.configRevision ?? attempt.configRevision;
+    if (!config) throw new AssignmentOperationError("判题配置不存在", 409);
+    const allCases = config.testCases;
     const selectedCases =
       attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
         ? allCases.filter(
@@ -298,11 +390,12 @@ export async function getProgrammingAttemptPayload(attemptId: string) {
       sourceCode: attempt.sourceCode,
       inputFingerprint: attempt.inputFingerprint,
       limits: {
-        cpuTimeMs: attempt.configSnapshot.cpuTimeMs,
-        wallTimeMs: attempt.configSnapshot.wallTimeMs,
-        memoryBytes: attempt.configSnapshot.memoryBytes,
-        outputBytes: attempt.configSnapshot.outputBytes,
-        processCount: attempt.configSnapshot.processCount,
+        cpuTimeMs: attempt.configSnapshot?.cpuTimeMs ?? config.cpuTimeMs,
+        wallTimeMs: attempt.configSnapshot?.wallTimeMs ?? config.wallTimeMs,
+        memoryBytes: attempt.configSnapshot?.memoryBytes ?? config.memoryBytes,
+        outputBytes: attempt.configSnapshot?.outputBytes ?? config.outputBytes,
+        processCount:
+          attempt.configSnapshot?.processCount ?? config.processCount,
       },
       testCases: selectedCases.map((testCase) => ({
         id: testCase.id,
@@ -367,6 +460,14 @@ async function projectJudgeResult(
     where: { id: result.attemptId },
     include: {
       studentAnswer: { select: { submissionId: true } },
+      recommendation: {
+        select: {
+          id: true,
+          studentId: true,
+          questionId: true,
+          courseCycle: { select: { courseId: true } },
+        },
+      },
       configSnapshot: {
         include: {
           configRevision: {
@@ -374,12 +475,18 @@ async function projectJudgeResult(
           },
         },
       },
+      configRevision: {
+        include: { testCases: { orderBy: { sortOrder: "asc" } } },
+      },
     },
   });
   if (!attempt || attempt.backgroundJobId !== job.id) {
     throw new ResourceNotFoundError("判题 Attempt 不存在");
   }
-  const allCases = attempt.configSnapshot.configRevision.testCases;
+  const config =
+    attempt.configSnapshot?.configRevision ?? attempt.configRevision;
+  if (!config) throw new AssignmentOperationError("判题配置不存在", 409);
+  const allCases = config.testCases;
   const expectedCases =
     attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
       ? allCases.filter(
@@ -451,25 +558,72 @@ async function projectJudgeResult(
     },
   });
   if (attempt.kind === ProgrammingAttemptKind.FORMAL_JUDGE) {
-    await transaction.studentAnswer.update({
-      where: { id: attempt.studentAnswerId },
-      data: {
-        gradingStatus: GradingStatus.AUTO_GRADED,
-        score: earned,
-        maxScore: attempt.maxScore,
-        isCorrect: earned.equals(attempt.maxScore),
-        gradedAt: now,
-        assessmentRevisionKey: attempt.id,
-      },
-    });
-    await recomputeSubmission(
-      transaction,
-      attempt.studentAnswer.submissionId,
-      now,
-    );
-    await appendAssessmentLearningEventsAndProjectEvidence(transaction, [
-      attempt.studentAnswerId,
-    ]);
+    if (attempt.studentAnswerId && attempt.studentAnswer)
+      await transaction.studentAnswer.update({
+        where: { id: attempt.studentAnswerId },
+        data: {
+          gradingStatus: GradingStatus.AUTO_GRADED,
+          score: earned,
+          maxScore: attempt.maxScore,
+          isCorrect: earned.equals(attempt.maxScore),
+          gradedAt: now,
+          assessmentRevisionKey: attempt.id,
+        },
+      });
+    if (attempt.studentAnswer)
+      await recomputeSubmission(
+        transaction,
+        attempt.studentAnswer.submissionId,
+        now,
+      );
+    if (attempt.studentAnswerId)
+      await appendAssessmentLearningEventsAndProjectEvidence(transaction, [
+        attempt.studentAnswerId,
+      ]);
+    if (attempt.recommendationId && attempt.recommendation) {
+      const isCorrect = earned.equals(attempt.maxScore);
+      const answer = await transaction.recommendationPracticeAnswer.upsert({
+        where: { recommendationId: attempt.recommendationId },
+        update: {
+          assessmentRevisionKey: attempt.id,
+          textAnswer: attempt.sourceCode,
+          score: earned,
+          maxScore: attempt.maxScore,
+          isCorrect,
+        },
+        create: {
+          recommendationId: attempt.recommendationId,
+          questionId: attempt.recommendation.questionId,
+          idempotencyKey: `programming-attempt:${attempt.id}`,
+          assessmentRevisionKey: attempt.id,
+          textAnswer: attempt.sourceCode,
+          score: earned,
+          maxScore: attempt.maxScore,
+          isCorrect,
+        },
+        select: { id: true },
+      });
+      await transaction.personalizedRecommendation.update({
+        where: { id: attempt.recommendationId },
+        data: {
+          status: "COMPLETED",
+          completedAt: now,
+          wasCorrect: isCorrect,
+          score: earned,
+          maxScore: attempt.maxScore,
+        },
+      });
+      const projection = await appendRecommendationPracticeLearningEvent(
+        transaction,
+        answer.id,
+      );
+      if (projection)
+        await ensureLearnerProfileSnapshot(
+          transaction,
+          attempt.recommendation.studentId,
+          projection.courseId,
+        );
+    }
   }
   return { attemptId: attempt.id, score: earned.toNumber() };
 }
@@ -592,7 +746,13 @@ export async function rejudgeProgrammingAttempt(
         },
       },
     });
-    if (!previous) throw new ResourceNotFoundError("判题记录不存在");
+    if (
+      !previous ||
+      !previous.studentAnswerId ||
+      !previous.assignmentQuestionId ||
+      !previous.studentAnswer
+    )
+      throw new ResourceNotFoundError("判题记录不存在");
     const created = await createAttemptAndJob(transaction, {
       studentAnswerId: previous.studentAnswerId,
       assignmentQuestionId: previous.assignmentQuestionId,
@@ -633,7 +793,14 @@ export async function revokeProgrammingAttempt(
       },
       include: { studentAnswer: { select: { submissionId: true } } },
     });
-    if (!previous) throw new ResourceNotFoundError("判题记录不存在");
+    if (
+      !previous ||
+      !previous.studentAnswerId ||
+      !previous.assignmentQuestionId ||
+      !previous.configSnapshotId ||
+      !previous.studentAnswer
+    )
+      throw new ResourceNotFoundError("判题记录不存在");
     const latest = await transaction.programmingAttempt.findFirst({
       where: {
         studentAnswerId: previous.studentAnswerId,
@@ -699,6 +866,160 @@ export async function revokeProgrammingAttempt(
     });
     return { attemptId: revoked.id, status: revoked.status };
   }, "撤销请求发生冲突，请重试");
+}
+
+export async function rejudgeRecommendationProgrammingAttempt(
+  teacherId: string,
+  attemptId: string,
+  reason: string,
+  idempotencyKey: string,
+  context: AuditRequestContext,
+) {
+  return runAssignmentSerializable(async (transaction) => {
+    const previous = await transaction.programmingAttempt.findFirst({
+      where: {
+        id: attemptId,
+        kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+        recommendation: { courseCycle: { is: { course: { teacherId } } } },
+      },
+      include: {
+        recommendation: {
+          select: {
+            questionId: true,
+            courseCycle: { select: { courseId: true } },
+          },
+        },
+      },
+    });
+    if (
+      !previous?.recommendationId ||
+      !previous.questionId ||
+      !previous.configRevisionId ||
+      !previous.recommendation?.courseCycle
+    )
+      throw new ResourceNotFoundError("推荐判题记录不存在");
+    const created = await createAttemptAndJob(transaction, {
+      recommendationId: previous.recommendationId,
+      questionId: previous.questionId,
+      configRevisionId: previous.configRevisionId,
+      studentId: previous.studentId,
+      createdById: teacherId,
+      sourceCode: previous.sourceCode,
+      kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+      courseId: previous.recommendation.courseCycle.courseId,
+      idempotencyKey: `recommendation-rejudge:${previous.recommendationId}:${idempotencyKey}`,
+    });
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: AuditAction.RECOMMENDATION_PROGRAMMING_ATTEMPT_REJUDGED,
+      targetType: AuditTargetType.COURSE,
+      targetId: previous.recommendation.courseCycle.courseId,
+      summary: "重新判定推荐 Python 练习",
+      beforeData: { attemptId: previous.id },
+      afterData: { attemptId: created.id, reason },
+      context,
+    });
+    return { attemptId: created.id, status: created.status };
+  }, "推荐重判请求发生冲突，请重试");
+}
+
+export async function revokeRecommendationProgrammingAttempt(
+  teacherId: string,
+  attemptId: string,
+  reason: string,
+  context: AuditRequestContext,
+) {
+  return runAssignmentSerializable(async (transaction) => {
+    const previous = await transaction.programmingAttempt.findFirst({
+      where: {
+        id: attemptId,
+        kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+        status: ProgrammingAttemptStatus.SUCCEEDED,
+        recommendation: { courseCycle: { is: { course: { teacherId } } } },
+      },
+      include: {
+        recommendation: {
+          include: {
+            practiceAnswer: { select: { id: true } },
+            courseCycle: { select: { courseId: true } },
+          },
+        },
+      },
+    });
+    if (
+      !previous?.recommendationId ||
+      !previous.questionId ||
+      !previous.configRevisionId ||
+      !previous.recommendation?.practiceAnswer ||
+      !previous.recommendation.courseCycle
+    )
+      throw new ResourceNotFoundError("推荐判题记录不存在");
+    const latest = await transaction.programmingAttempt.findFirst({
+      where: {
+        recommendationId: previous.recommendationId,
+        kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+      },
+      orderBy: { revisionNumber: "desc" },
+      select: { id: true, revisionNumber: true },
+    });
+    if (latest?.id !== previous.id)
+      throw new AssignmentOperationError("只能撤销最新推荐判题修订", 409);
+    const now = new Date();
+    const revoked = await transaction.programmingAttempt.create({
+      data: {
+        recommendationId: previous.recommendationId,
+        questionId: previous.questionId,
+        studentId: previous.studentId,
+        createdById: teacherId,
+        configRevisionId: previous.configRevisionId,
+        kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+        revisionNumber: latest.revisionNumber + 1,
+        sourceCode: previous.sourceCode,
+        inputFingerprint: programmingAttemptFingerprint({
+          revokedAttemptId: previous.id,
+          reason,
+        }),
+        ruleVersion: previous.ruleVersion,
+        status: ProgrammingAttemptStatus.CANCELLED,
+        maxScore: previous.maxScore,
+        overallErrorType: ProgrammingJudgeErrorType.CANCELLED,
+        safeErrorSummary: "教师已撤销本次推荐判题结果",
+        supersedesAttemptId: previous.id,
+        completedAt: now,
+      },
+    });
+    await transaction.personalizedRecommendation.update({
+      where: { id: previous.recommendationId },
+      data: {
+        status: "STARTED",
+        completedAt: null,
+        wasCorrect: null,
+        score: null,
+        maxScore: null,
+      },
+    });
+    const projection = await revokeRecommendationPracticeLearningEvent(
+      transaction,
+      previous.recommendation.practiceAnswer.id,
+    );
+    if (projection)
+      await ensureLearnerProfileSnapshot(
+        transaction,
+        previous.studentId,
+        projection.courseId,
+      );
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: AuditAction.RECOMMENDATION_PROGRAMMING_ATTEMPT_REVOKED,
+      targetType: AuditTargetType.COURSE,
+      targetId: previous.recommendation.courseCycle.courseId,
+      summary: "撤销推荐 Python 判题结果",
+      beforeData: { attemptId: previous.id },
+      afterData: { attemptId: revoked.id, reason },
+      context,
+    });
+    return { attemptId: revoked.id, status: revoked.status };
+  }, "推荐撤销请求发生冲突，请重试");
 }
 
 export async function cancelStudentProgrammingAttempt(

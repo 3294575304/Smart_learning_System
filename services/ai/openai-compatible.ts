@@ -14,6 +14,7 @@ import { buildSyllabusParseMessages } from "@/services/syllabus-parsing/prompt";
 import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 import type { QuestionMappingAIInput } from "@/services/question-mapping/schemas";
+import type { SelfReflectionAIInput } from "@/services/self-reflections/schemas";
 
 const chatResponseSchema = z
   .object({
@@ -183,6 +184,27 @@ export class OpenAICompatibleProvider implements AIProvider {
             role: "user",
             content: JSON.stringify(input),
           },
+        ],
+        options.signal,
+      )
+    ).content;
+  }
+
+  async structureSelfReflection(
+    input: SelfReflectionAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    const repair = options.validationError
+      ? `上次输出无效：${options.validationError}。请修复。`
+      : "";
+    return (
+      await this.completeJson(
+        [
+          {
+            role: "system",
+            content: `把学生的学习自述整理为严格 JSON：{"summary":"...","goals":["..."],"difficulties":["..."],"learningHabits":["..."],"practiceRequest":null或{"conceptIds":["..."],"questionTypes":["SINGLE_CHOICE"等],"count":1到20,"difficulty":1到5}}。不得编造输入之外的 Concept ID，不得诊断或污名化学生；没有明确练习诉求时 practiceRequest 为 null。${repair}`,
+          },
+          { role: "user", content: JSON.stringify(input) },
         ],
         options.signal,
       )

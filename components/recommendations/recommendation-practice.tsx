@@ -11,11 +11,15 @@ import {
   QuestionAnswerInput,
   type QuestionAnswerState,
 } from "@/components/assignments/question-answer-input";
+import { ProgrammingAttemptStatus } from "@/components/assignments/programming-attempt-status";
 import {
   difficultyLabel,
   questionTypeLabel,
 } from "@/components/recommendations/recommendation-presenters";
-import { submitRecommendationPracticeRequest } from "@/lib/api/recommendations";
+import {
+  submitRecommendationPracticeRequest,
+  submitRecommendationProgrammingRequest,
+} from "@/lib/api/recommendations";
 import {
   type RecommendationPracticeAnswerInput,
   type RecommendationPracticeSubmitData,
@@ -158,6 +162,11 @@ export function RecommendationPractice({ recommendation }: Props) {
   );
   const [serverError, setServerError] = useState<string | null>(null);
   const [idempotencyKey] = useState(() => globalThis.crypto.randomUUID());
+  const [programmingAttemptId, setProgrammingAttemptId] = useState(
+    recommendation.programmingAttempt?.id ?? null,
+  );
+  const [code, setCode] = useState(recommendation.starterCode ?? "");
+  const [programmingPending, setProgrammingPending] = useState(false);
   const form = useForm<
     z.input<typeof clientPracticeFormSchema>,
     unknown,
@@ -203,6 +212,22 @@ export function RecommendationPractice({ recommendation }: Props) {
     setResult(response.data);
   }
 
+  async function submitProgramming() {
+    if (!code.trim() || programmingPending) return;
+    setProgrammingPending(true);
+    setServerError(null);
+    const response = await submitRecommendationProgrammingRequest(
+      recommendation.id,
+      { sourceCode: code, idempotencyKey },
+    );
+    setProgrammingPending(false);
+    if (!response.success) {
+      setServerError(response.error);
+      return;
+    }
+    setProgrammingAttemptId(response.data.attemptId);
+  }
+
   return (
     <section className="min-w-0 space-y-6">
       <header className="min-w-0">
@@ -226,6 +251,45 @@ export function RecommendationPractice({ recommendation }: Props) {
           role="status"
         >
           该推荐已完成，但历史记录没有可展示的答案明细；为避免重复更新掌握度，不能再次提交。
+        </div>
+      ) : recommendation.type === QuestionType.PYTHON_PROGRAMMING ? (
+        <div className="space-y-5">
+          <article className="rounded-xl border bg-white p-5">
+            <h2 className="font-semibold">{recommendation.title}</h2>
+            <p className="mt-4 text-sm leading-7 whitespace-pre-wrap">
+              {recommendation.content}
+            </p>
+            <textarea
+              aria-label="Python 代码"
+              className="mt-4 min-h-80 w-full rounded-md border bg-slate-950 p-4 font-mono text-sm text-slate-100"
+              disabled={programmingPending || Boolean(programmingAttemptId)}
+              onChange={(event) => setCode(event.target.value)}
+              value={code}
+            />
+          </article>
+          {serverError ? (
+            <p className="text-sm text-red-700" role="alert">
+              {serverError}
+            </p>
+          ) : null}
+          {programmingAttemptId ? (
+            <ProgrammingAttemptStatus
+              assignmentQuestionId={recommendation.questionId}
+              attemptId={programmingAttemptId}
+            />
+          ) : (
+            <button
+              className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              disabled={programmingPending || !code.trim()}
+              onClick={() => void submitProgramming()}
+              type="button"
+            >
+              {programmingPending ? "正在提交判题…" : "提交 Python 判题"}
+            </button>
+          )}
+          <p className="text-sm text-gray-500">
+            隐藏用例异步执行；系统故障不会记为零分，完成后刷新可查看结果。
+          </p>
         </div>
       ) : (
         <form

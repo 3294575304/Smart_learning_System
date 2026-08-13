@@ -30,6 +30,7 @@ export const recommendationPracticeLearningEventPayloadSchema = z
     score: z.string().regex(/^\d+(\.\d+)?$/),
     maxScore: z.string().regex(/^\d+(\.\d+)?$/),
     isCorrect: z.boolean(),
+    assessmentRevisionKey: z.string().max(191).nullable().optional(),
     conceptSnapshotCount: z.number().int().positive(),
   })
   .strict();

@@ -41,7 +41,7 @@ test("course recommendation conditions are bounded and only accept supported pra
       classroomId: "classroom-1",
       questionTypes: [QuestionType.PYTHON_PROGRAMMING],
     }).success,
-    false,
+    true,
   );
   assert.equal(
     courseRecommendationGenerationSchema.safeParse({

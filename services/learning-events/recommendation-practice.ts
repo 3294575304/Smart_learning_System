@@ -27,7 +27,9 @@ export async function appendRecommendationPracticeLearningEvent(
       score: true,
       maxScore: true,
       isCorrect: true,
+      assessmentRevisionKey: true,
       createdAt: true,
+      updatedAt: true,
       recommendation: {
         select: {
           id: true,
@@ -59,24 +61,6 @@ export async function appendRecommendationPracticeLearningEvent(
   ) {
     return null;
   }
-  const existing = await transaction.learningEvent.findUnique({
-    where: {
-      sourceType_sourceId_sourceRevision: {
-        sourceType: LearningEventSourceType.RECOMMENDATION_PRACTICE_ANSWER,
-        sourceId: answer.id,
-        sourceRevision: 1,
-      },
-    },
-    select: { id: true },
-  });
-  if (existing) {
-    const mastery = await recalculateStudentCourseConceptMastery(
-      transaction,
-      answer.recommendation.studentId,
-      courseId,
-    );
-    return { courseId, learningEventId: existing.id, mastery };
-  }
   if (
     answer.maxScore.lte(0) ||
     answer.score.lt(0) ||
@@ -90,14 +74,33 @@ export async function appendRecommendationPracticeLearningEvent(
     score: answer.score.toFixed(CONCEPT_EVIDENCE_SCORE_SCALE),
     maxScore: answer.maxScore.toFixed(CONCEPT_EVIDENCE_SCORE_SCALE),
     isCorrect: answer.isCorrect,
+    assessmentRevisionKey: answer.assessmentRevisionKey,
     snapshots,
   });
+  const latestEvent = await transaction.learningEvent.findFirst({
+    where: {
+      sourceType: LearningEventSourceType.RECOMMENDATION_PRACTICE_ANSWER,
+      sourceId: answer.id,
+    },
+    orderBy: { sourceRevision: "desc" },
+    select: { id: true, sourceRevision: true, inputFingerprint: true },
+  });
+  if (latestEvent?.inputFingerprint === fingerprint) {
+    const mastery = await recalculateStudentCourseConceptMastery(
+      transaction,
+      answer.recommendation.studentId,
+      courseId,
+    );
+    return { courseId, learningEventId: latestEvent.id, mastery };
+  }
+  const sourceRevision = (latestEvent?.sourceRevision ?? 0) + 1;
   const payload = recommendationPracticeLearningEventPayloadSchema.parse({
     recommendationId: answer.recommendation.id,
     recommendationPracticeAnswerId: answer.id,
     score: answer.score.toFixed(CONCEPT_EVIDENCE_SCORE_SCALE),
     maxScore: answer.maxScore.toFixed(CONCEPT_EVIDENCE_SCORE_SCALE),
     isCorrect: answer.isCorrect,
+    assessmentRevisionKey: answer.assessmentRevisionKey,
     conceptSnapshotCount: snapshots.length,
   });
   const event = await transaction.learningEvent.create({
@@ -108,9 +111,9 @@ export async function appendRecommendationPracticeLearningEvent(
       schemaVersion: RECOMMENDATION_LEARNING_EVENT_SCHEMA_VERSION,
       sourceType: LearningEventSourceType.RECOMMENDATION_PRACTICE_ANSWER,
       sourceId: answer.id,
-      sourceRevision: 1,
-      occurredAt: answer.createdAt,
-      idempotencyKey: `recommendation-practice:${answer.id}:revision:1`,
+      sourceRevision,
+      occurredAt: answer.updatedAt,
+      idempotencyKey: `recommendation-practice:${answer.id}:revision:${sourceRevision}`,
       inputFingerprint: fingerprint,
       ruleVersion: RECOMMENDATION_LEARNING_EVENT_RULE_VERSION,
       payload,
@@ -130,25 +133,150 @@ export async function appendRecommendationPracticeLearningEvent(
     .div(answer.maxScore)
     .mul(100)
     .toDecimalPlaces(CONCEPT_EVIDENCE_SCORE_SCALE);
+  const previousEvidence =
+    await transaction.recommendationConceptEvidence.findMany({
+      where: { recommendationPracticeAnswerId: answer.id },
+      orderBy: { revision: "desc" },
+      distinct: ["conceptId"],
+      select: { id: true, conceptId: true, revision: true },
+    });
+  const previousByConcept = new Map(
+    previousEvidence.map((row) => [row.conceptId, row]),
+  );
   await transaction.recommendationConceptEvidence.createMany({
-    data: snapshots.map((snapshot) => ({
+    data: snapshots.map((snapshot) => {
+      const previous = previousByConcept.get(snapshot.conceptId);
+      return {
+        studentId: answer.recommendation.studentId,
+        courseId,
+        recommendationId: answer.recommendation.id,
+        recommendationPracticeAnswerId: answer.id,
+        questionId: answer.questionId,
+        recommendationConceptSnapshotId: snapshot.id,
+        conceptId: snapshot.conceptId,
+        bindingType: snapshot.bindingType,
+        revision: (previous?.revision ?? 0) + 1,
+        inputFingerprint: fingerprint,
+        status: ConceptEvidenceStatus.VALID,
+        score: answer.score,
+        maxScore: answer.maxScore,
+        normalizedScore,
+        gradedAt: answer.updatedAt,
+        supersedesEvidenceId: previous?.id ?? null,
+        learningEventId: event.id,
+      };
+    }),
+  });
+  const mastery = await recalculateStudentCourseConceptMastery(
+    transaction,
+    answer.recommendation.studentId,
+    courseId,
+  );
+  return { courseId, learningEventId: event.id, mastery };
+}
+
+export async function revokeRecommendationPracticeLearningEvent(
+  transaction: Prisma.TransactionClient,
+  recommendationPracticeAnswerId: string,
+) {
+  const answer = await transaction.recommendationPracticeAnswer.findUnique({
+    where: { id: recommendationPracticeAnswerId },
+    select: {
+      id: true,
+      questionId: true,
+      recommendation: {
+        select: {
+          id: true,
+          studentId: true,
+          courseCycle: { select: { courseId: true } },
+          conceptSnapshots: {
+            where: {
+              resolutionStatus: AssignmentConceptResolutionStatus.RESOLVED,
+            },
+            select: { id: true, conceptId: true, bindingType: true },
+          },
+        },
+      },
+    },
+  });
+  const courseId = answer?.recommendation.courseCycle?.courseId ?? null;
+  if (
+    !answer ||
+    !courseId ||
+    answer.recommendation.conceptSnapshots.length === 0
+  )
+    return null;
+  const latestEvent = await transaction.learningEvent.findFirst({
+    where: {
+      sourceType: LearningEventSourceType.RECOMMENDATION_PRACTICE_ANSWER,
+      sourceId: answer.id,
+    },
+    orderBy: { sourceRevision: "desc" },
+    select: { sourceRevision: true },
+  });
+  const sourceRevision = (latestEvent?.sourceRevision ?? 0) + 1;
+  const fingerprint = conceptMasteryFingerprint({
+    recommendationPracticeAnswerId: answer.id,
+    revoked: true,
+    sourceRevision,
+  });
+  const event = await transaction.learningEvent.create({
+    data: {
       studentId: answer.recommendation.studentId,
       courseId,
-      recommendationId: answer.recommendation.id,
-      recommendationPracticeAnswerId: answer.id,
-      questionId: answer.questionId,
-      recommendationConceptSnapshotId: snapshot.id,
-      conceptId: snapshot.conceptId,
-      bindingType: snapshot.bindingType,
-      revision: 1,
+      eventType: LearningEventType.RECOMMENDATION_PRACTICE_REVOKED,
+      schemaVersion: RECOMMENDATION_LEARNING_EVENT_SCHEMA_VERSION,
+      sourceType: LearningEventSourceType.RECOMMENDATION_PRACTICE_ANSWER,
+      sourceId: answer.id,
+      sourceRevision,
+      occurredAt: new Date(),
+      idempotencyKey: `recommendation-practice:${answer.id}:revision:${sourceRevision}`,
       inputFingerprint: fingerprint,
-      status: ConceptEvidenceStatus.VALID,
-      score: answer.score,
-      maxScore: answer.maxScore,
-      normalizedScore,
-      gradedAt: answer.createdAt,
-      learningEventId: event.id,
-    })),
+      ruleVersion: RECOMMENDATION_LEARNING_EVENT_RULE_VERSION,
+      payload: {
+        recommendationId: answer.recommendation.id,
+        recommendationPracticeAnswerId: answer.id,
+        revoked: true,
+      },
+      concepts: {
+        create: answer.recommendation.conceptSnapshots.map((snapshot) => ({
+          conceptId: snapshot.conceptId,
+          bindingType: snapshot.bindingType,
+          recommendationConceptSnapshotId: snapshot.id,
+        })),
+      },
+    },
+    select: { id: true },
+  });
+  const previousEvidence =
+    await transaction.recommendationConceptEvidence.findMany({
+      where: { recommendationPracticeAnswerId: answer.id },
+      orderBy: { revision: "desc" },
+      distinct: ["conceptId"],
+      select: { id: true, conceptId: true, revision: true },
+    });
+  const previousByConcept = new Map(
+    previousEvidence.map((row) => [row.conceptId, row]),
+  );
+  await transaction.recommendationConceptEvidence.createMany({
+    data: answer.recommendation.conceptSnapshots.map((snapshot) => {
+      const previous = previousByConcept.get(snapshot.conceptId);
+      return {
+        studentId: answer.recommendation.studentId,
+        courseId,
+        recommendationId: answer.recommendation.id,
+        recommendationPracticeAnswerId: answer.id,
+        questionId: answer.questionId,
+        recommendationConceptSnapshotId: snapshot.id,
+        conceptId: snapshot.conceptId,
+        bindingType: snapshot.bindingType,
+        revision: (previous?.revision ?? 0) + 1,
+        inputFingerprint: fingerprint,
+        status: ConceptEvidenceStatus.REVOKED,
+        supersedesEvidenceId: previous?.id ?? null,
+        learningEventId: event.id,
+      };
+    }),
   });
   const mastery = await recalculateStudentCourseConceptMastery(
     transaction,

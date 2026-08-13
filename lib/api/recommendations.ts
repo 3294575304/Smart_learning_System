@@ -23,6 +23,12 @@ export function recommendationSubmitApiPath(recommendationId: string): string {
   return `${recommendationDetailApiPath(recommendationId)}/submit`;
 }
 
+export function recommendationProgrammingAttemptApiPath(
+  recommendationId: string,
+): string {
+  return `${recommendationDetailApiPath(recommendationId)}/programming-attempts`;
+}
+
 interface RequestOptions {
   fetchImplementation?: typeof fetch;
 }
@@ -108,6 +114,22 @@ export function submitRecommendationPracticeRequest(
 ): Promise<ActionResult<RecommendationPracticeResultView>> {
   return requestRecommendationApi<RecommendationPracticeResultView>(
     recommendationSubmitApiPath(recommendationId),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    },
+    options,
+  );
+}
+
+export function submitRecommendationProgrammingRequest(
+  recommendationId: string,
+  input: { sourceCode: string; idempotencyKey: string },
+  options: RequestOptions = {},
+): Promise<ActionResult<{ attemptId: string; status: string }>> {
+  return requestRecommendationApi(
+    recommendationProgrammingAttemptApiPath(recommendationId),
     {
       method: "POST",
       headers: { "content-type": "application/json" },

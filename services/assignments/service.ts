@@ -1194,8 +1194,12 @@ export async function getStudentSubmissionResult(
     maxScore: isPublished ? decimalNumber(submission.maxScore) : null,
     percentage: isPublished ? decimalNumber(submission.percentage) : null,
     isPublished,
-    programmingAttempts: submission.answers.flatMap(
-      (answer) => answer.programmingAttempts,
+    programmingAttempts: submission.answers.flatMap((answer) =>
+      answer.programmingAttempts.flatMap((attempt) =>
+        attempt.assignmentQuestionId
+          ? [attempt as typeof attempt & { assignmentQuestionId: string }]
+          : [],
+      ),
     ),
     answers: isPublished
       ? submission.answers.map((answer) => ({

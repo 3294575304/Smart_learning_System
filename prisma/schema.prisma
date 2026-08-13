@@ -65,9 +65,12 @@ enum AuditAction {
   AI_QUESTION_MAPPING_BATCH_CREATED
   AI_QUESTION_MAPPING_BATCH_CONFIRMED
   COURSE_TEACHING_PROGRESS_UPDATED
+  COURSE_RECOMMENDATION_POLICY_UPDATED
   PROGRAMMING_CONFIG_REVISION_CREATED
   PROGRAMMING_ATTEMPT_REJUDGED
   PROGRAMMING_ATTEMPT_REVOKED
+  RECOMMENDATION_PROGRAMMING_ATTEMPT_REJUDGED
+  RECOMMENDATION_PROGRAMMING_ATTEMPT_REVOKED
   ASSESSMENT_SCHEME_DRAFT_GENERATED
   ASSESSMENT_SCHEME_REVIEW_SAVED
   ASSESSMENT_SCHEME_PUBLISHED
@@ -423,6 +426,12 @@ enum ProgrammingAttemptKind {
   FORMAL_JUDGE
 }
 
+enum StudentSelfReflectionStatus {
+  DRAFT
+  CONFIRMED
+  DELETED
+}
+
 enum ProgrammingAttemptStatus {
   PENDING
   RUNNING
@@ -617,6 +626,7 @@ model User {
   createdRecommendationPolicies      CourseRecommendationPolicyRevision[] @relation("CourseRecommendationPolicyCreatedBy")
   courseRecommendationCycles         CourseRecommendationCycle[]          @relation("CourseRecommendationStudent")
   recommendationConceptEvidences     RecommendationConceptEvidence[]      @relation("RecommendationConceptEvidenceStudent")
+  selfReflections                    StudentSelfReflection[]              @relation("StudentSelfReflectionStudent")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -932,6 +942,7 @@ model Course {
   currentRecommendationPolicyRevision   CourseRecommendationPolicyRevision?   @relation("CurrentCourseRecommendationPolicy", fields: [currentRecommendationPolicyRevisionId], references: [id], onDelete: SetNull)
   recommendationCycles                  CourseRecommendationCycle[]
   courseRecommendationConceptSnapshots  CourseRecommendationConceptSnapshot[]
+  selfReflections                       StudentSelfReflection[]
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -2069,22 +2080,23 @@ model Question {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  creator                        User                                  @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  options                        QuestionOption[]
-  knowledgePointLinks            QuestionKnowledgePoint[]
-  assignmentQuestions            AssignmentQuestion[]
-  recommendations                PersonalizedRecommendation[]
-  practiceAnswers                RecommendationPracticeAnswer[]        @relation("RecommendationPracticeQuestion")
-  recommendationWrongQuestions   WrongQuestion[]                       @relation("WrongQuestionSourceQuestion")
-  aiTutoringRecords              AITutoringRecord[]
-  graphBindingSets               QuestionKnowledgeGraphBindingSet[]
-  graphBindings                  QuestionKnowledgeGraphBinding[]
-  assignmentConceptSnapshots     AssignmentQuestionConceptSnapshot[]   @relation("AssignmentConceptSnapshotQuestion")
-  conceptAnswerEvidences         StudentAnswerConceptEvidence[]        @relation("ConceptEvidenceQuestion")
-  recommendationConceptSnapshots CourseRecommendationConceptSnapshot[] @relation("RecommendationSnapshotQuestion")
-  recommendationConceptEvidences RecommendationConceptEvidence[]       @relation("RecommendationConceptEvidenceQuestion")
-  programmingConfigRevisions     ProgrammingQuestionConfigRevision[]
-  aiQuestionMappingCandidates    AIQuestionMappingCandidate[]
+  creator                           User                                  @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  options                           QuestionOption[]
+  knowledgePointLinks               QuestionKnowledgePoint[]
+  assignmentQuestions               AssignmentQuestion[]
+  recommendations                   PersonalizedRecommendation[]
+  practiceAnswers                   RecommendationPracticeAnswer[]        @relation("RecommendationPracticeQuestion")
+  recommendationWrongQuestions      WrongQuestion[]                       @relation("WrongQuestionSourceQuestion")
+  aiTutoringRecords                 AITutoringRecord[]
+  graphBindingSets                  QuestionKnowledgeGraphBindingSet[]
+  graphBindings                     QuestionKnowledgeGraphBinding[]
+  assignmentConceptSnapshots        AssignmentQuestionConceptSnapshot[]   @relation("AssignmentConceptSnapshotQuestion")
+  conceptAnswerEvidences            StudentAnswerConceptEvidence[]        @relation("ConceptEvidenceQuestion")
+  recommendationConceptSnapshots    CourseRecommendationConceptSnapshot[] @relation("RecommendationSnapshotQuestion")
+  recommendationConceptEvidences    RecommendationConceptEvidence[]       @relation("RecommendationConceptEvidenceQuestion")
+  programmingConfigRevisions        ProgrammingQuestionConfigRevision[]
+  recommendationProgrammingAttempts ProgrammingAttempt[]                  @relation("RecommendationProgrammingQuestion")
+  aiQuestionMappingCandidates       AIQuestionMappingCandidate[]
 
   @@index([creatorId, status, deletedAt, createdAt])
   @@index([visibility, status, deletedAt, type, difficulty])
@@ -2222,10 +2234,11 @@ model ProgrammingQuestionConfigRevision {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  question            Question                              @relation(fields: [questionId], references: [id], onDelete: Restrict)
-  createdBy           User                                  @relation("ProgrammingConfigCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  testCases           ProgrammingTestCase[]
-  assignmentSnapshots AssignmentProgrammingConfigSnapshot[]
+  question               Question                              @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  createdBy              User                                  @relation("ProgrammingConfigCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  testCases              ProgrammingTestCase[]
+  assignmentSnapshots    AssignmentProgrammingConfigSnapshot[]
+  recommendationAttempts ProgrammingAttempt[]
 
   @@unique([questionId, revisionNumber])
   @@unique([questionId, configurationHash])
@@ -2358,11 +2371,14 @@ model AssignmentProgrammingConfigSnapshot {
 
 model ProgrammingAttempt {
   id                   String                     @id @default(cuid())
-  studentAnswerId      String
-  assignmentQuestionId String
+  studentAnswerId      String?
+  assignmentQuestionId String?
+  recommendationId     String?
+  questionId           String?
   studentId            String
   createdById          String
-  configSnapshotId     String
+  configSnapshotId     String?
+  configRevisionId     String?
   kind                 ProgrammingAttemptKind
   revisionNumber       Int
   sourceCode           String                     @db.Text
@@ -2380,19 +2396,25 @@ model ProgrammingAttempt {
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
 
-  studentAnswer      StudentAnswer                       @relation(fields: [studentAnswerId], references: [id], onDelete: Restrict)
-  assignmentQuestion AssignmentQuestion                  @relation(fields: [assignmentQuestionId], references: [id], onDelete: Restrict)
-  student            User                                @relation("ProgrammingAttemptStudent", fields: [studentId], references: [id], onDelete: Restrict)
-  createdBy          User                                @relation("ProgrammingAttemptCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  configSnapshot     AssignmentProgrammingConfigSnapshot @relation(fields: [configSnapshotId], references: [id], onDelete: Restrict)
-  backgroundJob      BackgroundJob?                      @relation(fields: [backgroundJobId], references: [id], onDelete: Restrict)
-  supersedesAttempt  ProgrammingAttempt?                 @relation("ProgrammingAttemptRevision", fields: [supersedesAttemptId], references: [id], onDelete: Restrict)
-  supersededBy       ProgrammingAttempt?                 @relation("ProgrammingAttemptRevision")
+  studentAnswer      StudentAnswer?                       @relation(fields: [studentAnswerId], references: [id], onDelete: Restrict)
+  assignmentQuestion AssignmentQuestion?                  @relation(fields: [assignmentQuestionId], references: [id], onDelete: Restrict)
+  recommendation     PersonalizedRecommendation?          @relation(fields: [recommendationId], references: [id], onDelete: Restrict)
+  question           Question?                            @relation("RecommendationProgrammingQuestion", fields: [questionId], references: [id], onDelete: Restrict)
+  student            User                                 @relation("ProgrammingAttemptStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  createdBy          User                                 @relation("ProgrammingAttemptCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  configSnapshot     AssignmentProgrammingConfigSnapshot? @relation(fields: [configSnapshotId], references: [id], onDelete: Restrict)
+  configRevision     ProgrammingQuestionConfigRevision?   @relation(fields: [configRevisionId], references: [id], onDelete: Restrict)
+  backgroundJob      BackgroundJob?                       @relation(fields: [backgroundJobId], references: [id], onDelete: Restrict)
+  supersedesAttempt  ProgrammingAttempt?                  @relation("ProgrammingAttemptRevision", fields: [supersedesAttemptId], references: [id], onDelete: Restrict)
+  supersededBy       ProgrammingAttempt?                  @relation("ProgrammingAttemptRevision")
   testResults        ProgrammingTestCaseResult[]
 
   @@unique([studentAnswerId, kind, revisionNumber])
+  @@unique([recommendationId, kind, revisionNumber])
   @@index([studentId, createdAt])
   @@index([assignmentQuestionId, createdAt])
+  @@index([recommendationId, createdAt])
+  @@index([questionId, createdAt])
   @@index([status, createdAt])
   @@index([inputFingerprint])
 }
@@ -3110,15 +3132,16 @@ model PersonalizedRecommendation {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
-  student          User                                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  question         Question                              @relation(fields: [questionId], references: [id], onDelete: Restrict)
-  knowledgePoint   KnowledgePoint?                       @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
-  analysis         AIAnalysis?                           @relation(fields: [analysisId], references: [id], onDelete: SetNull)
-  courseCycle      CourseRecommendationCycle?            @relation(fields: [courseCycleId], references: [id], onDelete: Restrict)
-  targetConcept    KnowledgeGraphConcept?                @relation("RecommendationTargetConcept", fields: [targetConceptId], references: [id], onDelete: Restrict)
-  practiceAnswer   RecommendationPracticeAnswer?
-  conceptSnapshots CourseRecommendationConceptSnapshot[]
-  conceptEvidences RecommendationConceptEvidence[]
+  student             User                                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  question            Question                              @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  knowledgePoint      KnowledgePoint?                       @relation(fields: [knowledgePointId], references: [id], onDelete: Restrict)
+  analysis            AIAnalysis?                           @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  courseCycle         CourseRecommendationCycle?            @relation(fields: [courseCycleId], references: [id], onDelete: Restrict)
+  targetConcept       KnowledgeGraphConcept?                @relation("RecommendationTargetConcept", fields: [targetConceptId], references: [id], onDelete: Restrict)
+  practiceAnswer      RecommendationPracticeAnswer?
+  conceptSnapshots    CourseRecommendationConceptSnapshot[]
+  conceptEvidences    RecommendationConceptEvidence[]
+  programmingAttempts ProgrammingAttempt[]
 
   @@unique([studentId, questionId, cycleKey])
   @@index([studentId, status, priority, createdAt])
@@ -3129,20 +3152,48 @@ model PersonalizedRecommendation {
   @@index([createdAt])
 }
 
+model StudentSelfReflection {
+  id              String                      @id @default(cuid())
+  studentId       String
+  courseId        String
+  inputText       String                      @db.Text
+  summary         String                      @db.Text
+  goals           String[]                    @default([])
+  difficulties    String[]                    @default([])
+  learningHabits  String[]                    @default([])
+  practiceRequest Json?
+  status          StudentSelfReflectionStatus @default(DRAFT)
+  provider        String?
+  model           String?
+  promptVersion   String                      @db.VarChar(100)
+  fallbackUsed    Boolean                     @default(false)
+  confirmedAt     DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+
+  student User   @relation("StudentSelfReflectionStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  course  Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@index([studentId, courseId, status, createdAt])
+  @@index([courseId, status, createdAt])
+}
+
 model RecommendationPracticeAnswer {
-  id                String   @id @default(cuid())
-  recommendationId  String   @unique
-  questionId        String
-  idempotencyKey    String   @unique
-  textAnswer        String?  @db.Text
-  booleanAnswer     Boolean?
-  selectedOptionIds String[] @default([])
-  responseTimeMs    Int?
-  score             Decimal  @db.Decimal(8, 2)
-  maxScore          Decimal  @db.Decimal(8, 2)
-  isCorrect         Boolean
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  recommendationId      String   @unique
+  questionId            String
+  idempotencyKey        String   @unique
+  assessmentRevisionKey String?  @db.VarChar(191)
+  textAnswer            String?  @db.Text
+  booleanAnswer         Boolean?
+  selectedOptionIds     String[] @default([])
+  responseTimeMs        Int?
+  score                 Decimal  @db.Decimal(8, 2)
+  maxScore              Decimal  @db.Decimal(8, 2)
+  isCorrect             Boolean
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   recommendation   PersonalizedRecommendation      @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
   question         Question                        @relation("RecommendationPracticeQuestion", fields: [questionId], references: [id], onDelete: Restrict)

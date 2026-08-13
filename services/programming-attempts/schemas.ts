@@ -17,6 +17,13 @@ export const createPublicProgrammingRunSchema = z
   })
   .strict();
 
+export const createRecommendationProgrammingAttemptSchema = z
+  .object({
+    sourceCode: z.string().trim().min(1).max(200_000),
+    idempotencyKey: z.string().uuid(),
+  })
+  .strict();
+
 export const rejudgeProgrammingAttemptSchema = z
   .object({
     reason: z.string().trim().min(2).max(500),

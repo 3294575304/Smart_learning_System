@@ -70,6 +70,15 @@ const recommendationViewSelect =
         isCorrect: true,
       },
     },
+    programmingAttempts: {
+      orderBy: { revisionNumber: "desc" },
+      take: 1,
+      select: {
+        id: true,
+        status: true,
+        backgroundJob: { select: { progress: true } },
+      },
+    },
     question: {
       select: {
         id: true,
@@ -78,6 +87,12 @@ const recommendationViewSelect =
         type: true,
         difficulty: true,
         explanation: true,
+        gradingConfig: true,
+        programmingConfigRevisions: {
+          orderBy: { revisionNumber: "desc" },
+          take: 1,
+          select: { starterCode: true },
+        },
         correctBoolean: true,
         referenceAnswer: true,
         acceptableAnswers: true,
