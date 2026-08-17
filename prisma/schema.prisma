@@ -1008,7 +1008,7 @@ model Course {
   qualityReports                        CourseQualityReport[]
   courseSurveys                         CourseSurvey[]
 
-  @@unique([teacherId, courseNo, term])
+  @@index([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
   @@index([teacherId, status, createdAt])
   @@index([term, courseNo])

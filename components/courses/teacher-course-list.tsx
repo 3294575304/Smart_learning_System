@@ -1,14 +1,7 @@
 "use client";
 
 import { CourseStatus } from "@prisma/client";
-import {
-  CheckCircle2,
-  LoaderCircle,
-  MoreVertical,
-  School,
-  Trash2,
-  X,
-} from "lucide-react";
+import { CheckCircle2, LoaderCircle, School, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import React, { useState } from "react";
 
@@ -38,13 +31,11 @@ function CourseDeleteAction({
   course: TeacherCourseListItem;
   onDeleted: (result: TeacherCourseDeletionResult) => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function openDialog() {
-    setMenuOpen(false);
     setError(null);
     setDialogOpen(true);
   }
@@ -78,35 +69,15 @@ function CourseDeleteAction({
 
   return (
     <>
-      <div className="relative shrink-0">
-        <button
-          aria-expanded={menuOpen}
-          aria-haspopup="menu"
-          aria-label={`打开“${course.name}”课程操作菜单`}
-          className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-          onClick={() => setMenuOpen((open) => !open)}
-          type="button"
-        >
-          <MoreVertical className="h-4 w-4" />
-        </button>
-        {menuOpen ? (
-          <div
-            aria-label="课程操作"
-            className="absolute top-10 right-0 z-20 min-w-36 rounded-md border bg-white p-1 shadow-lg"
-            role="menu"
-          >
-            <button
-              className="text-destructive hover:bg-destructive/10 flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm"
-              onClick={openDialog}
-              role="menuitem"
-              type="button"
-            >
-              <Trash2 className="h-4 w-4" />
-              删除课程
-            </button>
-          </div>
-        ) : null}
-      </div>
+      <button
+        aria-label={`删除课程“${course.name}”`}
+        className="text-destructive hover:bg-destructive/10 inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium"
+        onClick={openDialog}
+        type="button"
+      >
+        <Trash2 className="h-4 w-4" />
+        删除课程
+      </button>
 
       {dialogOpen ? (
         <div
@@ -125,7 +96,7 @@ function CourseDeleteAction({
                   确认删除课程
                 </h2>
                 <p className="text-muted-foreground mt-2 text-sm">
-                  此操作只适用于尚未产生正式教学数据的草稿课程。
+                  课程将从课程管理中移除；关联班级、作业、成绩和其他历史教学数据会完整保留。
                 </p>
               </div>
               <button
@@ -147,7 +118,7 @@ function CourseDeleteAction({
             </div>
 
             <p className="text-destructive mt-4 text-sm font-medium">
-              删除后无法恢复。
+              当前不提供恢复入口，请确认不再使用此课程开展教学。
             </p>
 
             {error ? (
@@ -204,7 +175,7 @@ export function TeacherCourseList({
 
   function handleDeleted(result: TeacherCourseDeletionResult) {
     setCourses((items) => items.filter((course) => course.id !== result.id));
-    setSuccessMessage(`课程“${result.name}”已删除。`);
+    setSuccessMessage(`课程“${result.name}”已删除，历史教学数据已保留。`);
   }
 
   return (

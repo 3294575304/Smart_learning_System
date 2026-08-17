@@ -31,7 +31,7 @@ const course = {
   updatedAt: new Date("2026-07-31T00:00:00.000Z"),
 };
 
-test("课程卡片的详情链接与删除菜单使用独立交互区域", () => {
+test("课程卡片的详情链接与直接删除按钮使用独立交互区域", () => {
   const markup = renderToStaticMarkup(
     React.createElement(TeacherCourseList, {
       initialCourses: [course],
@@ -40,7 +40,7 @@ test("课程卡片的详情链接与删除菜单使用独立交互区域", () =>
 
   assert.match(markup, /学生正式导入测试草稿/u);
   assert.match(markup, /PY-DELETE-01/u);
-  assert.match(markup, /打开“学生正式导入测试草稿”课程操作菜单/u);
+  assert.match(markup, /删除课程“学生正式导入测试草稿”/u);
   assert.match(markup, /href="\/teacher\/courses\/course-delete-ui"/u);
   const links = [...markup.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gu)];
   assert.equal(links.length, 2);
@@ -50,7 +50,7 @@ test("课程卡片的详情链接与删除菜单使用独立交互区域", () =>
   );
 });
 
-test("删除确认交互包含不可恢复提示、loading 和防重复提交", async () => {
+test("删除确认说明历史数据保留并提供 loading、防重复提交和即时移除", async () => {
   const source = await readFile(
     new URL(
       "../../components/courses/teacher-course-list.tsx",
@@ -61,11 +61,13 @@ test("删除确认交互包含不可恢复提示、loading 和防重复提交", 
 
   assert.match(source, /确认删除课程/u);
   assert.match(source, /课程号：\{course\.courseNo\}/u);
-  assert.match(source, /删除后无法恢复/u);
+  assert.match(source, /关联班级、作业、成绩和其他历史教学数据会完整保留/u);
+  assert.match(source, /当前不提供恢复入口/u);
   assert.match(source, /if \(isDeleting\) return/u);
   assert.match(source, /disabled=\{isDeleting\}/u);
   assert.match(source, /删除中\.\.\./u);
   assert.match(source, /setCourses\(\(items\) =>/u);
+  assert.match(source, /历史教学数据已保留/u);
   assert.match(source, /setError\(result\.error\)/u);
   assert.match(source, /aria-live="polite"/u);
 });

@@ -1,4 +1,9 @@
-import { ClassroomStatus, MembershipStatus, Prisma } from "@prisma/client";
+import {
+  ClassroomStatus,
+  CourseStatus,
+  MembershipStatus,
+  Prisma,
+} from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 
@@ -196,7 +201,7 @@ export async function loadTeacherCourses(
   client: DatabaseClient = prisma,
 ): Promise<TeacherCourseRecord[]> {
   return client.course.findMany({
-    where: { teacherId },
+    where: { teacherId, status: { not: CourseStatus.ARCHIVED } },
     select: teacherCourseSelect,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
@@ -208,7 +213,11 @@ export function findTeacherCourseById(
   client: DatabaseClient = prisma,
 ): Promise<TeacherCourseRecord | null> {
   return client.course.findFirst({
-    where: { id: courseId, teacherId },
+    where: {
+      id: courseId,
+      teacherId,
+      status: { not: CourseStatus.ARCHIVED },
+    },
     select: teacherCourseSelect,
   });
 }

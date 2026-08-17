@@ -5,8 +5,6 @@ import {
   CourseStatus,
   MembershipStatus,
   Prisma,
-  StudentImportBatchStatus,
-  StudentImportExecutionStatus,
 } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -867,47 +865,7 @@ export async function updateTeacherCourse(
 }
 
 interface CourseDeletionDependencies {
-  storage?: StorageService;
-  logger?: Pick<Console, "error">;
   writeAuditLog?: typeof writeGovernanceAuditLog;
-}
-
-interface OptionalSyllabusParseDraftDelegate {
-  syllabusParseDraft?: {
-    deleteMany(args: { where: { courseId: string } }): Promise<unknown>;
-  };
-}
-
-async function deleteCourseSyllabusParseDrafts(
-  transaction: Prisma.TransactionClient,
-  courseId: string,
-): Promise<void> {
-  const delegate = (
-    transaction as unknown as OptionalSyllabusParseDraftDelegate
-  ).syllabusParseDraft;
-  if (delegate) {
-    await delegate.deleteMany({ where: { courseId } });
-  }
-}
-
-async function deleteCourseFilesAfterCommit(
-  storageKeys: string[],
-  storage: StorageService,
-  logger: Pick<Console, "error">,
-): Promise<void> {
-  const uniqueStorageKeys = [...new Set(storageKeys)];
-  const results = await Promise.allSettled(
-    uniqueStorageKeys.map((storageKey) => storage.delete(storageKey)),
-  );
-
-  results.forEach((result, index) => {
-    if (result.status === "rejected") {
-      logger.error(
-        `Failed to delete course file after database deletion: ${uniqueStorageKeys[index]}`,
-        result.reason,
-      );
-    }
-  });
 }
 
 export async function deleteTeacherCourse(
@@ -916,19 +874,12 @@ export async function deleteTeacherCourse(
   context: AuditRequestContext,
   dependencies: CourseDeletionDependencies = {},
 ): Promise<TeacherCourseDeletionResult> {
-  const storage = dependencies.storage ?? getStorageService();
-  const logger = dependencies.logger ?? console;
   const writeAuditLog = dependencies.writeAuditLog ?? writeGovernanceAuditLog;
-  let transactionResult:
-    | {
-        result: TeacherCourseDeletionResult;
-        storageKeys: string[];
-      }
-    | undefined;
+  let result: TeacherCourseDeletionResult | undefined;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      transactionResult = await prisma.$transaction(
+      result = await prisma.$transaction(
         async (transaction) => {
           await transaction.$queryRaw<Array<{ id: string }>>`
             SELECT "id"
@@ -945,212 +896,16 @@ export async function deleteTeacherCourse(
           if (!course) {
             throw new ResourceNotFoundError("课程不存在");
           }
-          if (course.status !== CourseStatus.DRAFT) {
-            throw new CourseOperationError(
-              "只有尚未发布的草稿课程可以删除。",
-              409,
-            );
-          }
-
-          await transaction.$queryRaw<Array<{ id: string }>>`
-            SELECT "id"
-            FROM "Classroom"
-            WHERE "courseId" = ${courseId}
-            FOR UPDATE
-          `;
-
-          const classroomIds = course.classrooms.map(
-            (classroom) => classroom.id,
-          );
-          if (classroomIds.length > 0) {
-            const [
-              assignmentCount,
-              submissionCount,
-              answerCount,
-              analysisCount,
-              recommendationCount,
-            ] = await Promise.all([
-              transaction.assignment.count({
-                where: { classroomId: { in: classroomIds } },
-              }),
-              transaction.submission.count({
-                where: {
-                  assignment: { classroomId: { in: classroomIds } },
-                },
-              }),
-              transaction.studentAnswer.count({
-                where: {
-                  submission: {
-                    assignment: { classroomId: { in: classroomIds } },
-                  },
-                },
-              }),
-              transaction.aIAnalysis.count({
-                where: { classroomId: { in: classroomIds } },
-              }),
-              transaction.personalizedRecommendation.count({
-                where: {
-                  analysis: {
-                    classroomId: { in: classroomIds },
-                  },
-                },
-              }),
-            ]);
-
-            if (assignmentCount > 0 || submissionCount > 0 || answerCount > 0) {
-              throw new CourseOperationError(
-                "该课程已经产生作业、学生作答、成绩或批改记录，不能删除。",
-                409,
-              );
-            }
-            if (analysisCount > 0 || recommendationCount > 0) {
-              throw new CourseOperationError(
-                "该课程已经产生学情分析、画像或推荐数据，不能删除。",
-                409,
-              );
-            }
-          }
-
-          const processingImportBatchCount =
-            await transaction.studentImportBatch.count({
-              where: {
-                courseId,
-                status: StudentImportBatchStatus.PROCESSING,
-              },
-            });
-          if (processingImportBatchCount > 0) {
-            throw new CourseOperationError(
-              "该课程的学生名单正在处理，请稍后再试。",
-              409,
-            );
-          }
-
-          const materializedImportBatchCount =
-            await transaction.studentImportBatch.count({
-              where: {
-                courseId,
-                OR: [
-                  { importedRows: { gt: 0 } },
-                  { identityAssignments: { some: {} } },
-                  {
-                    rows: {
-                      some: {
-                        OR: [
-                          {
-                            executionStatus:
-                              StudentImportExecutionStatus.APPLIED,
-                          },
-                          { matchedMembershipId: { not: null } },
-                          { createdMembershipId: { not: null } },
-                          { createdUserId: { not: null } },
-                          { studentIdentityId: { not: null } },
-                        ],
-                      },
-                    },
-                  },
-                ],
-              },
-            });
-          if (materializedImportBatchCount > 0) {
-            throw new CourseOperationError(
-              "该课程的学生名单已经正式导入或正在处理，不能删除。",
-              409,
-            );
-          }
-
-          const publishedAssessmentSchemeCount =
-            await transaction.publishedAssessmentScheme.count({
-              where: { courseId },
-            });
-          if (publishedAssessmentSchemeCount > 0) {
-            throw new CourseOperationError(
-              "该课程已经发布正式考核方案，必须保留历史版本，不能删除。",
-              409,
-            );
-          }
-
-          const [courseFiles, syllabi] = await Promise.all([
-            transaction.courseFileVersion.findMany({
-              where: { courseId },
-              select: { storageKey: true },
-            }),
-            transaction.courseSyllabus.findMany({
-              where: { courseId },
-              select: { storageKey: true },
-            }),
-          ]);
-          const storageKeys = [
-            ...courseFiles.map((file) => file.storageKey),
-            ...syllabi.map((syllabus) => syllabus.storageKey),
-          ];
           const deletedAt = new Date();
           const snapshot = courseDeletionSnapshot(course, deletedAt);
 
-          await transaction.studentImportBatch.deleteMany({
-            where: { courseId },
-          });
           await transaction.course.update({
             where: { id: courseId },
             data: {
-              currentPublishedSyllabusStructureId: null,
-              currentPublishedKnowledgeGraphVersionId: null,
-              currentPublishedAssessmentSchemeId: null,
+              status: CourseStatus.ARCHIVED,
+              archivedAt: deletedAt,
             },
           });
-          const graphVersions =
-            await transaction.publishedKnowledgeGraphVersion.findMany({
-              where: { courseId },
-              select: { id: true },
-            });
-          await transaction.questionKnowledgeGraphBindingSet.deleteMany({
-            where: { courseId },
-          });
-          await transaction.publishedKnowledgeGraphEdge.deleteMany({
-            where: {
-              graphVersionId: { in: graphVersions.map((item) => item.id) },
-            },
-          });
-          await transaction.publishedKnowledgeGraphNode.deleteMany({
-            where: {
-              graphVersionId: { in: graphVersions.map((item) => item.id) },
-            },
-          });
-          await transaction.publishedKnowledgeGraphVersion.deleteMany({
-            where: { courseId },
-          });
-          await transaction.knowledgeGraphReviewRevision.deleteMany({
-            where: { courseId },
-          });
-          await transaction.knowledgeGraphDraft.deleteMany({
-            where: { courseId },
-          });
-          await transaction.knowledgeGraphConcept.deleteMany({
-            where: { courseId },
-          });
-          await transaction.assessmentSchemeReviewRevision.deleteMany({
-            where: { courseId },
-          });
-          await transaction.assessmentSchemeDraft.deleteMany({
-            where: { courseId },
-          });
-          await transaction.publishedSyllabusStructure.deleteMany({
-            where: { courseId },
-          });
-          await transaction.syllabusReviewRevision.deleteMany({
-            where: { courseId },
-          });
-          await deleteCourseSyllabusParseDrafts(transaction, courseId);
-          await transaction.courseSyllabus.deleteMany({
-            where: { courseId },
-          });
-          await transaction.courseFileVersion.deleteMany({
-            where: { courseId },
-          });
-          await transaction.classroom.updateMany({
-            where: { courseId },
-            data: { courseId: null },
-          });
-          await transaction.course.delete({ where: { id: courseId } });
 
           await writeAuditLog(transaction, {
             actorId: teacherId,
@@ -1164,19 +919,18 @@ export async function deleteTeacherCourse(
               teacherId,
               deletedById: teacherId,
               deletedAt: deletedAt.toISOString(),
+              status: CourseStatus.ARCHIVED,
+              historyPreserved: true,
             },
             context,
           });
 
           return {
-            result: {
-              id: course.id,
-              name: course.name,
-              courseNo: course.courseNo,
-              term: course.term,
-              deletedAt,
-            },
-            storageKeys,
+            id: course.id,
+            name: course.name,
+            courseNo: course.courseNo,
+            term: course.term,
+            deletedAt,
           };
         },
         {
@@ -1192,16 +946,10 @@ export async function deleteTeacherCourse(
     }
   }
 
-  if (!transactionResult) {
+  if (!result) {
     throw new CourseOperationError("课程删除冲突，请稍后重试。", 409);
   }
-
-  await deleteCourseFilesAfterCommit(
-    transactionResult.storageKeys,
-    storage,
-    logger,
-  );
-  return transactionResult.result;
+  return result;
 }
 
 export async function linkTeacherClassroomToCourse(

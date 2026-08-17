@@ -2571,33 +2571,38 @@ async function main(): Promise<void> {
     },
   });
 
-  await prisma.course.upsert({
+  const existingPythonCourse = await prisma.course.findFirst({
     where: {
-      teacherId_courseNo_term: {
+      teacherId: teacher.id,
+      courseNo: "PYTHON-2026",
+      term: "2026-2027-1",
+      status: { not: CourseStatus.ARCHIVED },
+    },
+    select: { id: true },
+  });
+  const pythonCourseData = {
+    templateId: pythonCourseTemplate.id,
+    name: "Python 程序设计",
+    description: "V1.0 Python 课程模板示例课程。",
+    status: CourseStatus.ACTIVE,
+    publishedAt: new Date("2026-09-01T00:00:00.000Z"),
+    archivedAt: null,
+  };
+  if (existingPythonCourse) {
+    await prisma.course.update({
+      where: { id: existingPythonCourse.id },
+      data: pythonCourseData,
+    });
+  } else {
+    await prisma.course.create({
+      data: {
+        ...pythonCourseData,
         teacherId: teacher.id,
         courseNo: "PYTHON-2026",
         term: "2026-2027-1",
       },
-    },
-    update: {
-      templateId: pythonCourseTemplate.id,
-      name: "Python 程序设计",
-      description: "V1.0 Python 课程模板示例课程。",
-      status: CourseStatus.ACTIVE,
-      publishedAt: new Date("2026-09-01T00:00:00.000Z"),
-      archivedAt: null,
-    },
-    create: {
-      templateId: pythonCourseTemplate.id,
-      teacherId: teacher.id,
-      courseNo: "PYTHON-2026",
-      term: "2026-2027-1",
-      name: "Python 程序设计",
-      description: "V1.0 Python 课程模板示例课程。",
-      status: CourseStatus.ACTIVE,
-      publishedAt: new Date("2026-09-01T00:00:00.000Z"),
-    },
-  });
+    });
+  }
 
   const classroom = await prisma.classroom.upsert({
     where: { joinCode: "MATH2026" },

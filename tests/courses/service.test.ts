@@ -24,8 +24,6 @@ import {
   updateTeacherCourse,
   unlinkTeacherClassroomFromCourse,
 } from "@/services/courses/service";
-import type { StorageService } from "@/services/storage/types";
-
 const prisma = new PrismaClient();
 
 const auditContext = {
@@ -225,7 +223,7 @@ test("教师课程可以按模板创建、避免重复并关联班级", async ()
   await prisma.course.delete({ where: { id: created.id } });
 });
 
-test("教师可以删除空草稿课程并保留班级、成员和账号", async () => {
+test("教师可以软删除课程并保留班级、名单、文件、成员和账号", async () => {
   const suffix = randomBytes(4).toString("hex");
   const [teacher, student, template] = await Promise.all([
     prisma.user.findUniqueOrThrow({
@@ -320,26 +318,7 @@ test("教师可以删除空草稿课程并保留班级、成员和账号", async
     },
   });
 
-  const deletedStorageKeys: string[] = [];
-  const storage: StorageService = {
-    save: async () => undefined,
-    read: async () => Buffer.alloc(0),
-    delete: async (storageKey) => {
-      assert.equal(
-        await prisma.course.count({ where: { id: course.id } }),
-        0,
-        "物理文件只能在数据库事务提交后删除",
-      );
-      deletedStorageKeys.push(storageKey);
-    },
-  };
-
-  const result = await deleteTeacherCourse(
-    teacher.id,
-    course.id,
-    auditContext,
-    { storage },
-  );
+  const result = await deleteTeacherCourse(teacher.id, course.id, auditContext);
   assert.equal(result.id, course.id);
   assert.equal(
     (await listTeacherCourses(teacher.id)).some(
@@ -347,14 +326,36 @@ test("教师可以删除空草稿课程并保留班级、成员和账号", async
     ),
     false,
   );
-  assert.deepEqual(
-    deletedStorageKeys.sort(),
-    [courseFile.storageKey, syllabus.storageKey].sort(),
-  );
   assert.equal(
     await prisma.studentImportBatch.count({ where: { id: batch.id } }),
-    0,
+    1,
   );
+  assert.equal(
+    await prisma.courseFileVersion.count({ where: { id: courseFile.id } }),
+    1,
+  );
+  assert.equal(
+    await prisma.courseSyllabus.count({ where: { id: syllabus.id } }),
+    1,
+  );
+
+  const deletedCourse = await prisma.course.findUniqueOrThrow({
+    where: { id: course.id },
+    select: { status: true, archivedAt: true },
+  });
+  assert.equal(deletedCourse.status, CourseStatus.ARCHIVED);
+  assert.ok(deletedCourse.archivedAt);
+
+  const replacementCourse = await prisma.course.create({
+    data: {
+      templateId: template.id,
+      teacherId: teacher.id,
+      courseNo: course.courseNo,
+      term: course.term,
+      name: "删除后重建课程",
+      status: CourseStatus.ACTIVE,
+    },
+  });
 
   const preservedClassroom = await prisma.classroom.findUniqueOrThrow({
     where: { id: classroom.id },
@@ -366,7 +367,7 @@ test("教师可以删除空草稿课程并保留班级、成员和账号", async
       },
     },
   });
-  assert.equal(preservedClassroom.courseId, null);
+  assert.equal(preservedClassroom.courseId, course.id);
   assert.equal(preservedClassroom.memberships.length, 1);
   assert.equal(
     await prisma.user.count({
@@ -390,13 +391,19 @@ test("教师可以删除空草稿课程并保留班级、成员和账号", async
   );
 
   await prisma.auditLog.delete({ where: { id: audit.id } });
+  await prisma.studentImportRow.deleteMany({ where: { batchId: batch.id } });
+  await prisma.studentImportBatch.delete({ where: { id: batch.id } });
+  await prisma.courseFileVersion.delete({ where: { id: courseFile.id } });
+  await prisma.courseSyllabus.delete({ where: { id: syllabus.id } });
   await prisma.classMembership.deleteMany({
     where: { classroomId: classroom.id },
   });
   await prisma.classroom.delete({ where: { id: classroom.id } });
+  await prisma.course.delete({ where: { id: replacementCourse.id } });
+  await prisma.course.delete({ where: { id: course.id } });
 });
 
-test("课程删除会阻止正式教学数据并在数据库异常时完整回滚", async () => {
+test("课程可在已有正式教学数据时删除，跨教师访问受限且审计异常完整回滚", async () => {
   const suffix = randomBytes(4).toString("hex");
   const [teacher, teacherTwo, template] = await Promise.all([
     prisma.user.findUniqueOrThrow({
@@ -444,16 +451,28 @@ test("课程删除会阻止正式教学数据并在数据库异常时完整回�
   });
 
   await assert.rejects(
-    () => deleteTeacherCourse(teacher.id, protectedCourse.id, auditContext),
-    /已经产生作业/u,
-  );
-  assert.equal(
-    await prisma.course.count({ where: { id: protectedCourse.id } }),
-    1,
-  );
-  await assert.rejects(
     () => deleteTeacherCourse(teacherTwo.id, protectedCourse.id, auditContext),
     /课程不存在/u,
+  );
+  await deleteTeacherCourse(teacher.id, protectedCourse.id, auditContext);
+  const archivedCourse = await prisma.course.findUniqueOrThrow({
+    where: { id: protectedCourse.id },
+    select: { status: true, archivedAt: true },
+  });
+  assert.equal(archivedCourse.status, CourseStatus.ARCHIVED);
+  assert.ok(archivedCourse.archivedAt);
+  assert.equal(
+    await prisma.assignment.count({ where: { id: assignment.id } }),
+    1,
+  );
+  assert.equal(
+    (
+      await prisma.classroom.findUniqueOrThrow({
+        where: { id: protectedClassroom.id },
+        select: { courseId: true },
+      })
+    ).courseId,
+    protectedCourse.id,
   );
   await assert.rejects(
     () =>
@@ -474,27 +493,23 @@ test("课程删除会阻止正式教学数据并在数据库异常时完整回�
       name: "事务回滚班级",
     },
   });
-  let storageDeleteCalled = false;
   await assert.rejects(
     () =>
       deleteTeacherCourse(teacher.id, rollbackCourse.id, auditContext, {
-        storage: {
-          save: async () => undefined,
-          read: async () => Buffer.alloc(0),
-          delete: async () => {
-            storageDeleteCalled = true;
-          },
-        },
         writeAuditLog: async () => {
           throw new Error("simulated audit database failure");
         },
       }),
     /simulated audit database failure/u,
   );
-  assert.equal(storageDeleteCalled, false);
   assert.equal(
-    await prisma.course.count({ where: { id: rollbackCourse.id } }),
-    1,
+    (
+      await prisma.course.findUniqueOrThrow({
+        where: { id: rollbackCourse.id },
+        select: { status: true, archivedAt: true },
+      })
+    ).status,
+    CourseStatus.DRAFT,
   );
   assert.equal(
     (
@@ -507,6 +522,9 @@ test("课程删除会阻止正式教学数据并在数据库异常时完整回�
   );
 
   await prisma.assignment.delete({ where: { id: assignment.id } });
+  await prisma.auditLog.deleteMany({
+    where: { targetId: protectedCourse.id },
+  });
   await prisma.classroom.deleteMany({
     where: { id: { in: [protectedClassroom.id, rollbackClassroom.id] } },
   });
@@ -515,7 +533,7 @@ test("课程删除会阻止正式教学数据并在数据库异常时完整回�
   });
 });
 
-test("课程数据库删除成功后文件清理失败只记录错误", async () => {
+test("课程删除不清理已上传文件", async () => {
   const suffix = randomBytes(4).toString("hex");
   const [teacher, template] = await Promise.all([
     prisma.user.findUniqueOrThrow({
@@ -547,37 +565,29 @@ test("课程数据库删除成功后文件清理失败只记录错误", async ()
       storageKey: `course-syllabi/cleanup-failure-${suffix}.pdf`,
     },
   });
-  const loggedErrors: unknown[][] = [];
-
-  const result = await deleteTeacherCourse(
-    teacher.id,
-    course.id,
-    auditContext,
-    {
-      storage: {
-        save: async () => undefined,
-        read: async () => Buffer.alloc(0),
-        delete: async () => {
-          throw new Error("simulated file cleanup failure");
-        },
-      },
-      logger: {
-        error: (...args: unknown[]) => {
-          loggedErrors.push(args);
-        },
-      },
-    },
-  );
+  const result = await deleteTeacherCourse(teacher.id, course.id, auditContext);
 
   assert.equal(result.id, course.id);
-  assert.equal(await prisma.course.count({ where: { id: course.id } }), 0);
-  assert.equal(loggedErrors.length, 1);
-  assert.match(String(loggedErrors[0]?.[0]), /Failed to delete course file/u);
+  assert.equal(
+    (
+      await prisma.course.findUniqueOrThrow({
+        where: { id: course.id },
+        select: { status: true },
+      })
+    ).status,
+    CourseStatus.ARCHIVED,
+  );
+  const preservedSyllabus = await prisma.courseSyllabus.findFirstOrThrow({
+    where: { courseId: course.id },
+  });
+  assert.match(preservedSyllabus.storageKey, /cleanup-failure/u);
 
   await prisma.auditLog.deleteMany({ where: { targetId: course.id } });
+  await prisma.courseSyllabus.deleteMany({ where: { courseId: course.id } });
+  await prisma.course.delete({ where: { id: course.id } });
 });
 
-test("已执行但未落地任何业务关系的空导入批次不阻止删除草稿课程", async () => {
+test("课程软删除保留已执行的空导入批次", async () => {
   const suffix = randomBytes(4).toString("hex");
   const [teacher, template] = await Promise.all([
     prisma.user.findUniqueOrThrow({
@@ -629,13 +639,24 @@ test("已执行但未落地任何业务关系的空导入批次不阻止删除�
       importedRows: 0,
     },
   });
-  await deleteTeacherCourse(teacher.id, course.id, auditContext, {
-    storage: {
-      save: async () => undefined,
-      read: async () => Buffer.alloc(0),
-      delete: async () => undefined,
-    },
-  });
-  assert.equal(await prisma.course.count({ where: { id: course.id } }), 0);
+  await deleteTeacherCourse(teacher.id, course.id, auditContext);
+  assert.equal(
+    (
+      await prisma.course.findUniqueOrThrow({
+        where: { id: course.id },
+        select: { status: true },
+      })
+    ).status,
+    CourseStatus.ARCHIVED,
+  );
+  assert.equal(
+    await prisma.studentImportBatch.count({ where: { courseId: course.id } }),
+    1,
+  );
   await prisma.auditLog.deleteMany({ where: { targetId: course.id } });
+  await prisma.studentImportBatch.deleteMany({
+    where: { courseId: course.id },
+  });
+  await prisma.courseFileVersion.delete({ where: { id: file.id } });
+  await prisma.course.delete({ where: { id: course.id } });
 });

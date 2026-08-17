@@ -1019,25 +1019,14 @@ async function main(): Promise<void> {
       true,
     );
 
-    assert.equal(
-      (
-        await requestJson(
-          `/api/teacher/courses/${createdCourse.data.id}`,
-          teacherCookie,
-          "DELETE",
-        )
-      ).status,
-      409,
-    );
-
     const deletableCourse = await prisma.course.create({
       data: {
         templateId: createdTemplate.data.id,
         teacherId: teacher.id,
         courseNo: `HTTP-DELETE-${randomBytes(3).toString("hex").toUpperCase()}`,
         term: "2026-2027-1",
-        name: "HTTP 可删除草稿课程",
-        status: "DRAFT",
+        name: "HTTP 可直接删除启用课程",
+        status: "ACTIVE",
       },
       select: { id: true },
     });
@@ -1099,6 +1088,15 @@ async function main(): Promise<void> {
     );
     assert.equal(
       (
+        await prisma.course.findUniqueOrThrow({
+          where: { id: deletableCourse.id },
+          select: { status: true },
+        })
+      ).status,
+      "ARCHIVED",
+    );
+    assert.equal(
+      (
         await requestJson(
           `/api/teacher/courses/${deletableCourse.id}`,
           teacherCookie,
@@ -1157,7 +1155,26 @@ async function main(): Promise<void> {
           "DELETE",
         )
       ).status,
-      409,
+      200,
+    );
+    const preservedFormalCourse = await prisma.course.findUniqueOrThrow({
+      where: { id: formalCourse.id },
+      select: { status: true, archivedAt: true },
+    });
+    assert.equal(preservedFormalCourse.status, "ARCHIVED");
+    assert.ok(preservedFormalCourse.archivedAt);
+    assert.equal(
+      await prisma.assignment.count({ where: { id: formalAssignment.id } }),
+      1,
+    );
+    assert.equal(
+      (
+        await prisma.classroom.findUniqueOrThrow({
+          where: { id: formalClassroom.id },
+          select: { courseId: true },
+        })
+      ).courseId,
+      formalCourse.id,
     );
 
     assert.equal(
@@ -1694,7 +1711,7 @@ async function main(): Promise<void> {
     );
 
     console.info(
-      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation and safe deletion, file upload versioning, protected downloads, roster preview and execution, concurrent and cross-batch idempotency, pending identity registration, legacy credential endpoint isolation, ownership isolation, classroom linking, unlinking, and invalid input handling.",
+      "Course HTTP integration checks passed: template governance, teacher template visibility, course creation and history-preserving direct deletion, file upload versioning, protected downloads, roster preview and execution, concurrent and cross-batch idempotency, pending identity registration, legacy credential endpoint isolation, ownership isolation, classroom linking, unlinking, and invalid input handling.",
     );
   } finally {
     if (createdAssignmentIds.length > 0) {
