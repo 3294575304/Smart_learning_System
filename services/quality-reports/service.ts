@@ -41,11 +41,13 @@ import { QualityReportOperationError } from "@/services/quality-reports/errors";
 import {
   qualityReportPlatformInputSchema,
   qualityReportSourceSnapshotSchema,
+  qualityReportSurveySnapshotSchema,
   qualityReportUploadMetadataSchema,
   type QualityReportSourceSnapshot,
 } from "@/services/quality-reports/schemas";
 import { parseUploadedGradeWorkbook } from "@/services/quality-reports/upload-parser";
 import { buildQualityReportWorkbook } from "@/services/quality-reports/xlsx-writer";
+import { enhanceQualityReportNarrative } from "@/services/quality-reports/ai";
 import { getStorageService } from "@/services/storage";
 
 const json = (value: unknown) =>
@@ -84,6 +86,63 @@ async function ownedCourse(teacherId: string, courseId: string) {
   });
   if (!course) throw new ResourceNotFoundError("课程不存在。");
   return course;
+}
+
+async function latestSurveySnapshot(
+  courseId: string,
+  classroomId: string | null,
+) {
+  if (!classroomId) return null;
+  const survey = await prisma.courseSurvey.findFirst({
+    where: {
+      courseId,
+      classroomId,
+      status: "CLOSED",
+      summaryRevisions: { some: {} },
+    },
+    orderBy: [{ closedAt: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      title: true,
+      mode: true,
+      summaryRevisions: {
+        orderBy: { revisionNumber: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          revisionNumber: true,
+          responseCount: true,
+          eligibleCount: true,
+          isSuppressed: true,
+          statisticsJson: true,
+          themesJson: true,
+          ruleVersion: true,
+        },
+      },
+    },
+  });
+  const summary = survey?.summaryRevisions[0];
+  if (!survey || !summary) return null;
+  const statistics = summary.statisticsJson as Record<string, unknown>;
+  const themes = summary.themesJson as Record<string, unknown>;
+  return qualityReportSurveySnapshotSchema.parse({
+    surveyId: survey.id,
+    title: survey.title,
+    mode: survey.mode,
+    summaryRevisionId: summary.id,
+    summaryRevisionNumber: summary.revisionNumber,
+    responseCount: summary.responseCount,
+    eligibleCount: summary.eligibleCount,
+    responseRate: statistics.responseRate ?? 0,
+    minSampleSize: statistics.minSampleSize ?? 5,
+    isSuppressed: summary.isSuppressed,
+    overallMean: statistics.overallMean ?? null,
+    outcomes: statistics.outcomes ?? [],
+    dimensions: statistics.dimensions ?? [],
+    themes: themes.themes ?? [],
+    themeNarrative: themes.narrative ?? "暂无可汇总的开放题主题。",
+    ruleVersion: summary.ruleVersion,
+  });
 }
 
 function componentResults(value: Prisma.JsonValue) {
@@ -188,6 +247,7 @@ async function platformSource(
   const attended = attendance.filter((item) =>
     ["PRESENT", "LATE", "EARLY_LEAVE"].includes(item.currentStatus),
   ).length;
+  const survey = await latestSurveySnapshot(courseId, gradebook.classroomId);
   return qualityReportSourceSnapshotSchema.parse({
     course: {
       id: gradebook.course.id,
@@ -240,6 +300,7 @@ async function platformSource(
       sessionCount: new Set(attendance.map((item) => item.sessionId)).size,
       presentRate: attendance.length ? attended / attendance.length : null,
     },
+    survey,
     sourceReference: {
       gradebookId: gradebook.id,
       gradebookPublicationId: gradebook.currentPublication.id,
@@ -278,6 +339,7 @@ async function uploadSource(
     if (!owned) throw new ResourceNotFoundError("班级不存在。");
     classroom = owned;
   }
+  const survey = await latestSurveySnapshot(courseId, classroom.id);
   return {
     data,
     extension,
@@ -306,6 +368,7 @@ async function uploadSource(
       ...parsed,
       outcomes: [],
       attendance: { sessionCount: 0, presentRate: null },
+      survey,
       sourceReference: { fileName: file.name, checksumSha256: sha256(data) },
     }),
   };
@@ -526,7 +589,16 @@ export async function processQualityReportJob(
       report.sourceSnapshotJson,
     );
     const statistics = calculateQualityReportStatistics(source);
-    const narrative = buildDeterministicNarrative(source, statistics);
+    const deterministicNarrative = buildDeterministicNarrative(
+      source,
+      statistics,
+    );
+    const narrativeExecution = await enhanceQualityReportNarrative(
+      source,
+      statistics,
+      deterministicNarrative,
+    );
+    const narrative = narrativeExecution.output;
     await heartbeatBackgroundJob(report.backgroundJobId, {
       leaseId,
       progress: 40,
@@ -562,7 +634,11 @@ export async function processQualityReportJob(
             status: QualityReportStatus.SUCCEEDED,
             statisticsSnapshotJson: json(statistics),
             narrativeSnapshotJson: json(narrative),
-            aiStatus: "FALLBACK",
+            aiStatus: narrativeExecution.fallbackUsed
+              ? "FALLBACK"
+              : "SUCCEEDED",
+            aiProvider: narrativeExecution.provider,
+            aiModel: narrativeExecution.model,
             docxStorageKey: docxKey,
             docxFileName: `${source.course.name}-教学质量分析报告-v${report.versionNumber}.docx`,
             docxSizeBytes: docx.length,

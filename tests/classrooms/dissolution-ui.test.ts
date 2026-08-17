@@ -34,22 +34,43 @@ test("班级卡片详情和操作菜单使用独立交互区域", () => {
   );
 });
 
-test("解散确认要求完整班级名并提供 loading、防重复提交和即时移除", async () => {
-  const source = await readFile(
+test("解散确认只要求原因，并在课程管理页提供直接入口和完整反馈", async () => {
+  const dialogSource = await readFile(
+    new URL(
+      "../../components/classrooms/dissolve-classroom-dialog.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const listSource = await readFile(
     new URL(
       "../../components/classrooms/teacher-classroom-list.tsx",
       import.meta.url,
     ),
     "utf8",
   );
-  assert.match(source, /请输入完整班级名称以确认/u);
-  assert.match(source, /confirmation !== classroom\.name/u);
-  assert.match(source, /if \(isDissolving/u);
-  assert.match(source, /disabled=\{isDissolving/u);
-  assert.match(source, /解散中\.\.\./u);
-  assert.match(source, /学生账号不会被删除/u);
-  assert.match(source, /此操作无法恢复/u);
-  assert.match(source, /setClassrooms\(\(items\) =>/u);
-  assert.match(source, /班级已解散，学生账号未删除/u);
-  assert.match(source, /event\.stopPropagation\(\)/u);
+  const courseSource = await readFile(
+    new URL(
+      "../../components/courses/course-classroom-manager.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(dialogSource, /解散原因/u);
+  assert.match(dialogSource, /reason\.trim\(\)\.length < 2/u);
+  assert.match(
+    dialogSource,
+    /JSON\.stringify\(\{ reason: normalizedReason \}\)/u,
+  );
+  assert.match(dialogSource, /if \(isDissolving/u);
+  assert.match(dialogSource, /disabled=\{isDissolving/u);
+  assert.match(dialogSource, /解散中\.\.\./u);
+  assert.match(dialogSource, /既有作业、成绩和学习记录会保留/u);
+  assert.doesNotMatch(dialogSource, /请输入完整班级名称/u);
+  assert.match(listSource, /setClassrooms\(\(items\) =>/u);
+  assert.match(listSource, /历史教学数据已保留/u);
+  assert.match(listSource, /event\.stopPropagation\(\)/u);
+  assert.match(courseSource, /解散班级/u);
+  assert.match(courseSource, /setDissolvingClassroom/u);
+  assert.match(courseSource, /notifiedStudentCount/u);
 });

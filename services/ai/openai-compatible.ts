@@ -15,6 +15,7 @@ import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 import type { QuestionMappingAIInput } from "@/services/question-mapping/schemas";
 import type { SelfReflectionAIInput } from "@/services/self-reflections/schemas";
+import type { QualityReportAIInput } from "@/services/quality-reports/schemas";
 
 const chatResponseSchema = z
   .object({
@@ -207,6 +208,28 @@ export class OpenAICompatibleProvider implements AIProvider {
           { role: "user", content: JSON.stringify(input) },
         ],
         options.signal,
+      )
+    ).content;
+  }
+
+  async writeQualityReportNarrative(
+    input: QualityReportAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    const repair = options.validationError
+      ? `上次输出无效：${options.validationError}。请修复。`
+      : "";
+    return (
+      await this.completeJson(
+        [
+          {
+            role: "system",
+            content: `你只根据去标识化的课程聚合统计撰写教学质量分析。严格返回 JSON：{"gradeAnalysis":"...","outcomeAnalysis":"...","studentEvaluation":"...","summary":"..."}。不得编造统计、学生身份或因果关系；学生问卷自评必须与客观成绩和课程目标定量达成度分开表述；数据不足时明确说明。每字段不超过 1000 个汉字。${repair}`,
+          },
+          { role: "user", content: JSON.stringify(input) },
+        ],
+        options.signal,
+        2_500,
       )
     ).content;
   }

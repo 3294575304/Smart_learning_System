@@ -41,6 +41,47 @@ export const reportStudentSchema = z.object({
   totalScore: z.number().min(0).max(100).nullable(),
 });
 
+export const qualityReportSurveySnapshotSchema = z
+  .object({
+    surveyId: z.string().cuid(),
+    title: z.string(),
+    mode: z.enum(["IDENTIFIED", "ANONYMOUS"]),
+    summaryRevisionId: z.string().cuid(),
+    summaryRevisionNumber: z.number().int().positive(),
+    responseCount: z.number().int().nonnegative(),
+    eligibleCount: z.number().int().nonnegative(),
+    responseRate: z.number().min(0).max(1),
+    minSampleSize: z.number().int().positive(),
+    isSuppressed: z.boolean(),
+    overallMean: z.number().min(1).max(5).nullable(),
+    outcomes: z.array(
+      z.object({
+        code: z.string(),
+        title: z.string().nullable(),
+        count: z.number().int().nonnegative(),
+        mean: z.number().min(1).max(5),
+      }),
+    ),
+    dimensions: z.array(
+      z.object({
+        code: z.string(),
+        title: z.string().nullable(),
+        count: z.number().int().nonnegative(),
+        mean: z.number().min(1).max(5),
+      }),
+    ),
+    themes: z.array(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        count: z.number().int().positive(),
+      }),
+    ),
+    themeNarrative: z.string(),
+    ruleVersion: z.string(),
+  })
+  .nullable();
+
 export const qualityReportSourceSnapshotSchema = z.object({
   course: z.object({
     id: z.string().cuid(),
@@ -71,9 +112,43 @@ export const qualityReportSourceSnapshotSchema = z.object({
     sessionCount: z.number().int().nonnegative(),
     presentRate: z.number().min(0).max(1).nullable(),
   }),
+  survey: qualityReportSurveySnapshotSchema.default(null),
   sourceReference: z.record(z.unknown()),
 });
 
 export type QualityReportSourceSnapshot = z.infer<
   typeof qualityReportSourceSnapshotSchema
 >;
+
+export const qualityReportNarrativeSchema = z
+  .object({
+    gradeAnalysis: z.string().trim().min(1).max(3000),
+    outcomeAnalysis: z.string().trim().min(1).max(3000),
+    studentEvaluation: z.string().trim().min(1).max(3000),
+    summary: z.string().trim().min(1).max(3000),
+  })
+  .strict();
+
+export interface QualityReportAIInput {
+  course: { name: string; courseNo: string; term: string };
+  statistics: {
+    participantCount: number;
+    mean: number | null;
+    passRate: number | null;
+    excellentRate: number | null;
+    componentMeans: Array<{
+      name: string;
+      weight: number;
+      mean: number | null;
+    }>;
+    outcomes: Array<{
+      code: string;
+      title: string;
+      threshold: number;
+      attainmentIndex: number | null;
+    }>;
+    attendance: { sessionCount: number; presentRate: number | null };
+  };
+  survey: QualityReportSourceSnapshot["survey"];
+  deterministicBaseline: z.infer<typeof qualityReportNarrativeSchema>;
+}

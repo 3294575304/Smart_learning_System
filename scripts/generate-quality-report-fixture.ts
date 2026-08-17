@@ -81,6 +81,7 @@ const source: QualityReportSourceSnapshot = {
     },
   ],
   attendance: { sessionCount: 8, presentRate: 0.94 },
+  survey: null,
   sourceReference: { fixture: true },
 };
 const statistics = calculateQualityReportStatistics(source);

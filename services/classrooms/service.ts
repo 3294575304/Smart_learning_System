@@ -13,13 +13,13 @@ import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { ClassroomOperationError } from "@/services/classrooms/errors";
 import { generateJoinCode } from "@/services/classrooms/join-code";
+import type { DissolveClassroomData } from "@/services/classrooms/schemas";
 import {
   assertClassroomCanAcceptStudents,
   assertMembershipCanJoin,
   assertStudentCanLeave,
 } from "@/services/classrooms/policy";
-import { getStorageService } from "@/services/storage";
-import type { StorageService } from "@/services/storage/types";
+import { notifyClassroomDissolved } from "@/services/notifications/events/classroom";
 
 const INVITE_CODE_ATTEMPTS = 8;
 
@@ -76,7 +76,11 @@ async function requireTeacherClassroom(
   status: ClassroomStatus;
 }> {
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId },
+    where: {
+      id: classroomId,
+      teacherId,
+      status: { not: ClassroomStatus.ARCHIVED },
+    },
     select: { id: true, joinCode: true, status: true },
   });
 
@@ -91,7 +95,7 @@ export async function listTeacherClassrooms(
   teacherId: string,
 ): Promise<TeacherClassroomListItem[]> {
   const classrooms = await prisma.classroom.findMany({
-    where: { teacherId },
+    where: { teacherId, status: { not: ClassroomStatus.ARCHIVED } },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -120,13 +124,13 @@ export interface ClassroomDissolutionResult {
   id: string;
   name: string;
   releasedStudentCount: number;
+  notifiedStudentCount: number;
   dissolvedAt: Date;
 }
 
 export interface ClassroomDissolutionDependencies {
   writeAuditLog?: typeof writeGovernanceAuditLog;
-  logger?: Pick<Console, "error">;
-  storage?: StorageService;
+  notifyStudents?: typeof notifyClassroomDissolved;
 }
 
 function isTransactionConflict(error: unknown): boolean {
@@ -139,13 +143,13 @@ function isTransactionConflict(error: unknown): boolean {
 export async function dissolveTeacherClassroom(
   teacherId: string,
   classroomId: string,
+  input: DissolveClassroomData,
   context: AuditRequestContext,
   dependencies: ClassroomDissolutionDependencies = {},
 ): Promise<ClassroomDissolutionResult> {
   const writeAuditLog = dependencies.writeAuditLog ?? writeGovernanceAuditLog;
-  const logger = dependencies.logger ?? console;
-  const storage = dependencies.storage ?? getStorageService();
-  let storageKeys: string[] = [];
+  const notifyStudents =
+    dependencies.notifyStudents ?? notifyClassroomDissolved;
   let result: ClassroomDissolutionResult | undefined;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -165,11 +169,23 @@ export async function dissolveTeacherClassroom(
               teacherId: true,
               courseId: true,
               joinCode: true,
-              _count: { select: { memberships: true } },
+              status: true,
+              closedAt: true,
+              dissolvedAt: true,
+              memberships: {
+                where: { status: MembershipStatus.ACTIVE },
+                select: { studentId: true },
+              },
             },
           });
           if (!classroom) {
             throw new ResourceNotFoundError("班级不存在");
+          }
+          if (
+            classroom.status === ClassroomStatus.ARCHIVED ||
+            classroom.dissolvedAt
+          ) {
+            throw new ClassroomOperationError("该班级已经解散。", 409);
           }
 
           await transaction.$queryRaw<Array<{ id: string }>>`
@@ -177,54 +193,54 @@ export async function dissolveTeacherClassroom(
             WHERE "classroomId" = ${classroomId}
             FOR UPDATE
           `;
-          const [assignmentCount, analysisCount, processingBatchCount] =
-            await Promise.all([
-              transaction.assignment.count({ where: { classroomId } }),
-              transaction.aIAnalysis.count({ where: { classroomId } }),
-              transaction.studentImportBatch.count({
-                where: {
-                  classroomId,
-                  status: StudentImportBatchStatus.PROCESSING,
-                },
-              }),
-            ]);
-          if (assignmentCount > 0) {
-            throw new ClassroomOperationError(
-              "该班级已经产生作业、学生作答、成绩或批改记录，不能解散。",
-              409,
-            );
-          }
-          if (analysisCount > 0) {
-            throw new ClassroomOperationError(
-              "该班级已经产生学情分析、画像或推荐数据，不能解散。",
-              409,
-            );
-          }
-          if (processingBatchCount > 0) {
-            throw new ClassroomOperationError(
-              "该班级的学生名单正在处理，请稍后再试。",
-              409,
-            );
-          }
-
-          const files = await transaction.courseFileVersion.findMany({
-            where: { classroomId },
-            select: { storageKey: true },
-          });
           const dissolvedAt = new Date();
+          const recipientIds = classroom.memberships.map(
+            (membership) => membership.studentId,
+          );
+
+          const notificationResult = await notifyStudents(
+            {
+              classroomId,
+              classroomName: classroom.name,
+              reason: input.reason,
+              recipientIds,
+            },
+            transaction,
+          );
+
+          await transaction.classMembership.updateMany({
+            where: { classroomId, status: MembershipStatus.ACTIVE },
+            data: { status: MembershipStatus.REMOVED, endedAt: dissolvedAt },
+          });
           await transaction.studentIdentityClassroomAssignment.deleteMany({
             where: { classroomId },
           });
-          await transaction.studentImportBatch.deleteMany({
-            where: { classroomId },
+          await transaction.studentImportBatch.updateMany({
+            where: {
+              classroomId,
+              status: {
+                in: [
+                  StudentImportBatchStatus.UPLOADED,
+                  StudentImportBatchStatus.PREVIEW_READY,
+                  StudentImportBatchStatus.CONFIRMED,
+                  StudentImportBatchStatus.PROCESSING,
+                ],
+              },
+            },
+            data: {
+              status: StudentImportBatchStatus.CANCELLED,
+              completedAt: dissolvedAt,
+            },
           });
-          await transaction.classMembership.deleteMany({
-            where: { classroomId },
+          await transaction.classroom.update({
+            where: { id: classroomId },
+            data: {
+              status: ClassroomStatus.ARCHIVED,
+              closedAt: classroom.closedAt ?? dissolvedAt,
+              dissolvedAt,
+              dissolutionReason: input.reason,
+            },
           });
-          await transaction.courseFileVersion.deleteMany({
-            where: { classroomId },
-          });
-          await transaction.classroom.delete({ where: { id: classroomId } });
 
           await writeAuditLog(transaction, {
             actorId: teacherId,
@@ -236,9 +252,10 @@ export async function dissolveTeacherClassroom(
               classroomId,
               name: classroom.name,
               teacherId: classroom.teacherId,
-              memberCount: classroom._count.memberships,
+              memberCount: classroom.memberships.length,
               courseId: classroom.courseId,
               joinCode: classroom.joinCode,
+              status: classroom.status,
             },
             afterData: {
               classroomId,
@@ -246,6 +263,9 @@ export async function dissolveTeacherClassroom(
               courseId: classroom.courseId,
               dissolvedById: teacherId,
               dissolvedAt: dissolvedAt.toISOString(),
+              dissolutionReason: input.reason,
+              status: ClassroomStatus.ARCHIVED,
+              notifiedStudentCount: notificationResult.createdCount,
             },
             context,
           });
@@ -253,16 +273,15 @@ export async function dissolveTeacherClassroom(
             result: {
               id: classroomId,
               name: classroom.name,
-              releasedStudentCount: classroom._count.memberships,
+              releasedStudentCount: classroom.memberships.length,
+              notifiedStudentCount: notificationResult.createdCount,
               dissolvedAt,
             },
-            storageKeys: files.map((file) => file.storageKey),
           };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
       result = transactionResult.result;
-      storageKeys = transactionResult.storageKeys;
       break;
     } catch (error: unknown) {
       if (isTransactionConflict(error) && attempt < 2) continue;
@@ -273,17 +292,6 @@ export async function dissolveTeacherClassroom(
   if (!result) {
     throw new ClassroomOperationError("班级解散冲突，请稍后重试。", 409);
   }
-  const cleanupResults = await Promise.allSettled(
-    [...new Set(storageKeys)].map((key) => storage.delete(key)),
-  );
-  cleanupResults.forEach((cleanup, index) => {
-    if (cleanup.status === "rejected") {
-      logger.error(
-        `Failed to delete classroom file after dissolution: ${storageKeys[index]}`,
-        cleanup.reason,
-      );
-    }
-  });
   return result;
 }
 
@@ -292,7 +300,11 @@ export async function getTeacherClassroom(
   classroomId: string,
 ): Promise<TeacherClassroomDetail> {
   const classroom = await prisma.classroom.findFirst({
-    where: { id: classroomId, teacherId },
+    where: {
+      id: classroomId,
+      teacherId,
+      status: { not: ClassroomStatus.ARCHIVED },
+    },
     select: {
       id: true,
       name: true,

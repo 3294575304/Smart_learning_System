@@ -139,7 +139,7 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
         <div>
           <h2 className="font-semibold">生成课程教学质量分析</h2>
           <p className="mt-1 text-sm text-gray-600">
-            使用平台正式数据或上传独立成绩文件；两种来源都会冻结为不可变快照。
+            使用平台正式数据或上传独立成绩文件；两种来源都会冻结为不可变快照，并自动纳入同班级最近一次已关闭问卷的匿名聚合结果。
           </p>
         </div>
         <div className="flex gap-3">

@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
-import { AuditAction, PrismaClient } from "@prisma/client";
+import {
+  AssignmentStatus,
+  AuditAction,
+  ClassroomStatus,
+  MembershipStatus,
+  NotificationType,
+  PrismaClient,
+} from "@prisma/client";
 
 import { dissolveTeacherClassroom } from "@/services/classrooms/service";
 
 const prisma = new PrismaClient();
 const auditContext = { ipAddress: "127.0.0.1", userAgent: "test" };
 
-test("教师解散只有成员的班级并保留账号、其他班级关系和课程", async () => {
+test("教师可解散已有学生和已发布作业的班级并通知学生、保留历史数据", async () => {
   const suffix = randomBytes(4).toString("hex").toUpperCase();
   const [teacher, student, template] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { email: "teacher@example.com" } }),
@@ -41,30 +48,47 @@ test("教师解散只有成员的班级并保留账号、其他班级关系和�
       name: "待解散班级",
       joinCode: `DROP${suffix}`,
       memberships: { create: { studentId: student.id } },
+      assignments: {
+        create: {
+          teacherId: teacher.id,
+          title: "已发布历史作业",
+          status: AssignmentStatus.PUBLISHED,
+          publishedAt: new Date(),
+        },
+      },
     },
   });
+  const reason = "本学期教学已经结束";
   const result = await dissolveTeacherClassroom(
     teacher.id,
     classroom.id,
+    { reason },
     auditContext,
-    {
-      storage: {
-        save: async () => undefined,
-        read: async () => Buffer.alloc(0),
-        delete: async () => undefined,
-      },
-    },
   );
   assert.equal(result.releasedStudentCount, 1);
+  assert.equal(result.notifiedStudentCount, 1);
+  const dissolved = await prisma.classroom.findUniqueOrThrow({
+    where: { id: classroom.id },
+  });
+  assert.equal(dissolved.status, ClassroomStatus.ARCHIVED);
+  assert.equal(dissolved.dissolutionReason, reason);
+  assert.ok(dissolved.dissolvedAt);
   assert.equal(
-    await prisma.classroom.count({ where: { id: classroom.id } }),
-    0,
+    (
+      await prisma.classMembership.findUniqueOrThrow({
+        where: {
+          classroomId_studentId: {
+            classroomId: classroom.id,
+            studentId: student.id,
+          },
+        },
+      })
+    ).status,
+    MembershipStatus.REMOVED,
   );
   assert.equal(
-    await prisma.classMembership.count({
-      where: { classroomId: classroom.id },
-    }),
-    0,
+    await prisma.assignment.count({ where: { classroomId: classroom.id } }),
+    1,
   );
   assert.equal(await prisma.user.count({ where: { id: student.id } }), 1);
   assert.equal(
@@ -78,7 +102,25 @@ test("教师解散只有成员的班级并保留账号、其他班级关系和�
     where: { action: AuditAction.CLASSROOM_DISSOLVED, targetId: classroom.id },
   });
   assert.equal((audit.beforeData as { memberCount?: number }).memberCount, 1);
+  assert.equal(
+    (audit.afterData as { dissolutionReason?: string }).dissolutionReason,
+    reason,
+  );
+  const notification = await prisma.notification.findFirstOrThrow({
+    where: {
+      recipientId: student.id,
+      type: NotificationType.CLASSROOM_DISSOLVED,
+      sourceId: classroom.id,
+    },
+  });
+  assert.match(notification.content, /本学期教学已经结束/u);
+  await prisma.notification.delete({ where: { id: notification.id } });
   await prisma.auditLog.delete({ where: { id: audit.id } });
+  await prisma.assignment.deleteMany({ where: { classroomId: classroom.id } });
+  await prisma.classMembership.deleteMany({
+    where: { classroomId: classroom.id },
+  });
+  await prisma.classroom.delete({ where: { id: classroom.id } });
   await prisma.classMembership.delete({
     where: {
       classroomId_studentId: { classroomId: other.id, studentId: student.id },
@@ -88,56 +130,66 @@ test("教师解散只有成员的班级并保留账号、其他班级关系和�
   await prisma.course.delete({ where: { id: course.id } });
 });
 
-test("正式教学数据阻止解散且审计异常会回滚", async () => {
+test("审计异常会回滚班级状态、成员移除和学生通知", async () => {
   const suffix = randomBytes(4).toString("hex").toUpperCase();
   const teacher = await prisma.user.findUniqueOrThrow({
     where: { email: "teacher@example.com" },
   });
-  const protectedClassroom = await prisma.classroom.create({
-    data: {
-      teacherId: teacher.id,
-      name: "正式数据班级",
-      joinCode: `FORM${suffix}`,
-      assignments: { create: { teacherId: teacher.id, title: "已有作业" } },
-    },
+  const student = await prisma.user.findUniqueOrThrow({
+    where: { email: "student@example.com" },
   });
-  await assert.rejects(
-    () =>
-      dissolveTeacherClassroom(teacher.id, protectedClassroom.id, auditContext),
-    /已经产生作业/u,
-  );
-  assert.equal(
-    await prisma.classroom.count({ where: { id: protectedClassroom.id } }),
-    1,
-  );
   const rollbackClassroom = await prisma.classroom.create({
     data: {
       teacherId: teacher.id,
       name: "回滚班级",
       joinCode: `ROLL${suffix}`,
+      memberships: { create: { studentId: student.id } },
     },
   });
   await assert.rejects(
     () =>
-      dissolveTeacherClassroom(teacher.id, rollbackClassroom.id, auditContext, {
-        writeAuditLog: async () => {
-          throw new Error("simulated audit failure");
+      dissolveTeacherClassroom(
+        teacher.id,
+        rollbackClassroom.id,
+        { reason: "测试事务回滚" },
+        auditContext,
+        {
+          writeAuditLog: async () => {
+            throw new Error("simulated audit failure");
+          },
         },
-        storage: {
-          save: async () => undefined,
-          read: async () => Buffer.alloc(0),
-          delete: async () => undefined,
-        },
-      }),
+      ),
     /simulated audit failure/u,
   );
-  assert.equal(
-    await prisma.classroom.count({ where: { id: rollbackClassroom.id } }),
-    1,
-  );
-  await prisma.assignment.deleteMany({
-    where: { classroomId: protectedClassroom.id },
+  const rolledBack = await prisma.classroom.findUniqueOrThrow({
+    where: { id: rollbackClassroom.id },
   });
-  await prisma.classroom.delete({ where: { id: protectedClassroom.id } });
+  assert.equal(rolledBack.status, ClassroomStatus.ACTIVE);
+  assert.equal(rolledBack.dissolvedAt, null);
+  assert.equal(
+    (
+      await prisma.classMembership.findUniqueOrThrow({
+        where: {
+          classroomId_studentId: {
+            classroomId: rollbackClassroom.id,
+            studentId: student.id,
+          },
+        },
+      })
+    ).status,
+    MembershipStatus.ACTIVE,
+  );
+  assert.equal(
+    await prisma.notification.count({
+      where: {
+        type: NotificationType.CLASSROOM_DISSOLVED,
+        sourceId: rollbackClassroom.id,
+      },
+    }),
+    0,
+  );
+  await prisma.classMembership.deleteMany({
+    where: { classroomId: rollbackClassroom.id },
+  });
   await prisma.classroom.delete({ where: { id: rollbackClassroom.id } });
 });

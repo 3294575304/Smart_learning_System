@@ -47,6 +47,7 @@ function fixture(): QualityReportSourceSnapshot {
     ],
     outcomes: [],
     attendance: { sessionCount: 0, presentRate: null },
+    survey: null,
     sourceReference: {},
   };
 }

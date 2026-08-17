@@ -3,6 +3,7 @@ import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 import type { QuestionMappingAIInput } from "@/services/question-mapping/schemas";
 import type { SelfReflectionAIInput } from "@/services/self-reflections/schemas";
+import type { QualityReportAIInput } from "@/services/quality-reports/schemas";
 
 export interface AIProviderOptions {
   signal: AbortSignal;
@@ -87,6 +88,11 @@ export interface AIProvider {
 
   structureSelfReflection?(
     input: SelfReflectionAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  writeQualityReportNarrative?(
+    input: QualityReportAIInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 }

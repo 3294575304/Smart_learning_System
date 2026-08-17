@@ -7,6 +7,7 @@ import { definedFieldErrors } from "@/lib/zod-errors";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
 import {
   classroomIdSchema,
+  dissolveClassroomSchema,
   updateClassroomSchema,
 } from "@/services/classrooms/schemas";
 import {
@@ -32,10 +33,20 @@ export async function DELETE(
 
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
+    const body: unknown = await request.json().catch(() => null);
+    const parsedInput = dissolveClassroomSchema.safeParse(body);
+    if (!parsedInput.success) {
+      return apiError(
+        "请填写解散原因",
+        400,
+        definedFieldErrors(parsedInput.error.flatten().fieldErrors),
+      );
+    }
     return apiSuccess(
       await dissolveTeacherClassroom(
         teacher.id,
         parsedId.data,
+        parsedInput.data,
         auditRequestContext(request),
       ),
     );

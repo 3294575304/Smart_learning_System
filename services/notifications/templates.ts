@@ -92,3 +92,13 @@ export function systemAnnouncementTemplate(input: {
 }): NotificationTemplate {
   return template(input.title, input.content);
 }
+
+export function classroomDissolvedTemplate(input: {
+  classroomName: string;
+  reason: string;
+}): NotificationTemplate {
+  return template(
+    "班级已解散",
+    `班级《${plainText(input.classroomName, 80)}》已由教师解散。解散原因：${plainText(input.reason, 500)}`,
+  );
+}

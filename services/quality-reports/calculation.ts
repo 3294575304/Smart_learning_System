@@ -103,8 +103,15 @@ export function buildDeterministicNarrative(
         ? `${below.map((item) => item.code).join("、")} 低于各自达成阈值，应结合对应考核证据复核教学与评价设计。`
         : "现有课程目标均达到设定阈值，仍需结合分项成绩和学生反馈持续改进。"
       : "当前数据源未提供可核验的课程目标达成度，报告不作推断。",
-    studentEvaluation:
-      "暂无可纳入本报告的课程问卷数据，学生评价留待教师补充或问卷模块汇总。",
+    studentEvaluation: source.survey
+      ? source.survey.isSuppressed
+        ? `结课问卷收到 ${source.survey.responseCount}/${source.survey.eligibleCount} 份回答，低于 ${source.survey.minSampleSize} 份小样本阈值，因此不展示量表细分或开放题主题。学生自评不替代客观成绩与课程目标定量达成度。`
+        : `结课问卷收到 ${source.survey.responseCount}/${source.survey.eligibleCount} 份回答，响应率 ${(source.survey.responseRate * 100).toFixed(1)}%，五级量表总体均值 ${source.survey.overallMean?.toFixed(2) ?? "暂无"}。${
+            source.survey.outcomes.length
+              ? `课程目标自评：${source.survey.outcomes.map((item) => `${item.code} ${item.mean.toFixed(2)}/5`).join("，")}。`
+              : ""
+          }${source.survey.themeNarrative}以上为学生定性自评，与客观达成度分开呈现。`
+      : "暂无已关闭且完成聚合的课程问卷数据，学生评价留待教师补充；报告不作推断。",
     summary: weakest
       ? `成绩统计显示“${weakest.name}”平均分相对较低。建议针对该环节补充形成性反馈、典型错误讲评与分层练习，并在下一轮教学中复核改进效果。`
       : "建议补齐有效成绩和课程目标证据后再形成针对性改进措施。",

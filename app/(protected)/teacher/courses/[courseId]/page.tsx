@@ -166,6 +166,19 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
           </div>
 
           <div className="bg-card rounded-xl border p-5">
+            <h2 className="font-semibold">结课教学质量问卷</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              从正式大纲生成问卷草稿，支持匿名或实名发布、小样本保护和课程目标自评汇总。
+            </p>
+            <Link
+              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+              href={`/teacher/courses/${course.id}/surveys`}
+            >
+              进入结课问卷
+            </Link>
+          </div>
+
+          <div className="bg-card rounded-xl border p-5">
             <h2 className="font-semibold">课程教学质量分析</h2>
             <p className="text-muted-foreground mt-1 text-sm">
               使用平台正式课程数据或独立上传成绩，生成待审查 DOCX

@@ -160,6 +160,8 @@ async function main(): Promise<void> {
       (
         await fetch(`${baseUrl}/api/teacher/classrooms/${dissolvable.id}`, {
           method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: "HTTP 未登录测试" }),
         })
       ).status,
       401,
@@ -170,6 +172,7 @@ async function main(): Promise<void> {
           `/api/teacher/classrooms/${dissolvable.id}`,
           studentCookie,
           "DELETE",
+          { reason: "HTTP 学生越权测试" },
         )
       ).status,
       403,
@@ -180,6 +183,7 @@ async function main(): Promise<void> {
           `/api/teacher/classrooms/${dissolvable.id}`,
           adminCookie,
           "DELETE",
+          { reason: "HTTP 管理员越权测试" },
         )
       ).status,
       403,
@@ -190,6 +194,7 @@ async function main(): Promise<void> {
           `/api/teacher/classrooms/${dissolvable.id}`,
           teacherTwoCookie,
           "DELETE",
+          { reason: "HTTP 跨教师测试" },
         )
       ).status,
       404,
@@ -200,23 +205,38 @@ async function main(): Promise<void> {
           `/api/teacher/classrooms/${dissolvable.id}`,
           teacherCookie,
           "DELETE",
+          { reason: " " },
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/classrooms/${dissolvable.id}`,
+          teacherCookie,
+          "DELETE",
+          { reason: "HTTP 集成测试结束" },
         )
       ).status,
       200,
     );
-    assert.equal(
-      await prisma.classroom.count({ where: { id: dissolvable.id } }),
-      0,
-    );
+    const dissolvedClassroom = await prisma.classroom.findUniqueOrThrow({
+      where: { id: dissolvable.id },
+      select: { status: true, dissolutionReason: true },
+    });
+    assert.equal(dissolvedClassroom.status, "ARCHIVED");
+    assert.equal(dissolvedClassroom.dissolutionReason, "HTTP 集成测试结束");
     assert.equal(
       (
         await requestJson(
           `/api/teacher/classrooms/${dissolvable.id}`,
           teacherCookie,
           "DELETE",
+          { reason: "重复解散测试" },
         )
       ).status,
-      404,
+      409,
     );
 
     const invalidCreate = await requestJson(

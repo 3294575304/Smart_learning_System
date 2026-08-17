@@ -23,6 +23,14 @@ export const createClassroomSchema = z.object({
 
 export const updateClassroomSchema = createClassroomSchema;
 
+export const dissolveClassroomSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(2, "请填写至少 2 个字符的解散原因")
+    .max(500, "解散原因不能超过 500 个字符"),
+});
+
 export const joinClassroomSchema = z.object({
   joinCode: z
     .string()
@@ -36,4 +44,6 @@ export const joinClassroomSchema = z.object({
 export type CreateClassroomInput = z.input<typeof createClassroomSchema>;
 export type CreateClassroomData = z.output<typeof createClassroomSchema>;
 export type UpdateClassroomInput = z.input<typeof updateClassroomSchema>;
+export type DissolveClassroomInput = z.input<typeof dissolveClassroomSchema>;
+export type DissolveClassroomData = z.output<typeof dissolveClassroomSchema>;
 export type JoinClassroomInput = z.input<typeof joinClassroomSchema>;

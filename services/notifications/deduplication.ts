@@ -15,4 +15,6 @@ export const notificationDeduplication = {
     key("recommendation-ready", cycleKey),
   systemAnnouncement: (announcementId: string) =>
     key("system-announcement", announcementId),
+  classroomDissolved: (classroomId: string) =>
+    key("classroom-dissolved", classroomId),
 } as const;

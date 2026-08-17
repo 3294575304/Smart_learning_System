@@ -89,6 +89,12 @@ enum AuditAction {
   QUALITY_REPORT_GENERATION_REQUESTED
   QUALITY_REPORT_GENERATED
   QUALITY_REPORT_DOWNLOADED
+  COURSE_SURVEY_CREATED
+  COURSE_SURVEY_UPDATED
+  COURSE_SURVEY_PUBLISHED
+  COURSE_SURVEY_CLOSED
+  COURSE_SURVEY_RESPONSE_SUBMITTED
+  COURSE_SURVEY_SUMMARY_GENERATED
 }
 
 enum QuestionGraphBindingType {
@@ -178,6 +184,9 @@ enum AuditTargetType {
   ATTENDANCE_RECORD
   OUTCOME_ATTAINMENT_RUN
   QUALITY_REPORT
+  COURSE_SURVEY
+  COURSE_SURVEY_RESPONSE
+  COURSE_SURVEY_SUMMARY
 }
 
 enum OutcomeStudentStatus {
@@ -272,6 +281,8 @@ enum NotificationType {
   LEARNING_ANALYSIS_READY
   RECOMMENDATION_READY
   SYSTEM_ANNOUNCEMENT
+  COURSE_SURVEY_PUBLISHED
+  CLASSROOM_DISSOLVED
 }
 
 enum NotificationPriority {
@@ -286,6 +297,8 @@ enum NotificationSourceType {
   AI_ANALYSIS
   RECOMMENDATION_CYCLE
   ANNOUNCEMENT
+  COURSE_SURVEY
+  CLASSROOM
 }
 
 enum AnnouncementTargetType {
@@ -343,6 +356,33 @@ enum QualityReportStatus {
   PROCESSING
   SUCCEEDED
   FAILED
+}
+
+enum CourseSurveyStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum CourseSurveyMode {
+  IDENTIFIED
+  ANONYMOUS
+}
+
+enum CourseSurveyQuestionType {
+  LIKERT_5
+  OPEN_TEXT
+}
+
+enum CourseSurveyDimension {
+  OUTCOME_SELF_ASSESSMENT
+  CONTENT
+  TEACHING_METHOD
+  ASSESSMENT
+  LEARNING_SUPPORT
+  PRACTICE
+  OPEN_FEEDBACK
 }
 
 enum SyllabusParseStatus {
@@ -645,6 +685,9 @@ model User {
   recommendationConceptEvidences     RecommendationConceptEvidence[]      @relation("RecommendationConceptEvidenceStudent")
   selfReflections                    StudentSelfReflection[]              @relation("StudentSelfReflectionStudent")
   requestedQualityReports            CourseQualityReport[]                @relation("QualityReportRequestedBy")
+  createdCourseSurveys               CourseSurvey[]                       @relation("CourseSurveyTeacher")
+  courseSurveyParticipations         CourseSurveyParticipation[]          @relation("CourseSurveyParticipant")
+  identifiedCourseSurveyResponses    CourseSurveyResponse[]               @relation("CourseSurveyIdentifiedRespondent")
 
   @@index([role, status])
   @@index([mustChangePassword])
@@ -963,6 +1006,7 @@ model Course {
   courseRecommendationConceptSnapshots  CourseRecommendationConceptSnapshot[]
   selfReflections                       StudentSelfReflection[]
   qualityReports                        CourseQualityReport[]
+  courseSurveys                         CourseSurvey[]
 
   @@unique([teacherId, courseNo, term])
   @@index([templateId, status, createdAt])
@@ -1120,6 +1164,7 @@ model PublishedSyllabusStructure {
   assessmentSchemeDrafts        AssessmentSchemeDraft[]
   assessmentSchemeReviews       AssessmentSchemeReviewRevision[]
   publishedAssessmentSchemes    PublishedAssessmentScheme[]
+  sourceCourseSurveys           CourseSurvey[]
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
@@ -1647,6 +1692,137 @@ model CourseQualityReport {
   @@index([outcomeAttainmentRunId])
 }
 
+model CourseSurvey {
+  id                                 String             @id @default(cuid())
+  courseId                           String
+  classroomId                        String
+  teacherId                          String
+  sourcePublishedSyllabusStructureId String?
+  title                              String             @db.VarChar(120)
+  description                        String?            @db.Text
+  instructions                       String             @db.Text
+  status                             CourseSurveyStatus @default(DRAFT)
+  mode                               CourseSurveyMode   @default(ANONYMOUS)
+  opensAt                            DateTime
+  dueAt                              DateTime
+  publishedAt                        DateTime?
+  closedAt                           DateTime?
+  version                            Int                @default(1)
+  createdAt                          DateTime           @default(now())
+  updatedAt                          DateTime           @updatedAt
+
+  course                           Course                        @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classroom                        Classroom                     @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  teacher                          User                          @relation("CourseSurveyTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  sourcePublishedSyllabusStructure PublishedSyllabusStructure?   @relation(fields: [sourcePublishedSyllabusStructureId], references: [id], onDelete: SetNull)
+  questions                        CourseSurveyQuestion[]
+  participations                   CourseSurveyParticipation[]
+  responses                        CourseSurveyResponse[]
+  summaryRevisions                 CourseSurveySummaryRevision[]
+
+  @@index([courseId, status, createdAt])
+  @@index([classroomId, status, opensAt, dueAt])
+  @@index([teacherId, status, createdAt])
+  @@index([sourcePublishedSyllabusStructureId])
+}
+
+model CourseSurveyQuestion {
+  id             String                   @id @default(cuid())
+  surveyId       String
+  type           CourseSurveyQuestionType
+  dimension      CourseSurveyDimension
+  prompt         String                   @db.Text
+  required       Boolean                  @default(true)
+  sortOrder      Int
+  outcomeCode    String?                  @db.VarChar(100)
+  outcomeTitle   String?                  @db.VarChar(300)
+  sourceRefsJson Json?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  survey  CourseSurvey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers CourseSurveyAnswer[]
+
+  @@unique([surveyId, sortOrder])
+  @@index([surveyId, dimension])
+  @@index([outcomeCode])
+}
+
+model CourseSurveyParticipation {
+  id          String   @id @default(cuid())
+  surveyId    String
+  studentId   String
+  submittedAt DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  survey  CourseSurvey @relation(fields: [surveyId], references: [id], onDelete: Restrict)
+  student User         @relation("CourseSurveyParticipant", fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([surveyId, studentId])
+  @@index([studentId, submittedAt])
+  @@index([surveyId, submittedAt])
+}
+
+model CourseSurveyResponse {
+  id          String   @id @default(cuid())
+  surveyId    String
+  studentId   String?
+  submittedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  survey  CourseSurvey         @relation(fields: [surveyId], references: [id], onDelete: Restrict)
+  student User?                @relation("CourseSurveyIdentifiedRespondent", fields: [studentId], references: [id], onDelete: Restrict)
+  answers CourseSurveyAnswer[]
+
+  @@unique([surveyId, studentId])
+  @@index([surveyId, submittedAt])
+  @@index([studentId, submittedAt])
+}
+
+model CourseSurveyAnswer {
+  id         String   @id @default(cuid())
+  responseId String
+  questionId String
+  scaleValue Int?
+  textValue  String?  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  response CourseSurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question CourseSurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([responseId, questionId])
+  @@index([questionId, scaleValue])
+}
+
+model CourseSurveySummaryRevision {
+  id               String   @id @default(cuid())
+  surveyId         String
+  revisionNumber   Int
+  inputFingerprint String   @db.Char(64)
+  responseCount    Int
+  eligibleCount    Int
+  isSuppressed     Boolean  @default(false)
+  statisticsJson   Json
+  themesJson       Json
+  ruleVersion      String   @db.VarChar(100)
+  aiStatus         String   @db.VarChar(30)
+  aiProvider       String?  @db.VarChar(100)
+  aiModel          String?  @db.VarChar(191)
+  promptVersion    String?  @db.VarChar(100)
+  generatedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  survey CourseSurvey @relation(fields: [surveyId], references: [id], onDelete: Restrict)
+
+  @@unique([surveyId, revisionNumber])
+  @@unique([surveyId, inputFingerprint])
+  @@index([surveyId, generatedAt])
+}
+
 model GradeImportBatch {
   id                  String                 @id @default(cuid())
   courseId            String
@@ -1911,6 +2087,8 @@ model Classroom {
   allowStudentLeave Boolean         @default(false)
   status            ClassroomStatus @default(ACTIVE)
   closedAt          DateTime?
+  dissolvedAt       DateTime?
+  dissolutionReason String?         @db.Text
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -1927,6 +2105,7 @@ model Classroom {
   attendanceSessions         AttendanceSession[]
   outcomeAttainmentRuns      CourseOutcomeAttainmentRun[]
   qualityReports             CourseQualityReport[]
+  courseSurveys              CourseSurvey[]
   recommendationCycles       CourseRecommendationCycle[]
 
   @@index([teacherId, status])

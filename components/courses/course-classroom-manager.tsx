@@ -1,9 +1,13 @@
 "use client";
 
-import { Link2, School, Unlink } from "lucide-react";
+import { CheckCircle2, Link2, School, Trash2, Unlink } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import {
+  DissolveClassroomDialog,
+  type DissolvableClassroom,
+} from "@/components/classrooms/dissolve-classroom-dialog";
 import { requestApi } from "@/components/courses/request-api";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import type { TeacherCourseClassroomView } from "@/services/courses/types";
@@ -21,6 +25,9 @@ export function CourseClassroomManager({
   const [pendingClassroomId, setPendingClassroomId] = useState<string | null>(
     null,
   );
+  const [dissolvingClassroom, setDissolvingClassroom] =
+    useState<DissolvableClassroom | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function linkClassroom(classroomId: string) {
     const classroom = classrooms.find((item) => item.id === classroomId);
@@ -68,6 +75,15 @@ export function CourseClassroomManager({
 
   return (
     <div className="space-y-6">
+      {successMessage ? (
+        <div
+          aria-live="polite"
+          className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700"
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          {successMessage}
+        </div>
+      ) : null}
       <section className="bg-card rounded-xl border p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -107,21 +123,38 @@ export function CourseClassroomManager({
                 <p className="text-muted-foreground mt-3 text-xs">
                   班级成员 {classroom.studentCount} 名
                 </p>
-                <button
-                  className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-red-600 disabled:text-gray-400"
-                  disabled={pendingClassroomId === classroom.id}
-                  onClick={() => void unlinkClassroom(classroom.id)}
-                  type="button"
-                >
-                  {pendingClassroomId === classroom.id ? (
-                    "处理中..."
-                  ) : (
-                    <>
-                      <Unlink className="h-4 w-4" />
-                      解除关联
-                    </>
-                  )}
-                </button>
+                <div className="mt-4 flex flex-wrap gap-4">
+                  <button
+                    className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 disabled:text-gray-400"
+                    disabled={pendingClassroomId === classroom.id}
+                    onClick={() => void unlinkClassroom(classroom.id)}
+                    type="button"
+                  >
+                    {pendingClassroomId === classroom.id ? (
+                      "处理中..."
+                    ) : (
+                      <>
+                        <Unlink className="h-4 w-4" />
+                        解除关联
+                      </>
+                    )}
+                  </button>
+                  <button
+                    className="text-destructive inline-flex items-center gap-2 text-sm font-medium"
+                    onClick={() =>
+                      setDissolvingClassroom({
+                        id: classroom.id,
+                        name: classroom.name,
+                        studentCount: classroom.studentCount,
+                        courseName: classroom.currentCourse?.name ?? null,
+                      })
+                    }
+                    type="button"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    解散班级
+                  </button>
+                </div>
               </article>
             ))}
           </div>
@@ -233,6 +266,20 @@ export function CourseClassroomManager({
           </div>
         )}
       </section>
+      {dissolvingClassroom ? (
+        <DissolveClassroomDialog
+          classroom={dissolvingClassroom}
+          onClose={() => setDissolvingClassroom(null)}
+          onDissolved={(result) => {
+            setDissolvingClassroom(null);
+            setSuccessMessage(
+              `班级已解散，已通知 ${result.notifiedStudentCount} 名学生，历史教学数据已保留`,
+            );
+            router.refresh();
+          }}
+          open
+        />
+      ) : null}
     </div>
   );
 }

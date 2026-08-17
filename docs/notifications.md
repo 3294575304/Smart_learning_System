@@ -10,6 +10,8 @@
 | `LEARNING_ANALYSIS_READY` | 可用学情分析及洞察成功持久化                     | `learning-analysis-ready:{analysisId}` |
 | `RECOMMENDATION_READY`    | 新推荐周期实际新增至少一条推荐记录               | `recommendation-ready:{cycleKey}`      |
 | `SYSTEM_ANNOUNCEMENT`     | 管理员显式发布公告草稿                           | `system-announcement:{announcementId}` |
+| `COURSE_SURVEY_PUBLISHED` | 教师发布结课问卷                                 | `course-survey-published:{surveyId}`   |
+| `CLASSROOM_DISSOLVED`     | 教师填写原因并解散班级                           | `classroom-dissolved:{classroomId}`    |
 
 去重键与 `recipientId` 组成数据库复合唯一约束。业务重试、并发发布和定时任务重复运行都不会为同一接收人重复创建相同事件通知。
 
@@ -28,6 +30,7 @@
 
 - 作业发布：作业状态更新和学生通知处于同一事务。
 - 公告发布：公告状态、角色通知和管理员审计处于同一事务。
+- 班级解散：班级归档、成员退出、未完成名单批次取消、学生通知和教师审计处于同一事务；历史作业、成绩和学习记录不删除。
 - 自动批改、学情分析和推荐：核心结果先提交，随后创建通知。通知失败不会回滚核心业务，只记录不含异常堆栈和个人信息的结构化错误。
 - AI Provider 失败但规则降级分析成功时，发送“学情分析已生成”，不会声称远端 AI 调用成功。
 
@@ -66,7 +69,7 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/internal/jobs/ass
 - 截止提醒在作业截止时过期。
 - 系统公告通知沿用公告的 `expiresAt`。
 - 推荐通知沿用推荐周期过期时间。
-- 作业发布、成绩和学情分析通知长期保留。
+- 作业发布、成绩、学情分析和班级解散通知长期保留。
 - 过期通知默认不在列表中显示，也不计入未读数量。
 - 当前不自动物理删除通知；历史数据通过分页读取。
 

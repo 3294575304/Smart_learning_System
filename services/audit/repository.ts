@@ -167,7 +167,10 @@ interface WriteGovernanceAuditInput {
     | typeof AuditTargetType.ATTENDANCE_SESSION
     | typeof AuditTargetType.ATTENDANCE_RECORD
     | typeof AuditTargetType.OUTCOME_ATTAINMENT_RUN
-    | typeof AuditTargetType.QUALITY_REPORT;
+    | typeof AuditTargetType.QUALITY_REPORT
+    | typeof AuditTargetType.COURSE_SURVEY
+    | typeof AuditTargetType.COURSE_SURVEY_RESPONSE
+    | typeof AuditTargetType.COURSE_SURVEY_SUMMARY;
   targetId: string;
   summary: string;
   beforeData: AuditConfigSnapshot | null;

@@ -7,6 +7,7 @@ import {
   BrainCircuit,
   ChevronRight,
   ClipboardList,
+  ClipboardCheck,
   GraduationCap,
   Home,
   Menu,
@@ -72,6 +73,7 @@ const NAVIGATION: Record<Role, NavigationItem[]> = {
   STUDENT: [
     { href: "/student", label: "学习主页", icon: Home },
     { href: "/student/assignments", label: "我的作业", icon: ClipboardList },
+    { href: "/student/surveys", label: "课程问卷", icon: ClipboardCheck },
     { href: "/student/results", label: "我的成绩", icon: BarChart3 },
     {
       href: "/student/wrong-questions",
@@ -99,6 +101,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   classes: "班级管理",
   questions: "题库管理",
   assignments: "作业管理",
+  surveys: "课程问卷",
   submissions: "提交记录",
   results: "成绩统计",
   result: "提交结果",

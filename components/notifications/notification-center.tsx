@@ -16,6 +16,8 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   LEARNING_ANALYSIS_READY: "学情分析",
   RECOMMENDATION_READY: "推荐更新",
   SYSTEM_ANNOUNCEMENT: "系统公告",
+  COURSE_SURVEY_PUBLISHED: "课程问卷",
+  CLASSROOM_DISSOLVED: "班级解散",
 };
 
 const PRIORITY_LABELS: Record<NotificationPriority, string> = {

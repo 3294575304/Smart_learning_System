@@ -3,7 +3,10 @@ import test from "node:test";
 
 import { GradeValueStatus, QualityReportSourceType } from "@prisma/client";
 
-import { calculateQualityReportStatistics } from "@/services/quality-reports/calculation";
+import {
+  buildDeterministicNarrative,
+  calculateQualityReportStatistics,
+} from "@/services/quality-reports/calculation";
 import type { QualityReportSourceSnapshot } from "@/services/quality-reports/schemas";
 
 const source: QualityReportSourceSnapshot = {
@@ -50,6 +53,7 @@ const source: QualityReportSourceSnapshot = {
   ],
   outcomes: [],
   attendance: { sessionCount: 0, presentRate: null },
+  survey: null,
   sourceReference: {},
 };
 
@@ -63,4 +67,35 @@ test("特殊状态与缺失成绩不进入成绩分布分母", () => {
     result.distribution.map((item) => item.count),
     [1, 0, 0, 0, 1],
   );
+});
+
+test("报告接入问卷聚合但明确与客观达成度分开呈现", () => {
+  const withSurvey: QualityReportSourceSnapshot = {
+    ...source,
+    survey: {
+      surveyId: "cm0000000000000000000002",
+      title: "结课问卷",
+      mode: "ANONYMOUS",
+      summaryRevisionId: "cm0000000000000000000003",
+      summaryRevisionNumber: 1,
+      responseCount: 8,
+      eligibleCount: 10,
+      responseRate: 0.8,
+      minSampleSize: 5,
+      isSuppressed: false,
+      overallMean: 4.25,
+      outcomes: [{ code: "OBJ-1", title: "目标一", count: 8, mean: 4.1 }],
+      dimensions: [],
+      themes: [{ key: "PRACTICE", label: "实践与练习", count: 3 }],
+      themeNarrative: "开放题主要涉及实践与练习。",
+      ruleVersion: "course-survey-summary-v1",
+    },
+  };
+  const narrative = buildDeterministicNarrative(
+    withSurvey,
+    calculateQualityReportStatistics(withSurvey),
+  );
+  assert.match(narrative.studentEvaluation, /8\/10/u);
+  assert.match(narrative.studentEvaluation, /OBJ-1 4\.10\/5/u);
+  assert.match(narrative.studentEvaluation, /与客观达成度分开/u);
 });

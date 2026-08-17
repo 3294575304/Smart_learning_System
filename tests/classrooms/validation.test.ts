@@ -4,6 +4,7 @@ import test from "node:test";
 import { generateJoinCode } from "@/services/classrooms/join-code";
 import {
   createClassroomSchema,
+  dissolveClassroomSchema,
   joinClassroomSchema,
 } from "@/services/classrooms/schemas";
 
@@ -46,6 +47,21 @@ test("邀请码输入自动转为大写并拒绝非法字符", () => {
   });
   assert.equal(
     joinClassroomSchema.safeParse({ joinCode: "错误 code" }).success,
+    false,
+  );
+});
+
+test("班级解散原因会清理空白并限制为 2—500 个字符", () => {
+  assert.deepEqual(
+    dissolveClassroomSchema.parse({ reason: "  本学期教学结束  " }),
+    { reason: "本学期教学结束" },
+  );
+  assert.equal(
+    dissolveClassroomSchema.safeParse({ reason: " " }).success,
+    false,
+  );
+  assert.equal(
+    dissolveClassroomSchema.safeParse({ reason: "原".repeat(501) }).success,
     false,
   );
 });
