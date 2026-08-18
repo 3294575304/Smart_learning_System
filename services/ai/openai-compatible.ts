@@ -8,6 +8,7 @@ import {
   type AIProviderErrorCode,
   type AIProviderOptions,
   type AIProviderResponse,
+  type AIThinkingMode,
 } from "@/services/ai/provider";
 import type { StudentAnalysisInput } from "@/services/ai/schemas";
 import { buildSyllabusParseMessages } from "@/services/syllabus-parsing/prompt";
@@ -90,6 +91,7 @@ export interface OpenAICompatibleProviderConfig {
   baseUrl: string;
   model: string;
   endpointType?: AIEndpointType;
+  thinkingMode?: AIThinkingMode;
   syllabusMaxCompletionTokens?: number;
   timeoutMs?: number;
   logger?: ProviderLogger;
@@ -224,7 +226,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         [
           {
             role: "system",
-            content: `你只根据去标识化的课程聚合统计撰写教学质量分析。严格返回 JSON：{"gradeAnalysis":"...","outcomeAnalysis":"...","studentEvaluation":"...","summary":"..."}。不得编造统计、学生身份或因果关系；学生问卷自评必须与客观成绩和课程目标定量达成度分开表述；数据不足时明确说明。每字段不超过 1000 个汉字。${repair}`,
+            content: `你只根据去标识化的课程聚合统计撰写教学质量分析初稿，供教师人工审核。严格返回 JSON：{"gradeAnalysis":"...","outcomeAnalysis":"...","outcomeDetails":[{"code":"课程目标代码","analysis":"..."}],"studentEvaluation":"...","courseSummary":"...","improvementMeasures":"..."}。outcomeDetails 只能使用输入中已有课程目标代码且每个目标恰好一项。不得编造统计、学生身份或因果关系；学生问卷自评必须与客观成绩和课程目标定量达成度分开表述；数据不足时明确说明。每段不超过 1000 个汉字。${repair}`,
           },
           { role: "user", content: JSON.stringify(input) },
         ],
@@ -253,6 +255,7 @@ export class OpenAICompatibleProvider implements AIProvider {
             this.model,
             messages,
             maxCompletionTokens,
+            this.config.thinkingMode,
           ),
         ),
         signal,
@@ -474,6 +477,7 @@ function requestBody(
   model: string,
   messages: Array<{ role: "system" | "user"; content: string }>,
   maxCompletionTokens?: number,
+  thinkingMode?: AIThinkingMode,
 ) {
   if (endpointType === "responses")
     return {
@@ -489,6 +493,7 @@ function requestBody(
     model,
     temperature: 0.2,
     response_format: { type: "json_object" },
+    ...(thinkingMode ? { thinking: { type: thinkingMode } } : {}),
     ...(maxCompletionTokens ? { max_tokens: maxCompletionTokens } : {}),
     messages,
   };
@@ -522,15 +527,27 @@ function extractChatContent(payload: unknown): ExtractedProviderContent | null {
     choice.message.parsed !== undefined
       ? { value: choice.message.parsed, branch: "chat.message.parsed" }
       : { value: choice.message.content, branch: "chat.message.content" };
+  const usage = {
+    promptTokens: parsed.data.usage?.prompt_tokens ?? null,
+    completionTokens: parsed.data.usage?.completion_tokens ?? null,
+    totalTokens: parsed.data.usage?.total_tokens ?? null,
+  };
+  if (
+    isEmptyProviderContent(candidate.value) &&
+    choice.finish_reason === "length"
+  ) {
+    return {
+      content: "",
+      parseBranch: `${candidate.branch}.truncated`,
+      finishReason: choice.finish_reason,
+      usage,
+    };
+  }
   const normalized = normalizeContent(candidate.value, candidate.branch);
   return {
     ...normalized,
     finishReason: choice.finish_reason ?? null,
-    usage: {
-      promptTokens: parsed.data.usage?.prompt_tokens ?? null,
-      completionTokens: parsed.data.usage?.completion_tokens ?? null,
-      totalTokens: parsed.data.usage?.total_tokens ?? null,
-    },
+    usage,
   };
 }
 
@@ -651,6 +668,14 @@ function normalizeContent(
   );
 }
 
+function isEmptyProviderContent(value: unknown): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    (typeof value === "string" && value.trim().length === 0)
+  );
+}
+
 function stripMarkdownFence(value: string) {
   const trimmed = value.trim();
   const match = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed);
@@ -702,8 +727,30 @@ function safeResponseSummary(value: string, contentType: string | null) {
 
 function structuralSummary(payload: unknown) {
   if (Array.isArray(payload)) return `JSON array(length=${payload.length})`;
-  if (isRecord(payload))
-    return `JSON object(keys=${Object.keys(payload).slice(0, 20).join(",")})`;
+  if (isRecord(payload)) {
+    const keys = Object.keys(payload).slice(0, 20).join(",");
+    const firstChoice = Array.isArray(payload.choices)
+      ? payload.choices.find(isRecord)
+      : null;
+    const message =
+      firstChoice && isRecord(firstChoice.message) ? firstChoice.message : null;
+    const contentLength =
+      message && typeof message.content === "string"
+        ? message.content.length
+        : null;
+    const reasoningLength =
+      message && typeof message.reasoning_content === "string"
+        ? message.reasoning_content.length
+        : null;
+    const finishReason =
+      firstChoice && typeof firstChoice.finish_reason === "string"
+        ? firstChoice.finish_reason
+        : null;
+    const choiceSummary = firstChoice
+      ? `; finishReason=${finishReason ?? "null"}; contentLength=${contentLength ?? "null"}; reasoningLength=${reasoningLength ?? "null"}`
+      : "";
+    return `JSON object(keys=${keys})${choiceSummary}`;
+  }
   return `JSON ${typeof payload}`;
 }
 

@@ -64,6 +64,14 @@ const source: QualityReportSourceSnapshot = {
       threshold: 0.68,
       attainmentIndex: 0.75,
       participantCount: 24,
+      componentAllocations: components.map((component) => ({
+        componentCode: component.code,
+        allocationRate: component.weight,
+      })),
+      studentScores: Array.from(
+        { length: 24 },
+        (_, index) => 0.58 + ((index * 7) % 34) / 100,
+      ),
     },
     {
       code: "2.1",
@@ -71,6 +79,14 @@ const source: QualityReportSourceSnapshot = {
       threshold: 0.68,
       attainmentIndex: 0.75,
       participantCount: 24,
+      componentAllocations: components.map((component) => ({
+        componentCode: component.code,
+        allocationRate: component.weight,
+      })),
+      studentScores: Array.from(
+        { length: 24 },
+        (_, index) => 0.56 + ((index * 5) % 38) / 100,
+      ),
     },
     {
       code: "3.1",
@@ -78,6 +94,14 @@ const source: QualityReportSourceSnapshot = {
       threshold: 0.68,
       attainmentIndex: 0.83,
       participantCount: 24,
+      componentAllocations: components.map((component) => ({
+        componentCode: component.code,
+        allocationRate: component.weight,
+      })),
+      studentScores: Array.from(
+        { length: 24 },
+        (_, index) => 0.7 + ((index * 3) % 27) / 100,
+      ),
     },
   ],
   attendance: { sessionCount: 8, presentRate: 0.94 },

@@ -159,8 +159,9 @@ function parseXmlAttributes(tag: string): Record<string, string> {
 }
 
 function extractXmlText(content: string, tagName: string): string | null {
+  const qualifiedTag = `(?:[A-Za-z_][\\w.-]*:)?${tagName}`;
   const pattern = new RegExp(
-    `<${tagName}\\b[^>]*>([\\s\\S]*?)</${tagName}>`,
+    `<${qualifiedTag}\\b[^>]*>([\\s\\S]*?)</${qualifiedTag}>`,
     "u",
   );
   const match = pattern.exec(content);
@@ -168,8 +169,9 @@ function extractXmlText(content: string, tagName: string): string | null {
 }
 
 function extractAllXmlTexts(content: string, tagName: string): string[] {
+  const qualifiedTag = `(?:[A-Za-z_][\\w.-]*:)?${tagName}`;
   const pattern = new RegExp(
-    `<${tagName}\\b[^>]*>([\\s\\S]*?)</${tagName}>`,
+    `<${qualifiedTag}\\b[^>]*>([\\s\\S]*?)</${qualifiedTag}>`,
     "gu",
   );
   const values: string[] = [];
@@ -443,7 +445,8 @@ function parseSharedStrings(sharedStringsXml: string | null): string[] {
   if (!sharedStringsXml) return [];
 
   const strings: string[] = [];
-  const pattern = /<si\b[^>]*>([\s\S]*?)<\/si>/gu;
+  const pattern =
+    /<(?:[A-Za-z_][\w.-]*:)?si\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?si>/gu;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(sharedStringsXml)) !== null) {
     strings.push(extractAllXmlTexts(match[1] ?? "", "t").join(""));
@@ -478,7 +481,8 @@ function parseWorkbookSheets(
 }> {
   const relationshipTargets = new Map<string, string>();
   if (relationshipsXml) {
-    const relationshipPattern = /<Relationship\b([^>]*)\/?>/gu;
+    const relationshipPattern =
+      /<(?:[A-Za-z_][\w.-]*:)?Relationship\b([^>]*)\/?>/gu;
     let relationshipMatch: RegExpExecArray | null;
     while ((relationshipMatch = relationshipPattern.exec(relationshipsXml))) {
       const attributes = parseXmlAttributes(relationshipMatch[1] ?? "");
@@ -491,7 +495,7 @@ function parseWorkbookSheets(
   }
 
   const sheets: Array<{ name: string; hidden: boolean; target: string }> = [];
-  const sheetPattern = /<sheet\b([^>]*)\/?>/gu;
+  const sheetPattern = /<(?:[A-Za-z_][\w.-]*:)?sheet\b([^>]*)\/?>/gu;
   let sheetMatch: RegExpExecArray | null;
   while ((sheetMatch = sheetPattern.exec(workbookXml)) !== null) {
     const attributes = parseXmlAttributes(sheetMatch[1] ?? "");
@@ -515,7 +519,7 @@ function parseWorkbookSheets(
 
 function parseXlsxMergedRanges(xml: string): ParsedSpreadsheetMergedRange[] {
   const ranges: ParsedSpreadsheetMergedRange[] = [];
-  const pattern = /<mergeCell\b([^>]*)\/?>/gu;
+  const pattern = /<(?:[A-Za-z_][\w.-]*:)?mergeCell\b([^>]*)\/?>/gu;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(xml)) !== null) {
     const ref = parseXmlAttributes(match[1] ?? "").ref;
@@ -584,7 +588,8 @@ function parseXlsxRows(
   sharedStrings: readonly string[],
 ): ParsedSpreadsheetRow[] {
   const rows: ParsedSpreadsheetRow[] = [];
-  const rowPattern = /<row\b([^>]*)>([\s\S]*?)<\/row>|<row\b([^>]*)\/>/gu;
+  const rowPattern =
+    /<(?:[A-Za-z_][\w.-]*:)?row\b([^>]*)>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?row>|<(?:[A-Za-z_][\w.-]*:)?row\b([^>]*)\/>/gu;
   let fallbackRowNumber = 1;
   let rowMatch: RegExpExecArray | null;
   while ((rowMatch = rowPattern.exec(xml)) !== null) {
@@ -593,7 +598,8 @@ function parseXlsxRows(
     fallbackRowNumber = rowNumber + 1;
     const rowBody = rowMatch[2] ?? "";
     const cells: ParsedSpreadsheetCell[] = [];
-    const cellPattern = /<c\b([^>]*)>([\s\S]*?)<\/c>|<c\b([^>]*)\/>/gu;
+    const cellPattern =
+      /<(?:[A-Za-z_][\w.-]*:)?c\b([^>]*)>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?c>|<(?:[A-Za-z_][\w.-]*:)?c\b([^>]*)\/>/gu;
     let fallbackColumnIndex = 0;
     let cellMatch: RegExpExecArray | null;
     while ((cellMatch = cellPattern.exec(rowBody)) !== null) {
@@ -606,7 +612,7 @@ function parseXlsxRows(
         rowNumber,
         columnIndex,
         columnName: columnNameFromIndex(columnIndex),
-        hasFormula: /<f\b/iu.test(body),
+        hasFormula: /<(?:[A-Za-z_][\w.-]*:)?f\b/iu.test(body),
         ...value,
       });
       fallbackColumnIndex = columnIndex + 1;

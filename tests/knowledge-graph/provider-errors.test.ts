@@ -13,6 +13,7 @@ const graph = {
 async function invoke(
   response: Response,
   endpointType: "chat-completions" | "responses" = "chat-completions",
+  thinkingMode?: "enabled" | "disabled",
 ) {
   const originalFetch = globalThis.fetch;
   let requestUrl = "";
@@ -28,6 +29,7 @@ async function invoke(
       baseUrl: "https://provider.example/v1",
       model: "model",
       endpointType,
+      thinkingMode,
       timeoutMs: 100,
       logger: { error: () => undefined, info: () => undefined },
     });
@@ -74,6 +76,12 @@ test(
         "messages" in result.requestBody &&
         "response_format" in result.requestBody,
     );
+    assert.equal(
+      result.requestBody &&
+        typeof result.requestBody === "object" &&
+        "thinking" in result.requestBody,
+      false,
+    );
     const messages = (
       result.requestBody as {
         messages?: Array<{ content?: unknown }>;
@@ -87,6 +95,31 @@ test(
         .join(" ") ?? "",
       /json/iu,
     );
+  },
+);
+
+test(
+  "Chat Completions can explicitly disable provider thinking for JSON tasks",
+  { concurrency: false },
+  async () => {
+    const result = await invoke(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: { content: '{"related":[]}' },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+      "chat-completions",
+      "disabled",
+    );
+    assert.deepEqual((result.requestBody as { thinking?: unknown }).thinking, {
+      type: "disabled",
+    });
   },
 );
 

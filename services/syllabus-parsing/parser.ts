@@ -239,9 +239,16 @@ export async function parseSyllabusStructure(
       });
       if (response.finishReason === "length") {
         metrics.errorPhase = "provider";
+        metrics.validationError =
+          "Provider output reached the completion-token limit.";
         attempts.push(metrics);
+        if (index + 1 < SYLLABUS_MAX_AI_ATTEMPTS) {
+          validationError =
+            "上一次输出因长度限制被截断。请显著压缩描述，只保留页码引用，不输出 quote，优先保证完整 JSON 闭合和全部必填键。";
+          continue;
+        }
         throw new SyllabusParseOperationError(
-          "AI output was truncated. Please retry explicitly.",
+          "AI output was truncated after one compact repair attempt.",
           502,
           "AI_OUTPUT_TRUNCATED",
           { attempts },
@@ -308,6 +315,14 @@ export async function parseSyllabusStructure(
         error instanceof AIProviderRequestError
           ? error.code
           : "PROVIDER_UNAVAILABLE";
+      if (
+        code === "PROVIDER_EMPTY_RESPONSE" &&
+        index + 1 < SYLLABUS_MAX_AI_ATTEMPTS
+      ) {
+        validationError =
+          "Provider returned empty content. Return the complete JSON object directly.";
+        continue;
+      }
       throw new SyllabusParseOperationError(
         "AI provider request failed.",
         502,

@@ -27,6 +27,7 @@ export const qualityReportUploadMetadataSchema = z
   .strict();
 
 export const reportComponentSchema = z.object({
+  id: z.string().optional(),
   code: z.string().min(1).max(100),
   name: z.string().min(1).max(300),
   weight: z.number().min(0).max(1),
@@ -106,6 +107,15 @@ export const qualityReportSourceSnapshotSchema = z.object({
       threshold: z.number(),
       attainmentIndex: z.number().nullable(),
       participantCount: z.number().int().nonnegative(),
+      componentAllocations: z
+        .array(
+          z.object({
+            componentCode: z.string().min(1).max(100),
+            allocationRate: z.number().min(0).max(1),
+          }),
+        )
+        .optional(),
+      studentScores: z.array(z.number()).max(2000).optional(),
     }),
   ),
   attendance: z.object({
@@ -124,8 +134,23 @@ export const qualityReportNarrativeSchema = z
   .object({
     gradeAnalysis: z.string().trim().min(1).max(3000),
     outcomeAnalysis: z.string().trim().min(1).max(3000),
+    outcomeDetails: z
+      .array(
+        z.object({
+          code: z.string().trim().min(1).max(100),
+          analysis: z.string().trim().min(1).max(3000),
+        }),
+      )
+      .max(30),
     studentEvaluation: z.string().trim().min(1).max(3000),
-    summary: z.string().trim().min(1).max(3000),
+    courseSummary: z.string().trim().min(1).max(3000),
+    improvementMeasures: z.string().trim().min(1).max(3000),
+  })
+  .strict();
+
+export const qualityReportReviewSchema = qualityReportNarrativeSchema
+  .extend({
+    reviewComment: z.string().trim().max(1000).default(""),
   })
   .strict();
 

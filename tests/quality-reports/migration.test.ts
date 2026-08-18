@@ -18,3 +18,19 @@ test("教学质量报告迁移保存双数据源、快照、任务和双产物�
   ])
     assert.ok(sql.includes(token), token);
 });
+
+test("教学质量报告审核迁移区分 AI 审核稿与人工确认正式版", async () => {
+  const sql = await readFile(
+    "prisma/migrations/20260817110000_add_quality_report_review/migration.sql",
+    "utf8",
+  );
+  for (const token of [
+    "QualityReportReviewStatus",
+    "PENDING_REVIEW",
+    "reviewedNarrativeJson",
+    "reviewedById",
+    "approvedDocxStorageKey",
+    "QUALITY_REPORT_APPROVED",
+  ])
+    assert.ok(sql.includes(token), token);
+});

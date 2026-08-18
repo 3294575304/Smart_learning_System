@@ -297,12 +297,14 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
             {syllabusParseFailureMessage(current.errorCode)}
           </p>
           <button
-            className="mt-2 font-medium"
+            aria-label="重新解析教学大纲"
+            className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-600 bg-white px-3 py-2 font-medium text-red-700 shadow-sm transition-colors hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             disabled={parsing}
             onClick={() => void parse()}
             type="button"
           >
-            重新解析
+            <RefreshCw className={`h-4 w-4 ${parsing ? "animate-spin" : ""}`} />
+            {parsing ? "重新解析中..." : "重新解析"}
           </button>
         </div>
       ) : null}

@@ -84,7 +84,7 @@ try {
   Write-Output "[4/4] Verifying local services..."
   Wait-LocalPort -Port 18788 -TimeoutSeconds 15
   Wait-LocalPort -Port 3000 -TimeoutSeconds 30
-  $response = Invoke-WebRequest -Uri "http://127.0.0.1:3000/login" -UseBasicParsing -TimeoutSec 15
+  $response = Invoke-WebRequest -Uri "http://localhost:3000/login" -UseBasicParsing -TimeoutSec 15
   if ($response.StatusCode -ne 200) {
     throw "Application health check failed."
   }
@@ -93,7 +93,8 @@ try {
     Sort-Object TaskName |
     Select-Object TaskName, State
   Write-Output "START_ALL_READY=1"
-  Write-Output "Open http://127.0.0.1:3000"
+  Write-Output "Open http://localhost:3000"
+  Write-Output "Stop manually with: powershell -ExecutionPolicy Bypass -File .\stop-all.ps1"
 } finally {
   Pop-Location
 }

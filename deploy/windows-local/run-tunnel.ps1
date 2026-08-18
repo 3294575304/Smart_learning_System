@@ -26,8 +26,12 @@ $arguments = @(
 while ($true) {
   Push-Location $config.repoRoot
   try {
+    # SSH warnings and reconnect diagnostics are expected on stderr. Keeping
+    # native errors non-terminating lets this loop reconnect as designed.
+    $ErrorActionPreference = "Continue"
     & $config.sshExecutable @arguments 1>> $stdoutPath 2>> $stderrPath
   } finally {
+    $ErrorActionPreference = "Stop"
     Pop-Location
   }
   Start-Sleep -Seconds 3

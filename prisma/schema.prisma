@@ -88,6 +88,7 @@ enum AuditAction {
   OUTCOME_ATTAINMENT_GENERATED
   QUALITY_REPORT_GENERATION_REQUESTED
   QUALITY_REPORT_GENERATED
+  QUALITY_REPORT_APPROVED
   QUALITY_REPORT_DOWNLOADED
   COURSE_SURVEY_CREATED
   COURSE_SURVEY_UPDATED
@@ -356,6 +357,11 @@ enum QualityReportStatus {
   PROCESSING
   SUCCEEDED
   FAILED
+}
+
+enum QualityReportReviewStatus {
+  PENDING_REVIEW
+  APPROVED
 }
 
 enum CourseSurveyStatus {
@@ -685,6 +691,7 @@ model User {
   recommendationConceptEvidences     RecommendationConceptEvidence[]      @relation("RecommendationConceptEvidenceStudent")
   selfReflections                    StudentSelfReflection[]              @relation("StudentSelfReflectionStudent")
   requestedQualityReports            CourseQualityReport[]                @relation("QualityReportRequestedBy")
+  reviewedQualityReports             CourseQualityReport[]                @relation("QualityReportReviewedBy")
   createdCourseSurveys               CourseSurvey[]                       @relation("CourseSurveyTeacher")
   courseSurveyParticipations         CourseSurveyParticipation[]          @relation("CourseSurveyParticipant")
   identifiedCourseSurveyResponses    CourseSurveyResponse[]               @relation("CourseSurveyIdentifiedRespondent")
@@ -1638,47 +1645,57 @@ model StudentOutcomeAttainmentResult {
 }
 
 model CourseQualityReport {
-  id                     String                  @id @default(cuid())
-  courseId               String
-  classroomId            String?
-  gradebookId            String?
-  outcomeAttainmentRunId String?
-  requestedById          String
-  backgroundJobId        String?                 @unique
-  sourceFileVersionId    String?
-  sourceType             QualityReportSourceType
-  status                 QualityReportStatus     @default(QUEUED)
-  versionNumber          Int
-  inputFingerprint       String                  @db.Char(64)
-  templateVersion        String                  @db.VarChar(50)
-  templateChecksumSha256 String                  @db.Char(64)
-  calculationRuleVersion String                  @db.VarChar(50)
-  promptVersion          String                  @db.VarChar(50)
-  aiProvider             String?                 @db.VarChar(100)
-  aiModel                String?                 @db.VarChar(120)
-  aiStatus               String                  @default("NOT_ATTEMPTED") @db.VarChar(30)
-  sourceSnapshotJson     Json
-  statisticsSnapshotJson Json?
-  narrativeSnapshotJson  Json?
-  docxStorageKey         String?                 @unique @db.VarChar(191)
-  docxFileName           String?                 @db.VarChar(255)
-  docxSizeBytes          Int?
-  docxChecksumSha256     String?                 @db.Char(64)
-  workbookStorageKey     String?                 @unique @db.VarChar(191)
-  workbookFileName       String?                 @db.VarChar(255)
-  workbookSizeBytes      Int?
-  workbookChecksumSha256 String?                 @db.Char(64)
-  errorCode              String?                 @db.VarChar(100)
-  startedAt              DateTime?
-  completedAt            DateTime?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  id                         String                    @id @default(cuid())
+  courseId                   String
+  classroomId                String?
+  gradebookId                String?
+  outcomeAttainmentRunId     String?
+  requestedById              String
+  backgroundJobId            String?                   @unique
+  sourceFileVersionId        String?
+  sourceType                 QualityReportSourceType
+  status                     QualityReportStatus       @default(QUEUED)
+  reviewStatus               QualityReportReviewStatus @default(PENDING_REVIEW)
+  versionNumber              Int
+  inputFingerprint           String                    @db.Char(64)
+  templateVersion            String                    @db.VarChar(50)
+  templateChecksumSha256     String                    @db.Char(64)
+  calculationRuleVersion     String                    @db.VarChar(50)
+  promptVersion              String                    @db.VarChar(50)
+  aiProvider                 String?                   @db.VarChar(100)
+  aiModel                    String?                   @db.VarChar(120)
+  aiStatus                   String                    @default("NOT_ATTEMPTED") @db.VarChar(30)
+  sourceSnapshotJson         Json
+  statisticsSnapshotJson     Json?
+  narrativeSnapshotJson      Json?
+  reviewedNarrativeJson      Json?
+  reviewedById               String?
+  reviewedAt                 DateTime?
+  reviewComment              String?                   @db.VarChar(1000)
+  docxStorageKey             String?                   @unique @db.VarChar(191)
+  docxFileName               String?                   @db.VarChar(255)
+  docxSizeBytes              Int?
+  docxChecksumSha256         String?                   @db.Char(64)
+  approvedDocxStorageKey     String?                   @unique @db.VarChar(191)
+  approvedDocxFileName       String?                   @db.VarChar(255)
+  approvedDocxSizeBytes      Int?
+  approvedDocxChecksumSha256 String?                   @db.Char(64)
+  workbookStorageKey         String?                   @unique @db.VarChar(191)
+  workbookFileName           String?                   @db.VarChar(255)
+  workbookSizeBytes          Int?
+  workbookChecksumSha256     String?                   @db.Char(64)
+  errorCode                  String?                   @db.VarChar(100)
+  startedAt                  DateTime?
+  completedAt                DateTime?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
 
   course               Course                      @relation(fields: [courseId], references: [id], onDelete: Restrict)
   classroom            Classroom?                  @relation(fields: [classroomId], references: [id], onDelete: Restrict)
   gradebook            CourseGradebook?            @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
   outcomeAttainmentRun CourseOutcomeAttainmentRun? @relation(fields: [outcomeAttainmentRunId], references: [id], onDelete: Restrict)
   requestedBy          User                        @relation("QualityReportRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy           User?                       @relation("QualityReportReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
   backgroundJob        BackgroundJob?              @relation(fields: [backgroundJobId], references: [id], onDelete: Restrict)
   sourceFileVersion    CourseFileVersion?          @relation("QualityReportSourceFile", fields: [sourceFileVersionId], references: [id], onDelete: Restrict)
 
@@ -1688,6 +1705,8 @@ model CourseQualityReport {
   @@index([classroomId, createdAt])
   @@index([gradebookId, createdAt])
   @@index([requestedById, createdAt])
+  @@index([reviewedById, reviewedAt])
+  @@index([courseId, reviewStatus, createdAt])
   @@index([sourceFileVersionId])
   @@index([outcomeAttainmentRunId])
 }

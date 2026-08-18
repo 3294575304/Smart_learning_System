@@ -42,8 +42,10 @@ function inputFor(
     deterministicBaseline: {
       gradeAnalysis: baseline.gradeAnalysis,
       outcomeAnalysis: baseline.outcomeAnalysis,
+      outcomeDetails: baseline.outcomeDetails,
       studentEvaluation: baseline.studentEvaluation,
-      summary: baseline.summary,
+      courseSummary: baseline.courseSummary,
+      improvementMeasures: baseline.improvementMeasures,
     },
   };
 }
@@ -76,6 +78,15 @@ export async function executeQualityReportNarrative(
       const enhanced = qualityReportNarrativeSchema.parse(
         typeof raw === "string" ? JSON.parse(raw) : raw,
       );
+      const expectedCodes = statistics.outcomes.map((item) => item.code).sort();
+      const returnedCodes = enhanced.outcomeDetails
+        .map((item) => item.code)
+        .sort();
+      if (
+        expectedCodes.length !== returnedCodes.length ||
+        expectedCodes.some((code, index) => code !== returnedCodes[index])
+      )
+        throw new Error("课程目标分析代码与正式统计范围不一致");
       return {
         output: { ...baseline, ...enhanced },
         fallbackUsed: false,

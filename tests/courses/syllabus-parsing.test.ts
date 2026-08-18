@@ -7,7 +7,16 @@ import test from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
-import type { AIProvider, AIProviderOptions } from "@/services/ai/provider";
+import {
+  AIProviderRequestError,
+  type AIProvider,
+  type AIProviderOptions,
+} from "@/services/ai/provider";
+import {
+  MAX_SYLLABUS_MAX_COMPLETION_TOKENS,
+  parseSyllabusMaxCompletionTokens,
+  resolveAIThinkingMode,
+} from "@/services/ai/provider-config";
 import { MockAIProvider } from "@/services/ai/mock-provider";
 import { OpenAICompatibleProvider } from "@/services/ai/openai-compatible";
 import {
@@ -151,6 +160,35 @@ test("PDF extractor reads normal text and rejects invalid or empty PDFs", async 
   const emptyPdf = Buffer.from(await emptyDocument.save());
   await assert.rejects(() => extractTextFromPdf(emptyPdf), /没有可提取文本/u);
 });
+
+test(
+  "用户上传的 2024 Python 教学大纲可完整提取并进入紧凑提示词",
+  { skip: !process.env.SYLLABUS_ACCEPTANCE_PDF_PATH },
+  async () => {
+    const samplePath = process.env.SYLLABUS_ACCEPTANCE_PDF_PATH;
+    assert.ok(samplePath);
+    const extracted = await extractTextFromPdf(await fs.readFile(samplePath));
+    assert.equal(extracted.pageCount, 11);
+    assert.equal(extracted.pages.length, 11);
+    assert.equal(extracted.characterCount, 8_643);
+    assert.match(extracted.pages[1]?.text ?? "", /Python 程序设计/u);
+    assert.match(extracted.pages[2]?.text ?? "", /课程目标/u);
+    assert.match(extracted.pages[6]?.text ?? "", /课程实验/u);
+
+    const messages = buildSyllabusParseMessages({
+      courseHint: {
+        name: "Python 程序设计",
+        courseNo: "PYTHON-2024",
+        term: "2026-2027-1",
+      },
+      pages: extracted.pages,
+    });
+    const sentInput = JSON.parse(messages[1]!.content) as SyllabusParseInput;
+    assert.equal(sentInput.pages.length, 11);
+    assert.equal(sentInput.pages.at(-1)?.pageNumber, 11);
+    assert.match(messages[0]!.content, /完整性优先/u);
+  },
+);
 
 test("strict AI JSON validation retries once and accepts a repaired output", async () => {
   const extracted = await extractTextFromPdf(await textPdf());
@@ -374,32 +412,101 @@ test("schema failure retries once and ends as INVALID_AI_OUTPUT", async () => {
   assert.equal(calls, 2);
 });
 
-test("finish_reason length maps AI_OUTPUT_TRUNCATED without a repair retry", async () => {
+test("provider empty content is retried once before failing the parse", async () => {
   let calls = 0;
-  await assert.rejects(
-    () =>
-      parseSyllabusStructure(
-        providerWith(() => {
-          calls += 1;
-          return {
-            content: "{}",
-            requestId: "req-1",
-            finishReason: "length",
-            usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-            responseLength: 2,
-          };
-        }),
-        {
-          courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
-          pages: [{ pageNumber: 1, text: "Python syllabus" }],
-        },
-      ),
-    (error: unknown) =>
-      error instanceof SyllabusParseOperationError &&
-      error.code === "AI_OUTPUT_TRUNCATED",
+  const result = await parseSyllabusStructure(
+    providerWith(() => {
+      calls += 1;
+      if (calls === 1) {
+        throw new AIProviderRequestError(
+          "empty response",
+          "PROVIDER_EMPTY_RESPONSE",
+        );
+      }
+      return validOutput;
+    }),
+    {
+      courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+      pages: [{ pageNumber: 1, text: "Python syllabus" }],
+    },
   );
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
+  assert.equal(result.retryCount, 1);
 });
+
+test("finish_reason length automatically retries once with a compact repair", async () => {
+  let calls = 0;
+  const result = await parseSyllabusStructure(
+    providerWith((_input, options) => {
+      calls += 1;
+      if (calls === 2) {
+        assert.match(options.validationError ?? "", /显著压缩/u);
+        return validOutput;
+      }
+      return {
+        content: "{}",
+        requestId: "req-1",
+        finishReason: "length",
+        usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+        responseLength: 2,
+      };
+    }),
+    {
+      courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+      pages: [{ pageNumber: 1, text: "Python syllabus" }],
+    },
+  );
+  assert.equal(calls, 2);
+  assert.equal(result.retryCount, 1);
+});
+
+test(
+  "empty chat content with finish_reason length maps to AI_OUTPUT_TRUNCATED",
+  { concurrency: false },
+  async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: { content: null, reasoning_content: "omitted" },
+              finish_reason: "length",
+            },
+          ],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 8192,
+            total_tokens: 8202,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+    try {
+      const provider = new OpenAICompatibleProvider({
+        apiKey: "test",
+        baseUrl: "https://example.invalid/v1",
+        model: "test",
+      });
+      await assert.rejects(
+        () =>
+          parseSyllabusStructure(provider, {
+            courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+            pages: [{ pageNumber: 1, text: "Python syllabus" }],
+          }),
+        (error: unknown) =>
+          error instanceof SyllabusParseOperationError &&
+          error.code === "AI_OUTPUT_TRUNCATED",
+      );
+      assert.equal(calls, 2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
 
 test("openai-compatible client has implicit retries disabled", () => {
   const provider = new OpenAICompatibleProvider({
@@ -410,7 +517,7 @@ test("openai-compatible client has implicit retries disabled", () => {
   assert.equal(provider.maxRetries, 0);
 });
 
-test("syllabus request explicitly uses the 8192 completion-token ceiling", async () => {
+test("syllabus request uses the 8192 completion-token default", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: Record<string, unknown> | undefined;
   globalThis.fetch = async (_input, init) => {
@@ -446,6 +553,65 @@ test("syllabus request explicitly uses the 8192 completion-token ceiling", async
     globalThis.fetch = originalFetch;
   }
 });
+
+test(
+  "syllabus provider config honors 16384 tokens and disables DeepSeek thinking",
+  { concurrency: false },
+  async () => {
+    assert.equal(parseSyllabusMaxCompletionTokens(undefined), 8_192);
+    assert.equal(parseSyllabusMaxCompletionTokens("16384"), 16_384);
+    assert.equal(
+      parseSyllabusMaxCompletionTokens("999999"),
+      MAX_SYLLABUS_MAX_COMPLETION_TOKENS,
+    );
+    assert.equal(
+      resolveAIThinkingMode(undefined, "https://api.deepseek.com/v1"),
+      "disabled",
+    );
+    assert.equal(
+      resolveAIThinkingMode(undefined, "https://example.invalid/v1"),
+      undefined,
+    );
+
+    const originalFetch = globalThis.fetch;
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: { content: JSON.stringify(validOutput) },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200 },
+      );
+    };
+    try {
+      const provider = new OpenAICompatibleProvider({
+        apiKey: "test",
+        baseUrl: "https://api.deepseek.com",
+        model: "deepseek-v4-flash",
+        thinkingMode: "disabled",
+        syllabusMaxCompletionTokens: 16_384,
+      });
+      await provider.parseSyllabus(
+        {
+          courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+          pages: [{ pageNumber: 1, text: "Python syllabus" }],
+        },
+        { signal: new AbortController().signal },
+      );
+      assert.equal(requestBody?.max_tokens, 16_384);
+      assert.deepEqual(requestBody?.thinking, { type: "disabled" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);
 
 test("syllabus prompt requires compact page-only references by default", () => {
   const messages = buildSyllabusParseMessages({

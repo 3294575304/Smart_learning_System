@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { StudentImportOperationError } from "@/services/student-imports/errors";
@@ -131,6 +132,27 @@ test("XLS 解析器标记合并单元格和公式单元格", () => {
   assert.ok(sheet);
   assert.equal(sheet.mergedRanges[0]?.ref, "A2:B2");
   assert.equal(sheet.rows[1]?.cells[2]?.hasFormula, true);
+});
+
+test("XLSX 解析器兼容带命名空间前缀的标准 OOXML 标签", () => {
+  const workbook = parseSpreadsheetWorkbook(
+    "xlsx",
+    readFileSync("outputs/full-system-e2e/student-roster-e2e.xlsx"),
+  );
+  const sheet = workbook.sheets[0];
+  assert.equal(workbook.sheets.length, 1);
+  assert.equal(sheet?.name, "学生名单");
+  assert.equal(sheet?.rows.length, 13);
+  assert.equal(sheet?.rows[0]?.cells.length, 10);
+  assert.deepEqual(sheet?.rows[1]?.cells[2], {
+    rowNumber: 2,
+    columnIndex: 2,
+    columnName: "C",
+    hasFormula: false,
+    value: "000202600001",
+    rawValue: "000202600001",
+    type: "string",
+  });
 });
 
 test("解析器拒绝不可解析的工作簿内容", () => {

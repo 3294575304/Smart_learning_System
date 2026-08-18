@@ -63,8 +63,10 @@ test("报告 AI 只接收去标识化聚合并接受严格结构文字", async (
       return {
         gradeAnalysis: "成绩分析",
         outcomeAnalysis: "目标分析",
+        outcomeDetails: [],
         studentEvaluation: "学生评价",
-        summary: "持续改进",
+        courseSummary: "课程总结",
+        improvementMeasures: "持续改进",
       };
     }),
     source,
@@ -72,7 +74,7 @@ test("报告 AI 只接收去标识化聚合并接受严格结构文字", async (
     baseline,
   );
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.output.summary, "持续改进");
+  assert.equal(result.output.improvementMeasures, "持续改进");
   assert.doesNotMatch(serializedInput, /20260001|不会发送给 AI/u);
 });
 

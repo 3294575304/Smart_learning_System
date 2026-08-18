@@ -81,6 +81,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   OUTCOME_ATTAINMENT_GENERATED: "生成课程目标达成度",
   QUALITY_REPORT_GENERATION_REQUESTED: "请求生成教学质量报告",
   QUALITY_REPORT_GENERATED: "生成教学质量报告",
+  QUALITY_REPORT_APPROVED: "审核教学质量报告",
   QUALITY_REPORT_DOWNLOADED: "下载教学质量报告",
   COURSE_SURVEY_CREATED: "创建结课问卷",
   COURSE_SURVEY_UPDATED: "更新结课问卷",

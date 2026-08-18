@@ -92,6 +92,15 @@ export function buildDeterministicNarrative(
     (item) =>
       item.attainmentIndex !== null && item.attainmentIndex < item.threshold,
   );
+  const outcomeDetails = stats.outcomes.map((item) => ({
+    code: item.code,
+    analysis:
+      item.attainmentIndex === null
+        ? `课程目标 ${item.code} 暂无可核验的达成度数据，需补齐考核证据后再形成结论。`
+        : item.attainmentIndex >= item.threshold
+          ? `课程目标 ${item.code} 的达成度为 ${item.attainmentIndex.toFixed(2)}，达到期望值 ${item.threshold.toFixed(2)}。建议结合分项成绩、学生反馈和具体考核证据继续复核优势与薄弱环节。`
+          : `课程目标 ${item.code} 的达成度为 ${item.attainmentIndex.toFixed(2)}，低于期望值 ${item.threshold.toFixed(2)}。应复核对应考核环节、教学内容与学习支持，并在下一轮教学中验证改进效果。`,
+  }));
   return {
     gradeComposition: `总评成绩 = ${formula}。有效成绩 ${stats.participantCount} 人，特殊状态或缺失数据 ${stats.excludedCount} 人。`,
     gradeAnalysis:
@@ -103,6 +112,7 @@ export function buildDeterministicNarrative(
         ? `${below.map((item) => item.code).join("、")} 低于各自达成阈值，应结合对应考核证据复核教学与评价设计。`
         : "现有课程目标均达到设定阈值，仍需结合分项成绩和学生反馈持续改进。"
       : "当前数据源未提供可核验的课程目标达成度，报告不作推断。",
+    outcomeDetails,
     studentEvaluation: source.survey
       ? source.survey.isSuppressed
         ? `结课问卷收到 ${source.survey.responseCount}/${source.survey.eligibleCount} 份回答，低于 ${source.survey.minSampleSize} 份小样本阈值，因此不展示量表细分或开放题主题。学生自评不替代客观成绩与课程目标定量达成度。`
@@ -112,7 +122,11 @@ export function buildDeterministicNarrative(
               : ""
           }${source.survey.themeNarrative}以上为学生定性自评，与客观达成度分开呈现。`
       : "暂无已关闭且完成聚合的课程问卷数据，学生评价留待教师补充；报告不作推断。",
-    summary: weakest
+    courseSummary:
+      stats.mean === null
+        ? "当前缺少可用于课程质量分析的有效成绩，暂不形成确定性质量结论。"
+        : `本次统计纳入 ${stats.participantCount} 名学生，班级平均分为 ${stats.mean.toFixed(2)}，及格率为 ${((stats.passRate ?? 0) * 100).toFixed(1)}%。课程目标定量结果、学生评价与出勤数据分别作为独立证据呈现。`,
+    improvementMeasures: weakest
       ? `成绩统计显示“${weakest.name}”平均分相对较低。建议针对该环节补充形成性反馈、典型错误讲评与分层练习，并在下一轮教学中复核改进效果。`
       : "建议补齐有效成绩和课程目标证据后再形成针对性改进措施。",
   };

@@ -16,8 +16,12 @@ $stderrPath = Join-Path $config.logRoot "worker.stderr.log"
 $workerEntry = Join-Path $config.repoRoot ".data/programming-judge-worker-build/main.js"
 Push-Location $config.repoRoot
 try {
+  # Native stderr is diagnostic output, not a PowerShell terminating error.
+  $ErrorActionPreference = "Continue"
   & $config.nodeExecutable $workerEntry 1>> $stdoutPath 2>> $stderrPath
-  exit $LASTEXITCODE
+  $processExitCode = $LASTEXITCODE
 } finally {
+  $ErrorActionPreference = "Stop"
   Pop-Location
 }
+exit $processExitCode

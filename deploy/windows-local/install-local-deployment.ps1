@@ -143,7 +143,7 @@ $config = [ordered]@{
     NODE_ENV = "production"
     NEXT_DIST_DIR = $nextBuildDirectory
     BACKGROUND_JOB_WORKER_SECRET = $workerSecret
-    APPLICATION_INTERNAL_URL = "http://127.0.0.1:3000"
+    APPLICATION_INTERNAL_URL = "http://[::1]:3000"
     SANDBOX_EXECUTOR_URL = "http://127.0.0.1:18788"
     SANDBOX_EXECUTOR_API_KEY = $executorApiKey
     PROGRAMMING_JUDGE_WORKER_ID = "windows-local-$($env:COMPUTERNAME.ToLowerInvariant())"
@@ -187,6 +187,7 @@ Start-Sleep -Seconds 1
 $deploymentProcesses = Get-CimInstance Win32_Process | Where-Object {
   ($_.Name -eq "node.exe" -and (
     $_.CommandLine -like "*$RepoRoot\node_modules\next\dist\bin\next start -H 127.0.0.1 -p 3000*" -or
+    $_.CommandLine -like "*$RepoRoot\node_modules\next\dist\bin\next start -H ::1 -p 3000*" -or
     $_.CommandLine -like "*$RepoRoot\.data\programming-judge-worker-build\main.js*"
   )) -or
   ($_.Name -eq "ssh.exe" -and
@@ -211,23 +212,21 @@ foreach ($logName in @(
   )
 }
 
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
 $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries `
   -DontStopOnIdleEnd `
   -ExecutionTimeLimit ([TimeSpan]::Zero) `
-  -MultipleInstances IgnoreNew `
-  -RestartCount 999 `
-  -RestartInterval (New-TimeSpan -Minutes 1) `
-  -StartWhenAvailable
+  -MultipleInstances IgnoreNew
 
 foreach ($definition in $taskDefinitions) {
   $scriptPath = Join-Path $PSScriptRoot $definition.Script
   $arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`" -ConfigPath `"$configPath`""
   $action = New-ScheduledTaskAction -Execute $powershellExecutable -Argument $arguments -WorkingDirectory $RepoRoot
-  $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings
+  # No trigger is registered: these tasks only run when start-all.ps1 (or the
+  # operator) starts them explicitly, and they stay stopped after stop-all.ps1.
+  $task = New-ScheduledTask -Action $action -Principal $principal -Settings $settings
   Register-ScheduledTask -TaskName $definition.Name -InputObject $task -Force | Out-Null
 }
 
@@ -245,7 +244,7 @@ if ($health.status -ne "ok") {
   throw "Remote executor health check failed"
 }
 
-$appResponse = Invoke-WebRequest -Uri "http://127.0.0.1:3000/login" -UseBasicParsing -TimeoutSec 15
+$appResponse = Invoke-WebRequest -Uri "http://localhost:3000/login" -UseBasicParsing -TimeoutSec 15
 if ($appResponse.StatusCode -ne 200) {
   throw "Next.js health check failed"
 }

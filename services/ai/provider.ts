@@ -24,6 +24,7 @@ export interface AIProviderResponse {
 }
 
 export type AIEndpointType = "chat-completions" | "responses";
+export type AIThinkingMode = "enabled" | "disabled";
 
 export type AIProviderErrorCode =
   | "PROVIDER_NOT_CONFIGURED"

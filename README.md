@@ -20,7 +20,7 @@ AI 驱动的个性化教学平台。MVP 已完成并通过演示验收；V1.0 �
 | V1.0 迭代五 D：批量题目映射       | 已完成               | 外部 AI 候选、严格输出/ID 范围校验、失败安全降级、教师预览/修改/确认、版本元数据和不覆盖人工绑定已落地；真实合成数据契约探测通过                                 |
 | V1.0 迭代六：课程图谱驱动推荐     | 已完成并通过专项验收 | 课程图谱/教学进度驱动推荐、六项版本化策略、自主练习、Python 异步判题、追加式反馈闭环、AI 自述与结构化条件确认均已落地；旧 MVP 推荐历史保持兼容                   |
 | V1.0 迭代七 A：结课问卷           | 功能闭环已实现       | 正式大纲派生草稿、教师审核、实名/匿名发布、一次性提交、匿名关联隔离、汇总修订、小样本保护、开放题脱敏与确定性主题分析已落地                                      |
-| V1.0 迭代七 B：教学质量报告       | 功能闭环已实现       | 固定 2024 DOCX 模板、平台/上传双数据源、不可变快照、后台任务、问卷聚合接入、统一 AI 文字与确定性降级、DOCX/XLSX 私有下载和审计已落地                             |
+| V1.0 迭代七 B：教学质量报告       | 功能闭环已实现       | 固定 2024 DOCX 模板、平台/上传双数据源、不可变快照、后台任务、问卷聚合、统一 AI 初稿、教师逐项审核、正式 DOCX/XLSX 私有下载和审计已落地                          |
 | V1.0 迭代八：整合与验收           | 待开发               | V1.0 全流程界面整合、端到端验收、部署与演示尚未完成                                                                                                              |
 
 迭代五已于 2026-08-11 完成专项验收，迭代六已于 2026-08-13 正式封口。2026-08-16 已完成迭代七问卷与报告功能闭环：353/353 单测、50 个 migration 的空库 HTTP 集成、Prisma 校验、格式、Lint、类型检查和 Next.js 生产构建通过；固定样例 DOCX/XLSX 已实际生成并重新打开。迭代七仍需完成登录态浏览器全流程与真实 AI Provider 专项验收，不能据此宣称 V1.0 整体完成。Windows 无人登录开机自启按目标部署环境选配，不作为功能专项验收门禁。
@@ -35,7 +35,7 @@ AI 驱动的个性化教学平台。MVP 已完成并通过演示验收；V1.0 �
 - 教学评价：考核方案、成绩台账、特殊状态、签到与纠正、课程目标达成度、统一学习事件、追加式课程证据和版本化掌握度。
 - Python 判题：不可变题目配置、公开样例、隐藏用例异步判题、隔离资源限制、确定性评分、重试/重判/撤销和隐藏信息隔离。
 - 学情画像：不可变画像快照、证据门槛与置信度、出勤/活跃度/反思/客观掌握度分维度保存，以及师生证据下钻页面。
-- 教学质量报告闭环：固定 2024 模板、平台正式成绩或独立上传成绩双来源、问卷聚合、版本化数据/统计/文字快照、可重试后台任务、统一 AI 文字与确定性降级、DOCX/成绩工作簿生成、私有下载和审计。
+- 教学质量报告闭环：固定 2024 模板、平台正式成绩或独立上传成绩双来源、问卷聚合、版本化数据/统计/AI 初稿/教师审核文字快照、可重试后台任务、严格模板 DOCX、成绩工作簿、私有下载和审计。
 
 迭代六已建立完整课程推荐闭环：教师维护正式图谱的已授 Concept 范围和六项版本化策略，学生以知识点、题型、题量和难度发起结构化自主练习。推荐周期冻结图谱、画像、掌握度、教学进度、策略及题目—Concept 来源；客观题和 Python 判题完成后追加课程学习事件、推荐证据、掌握度修订与画像快照，重判和撤销不覆盖历史。AI 自述独立于客观画像并支持确认、修改和删除。旧 MVP 推荐历史不迁移、不改写，推荐练习不计入正式课程成绩。
 
@@ -53,10 +53,10 @@ AI 驱动的个性化教学平台。MVP 已完成并通过演示验收；V1.0 �
 
 - 教师从课程详情进入 `/teacher/courses/:courseId/quality-report`，可选择平台正式成绩台账，也可上传隔离的 `.xlsx`/`.csv` 成绩源；上传源只生成报告快照，不回写正式成绩。
 - 报告冻结模板校验和、来源数据、统计结果、规则版本和生成记录，通过通用后台任务执行并支持安全重试与幂等复用。
-- 当前可生成基于固定 2024 模板的 DOCX 和带公式的成绩工作簿；审核意见、签字和日期保持空白，下载执行教师/课程归属校验并使用私有无缓存响应。
+- 当前先生成基于固定 2024 模板的 AI 审核稿和带公式的成绩工作簿；教师逐项核对、修改并确认后才生成正式 DOCX。课程评价小组、学院意见、签字和日期保持空白，所有下载执行教师/课程归属校验并使用私有无缓存响应。
 - 报告自动纳入同班级最近一次已关闭问卷的聚合快照；统一 AI Service Layer 只接收去标识化统计，失败时继续使用确定性文字。
 - V1.0 固定 2024 模板使用已确认映射；仅在引入不同复杂模板时再增加上传与人工字段映射，不猜测填充位置。
-- 登录态浏览器全流程、真实 AI Provider 和最终版式对照仍待专项验收。
+- 登录态浏览器全流程和真实 AI Provider 仍待专项验收；固定样例已与空白模板和参考成品完成 Microsoft Word 逐页版式对照。
 - DOCX 运行依赖与模板字段映射见 [`docs/report-templates/artifact.md`](docs/report-templates/artifact.md)。
 
 迭代一采用“预导入身份、学生自主认领”的账号流程。名单导入只创建待认领身份和班级预分配；学生在注册页使用唯一学号与名单姓名认领账号。历史一次性账号仅保留兼容能力，专项验收记录见 [`docs/ITERATION-ONE-ACCEPTANCE.md`](docs/ITERATION-ONE-ACCEPTANCE.md)。
@@ -65,7 +65,7 @@ AI 驱动的个性化教学平台。MVP 已完成并通过演示验收；V1.0 �
 
 - `POST /api/student/submissions/:submissionId/analysis` 为当前已批改作答生成或复用学情分析。
 - `GET /api/student/submissions/:submissionId/analysis` 读取与当前数据指纹匹配的已有分析。
-- 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_API_TYPE`（DeepSeek 等兼容接口使用 `chat-completions`，OpenAI Responses API 使用 `responses`）、`AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。大纲长结构化输出单独使用毫秒单位的 `SYLLABUS_AI_TIMEOUT_MS`，默认 `180000`，允许覆盖到 `600000`；`SYLLABUS_AI_MAX_COMPLETION_TOKENS` 默认 `8192`，用于显式设置大纲输出上限。
+- 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_API_TYPE`（DeepSeek 等兼容接口使用 `chat-completions`，OpenAI Responses API 使用 `responses`）、`AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。大纲长结构化输出单独使用毫秒单位的 `SYLLABUS_AI_TIMEOUT_MS`，默认 `180000`，允许覆盖到 `600000`；`SYLLABUS_AI_MAX_COMPLETION_TOKENS` 默认 `8192`、最高 `384000`，会按配置值实际传给 Provider。DeepSeek V4 默认思考会占用输出预算，系统对官方 DeepSeek 地址默认关闭思考，也可通过 `AI_THINKING_MODE` 显式覆盖。
 - 模型输出会经过严格 Zod 校验，失败最多重试一次；仍失败时返回基于正确率的规则结果。分析接口独立于交卷和成绩接口，AI 故障不会影响成绩查看。
 
 ## 教学大纲结构化解析
@@ -152,7 +152,13 @@ AI 驱动的个性化教学平台。MVP 已完成并通过演示验收；V1.0 �
 powershell -ExecutionPolicy Bypass -File .\start-all.ps1
 ```
 
-首次运行前仍需准备 `.env`、安装 npm 依赖，并按 [`deploy/windows-local/README.md`](deploy/windows-local/README.md) 配置 SSH 私钥、known_hosts 和远程执行器。仅在已经确认生产构建未变化时可传入 `-SkipBuild`；仅在明确已应用 migration 时可传入 `-SkipMigration`。脚本成功后访问 `http://127.0.0.1:3000`，运行日志位于 `.data/local-deployment/logs`。
+首次运行前仍需准备 `.env`、安装 npm 依赖，并按 [`deploy/windows-local/README.md`](deploy/windows-local/README.md) 配置 SSH 私钥、known_hosts 和远程执行器。仅在已经确认生产构建未变化时可传入 `-SkipBuild`；仅在明确已应用 migration 时可传入 `-SkipMigration`。脚本成功后访问 `http://localhost:3000`，运行日志位于 `.data/local-deployment/logs`。
+
+本地生产服务不会随登录、定时器或失败重试自动启动。需要关闭应用、worker 和 SSH 隧道时运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\stop-all.ps1
+```
 
 ### 手动启动 Web 开发服务器
 

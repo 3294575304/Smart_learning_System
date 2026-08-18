@@ -7,7 +7,9 @@ import {
   AuditAction,
   AuditTargetType,
   GradeValueStatus,
+  OutcomeStudentStatus,
   Prisma,
+  QualityReportReviewStatus,
   QualityReportSourceType,
   QualityReportStatus,
 } from "@prisma/client";
@@ -40,6 +42,8 @@ import { buildQualityReportDocx } from "@/services/quality-reports/docx-writer";
 import { QualityReportOperationError } from "@/services/quality-reports/errors";
 import {
   qualityReportPlatformInputSchema,
+  qualityReportNarrativeSchema,
+  qualityReportReviewSchema,
   qualityReportSourceSnapshotSchema,
   qualityReportSurveySnapshotSchema,
   qualityReportUploadMetadataSchema,
@@ -162,6 +166,31 @@ function componentResults(value: Prisma.JsonValue) {
   });
 }
 
+function outcomeMappingSnapshot(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const mappings = (value as Record<string, unknown>).mappings;
+  if (!Array.isArray(mappings)) return [];
+  return mappings.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    if (
+      typeof record.componentId !== "string" ||
+      typeof record.outcomeId !== "string"
+    )
+      return [];
+    const allocationRate = Number(record.allocationRate);
+    if (!Number.isFinite(allocationRate)) return [];
+    return [
+      {
+        componentId: record.componentId,
+        outcomeId: record.outcomeId,
+        allocationRate:
+          allocationRate > 1 ? allocationRate / 100 : allocationRate,
+      },
+    ];
+  });
+}
+
 async function platformSource(
   teacherId: string,
   courseId: string,
@@ -222,7 +251,18 @@ async function platformSource(
           gradebookPublicationId: gradebook.currentPublication.id,
           course: { teacherId },
         },
-        include: { results: { orderBy: { outcomeCode: "asc" } } },
+        include: {
+          results: {
+            orderBy: { outcomeCode: "asc" },
+            include: {
+              students: {
+                where: { status: OutcomeStudentStatus.INCLUDED },
+                orderBy: { studentId: "asc" },
+                select: { score: true },
+              },
+            },
+          },
+        },
       })
     : await prisma.courseOutcomeAttainmentRun.findFirst({
         where: {
@@ -230,7 +270,18 @@ async function platformSource(
           gradebookPublicationId: gradebook.currentPublication.id,
         },
         orderBy: { versionNumber: "desc" },
-        include: { results: { orderBy: { outcomeCode: "asc" } } },
+        include: {
+          results: {
+            orderBy: { outcomeCode: "asc" },
+            include: {
+              students: {
+                where: { status: OutcomeStudentStatus.INCLUDED },
+                orderBy: { studentId: "asc" },
+                select: { score: true },
+              },
+            },
+          },
+        },
       });
   if (input.outcomeAttainmentRunId && !attainment)
     throw new ResourceNotFoundError("课程目标达成度版本不存在。");
@@ -248,6 +299,15 @@ async function platformSource(
     ["PRESENT", "LATE", "EARLY_LEAVE"].includes(item.currentStatus),
   ).length;
   const survey = await latestSurveySnapshot(courseId, gradebook.classroomId);
+  const componentCodeById = new Map(
+    gradebook.scheme.components.map((component) => [
+      component.id,
+      component.code,
+    ]),
+  );
+  const attainmentMappings = outcomeMappingSnapshot(
+    attainment?.inputSnapshotJson ?? Prisma.JsonNull,
+  );
   return qualityReportSourceSnapshotSchema.parse({
     course: {
       id: gradebook.course.id,
@@ -265,6 +325,7 @@ async function platformSource(
     classroom: gradebook.classroom,
     sourceType: QualityReportSourceType.PLATFORM,
     components: gradebook.scheme.components.map((component) => ({
+      id: component.id,
       code: component.code,
       name: component.name,
       weight: Number(component.weight),
@@ -295,6 +356,15 @@ async function platformSource(
             ? null
             : Number(result.attainmentIndex),
         participantCount: result.participantCount,
+        componentAllocations: attainmentMappings.flatMap((mapping) => {
+          const componentCode = componentCodeById.get(mapping.componentId);
+          return mapping.outcomeId === result.outcomeId && componentCode
+            ? [{ componentCode, allocationRate: mapping.allocationRate }]
+            : [];
+        }),
+        studentScores: result.students.flatMap((student) =>
+          student.score === null ? [] : [Number(student.score)],
+        ),
       })) ?? [],
     attendance: {
       sessionCount: new Set(attendance.map((item) => item.sessionId)).size,
@@ -608,7 +678,7 @@ export async function processQualityReportJob(
       buildQualityReportDocx(source, statistics, narrative),
       Promise.resolve(buildQualityReportWorkbook(source)),
     ]);
-    docxKey = `quality-reports/${report.courseId}/outputs/${report.id}.docx`;
+    docxKey = `quality-reports/${report.courseId}/drafts/${report.id}.docx`;
     workbookKey = `quality-reports/${report.courseId}/outputs/${report.id}.xlsx`;
     await storage.save(docxKey, docx);
     await storage.save(workbookKey, workbook);
@@ -640,7 +710,7 @@ export async function processQualityReportJob(
             aiProvider: narrativeExecution.provider,
             aiModel: narrativeExecution.model,
             docxStorageKey: docxKey,
-            docxFileName: `${source.course.name}-教学质量分析报告-v${report.versionNumber}.docx`,
+            docxFileName: `${source.course.name}-教学质量分析报告-AI审核稿-v${report.versionNumber}.docx`,
             docxSizeBytes: docx.length,
             docxChecksumSha256: sha256(docx),
             workbookStorageKey: workbookKey,
@@ -698,6 +768,125 @@ export async function processQualityReportJob(
   }
 }
 
+export async function approveTeacherQualityReport(
+  teacherId: string,
+  courseId: string,
+  reportId: string,
+  rawInput: unknown,
+  context: AuditRequestContext,
+) {
+  const input = qualityReportReviewSchema.parse(rawInput);
+  const report = await prisma.courseQualityReport.findFirst({
+    where: { id: reportId, courseId, course: { teacherId } },
+  });
+  if (!report || report.status !== QualityReportStatus.SUCCEEDED)
+    throw new ResourceNotFoundError("待审核报告不存在。");
+  if (report.reviewStatus === QualityReportReviewStatus.APPROVED)
+    return {
+      report: {
+        id: report.id,
+        reviewStatus: report.reviewStatus,
+        reviewedAt: report.reviewedAt,
+      },
+      reused: true,
+    };
+  const source = qualityReportSourceSnapshotSchema.parse(
+    report.sourceSnapshotJson,
+  );
+  const statistics = calculateQualityReportStatistics(source);
+  const baseline = buildDeterministicNarrative(source, statistics);
+  const reviewedNarrative = qualityReportNarrativeSchema.parse({
+    gradeAnalysis: input.gradeAnalysis,
+    outcomeAnalysis: input.outcomeAnalysis,
+    outcomeDetails: input.outcomeDetails,
+    studentEvaluation: input.studentEvaluation,
+    courseSummary: input.courseSummary,
+    improvementMeasures: input.improvementMeasures,
+  });
+  const expectedCodes = statistics.outcomes.map((item) => item.code).sort();
+  const reviewedCodes = reviewedNarrative.outcomeDetails
+    .map((item) => item.code)
+    .sort();
+  if (
+    expectedCodes.length !== reviewedCodes.length ||
+    expectedCodes.some((code, index) => code !== reviewedCodes[index])
+  )
+    throw new QualityReportOperationError(
+      "课程目标分析必须与本报告冻结的正式目标逐项对应。",
+      400,
+      "OUTCOME_REVIEW_SCOPE_INVALID",
+    );
+  const docx = await buildQualityReportDocx(
+    source,
+    statistics,
+    {
+      gradeComposition: baseline.gradeComposition,
+      ...reviewedNarrative,
+    },
+    { reviewed: true },
+  );
+  const storage = getStorageService();
+  const storageKey = `quality-reports/${courseId}/approved/${reportId}-${randomUUID()}.docx`;
+  await storage.save(storageKey, docx);
+  try {
+    const approved = await prisma.$transaction(async (transaction) => {
+      const claimed = await transaction.courseQualityReport.updateMany({
+        where: {
+          id: reportId,
+          reviewStatus: QualityReportReviewStatus.PENDING_REVIEW,
+        },
+        data: {
+          reviewStatus: QualityReportReviewStatus.APPROVED,
+          reviewedNarrativeJson: json(reviewedNarrative),
+          reviewedById: teacherId,
+          reviewedAt: new Date(),
+          reviewComment: input.reviewComment || null,
+          approvedDocxStorageKey: storageKey,
+          approvedDocxFileName: `${source.course.name}-教学质量分析报告-v${report.versionNumber}.docx`,
+          approvedDocxSizeBytes: docx.length,
+          approvedDocxChecksumSha256: sha256(docx),
+        },
+      });
+      if (claimed.count !== 1)
+        throw new QualityReportOperationError(
+          "报告已被审核，请刷新后查看。",
+          409,
+          "REPORT_ALREADY_REVIEWED",
+        );
+      const updated = await transaction.courseQualityReport.findUniqueOrThrow({
+        where: { id: reportId },
+      });
+      await writeGovernanceAuditLog(transaction, {
+        actorId: teacherId,
+        action: AuditAction.QUALITY_REPORT_APPROVED,
+        targetType: AuditTargetType.QUALITY_REPORT,
+        targetId: reportId,
+        summary: `审核并确认课程教学质量分析报告 v${report.versionNumber}`,
+        beforeData: {
+          reviewStatus: QualityReportReviewStatus.PENDING_REVIEW,
+        },
+        afterData: {
+          reviewStatus: QualityReportReviewStatus.APPROVED,
+          approvedDocxChecksumSha256: sha256(docx),
+        },
+        context,
+      });
+      return updated;
+    });
+    return {
+      report: {
+        id: approved.id,
+        reviewStatus: approved.reviewStatus,
+        reviewedAt: approved.reviewedAt,
+      },
+      reused: false,
+    };
+  } catch (error) {
+    await storage.delete(storageKey);
+    throw error;
+  }
+}
+
 export async function getTeacherQualityReports(
   teacherId: string,
   courseId: string,
@@ -726,7 +915,18 @@ export async function getTeacherQualityReports(
     prisma.courseQualityReport.findMany({
       where: { courseId },
       orderBy: { versionNumber: "desc" },
-      include: {
+      select: {
+        id: true,
+        versionNumber: true,
+        sourceType: true,
+        status: true,
+        reviewStatus: true,
+        aiStatus: true,
+        narrativeSnapshotJson: true,
+        reviewedNarrativeJson: true,
+        reviewedAt: true,
+        reviewComment: true,
+        createdAt: true,
         backgroundJob: {
           select: { status: true, progress: true, errorCode: true },
         },
@@ -740,7 +940,7 @@ export async function downloadTeacherQualityReport(
   teacherId: string,
   courseId: string,
   reportId: string,
-  artifact: "docx" | "xlsx",
+  artifact: "draft-docx" | "docx" | "xlsx",
   context: AuditRequestContext,
 ) {
   const report = await prisma.courseQualityReport.findFirst({
@@ -748,10 +948,27 @@ export async function downloadTeacherQualityReport(
   });
   if (!report || report.status !== QualityReportStatus.SUCCEEDED)
     throw new ResourceNotFoundError("报告文件不存在。");
+  if (
+    artifact === "docx" &&
+    report.reviewStatus !== QualityReportReviewStatus.APPROVED
+  )
+    throw new QualityReportOperationError(
+      "请先完成人工审核，再下载正式 DOCX。",
+      409,
+      "QUALITY_REPORT_REVIEW_REQUIRED",
+    );
   const storageKey =
-    artifact === "docx" ? report.docxStorageKey : report.workbookStorageKey;
+    artifact === "docx"
+      ? report.approvedDocxStorageKey
+      : artifact === "draft-docx"
+        ? report.docxStorageKey
+        : report.workbookStorageKey;
   const fileName =
-    artifact === "docx" ? report.docxFileName : report.workbookFileName;
+    artifact === "docx"
+      ? report.approvedDocxFileName
+      : artifact === "draft-docx"
+        ? report.docxFileName
+        : report.workbookFileName;
   if (!storageKey || !fileName)
     throw new ResourceNotFoundError("报告文件不存在。");
   const data = await getStorageService().read(storageKey);
@@ -761,7 +978,7 @@ export async function downloadTeacherQualityReport(
       action: AuditAction.QUALITY_REPORT_DOWNLOADED,
       targetType: AuditTargetType.QUALITY_REPORT,
       targetId: reportId,
-      summary: `下载课程教学质量报告${artifact === "docx" ? " DOCX" : "成绩工作簿"}`,
+      summary: `下载课程教学质量报告${artifact === "docx" ? "正式 DOCX" : artifact === "draft-docx" ? "AI 审核稿 DOCX" : "成绩工作簿"}`,
       beforeData: null,
       afterData: { artifact, versionNumber: report.versionNumber },
       context,

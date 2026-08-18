@@ -17,15 +17,21 @@ $arguments = @(
   (Join-Path $config.repoRoot "node_modules/next/dist/bin/next"),
   "start",
   "-H",
-  "127.0.0.1",
+  "::1",
   "-p",
   "3000"
 )
 
 Push-Location $config.repoRoot
 try {
+  # Windows PowerShell 5 promotes native stderr to NativeCommandError when the
+  # global preference is Stop. Next.js legitimately writes request failures to
+  # stderr, which must not terminate the wrapper prematurely.
+  $ErrorActionPreference = "Continue"
   & $config.nodeExecutable @arguments 1>> $stdoutPath 2>> $stderrPath
-  exit $LASTEXITCODE
+  $processExitCode = $LASTEXITCODE
 } finally {
+  $ErrorActionPreference = "Stop"
   Pop-Location
 }
+exit $processExitCode

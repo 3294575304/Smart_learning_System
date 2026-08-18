@@ -15,7 +15,7 @@ export async function GET(request: Request, context: Context) {
   if (!courseId.success || !/^c[a-z0-9]{20,}$/u.test(params.reportId))
     return apiError("报告参数无效", 400);
   const artifact = new URL(request.url).searchParams.get("artifact");
-  if (artifact !== "docx" && artifact !== "xlsx")
+  if (artifact !== "draft-docx" && artifact !== "docx" && artifact !== "xlsx")
     return apiError("下载类型无效", 400);
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
@@ -30,7 +30,7 @@ export async function GET(request: Request, context: Context) {
     return new Response(new Uint8Array(file.data), {
       headers: {
         "Content-Type":
-          artifact === "docx"
+          artifact === "docx" || artifact === "draft-docx"
             ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename*=UTF-8''${encoded}`,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("Windows local tasks remain active when user activity resumes", async () => {
+test("Windows local tasks only start and stop through explicit commands", async () => {
   const installer = await readFile(
     new URL(
       "../../deploy/windows-local/install-local-deployment.ps1",
@@ -10,10 +10,37 @@ test("Windows local tasks remain active when user activity resumes", async () =>
     ),
     "utf8",
   );
+  const stopScript = await readFile(
+    new URL("../../stop-all.ps1", import.meta.url),
+    "utf8",
+  );
 
   assert.match(installer, /-DontStopOnIdleEnd/u);
-  assert.match(installer, /-RestartCount 999/u);
   assert.match(installer, /-DontStopIfGoingOnBatteries/u);
+  assert.match(installer, /-MultipleInstances IgnoreNew/u);
+  assert.doesNotMatch(installer, /New-ScheduledTaskTrigger/u);
+  assert.doesNotMatch(installer, /-RestartCount/u);
+  assert.match(stopScript, /Stop-ScheduledTask/u);
+  assert.match(stopScript, /MANUAL_SERVICES_STOPPED=1/u);
+});
+
+test("Windows wrappers keep native stderr from terminating services", async () => {
+  const wrappers = await Promise.all(
+    ["run-next.ps1", "run-worker.ps1", "run-tunnel.ps1"].map((file) =>
+      readFile(
+        new URL(`../../deploy/windows-local/${file}`, import.meta.url),
+        "utf8",
+      ),
+    ),
+  );
+
+  for (const wrapper of wrappers) {
+    assert.match(wrapper, /\$ErrorActionPreference = "Continue"/u);
+  }
+  assert.match(wrappers[0], /"::1"/u);
+  assert.doesNotMatch(wrappers[0], /while \(\$true\)/u);
+  assert.match(wrappers[0], /\$processExitCode = \$LASTEXITCODE/u);
+  assert.match(wrappers[1], /\$processExitCode = \$LASTEXITCODE/u);
 });
 
 test("Windows production build is isolated from the Next.js development output", async () => {

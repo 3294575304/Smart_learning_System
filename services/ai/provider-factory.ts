@@ -7,6 +7,10 @@ import {
   AIProviderRequestError,
   type AIEndpointType,
 } from "@/services/ai/provider";
+import {
+  parseSyllabusMaxCompletionTokens,
+  resolveAIThinkingMode,
+} from "@/services/ai/provider-config";
 
 export function createAIProvider(): AIProvider {
   const provider =
@@ -29,18 +33,15 @@ export function createAIProvider(): AIProvider {
       "PROVIDER_NOT_CONFIGURED",
     );
   }
-  const configuredMaxTokens = Number(
+  const syllabusMaxCompletionTokens = parseSyllabusMaxCompletionTokens(
     process.env.SYLLABUS_AI_MAX_COMPLETION_TOKENS,
   );
-  const syllabusMaxCompletionTokens =
-    Number.isInteger(configuredMaxTokens) && configuredMaxTokens > 0
-      ? Math.min(configuredMaxTokens, 8_192)
-      : 8_192;
   return new OpenAICompatibleProvider({
     apiKey,
     baseUrl,
     model,
     endpointType: parseEndpointType(process.env.AI_API_TYPE),
+    thinkingMode: resolveAIThinkingMode(process.env.AI_THINKING_MODE, baseUrl),
     syllabusMaxCompletionTokens,
     timeoutMs: parseTimeout(process.env.AI_TIMEOUT_MS),
   });
