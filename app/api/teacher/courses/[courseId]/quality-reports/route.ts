@@ -45,7 +45,7 @@ export async function POST(request: Request, context: Context) {
         {
           sourceType: "UPLOAD",
           classroomId: String(form.get("classroomId") ?? "") || undefined,
-          courseNature: String(form.get("courseNature") ?? "专业(必)"),
+          courseNature: String(form.get("courseNature") ?? ""),
           credits: String(form.get("credits") ?? "0"),
           majorClass: String(form.get("majorClass") ?? ""),
           college: String(form.get("college") ?? ""),

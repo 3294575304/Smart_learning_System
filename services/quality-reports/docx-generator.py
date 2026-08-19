@@ -290,7 +290,8 @@ for index, outcome in enumerate(source.get("outcomes", [])):
     current = paragraph if index == 0 else objective_cell.add_paragraph()
     format_paragraph(current, line=1.5)
     add_text(current, f"课程目标{outcome['code']} ", bold=True)
-    add_text(current, outcome["title"])
+    description = outcome.get("description")
+    add_text(current, description or outcome["title"])
 if not source.get("outcomes"):
     add_text(paragraph, "当前数据源未提供正式课程目标。")
 
@@ -354,7 +355,7 @@ if outcomes:
         )
         values.extend([
             "未提供" if outcome["attainmentIndex"] is None else f"{outcome['attainmentIndex']:.2f}",
-            f"{outcome['threshold']:.2f}",
+            "未提供" if outcome["threshold"] is None else f"{outcome['threshold']:.2f}",
             str(outcome["participantCount"]),
         ])
         for column, value in enumerate(values):
@@ -363,16 +364,21 @@ if outcomes:
 paragraph = outcome_cell.add_paragraph()
 format_paragraph(paragraph, before=5, line=1.2)
 add_text(paragraph, "2.课程目标达成情况——定性分析", bold=True)
-if outcomes:
+chartable_outcomes = [
+    outcome
+    for outcome in outcomes
+    if outcome.get("attainmentIndex") is not None and outcome.get("threshold") is not None
+]
+if chartable_outcomes:
     summary_chart = os.path.join(work_dir, "outcome-summary.png")
     grouped_outcome_chart(
         [
             (
                 outcome["code"],
-                outcome["attainmentIndex"] or 0,
+                outcome["attainmentIndex"],
                 outcome["threshold"],
             )
-            for outcome in outcomes
+            for outcome in chartable_outcomes
         ],
         summary_chart,
     )
@@ -387,7 +393,7 @@ for index, outcome in enumerate(outcomes, start=3):
     format_paragraph(paragraph, before=4, line=1.5)
     add_text(paragraph, f"课程目标{outcome['code']}达成情况分析：", bold=True)
     add_text(paragraph, details.get(outcome["code"], "暂无分析文字。"))
-    if outcome.get("studentScores"):
+    if outcome.get("studentScores") and outcome.get("threshold") is not None:
         path = os.path.join(work_dir, f"outcome-{index}.png")
         scatter_chart(outcome["code"], outcome["studentScores"], outcome["threshold"], path)
         add_picture(outcome_cell, path, 5.35)

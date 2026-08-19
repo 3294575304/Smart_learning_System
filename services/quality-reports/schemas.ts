@@ -6,7 +6,7 @@ export const qualityReportPlatformInputSchema = z
     sourceType: z.literal(QualityReportSourceType.PLATFORM),
     gradebookId: z.string().cuid(),
     outcomeAttainmentRunId: z.string().cuid().optional(),
-    courseNature: z.string().trim().max(50).default("专业(必)"),
+    courseNature: z.string().trim().max(50).default(""),
     credits: z.coerce.number().min(0).max(20).default(0),
     majorClass: z.string().trim().max(200).default(""),
     college: z.string().trim().max(200).default(""),
@@ -18,7 +18,7 @@ export const qualityReportUploadMetadataSchema = z
   .object({
     sourceType: z.literal(QualityReportSourceType.UPLOAD),
     classroomId: z.string().cuid().optional(),
-    courseNature: z.string().trim().max(50).default("专业(必)"),
+    courseNature: z.string().trim().max(50).default(""),
     credits: z.coerce.number().min(0).max(20).default(0),
     majorClass: z.string().trim().max(200).default(""),
     college: z.string().trim().max(200).default(""),
@@ -104,7 +104,8 @@ export const qualityReportSourceSnapshotSchema = z.object({
     z.object({
       code: z.string(),
       title: z.string(),
-      threshold: z.number(),
+      description: z.string().nullable().optional(),
+      threshold: z.number().nullable(),
       attainmentIndex: z.number().nullable(),
       participantCount: z.number().int().nonnegative(),
       componentAllocations: z
@@ -123,6 +124,21 @@ export const qualityReportSourceSnapshotSchema = z.object({
     presentRate: z.number().min(0).max(1).nullable(),
   }),
   survey: qualityReportSurveySnapshotSchema.default(null),
+  syllabus: z
+    .object({
+      publishedStructureId: z.string().cuid(),
+      versionNumber: z.number().int().positive(),
+      courseName: z.string().nullable(),
+      courseCategory: z.string().nullable(),
+      courseNature: z.string().nullable(),
+      credits: z.number().nullable(),
+      teachingCollege: z.string().nullable(),
+      applicableMajors: z.string().nullable(),
+      objectiveCount: z.number().int().nonnegative(),
+      assessmentCount: z.number().int().nonnegative(),
+    })
+    .nullable()
+    .optional(),
   sourceReference: z.record(z.unknown()),
 });
 
@@ -154,6 +170,41 @@ export const qualityReportReviewSchema = qualityReportNarrativeSchema
   })
   .strict();
 
+export const qualityReportAuditIssueSchema = z
+  .object({
+    code: z.string().min(1).max(100),
+    severity: z.enum(["ERROR", "WARNING", "INFO"]),
+    category: z.enum([
+      "SYLLABUS",
+      "COURSE_METADATA",
+      "ASSESSMENT",
+      "OUTCOME_ATTAINMENT",
+      "SURVEY",
+      "ATTENDANCE",
+      "AI_NARRATIVE",
+    ]),
+    title: z.string().min(1).max(200),
+    message: z.string().min(1).max(1_000),
+    action: z.string().min(1).max(1_000),
+    relatedFields: z.array(z.string().min(1).max(200)).max(20),
+  })
+  .strict();
+
+export const qualityReportAuditSchema = z
+  .object({
+    ruleVersion: z.string().min(1).max(100),
+    status: z.enum(["READY", "NEEDS_REVIEW", "INCOMPLETE"]),
+    issues: z.array(qualityReportAuditIssueSchema).max(100),
+    counts: z.object({
+      errors: z.number().int().nonnegative(),
+      warnings: z.number().int().nonnegative(),
+      info: z.number().int().nonnegative(),
+    }),
+  })
+  .strict();
+
+export type QualityReportAudit = z.infer<typeof qualityReportAuditSchema>;
+
 export interface QualityReportAIInput {
   course: { name: string; courseNo: string; term: string };
   statistics: {
@@ -169,11 +220,18 @@ export interface QualityReportAIInput {
     outcomes: Array<{
       code: string;
       title: string;
-      threshold: number;
+      threshold: number | null;
       attainmentIndex: number | null;
     }>;
     attendance: { sessionCount: number; presentRate: number | null };
   };
   survey: QualityReportSourceSnapshot["survey"];
+  dataAvailability: {
+    publishedSyllabus: boolean;
+    outcomeAttainmentCount: number;
+    outcomeCount: number;
+    surveyAvailable: boolean;
+    attendanceAvailable: boolean;
+  };
   deterministicBaseline: z.infer<typeof qualityReportNarrativeSchema>;
 }

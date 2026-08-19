@@ -353,6 +353,88 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                   }
                 />
               </Field>
+              <Field label="学分">
+                <input
+                  className={inputClass}
+                  min="0"
+                  step="0.5"
+                  type="number"
+                  value={structure.courseInfo.credits ?? ""}
+                  onChange={(e) =>
+                    change((d) => {
+                      d.courseInfo.credits = e.target.value
+                        ? Number(e.target.value)
+                        : null;
+                    })
+                  }
+                />
+              </Field>
+              <Field label="课程类别">
+                <input
+                  className={inputClass}
+                  value={structure.courseInfo.courseCategory ?? ""}
+                  onChange={(e) =>
+                    change((d) => {
+                      d.courseInfo.courseCategory = e.target.value || null;
+                    })
+                  }
+                />
+              </Field>
+              <Field label="课程性质">
+                <input
+                  className={inputClass}
+                  value={structure.courseInfo.courseNature ?? ""}
+                  onChange={(e) =>
+                    change((d) => {
+                      d.courseInfo.courseNature = e.target.value || null;
+                    })
+                  }
+                />
+              </Field>
+              <Field label="授课语言">
+                <input
+                  className={inputClass}
+                  value={structure.courseInfo.teachingLanguage ?? ""}
+                  onChange={(e) =>
+                    change((d) => {
+                      d.courseInfo.teachingLanguage = e.target.value || null;
+                    })
+                  }
+                />
+              </Field>
+              <Field label="授课学期">
+                <input
+                  className={inputClass}
+                  value={structure.courseInfo.offeredTerm ?? ""}
+                  onChange={(e) =>
+                    change((d) => {
+                      d.courseInfo.offeredTerm = e.target.value || null;
+                    })
+                  }
+                />
+              </Field>
+              <Field label="适用专业">
+                <input
+                  className={inputClass}
+                  value={structure.courseInfo.applicableMajors ?? ""}
+                  onChange={(e) =>
+                    change((d) => {
+                      d.courseInfo.applicableMajors = e.target.value || null;
+                    })
+                  }
+                />
+              </Field>
+              <Field label="授课学院">
+                <input
+                  className={inputClass}
+                  value={structure.courseInfo.teachingCollege ?? ""}
+                  onChange={(e) =>
+                    change((d) => {
+                      d.courseInfo.teachingCollege = e.target.value || null;
+                    })
+                  }
+                />
+              </Field>
               <Field label="总学时">
                 <input
                   className={inputClass}

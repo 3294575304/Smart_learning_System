@@ -99,3 +99,27 @@ test("报告接入问卷聚合但明确与客观达成度分开呈现", () => {
   assert.match(narrative.studentEvaluation, /OBJ-1 4\.10\/5/u);
   assert.match(narrative.studentEvaluation, /与客观达成度分开/u);
 });
+
+test("已识别课程目标但缺少达成度时不会误报为全部达标", () => {
+  const withUncalculatedOutcome: QualityReportSourceSnapshot = {
+    ...source,
+    outcomes: [
+      {
+        code: "OBJ-1",
+        title: "知识目标",
+        description: "掌握 Python 基础语法。",
+        threshold: null,
+        attainmentIndex: null,
+        participantCount: 0,
+        componentAllocations: [],
+        studentScores: [],
+      },
+    ],
+  };
+  const narrative = buildDeterministicNarrative(
+    withUncalculatedOutcome,
+    calculateQualityReportStatistics(withUncalculatedOutcome),
+  );
+  assert.match(narrative.outcomeAnalysis, /没有可核验/u);
+  assert.doesNotMatch(narrative.outcomeAnalysis, /均达到/u);
+});

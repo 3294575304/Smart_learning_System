@@ -88,15 +88,20 @@ export function buildDeterministicNarrative(
   const weakest = [...stats.componentMeans]
     .filter((item) => item.mean !== null)
     .sort((left, right) => left.mean! - right.mean!)[0];
-  const below = stats.outcomes.filter(
-    (item) =>
-      item.attainmentIndex !== null && item.attainmentIndex < item.threshold,
+  const evaluated = stats.outcomes.filter(
+    (item) => item.attainmentIndex !== null && item.threshold !== null,
+  );
+  const below = evaluated.filter(
+    (item) => item.attainmentIndex! < item.threshold!,
+  );
+  const missingOutcomes = stats.outcomes.filter(
+    (item) => item.attainmentIndex === null || item.threshold === null,
   );
   const outcomeDetails = stats.outcomes.map((item) => ({
     code: item.code,
     analysis:
-      item.attainmentIndex === null
-        ? `课程目标 ${item.code} 暂无可核验的达成度数据，需补齐考核证据后再形成结论。`
+      item.attainmentIndex === null || item.threshold === null
+        ? `课程目标 ${item.code} 已从正式课程结构识别，但暂无完整的达成度与期望值，需补齐考核证据后再形成结论。`
         : item.attainmentIndex >= item.threshold
           ? `课程目标 ${item.code} 的达成度为 ${item.attainmentIndex.toFixed(2)}，达到期望值 ${item.threshold.toFixed(2)}。建议结合分项成绩、学生反馈和具体考核证据继续复核优势与薄弱环节。`
           : `课程目标 ${item.code} 的达成度为 ${item.attainmentIndex.toFixed(2)}，低于期望值 ${item.threshold.toFixed(2)}。应复核对应考核环节、教学内容与学习支持，并在下一轮教学中验证改进效果。`,
@@ -107,11 +112,20 @@ export function buildDeterministicNarrative(
       stats.mean === null
         ? "暂无可用于统计的有效成绩。"
         : `班级平均分 ${stats.mean.toFixed(2)}，及格率 ${((stats.passRate ?? 0) * 100).toFixed(1)}%，优秀率 ${((stats.excellentRate ?? 0) * 100).toFixed(1)}%。`,
-    outcomeAnalysis: stats.outcomes.length
-      ? below.length
-        ? `${below.map((item) => item.code).join("、")} 低于各自达成阈值，应结合对应考核证据复核教学与评价设计。`
-        : "现有课程目标均达到设定阈值，仍需结合分项成绩和学生反馈持续改进。"
-      : "当前数据源未提供可核验的课程目标达成度，报告不作推断。",
+    outcomeAnalysis:
+      stats.outcomes.length === 0
+        ? "当前数据源未提供正式课程目标，无法形成课程目标达成分析。"
+        : evaluated.length === 0
+          ? `已识别 ${stats.outcomes.length} 项正式课程目标，但当前没有可核验的定量达成度与期望值，报告不作达成结论。`
+          : `${
+              below.length
+                ? `${below.map((item) => item.code).join("、")} 低于各自达成阈值，应结合对应考核证据复核教学与评价设计。`
+                : "已有定量结果的课程目标均达到设定阈值，仍需结合分项成绩和学生反馈持续改进。"
+            }${
+              missingOutcomes.length
+                ? ` ${missingOutcomes.map((item) => item.code).join("、")} 缺少完整达成数据，不纳入上述判断。`
+                : ""
+            }`,
     outcomeDetails,
     studentEvaluation: source.survey
       ? source.survey.isSuppressed

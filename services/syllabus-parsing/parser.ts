@@ -135,6 +135,22 @@ function applyDeterministicWarnings(
       );
     }
   }
+  if (output.courseInfo.credits === null) {
+    warnings.add(
+      "未提取到学分；生成教学质量报告前请对照大纲补充并发布审核修订。",
+    );
+  }
+  if (!output.courseInfo.courseNature) {
+    warnings.add(
+      "未提取到课程性质；生成教学质量报告前请对照大纲补充并发布审核修订。",
+    );
+  }
+  if (!output.courseInfo.teachingCollege) {
+    warnings.add("未提取到授课学院；教学质量报告封面需要教师确认学院信息。");
+  }
+  if (!output.courseInfo.applicableMajors) {
+    warnings.add("未提取到适用专业；教学质量报告封面需要教师确认专业信息。");
+  }
   return { ...output, warnings: [...warnings] };
 }
 

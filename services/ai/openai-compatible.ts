@@ -226,7 +226,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         [
           {
             role: "system",
-            content: `你只根据去标识化的课程聚合统计撰写教学质量分析初稿，供教师人工审核。严格返回 JSON：{"gradeAnalysis":"...","outcomeAnalysis":"...","outcomeDetails":[{"code":"课程目标代码","analysis":"..."}],"studentEvaluation":"...","courseSummary":"...","improvementMeasures":"..."}。outcomeDetails 只能使用输入中已有课程目标代码且每个目标恰好一项。不得编造统计、学生身份或因果关系；学生问卷自评必须与客观成绩和课程目标定量达成度分开表述；数据不足时明确说明。每段不超过 1000 个汉字。${repair}`,
+            content: `你只根据去标识化的课程聚合统计撰写教学质量分析初稿，供教师人工审核。严格返回 JSON：{"gradeAnalysis":"...","outcomeAnalysis":"...","outcomeDetails":[{"code":"课程目标代码","analysis":"..."}],"studentEvaluation":"...","courseSummary":"...","improvementMeasures":"..."}。outcomeDetails 只能使用输入中已有课程目标代码且每个目标恰好一项。成绩分析应说明总体分布与薄弱考核环节；课程目标分析必须区分有定量证据、缺少定量证据和未达阈值；有问卷时说明响应率并将学生自评与客观达成度对照但不得相互替代；持续改进措施应对应已观察到的薄弱环节并说明下一轮如何验证。不得编造统计、学生身份或因果关系；数据不足时明确说明缺什么、影响什么结论。每段不超过 1000 个汉字。${repair}`,
           },
           { role: "user", content: JSON.stringify(input) },
         ],

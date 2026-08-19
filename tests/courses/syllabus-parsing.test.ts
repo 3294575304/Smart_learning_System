@@ -53,6 +53,12 @@ const validOutput: SyllabusParseOutput = {
     courseName: "Python Programming",
     courseCode: "PY101",
     credits: 2,
+    courseCategory: "专业课",
+    courseNature: "必修",
+    teachingLanguage: "中文",
+    offeredTerm: "第 2 学期",
+    applicableMajors: "计算机相关专业",
+    teachingCollege: "计算机学院",
     totalHours: 32,
     theoryHours: 20,
     practiceHours: 12,
@@ -315,7 +321,7 @@ test("2024 Python 固定样本验收结构覆盖目标、章节、实验、学�
   );
 });
 
-test("v3 AI 输出必须显式包含实践项目且旧存量结构只读兼容", () => {
+test("v4 AI 输出必须显式包含实践项目且旧存量结构只读兼容", () => {
   const legacy = structuredClone(validOutput) as Record<string, unknown>;
   delete legacy.practiceItems;
   assert.equal(syllabusParseOutputSchema.safeParse(legacy).success, false);

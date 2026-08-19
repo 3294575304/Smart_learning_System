@@ -2,6 +2,13 @@ import { z } from "zod";
 
 const nullableText = z.string().trim().min(1).max(4_000).nullable();
 const nullableNumber = z.number().finite().nonnegative().nullable();
+const optionalMetadataText = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .nullable()
+  .optional();
 const codeSchema = z.string().trim().min(1).max(100);
 const nameSchema = z.string().trim().min(1).max(300);
 
@@ -86,6 +93,12 @@ export const syllabusCourseInfoSchema = z
     totalHours: nullableNumber,
     theoryHours: nullableNumber,
     practiceHours: nullableNumber,
+    courseCategory: optionalMetadataText,
+    courseNature: optionalMetadataText,
+    teachingLanguage: optionalMetadataText,
+    offeredTerm: optionalMetadataText,
+    applicableMajors: optionalMetadataText,
+    teachingCollege: optionalMetadataText,
     ...sourced,
   })
   .strict();

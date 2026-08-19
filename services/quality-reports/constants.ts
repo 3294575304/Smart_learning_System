@@ -1,8 +1,8 @@
 export const QUALITY_REPORT_TEMPLATE_VERSION = "2024.2";
 export const QUALITY_REPORT_TEMPLATE_CHECKSUM =
   "659ed18e3577332acd6ade374c7bd477e272218285ee78ae3013017e96dd8c54";
-export const QUALITY_REPORT_RULE_VERSION = "quality-report-v2";
-export const QUALITY_REPORT_PROMPT_VERSION = "quality-report-analysis-v2";
+export const QUALITY_REPORT_RULE_VERSION = "quality-report-v3";
+export const QUALITY_REPORT_PROMPT_VERSION = "quality-report-analysis-v3";
 export const QUALITY_REPORT_JOB_TYPE = "QUALITY_REPORT_GENERATION";
 export const QUALITY_REPORT_MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 export const QUALITY_REPORT_MAX_ROWS = 2000;

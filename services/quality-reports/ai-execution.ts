@@ -39,6 +39,17 @@ function inputFor(
       attendance: statistics.attendance,
     },
     survey: source.survey,
+    dataAvailability: {
+      publishedSyllabus: Boolean(source.syllabus),
+      outcomeAttainmentCount: statistics.outcomes.filter(
+        (item) => item.attainmentIndex !== null && item.threshold !== null,
+      ).length,
+      outcomeCount: statistics.outcomes.length,
+      surveyAvailable: Boolean(source.survey),
+      attendanceAvailable:
+        statistics.attendance.sessionCount > 0 &&
+        statistics.attendance.presentRate !== null,
+    },
     deterministicBaseline: {
       gradeAnalysis: baseline.gradeAnalysis,
       outcomeAnalysis: baseline.outcomeAnalysis,

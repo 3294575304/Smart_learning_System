@@ -52,7 +52,12 @@ import {
 import { parseUploadedGradeWorkbook } from "@/services/quality-reports/upload-parser";
 import { buildQualityReportWorkbook } from "@/services/quality-reports/xlsx-writer";
 import { enhanceQualityReportNarrative } from "@/services/quality-reports/ai";
+import { auditQualityReportDraft } from "@/services/quality-reports/quality-audit";
 import { getStorageService } from "@/services/storage";
+import {
+  storedSyllabusParseOutputSchema,
+  type SyllabusParseOutput,
+} from "@/services/syllabus-parsing/schemas";
 
 const json = (value: unknown) =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -86,10 +91,100 @@ async function ownedCourse(teacherId: string, courseId: string) {
       courseNo: true,
       term: true,
       teacher: { select: { profile: { select: { displayName: true } } } },
+      currentPublishedSyllabusStructure: {
+        select: { id: true, versionNumber: true, structureJson: true },
+      },
+      currentPublishedAssessmentScheme: {
+        select: {
+          id: true,
+          outcomes: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              mappings: {
+                include: { component: { select: { code: true } } },
+              },
+            },
+          },
+        },
+      },
     },
   });
   if (!course) throw new ResourceNotFoundError("课程不存在。");
   return course;
+}
+
+function parsedSyllabus(
+  published:
+    | { id: string; versionNumber: number; structureJson: Prisma.JsonValue }
+    | null
+    | undefined,
+): SyllabusParseOutput | null {
+  if (!published) return null;
+  const result = storedSyllabusParseOutputSchema.safeParse(
+    published.structureJson,
+  );
+  return result.success ? result.data : null;
+}
+
+function syllabusSnapshot(
+  published:
+    | { id: string; versionNumber: number; structureJson: Prisma.JsonValue }
+    | null
+    | undefined,
+) {
+  const structure = parsedSyllabus(published);
+  if (!published || !structure) return null;
+  const info = structure.courseInfo;
+  return {
+    publishedStructureId: published.id,
+    versionNumber: published.versionNumber,
+    courseName: info.courseName,
+    courseCategory: info.courseCategory ?? null,
+    courseNature: info.courseNature ?? null,
+    credits: info.credits,
+    teachingCollege: info.teachingCollege ?? null,
+    applicableMajors: info.applicableMajors ?? null,
+    objectiveCount: structure.objectives.length,
+    assessmentCount: structure.assessments.length,
+  };
+}
+
+function resolvedMetadata(
+  input: {
+    courseNature: string;
+    credits: number;
+    majorClass: string;
+    college: string;
+    major: string;
+  },
+  structure: SyllabusParseOutput | null,
+  classroomName: string,
+) {
+  const info = structure?.courseInfo;
+  return {
+    courseNature:
+      input.courseNature ||
+      info?.courseNature ||
+      info?.courseCategory ||
+      "未提供",
+    credits: input.credits > 0 ? input.credits : (info?.credits ?? 0),
+    majorClass: input.majorClass || classroomName,
+    college: input.college || info?.teachingCollege || "",
+    major: input.major || info?.applicableMajors || "",
+  };
+}
+
+function syllabusOnlyOutcomes(structure: SyllabusParseOutput | null) {
+  return (structure?.objectives ?? []).map((objective) => ({
+    code: objective.code,
+    title: objective.title,
+    description: objective.description,
+    threshold: null,
+    attainmentIndex: null,
+    participantCount: 0,
+    componentAllocations: [],
+    studentScores: [],
+  }));
 }
 
 async function latestSurveySnapshot(
@@ -166,31 +261,6 @@ function componentResults(value: Prisma.JsonValue) {
   });
 }
 
-function outcomeMappingSnapshot(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  const mappings = (value as Record<string, unknown>).mappings;
-  if (!Array.isArray(mappings)) return [];
-  return mappings.flatMap((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-    const record = item as Record<string, unknown>;
-    if (
-      typeof record.componentId !== "string" ||
-      typeof record.outcomeId !== "string"
-    )
-      return [];
-    const allocationRate = Number(record.allocationRate);
-    if (!Number.isFinite(allocationRate)) return [];
-    return [
-      {
-        componentId: record.componentId,
-        outcomeId: record.outcomeId,
-        allocationRate:
-          allocationRate > 1 ? allocationRate / 100 : allocationRate,
-      },
-    ];
-  });
-}
-
 async function platformSource(
   teacherId: string,
   courseId: string,
@@ -213,6 +283,9 @@ async function platformSource(
           courseNo: true,
           term: true,
           teacher: { select: { profile: { select: { displayName: true } } } },
+          currentPublishedSyllabusStructure: {
+            select: { id: true, versionNumber: true, structureJson: true },
+          },
         },
       },
       classroom: { select: { id: true, name: true } },
@@ -221,6 +294,14 @@ async function platformSource(
           components: {
             where: { enabled: true },
             orderBy: { sortOrder: "asc" },
+          },
+          outcomes: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              mappings: {
+                include: { component: { select: { code: true } } },
+              },
+            },
           },
         },
       },
@@ -299,14 +380,16 @@ async function platformSource(
     ["PRESENT", "LATE", "EARLY_LEAVE"].includes(item.currentStatus),
   ).length;
   const survey = await latestSurveySnapshot(courseId, gradebook.classroomId);
-  const componentCodeById = new Map(
-    gradebook.scheme.components.map((component) => [
-      component.id,
-      component.code,
-    ]),
+  const syllabusStructure = parsedSyllabus(
+    gradebook.course.currentPublishedSyllabusStructure,
   );
-  const attainmentMappings = outcomeMappingSnapshot(
-    attainment?.inputSnapshotJson ?? Prisma.JsonNull,
+  const metadata = resolvedMetadata(
+    input,
+    syllabusStructure,
+    gradebook.classroom.name,
+  );
+  const attainmentByOutcomeId = new Map(
+    attainment?.results.map((result) => [result.outcomeId, result]) ?? [],
   );
   return qualityReportSourceSnapshotSchema.parse({
     course: {
@@ -316,11 +399,7 @@ async function platformSource(
       term: gradebook.course.term,
       teacherName:
         gradebook.course.teacher.profile?.displayName ?? "未命名教师",
-      courseNature: input.courseNature,
-      credits: input.credits,
-      majorClass: input.majorClass,
-      college: input.college,
-      major: input.major,
+      ...metadata,
     },
     classroom: gradebook.classroom,
     sourceType: QualityReportSourceType.PLATFORM,
@@ -328,7 +407,7 @@ async function platformSource(
       id: component.id,
       code: component.code,
       name: component.name,
-      weight: Number(component.weight),
+      weight: Number(component.weight) / 100,
     })),
     students: gradebook.currentPublication.students.map((row) => ({
       studentId: row.studentId,
@@ -346,36 +425,45 @@ async function platformSource(
           ? Number(row.gradeRevision.effectiveScore)
           : null,
     })),
-    outcomes:
-      attainment?.results.map((result) => ({
-        code: result.outcomeCode,
-        title: result.outcomeTitle,
-        threshold: Number(result.threshold),
-        attainmentIndex:
-          result.attainmentIndex === null
-            ? null
-            : Number(result.attainmentIndex),
-        participantCount: result.participantCount,
-        componentAllocations: attainmentMappings.flatMap((mapping) => {
-          const componentCode = componentCodeById.get(mapping.componentId);
-          return mapping.outcomeId === result.outcomeId && componentCode
-            ? [{ componentCode, allocationRate: mapping.allocationRate }]
-            : [];
-        }),
-        studentScores: result.students.flatMap((student) =>
-          student.score === null ? [] : [Number(student.score)],
-        ),
-      })) ?? [],
+    outcomes: gradebook.scheme.outcomes.length
+      ? gradebook.scheme.outcomes.map((outcome) => {
+          const result = attainmentByOutcomeId.get(outcome.id);
+          return {
+            code: outcome.code,
+            title: outcome.title,
+            description: outcome.description,
+            threshold: Number(outcome.attainmentThreshold) / 100,
+            attainmentIndex:
+              result?.attainmentIndex === null || !result
+                ? null
+                : Number(result.attainmentIndex),
+            participantCount: result?.participantCount ?? 0,
+            componentAllocations: outcome.mappings.map((mapping) => ({
+              componentCode: mapping.component.code,
+              allocationRate: Number(mapping.allocationRate) / 100,
+            })),
+            studentScores:
+              result?.students.flatMap((student) =>
+                student.score === null ? [] : [Number(student.score)],
+              ) ?? [],
+          };
+        })
+      : syllabusOnlyOutcomes(syllabusStructure),
     attendance: {
       sessionCount: new Set(attendance.map((item) => item.sessionId)).size,
       presentRate: attendance.length ? attended / attendance.length : null,
     },
     survey,
+    syllabus: syllabusSnapshot(
+      gradebook.course.currentPublishedSyllabusStructure,
+    ),
     sourceReference: {
       gradebookId: gradebook.id,
       gradebookPublicationId: gradebook.currentPublication.id,
       outcomeAttainmentRunId: attainment?.id ?? null,
       schemeId: gradebook.schemeId,
+      publishedSyllabusStructureId:
+        gradebook.course.currentPublishedSyllabusStructure?.id ?? null,
     },
   });
 }
@@ -410,6 +498,30 @@ async function uploadSource(
     classroom = owned;
   }
   const survey = await latestSurveySnapshot(courseId, classroom.id);
+  const syllabusStructure = parsedSyllabus(
+    course.currentPublishedSyllabusStructure,
+  );
+  const reportMetadata = resolvedMetadata(
+    metadata,
+    syllabusStructure,
+    classroom.name,
+  );
+  const officialOutcomes = course.currentPublishedAssessmentScheme?.outcomes
+    .length
+    ? course.currentPublishedAssessmentScheme.outcomes.map((outcome) => ({
+        code: outcome.code,
+        title: outcome.title,
+        description: outcome.description,
+        threshold: Number(outcome.attainmentThreshold) / 100,
+        attainmentIndex: null,
+        participantCount: 0,
+        componentAllocations: outcome.mappings.map((mapping) => ({
+          componentCode: mapping.component.code,
+          allocationRate: Number(mapping.allocationRate) / 100,
+        })),
+        studentScores: [],
+      }))
+    : syllabusOnlyOutcomes(syllabusStructure);
   return {
     data,
     extension,
@@ -427,19 +539,23 @@ async function uploadSource(
         courseNo: course.courseNo,
         term: course.term,
         teacherName: course.teacher.profile?.displayName ?? "未命名教师",
-        courseNature: metadata.courseNature,
-        credits: metadata.credits,
-        majorClass: metadata.majorClass,
-        college: metadata.college,
-        major: metadata.major,
+        ...reportMetadata,
       },
       classroom,
       sourceType: QualityReportSourceType.UPLOAD,
       ...parsed,
-      outcomes: [],
+      outcomes: officialOutcomes,
       attendance: { sessionCount: 0, presentRate: null },
       survey,
-      sourceReference: { fileName: file.name, checksumSha256: sha256(data) },
+      syllabus: syllabusSnapshot(course.currentPublishedSyllabusStructure),
+      sourceReference: {
+        fileName: file.name,
+        checksumSha256: sha256(data),
+        publishedSyllabusStructureId:
+          course.currentPublishedSyllabusStructure?.id ?? null,
+        schemeId: course.currentPublishedAssessmentScheme?.id ?? null,
+        outcomeAttainmentRunId: null,
+      },
     }),
   };
 }
@@ -669,6 +785,15 @@ export async function processQualityReportJob(
       deterministicNarrative,
     );
     const narrative = narrativeExecution.output;
+    const qualityAudit = auditQualityReportDraft(
+      source,
+      statistics,
+      narrative,
+      {
+        fallbackUsed: narrativeExecution.fallbackUsed,
+        errorCode: narrativeExecution.errorCode,
+      },
+    );
     await heartbeatBackgroundJob(report.backgroundJobId, {
       leaseId,
       progress: 40,
@@ -703,7 +828,7 @@ export async function processQualityReportJob(
           data: {
             status: QualityReportStatus.SUCCEEDED,
             statisticsSnapshotJson: json(statistics),
-            narrativeSnapshotJson: json(narrative),
+            narrativeSnapshotJson: json({ ...narrative, qualityAudit }),
             aiStatus: narrativeExecution.fallbackUsed
               ? "FALLBACK"
               : "SUCCEEDED",
@@ -731,6 +856,8 @@ export async function processQualityReportJob(
             status: QualityReportStatus.SUCCEEDED,
             docxBytes: docx.length,
             workbookBytes: workbook.length,
+            qualityAuditStatus: qualityAudit.status,
+            qualityAuditCounts: qualityAudit.counts,
           },
           context,
         });
@@ -803,6 +930,10 @@ export async function approveTeacherQualityReport(
     courseSummary: input.courseSummary,
     improvementMeasures: input.improvementMeasures,
   });
+  const reviewedAudit = auditQualityReportDraft(source, statistics, {
+    gradeComposition: baseline.gradeComposition,
+    ...reviewedNarrative,
+  });
   const expectedCodes = statistics.outcomes.map((item) => item.code).sort();
   const reviewedCodes = reviewedNarrative.outcomeDetails
     .map((item) => item.code)
@@ -837,7 +968,10 @@ export async function approveTeacherQualityReport(
         },
         data: {
           reviewStatus: QualityReportReviewStatus.APPROVED,
-          reviewedNarrativeJson: json(reviewedNarrative),
+          reviewedNarrativeJson: json({
+            ...reviewedNarrative,
+            qualityAudit: reviewedAudit,
+          }),
           reviewedById: teacherId,
           reviewedAt: new Date(),
           reviewComment: input.reviewComment || null,
@@ -891,7 +1025,7 @@ export async function getTeacherQualityReports(
   teacherId: string,
   courseId: string,
 ) {
-  await ownedCourse(teacherId, courseId);
+  const course = await ownedCourse(teacherId, courseId);
   const [gradebooks, reports] = await Promise.all([
     prisma.courseGradebook.findMany({
       where: { courseId, course: { teacherId } },
@@ -933,7 +1067,26 @@ export async function getTeacherQualityReports(
       },
     }),
   ]);
-  return { gradebooks, reports };
+  const structure = parsedSyllabus(course.currentPublishedSyllabusStructure);
+  return {
+    gradebooks,
+    reports,
+    metadataDefaults: {
+      ...resolvedMetadata(
+        {
+          courseNature: "",
+          credits: 0,
+          majorClass: "",
+          college: "",
+          major: "",
+        },
+        structure,
+        "",
+      ),
+      publishedSyllabusVersion:
+        course.currentPublishedSyllabusStructure?.versionNumber ?? null,
+    },
+  };
 }
 
 export async function downloadTeacherQualityReport(

@@ -51,6 +51,12 @@ export class MockAIProvider implements AIProvider {
         totalHours: null,
         theoryHours: null,
         practiceHours: null,
+        courseCategory: null,
+        courseNature: null,
+        teachingLanguage: null,
+        offeredTerm: null,
+        applicableMajors: null,
+        teachingCollege: null,
         description: "Python 程序设计课程基础信息。",
         sourceRefs: [
           { page: input.pages[0]?.pageNumber ?? 1, verified: false },
