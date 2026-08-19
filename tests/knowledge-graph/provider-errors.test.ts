@@ -77,6 +77,10 @@ test(
         "response_format" in result.requestBody,
     );
     assert.equal(
+      (result.requestBody as { max_tokens?: unknown }).max_tokens,
+      8_192,
+    );
+    assert.equal(
       result.requestBody &&
         typeof result.requestBody === "object" &&
         "thinking" in result.requestBody,

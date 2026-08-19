@@ -110,6 +110,7 @@ const validOutput: SyllabusParseOutput = {
     {
       objectiveCode: "OBJ-1",
       assessmentCode: "ASSESS-1",
+      allocationRate: 100,
       sourceRefs: [{ page: 1, verified: false }],
     },
   ],
@@ -280,7 +281,12 @@ test("2024 Python 固定样本验收结构覆盖目标、章节、实验、学�
       },
       pages: Array.from({ length: 11 }, (_, index) => ({
         pageNumber: index + 1,
-        text: "固定样本第 " + (index + 1) + " 页",
+        text:
+          index === 7
+            ? "课程目标在各考核方式中占比 平时表现 课程作业 期中考试 课程实验 期末考试 目标1 50% 60% 60% 50% 60% 目标2 25% 20% 30% 25% 30%"
+            : index === 8
+              ? "目标3 25% 20% 10% 25% 10% 合计 100% 100% 100% 100% 100% 各考核方式占总成绩权重 10% 5% 5% 20% 60%"
+              : "固定样本第 " + (index + 1) + " 页",
       })),
     },
   );
@@ -312,6 +318,18 @@ test("2024 Python 固定样本验收结构覆盖目标、章节、实验、学�
       ["期末考试", 60],
     ],
   );
+  assert.deepEqual(
+    execution.output.objectiveAssessmentMappings.map(
+      (item) => item.allocationRate,
+    ),
+    [50, 60, 60, 50, 60, 25, 20, 30, 25, 30, 25, 20, 10, 25, 10],
+  );
+  assert.equal(
+    execution.output.objectiveAssessmentMappings.every(
+      (item) => item.sourceRefs[0]?.page === 8,
+    ),
+    true,
+  );
   assert.match(
     buildSyllabusParseMessages({
       courseHint: { name: "Python", courseNo: "PY", term: "2026-1" },
@@ -321,15 +339,20 @@ test("2024 Python 固定样本验收结构覆盖目标、章节、实验、学�
   );
 });
 
-test("v4 AI 输出必须显式包含实践项目且旧存量结构只读兼容", () => {
+test("v5 AI 输出必须显式包含实践项目且旧存量结构只读兼容", () => {
   const legacy = structuredClone(validOutput) as Record<string, unknown>;
   delete legacy.practiceItems;
+  const mappings = legacy.objectiveAssessmentMappings as Array<
+    Record<string, unknown>
+  >;
+  delete mappings[0]?.allocationRate;
   assert.equal(syllabusParseOutputSchema.safeParse(legacy).success, false);
   const stored = storedSyllabusParseOutputSchema.parse(legacy);
   assert.deepEqual(stored.practiceItems, []);
+  assert.equal(stored.objectiveAssessmentMappings[0]?.allocationRate, null);
 });
 
-test("invalid JSON retries once and then reports INVALID_AI_JSON", async () => {
+test("invalid JSON uses two repair retries and then reports INVALID_AI_JSON", async () => {
   let calls = 0;
   await assert.rejects(
     () =>
@@ -347,7 +370,7 @@ test("invalid JSON retries once and then reports INVALID_AI_JSON", async () => {
       error instanceof SyllabusParseOperationError &&
       error.code === "INVALID_AI_JSON",
   );
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
 });
 
 test("provider returning before the deadline succeeds", async () => {
@@ -397,7 +420,7 @@ test("provider timeout aborts the request, calls once, and maps PROVIDER_TIMEOUT
   assert.equal(calls, 1);
 });
 
-test("schema failure retries once and ends as INVALID_AI_OUTPUT", async () => {
+test("schema failure uses two repair retries and ends as INVALID_AI_OUTPUT", async () => {
   let calls = 0;
   await assert.rejects(
     () =>
@@ -415,7 +438,7 @@ test("schema failure retries once and ends as INVALID_AI_OUTPUT", async () => {
       error instanceof SyllabusParseOperationError &&
       error.code === "INVALID_AI_OUTPUT",
   );
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
 });
 
 test("provider empty content is retried once before failing the parse", async () => {
@@ -507,7 +530,7 @@ test(
           error instanceof SyllabusParseOperationError &&
           error.code === "AI_OUTPUT_TRUNCATED",
       );
-      assert.equal(calls, 2);
+      assert.equal(calls, 3);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -523,7 +546,7 @@ test("openai-compatible client has implicit retries disabled", () => {
   assert.equal(provider.maxRetries, 0);
 });
 
-test("syllabus request uses the 8192 completion-token default", async () => {
+test("syllabus request uses the quality-first 32768 completion-token default", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: Record<string, unknown> | undefined;
   globalThis.fetch = async (_input, init) => {
@@ -554,7 +577,7 @@ test("syllabus request uses the 8192 completion-token default", async () => {
       },
       { signal: new AbortController().signal },
     );
-    assert.equal(requestBody?.max_tokens, 8_192);
+    assert.equal(requestBody?.max_tokens, 32_768);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -564,7 +587,7 @@ test(
   "syllabus provider config honors 16384 tokens and disables DeepSeek thinking",
   { concurrency: false },
   async () => {
-    assert.equal(parseSyllabusMaxCompletionTokens(undefined), 8_192);
+    assert.equal(parseSyllabusMaxCompletionTokens(undefined), 32_768);
     assert.equal(parseSyllabusMaxCompletionTokens("16384"), 16_384);
     assert.equal(
       parseSyllabusMaxCompletionTokens("999999"),
@@ -627,6 +650,8 @@ test("syllabus prompt requires compact page-only references by default", () => {
   assert.match(messages[0]?.content ?? "", /紧凑的单行 JSON/u);
   assert.match(messages[0]?.content ?? "", /不要输出 quote/u);
   assert.match(messages[0]?.content ?? "", /完整性优先/u);
+  assert.match(messages[0]?.content ?? "", /allocationRate/u);
+  assert.match(messages[0]?.content ?? "", /合计必须为 100/u);
 });
 
 test("terminal writes use attemptId so a late result cannot overwrite a newer attempt", async () => {
@@ -660,7 +685,7 @@ test("terminal writes use attemptId so a late result cannot overwrite a newer at
   });
 });
 
-test("two invalid AI outputs fail without creating a fabricated fallback", async () => {
+test("three invalid AI outputs fail without creating a fabricated fallback", async () => {
   const extracted = await extractTextFromPdf(await textPdf());
   let calls = 0;
   await assert.rejects(
@@ -681,7 +706,7 @@ test("two invalid AI outputs fail without creating a fabricated fallback", async
       ),
     /结构化解析失败/u,
   );
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
 });
 
 test("Mock Provider returns a stable schema-valid syllabus draft", async () => {

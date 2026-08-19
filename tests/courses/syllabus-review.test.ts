@@ -102,6 +102,7 @@ test("审核修订保持 AI 原稿、阻止并发覆盖并幂等发布不可变�
       {
         objectiveCode: edited.objectives[0]!.code,
         assessmentCode: "FINAL",
+        allocationRate: 100,
         sourceRefs: [],
       },
     ];
@@ -375,7 +376,12 @@ test("发布校验拒绝空必填项、重复标识、悬空映射和非 100% �
       },
     ],
     objectiveAssessmentMappings: [
-      { objectiveCode: "O404", assessmentCode: "A1", sourceRefs: [] },
+      {
+        objectiveCode: "O404",
+        assessmentCode: "A1",
+        allocationRate: 100,
+        sourceRefs: [],
+      },
     ],
     materials: [],
     warnings: [],

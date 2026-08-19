@@ -91,6 +91,7 @@ const syllabus: SyllabusParseOutput = {
     ["A1", "A2", "A3", "A4", "A5"].map((assessmentCode) => ({
       objectiveCode,
       assessmentCode,
+      allocationRate: null,
       sourceRefs: [{ page: 8, verified: true }],
     })),
   ),
@@ -137,6 +138,34 @@ test("从正式大纲原文确定性提取目标比例、百分制满分和达�
   assert.equal(result.components[0]?.rubricBands.length, 5);
   assert.ok(
     result.components.every((component) => component.sourceType === null),
+  );
+});
+
+test("正式大纲结构中的数值占比优先于 PDF 文本回退", () => {
+  const structured = structuredClone(syllabus);
+  const rates = [
+    [50, 60, 60, 50, 60],
+    [25, 20, 30, 25, 30],
+    [25, 20, 10, 25, 10],
+  ];
+  structured.objectiveAssessmentMappings.forEach((mapping) => {
+    const objectiveIndex = structured.objectives.findIndex(
+      (objective) => objective.code === mapping.objectiveCode,
+    );
+    const assessmentIndex = structured.assessments.findIndex(
+      (assessment) => assessment.code === mapping.assessmentCode,
+    );
+    mapping.allocationRate = rates[objectiveIndex]?.[assessmentIndex] ?? null;
+  });
+
+  const result = buildAssessmentSchemeFromSyllabus(structured, []);
+  assert.deepEqual(
+    result.components[0]?.mappings.map((mapping) => mapping.allocationRate),
+    [50, 25, 25],
+  );
+  assert.deepEqual(
+    result.components[4]?.mappings.map((mapping) => mapping.allocationRate),
+    [60, 30, 10],
   );
 });
 

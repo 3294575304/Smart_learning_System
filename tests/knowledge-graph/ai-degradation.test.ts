@@ -97,22 +97,22 @@ test("RELATED inference retries once and preserves a later success", async () =>
   assert.equal(result.inference.related.length, 1);
 });
 
-test("two provider failures degrade to an empty RELATED result", async () => {
+test("three provider failures degrade to an empty RELATED result", async () => {
   const result = await runOptionalKnowledgeGraphAiEnhancement(base, () =>
-    provider([new Error("outage"), new Error("outage")]),
+    provider([new Error("outage"), new Error("outage"), new Error("outage")]),
   );
   assert.equal(result.status, AIEnhancementStatus.FAILED);
-  assert.equal(result.attemptCount, 2);
+  assert.equal(result.attemptCount, 3);
   assert.equal(result.warningCode, "PROVIDER_UNAVAILABLE");
   assert.deepEqual(result.inference, { related: [] });
 });
 
-test("invalid JSON retries once then records PROVIDER_SCHEMA_INVALID", async () => {
+test("invalid JSON uses two repair retries then records PROVIDER_SCHEMA_INVALID", async () => {
   const result = await runOptionalKnowledgeGraphAiEnhancement(base, () =>
-    provider(["not-json", "still-not-json"]),
+    provider(["not-json", "still-not-json", "invalid-again"]),
   );
   assert.equal(result.status, AIEnhancementStatus.FAILED);
-  assert.equal(result.attemptCount, 2);
+  assert.equal(result.attemptCount, 3);
   assert.equal(result.warningCode, "PROVIDER_SCHEMA_INVALID");
   assert.deepEqual(result.inference, { related: [] });
 });
@@ -128,6 +128,11 @@ test("悬空 RELATED 建议重试后降级且不污染基础草稿", async () =>
       {
         related: [
           { from: "missing", to: b, description: null, confidence: 0.8 },
+        ],
+      },
+      {
+        related: [
+          { from: a, to: "missing-again", description: null, confidence: 0.8 },
         ],
       },
     ]),

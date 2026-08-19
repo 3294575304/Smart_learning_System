@@ -511,7 +511,13 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                       value={objective.code}
                       onChange={(e) =>
                         change((d) => {
+                          const previous = d.objectives[index]!.code;
                           d.objectives[index]!.code = e.target.value;
+                          d.objectiveAssessmentMappings.forEach((mapping) => {
+                            if (mapping.objectiveCode === previous) {
+                              mapping.objectiveCode = e.target.value;
+                            }
+                          });
                         })
                       }
                     />
@@ -731,7 +737,13 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                     value={assessment.code}
                     onChange={(e) =>
                       change((d) => {
+                        const previous = d.assessments[index]!.code;
                         d.assessments[index]!.code = e.target.value;
+                        d.objectiveAssessmentMappings.forEach((mapping) => {
+                          if (mapping.assessmentCode === previous) {
+                            mapping.assessmentCode = e.target.value;
+                          }
+                        });
                       })
                     }
                   />
@@ -772,8 +784,115 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                 </div>
               ))}
             </div>
+            {structure.objectives.length && structure.assessments.length ? (
+              <div className="mt-5 overflow-x-auto rounded-md border">
+                <table className="min-w-full border-collapse text-sm">
+                  <caption className="bg-slate-50 px-3 py-2 text-left font-medium">
+                    课程目标在各考核方式中占比（%）
+                  </caption>
+                  <thead>
+                    <tr className="border-t bg-slate-50">
+                      <th className="min-w-44 border-r px-3 py-2 text-left">
+                        课程目标
+                      </th>
+                      {structure.assessments.map((assessment) => (
+                        <th
+                          className="min-w-32 border-r px-3 py-2 text-center last:border-r-0"
+                          key={assessment.code}
+                        >
+                          {assessment.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {structure.objectives.map((objective) => (
+                      <tr className="border-t" key={objective.code}>
+                        <th className="border-r px-3 py-2 text-left font-medium">
+                          {objective.code} · {objective.title}
+                        </th>
+                        {structure.assessments.map((assessment) => {
+                          const mapping =
+                            structure.objectiveAssessmentMappings.find(
+                              (item) =>
+                                item.objectiveCode === objective.code &&
+                                item.assessmentCode === assessment.code,
+                            );
+                          return (
+                            <td
+                              className="border-r p-2 text-center last:border-r-0"
+                              key={`${objective.code}-${assessment.code}`}
+                            >
+                              <input
+                                aria-label={`${objective.title}在${assessment.name}中占比`}
+                                className="w-24 rounded-md border bg-white px-2 py-1.5 text-center"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                type="number"
+                                value={mapping?.allocationRate ?? ""}
+                                onChange={(event) =>
+                                  change((draft) => {
+                                    let target =
+                                      draft.objectiveAssessmentMappings.find(
+                                        (item) =>
+                                          item.objectiveCode ===
+                                            objective.code &&
+                                          item.assessmentCode ===
+                                            assessment.code,
+                                      );
+                                    if (!target) {
+                                      target = {
+                                        objectiveCode: objective.code,
+                                        assessmentCode: assessment.code,
+                                        allocationRate: null,
+                                        sourceRefs: [],
+                                      };
+                                      draft.objectiveAssessmentMappings.push(
+                                        target,
+                                      );
+                                    }
+                                    target.allocationRate = event.target.value
+                                      ? Number(event.target.value)
+                                      : null;
+                                  })
+                                }
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                    <tr className="border-t bg-slate-50 font-medium">
+                      <th className="border-r px-3 py-2 text-left">列合计</th>
+                      {structure.assessments.map((assessment) => {
+                        const total = structure.objectives.reduce(
+                          (sum, objective) =>
+                            sum +
+                            (structure.objectiveAssessmentMappings.find(
+                              (item) =>
+                                item.objectiveCode === objective.code &&
+                                item.assessmentCode === assessment.code,
+                            )?.allocationRate ?? 0),
+                          0,
+                        );
+                        return (
+                          <td
+                            className={`border-r px-3 py-2 text-center last:border-r-0 ${Math.abs(total - 100) < 0.000001 ? "text-emerald-700" : "text-red-700"}`}
+                            key={assessment.code}
+                          >
+                            {total}%
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
             <p className="text-muted-foreground mt-3 text-sm">
-              目标—考核映射 {structure.objectiveAssessmentMappings.length} 条
+              每种考核方式下的课程目标占比必须合计
+              100%。这些数值将进入正式考核方案和课程目标达成度计算；空白表示尚未确认。
             </p>
           </div>
 

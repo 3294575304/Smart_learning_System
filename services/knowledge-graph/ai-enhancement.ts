@@ -5,7 +5,11 @@ import {
   AIProviderRequestError,
   type AIProvider,
 } from "@/services/ai/provider";
-import { KNOWLEDGE_GRAPH_MAX_AI_ATTEMPTS } from "@/services/knowledge-graph/constants";
+import {
+  KNOWLEDGE_GRAPH_AI_TIMEOUT_MS,
+  KNOWLEDGE_GRAPH_MAX_AI_ATTEMPTS,
+  KNOWLEDGE_GRAPH_MAX_AI_TIMEOUT_MS,
+} from "@/services/knowledge-graph/constants";
 import { KnowledgeGraphOperationError } from "@/services/knowledge-graph/errors";
 import { mergeRelated } from "@/services/knowledge-graph/generator";
 import {
@@ -81,10 +85,10 @@ export async function runOptionalKnowledgeGraphAiEnhancement(
 }
 
 function knowledgeGraphAiTimeoutMs() {
-  const configured = Number(process.env.AI_TIMEOUT_MS);
+  const configured = Number(process.env.KNOWLEDGE_GRAPH_AI_TIMEOUT_MS);
   return Number.isInteger(configured) && configured > 0
-    ? Math.min(configured, 600_000)
-    : 30_000;
+    ? Math.min(configured, KNOWLEDGE_GRAPH_MAX_AI_TIMEOUT_MS)
+    : KNOWLEDGE_GRAPH_AI_TIMEOUT_MS;
 }
 
 function classifyAiEnhancementError(error: unknown) {

@@ -77,7 +77,12 @@ const syllabus: SyllabusParseOutput = {
     },
   ],
   objectiveAssessmentMappings: [
-    { objectiveCode: "O1", assessmentCode: "A1", sourceRefs: ref },
+    {
+      objectiveCode: "O1",
+      assessmentCode: "A1",
+      allocationRate: 100,
+      sourceRefs: ref,
+    },
   ],
   materials: [],
   warnings: [],

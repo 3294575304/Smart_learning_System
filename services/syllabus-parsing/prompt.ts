@@ -21,7 +21,7 @@ practiceItems=PracticeItem[]，PracticeItem={code:string,title:string,descriptio
 prerequisites=Prerequisite[]，Prerequisite={fromKnowledgePointCode:string,toKnowledgePointCode:string,description:string|null,sourceRefs:Ref[]}。
 keyTopics 和 difficultTopics 均为 Topic[]，Topic={knowledgePointCode:string|null,name:string,description:string|null,sourceRefs:Ref[]}。
 assessments=Assessment[]，Assessment={code:string,name:string,type:string,weight:number|null,description:string|null,sourceRefs:Ref[]}。
-objectiveAssessmentMappings=Mapping[]，Mapping={objectiveCode:string,assessmentCode:string,sourceRefs:Ref[]}。
+objectiveAssessmentMappings=Mapping[]，Mapping={objectiveCode:string,assessmentCode:string,allocationRate:number|null,sourceRefs:Ref[]}；allocationRate 是“该课程目标在该考核方式中占比”的百分数值。若原文存在二维占比表，必须逐单元格完整提取（包括 0），不得只输出是否关联。
 materials=Material[]，Material={code:string,title:string,type:"TEXTBOOK"|"REFERENCE"|"OTHER",author:string|null,publisher:string|null,required:boolean,sourceRefs:Ref[]}。
 warnings=string[]。Ref={page:正整数,verified:false}，仅在必要时增加 quote:string。
 
@@ -34,7 +34,8 @@ warnings=string[]。Ref={page:正整数,verified:false}，仅在必要时增加 
 6. importance 只能是 CORE、NORMAL、EXTENDED。
 7. 稳定编码使用 OBJ-1、CH-1、KP-1-1、ASSESS-1 等短格式。
 8. 所有引用编码必须真实存在：映射引用 objectives/assessments 的 code，先修和 Topic 引用 knowledgePoints 的 code，practiceItems.relatedChapterCodes 引用 chapters 的 code。
-9. 同类 code 和章节 order 不得重复。JSON 必须完整闭合，完整性优先于补充细节。${repair}`,
+9. 同类 code 和章节 order 不得重复。JSON 必须完整闭合，完整性优先于补充细节。
+10. 课程目标—考核方式占比表按课程目标行、考核方式列读取；每种考核方式下所有课程目标的 allocationRate 合计必须为 100。无法确定具体数值时用 null，不得把各考核方式占总成绩权重误填为 allocationRate。${repair}`,
     },
     {
       role: "user",

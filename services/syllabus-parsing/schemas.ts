@@ -178,6 +178,13 @@ const objectiveAssessmentMappingSchema = z
   .object({
     objectiveCode: codeSchema,
     assessmentCode: codeSchema,
+    allocationRate: z
+      .number()
+      .finite()
+      .min(0)
+      .max(100)
+      .nullable()
+      .default(null),
     ...sourced,
   })
   .strict();
@@ -265,6 +272,14 @@ export const syllabusParseOutputSchema = z
       value.materials.map((item) => item.code),
       ["materials"],
       "教材与参考资料编码不能重复",
+      context,
+    );
+    addDuplicateIssue(
+      value.objectiveAssessmentMappings.map(
+        (item) => `${item.objectiveCode}\u0000${item.assessmentCode}`,
+      ),
+      ["objectiveAssessmentMappings"],
+      "同一课程目标与考核项目不能重复映射",
       context,
     );
     const chapterCodes = new Set(value.chapters.map((item) => item.code));
@@ -376,6 +391,38 @@ export const publishableSyllabusStructureSchema =
         });
       }
     });
+    const hasNumericAllocation = value.objectiveAssessmentMappings.some(
+      (item) => item.allocationRate !== null,
+    );
+    if (hasNumericAllocation) {
+      value.assessments.forEach((assessment, assessmentIndex) => {
+        const mappings = value.objectiveAssessmentMappings.filter(
+          (item) => item.assessmentCode === assessment.code,
+        );
+        if (
+          mappings.length !== value.objectives.length ||
+          mappings.some((item) => item.allocationRate === null)
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["objectiveAssessmentMappings", assessmentIndex],
+            message: "已填写数值占比时，每种考核方式必须覆盖全部课程目标",
+          });
+          return;
+        }
+        const total = mappings.reduce(
+          (sum, item) => sum + (item.allocationRate ?? 0),
+          0,
+        );
+        if (Math.abs(total - 100) > 0.000001) {
+          context.addIssue({
+            code: "custom",
+            path: ["objectiveAssessmentMappings", assessmentIndex],
+            message: `考核方式 ${assessment.code} 的课程目标占比合计必须为 100%`,
+          });
+        }
+      });
+    }
     if (value.assessments.length > 0) {
       if (value.assessments.some((item) => item.weight === null)) {
         context.addIssue({

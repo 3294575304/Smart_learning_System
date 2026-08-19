@@ -24,10 +24,39 @@ test("教学大纲审核界面包含来源、保存、发布、脏状态和历�
   assert.match(source, /structure\.practiceItems\.length/u);
   assert.match(source, /实践项目学时/u);
   assert.match(source, /关联章节编码/u);
+  assert.match(source, /课程目标在各考核方式中占比/u);
+  assert.match(source, /allocationRate/u);
+  assert.match(source, /列合计/u);
+  assert.match(source, /课程目标达成度计算/u);
   assert.match(source, /useState<ParseState \| null>\(null\)/u);
   assert.match(source, /useEffect\(\(\) => \{\s+void load\(\)/u);
   assert.match(source, /currentPublishedSyllabusStructureId/u);
   assert.match(source, /isCurrentReviewPublished \? "已发布" : statusLabel/u);
   assert.match(source, /const refreshed = await load\(\)/u);
   assert.doesNotMatch(source, /localStorage|sessionStorage/u);
+});
+
+test("教学大纲使用独立工作区并从课程详情提供入口", async () => {
+  const page = await readFile(
+    new URL(
+      "../../app/(protected)/teacher/courses/[courseId]/syllabus/page.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const courseDetail = await readFile(
+    new URL(
+      "../../app/(protected)/teacher/courses/[courseId]/page.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(page, /教学大纲解析与审核/u);
+  assert.match(page, /CourseSyllabusCard/u);
+  assert.match(page, /CourseSyllabusReviewPanel/u);
+  assert.match(page, /requirePageRole\(Role\.TEACHER\)/u);
+  assert.match(page, /getTeacherCourse\(teacher\.id, courseId\.data\)/u);
+  assert.match(page, /ResourceNotFoundError/u);
+  assert.match(courseDetail, /进入教学大纲工作区/u);
+  assert.match(courseDetail, /\/syllabus/u);
 });

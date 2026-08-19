@@ -6,8 +6,6 @@ import { notFound } from "next/navigation";
 import { CourseClassroomManager } from "@/components/courses/course-classroom-manager";
 import { CourseForm } from "@/components/courses/course-form";
 import { CourseStudentRosterImportCard } from "@/components/courses/course-student-roster-import-card";
-import { CourseSyllabusCard } from "@/components/courses/course-syllabus-card";
-import { CourseSyllabusReviewPanel } from "@/components/courses/course-syllabus-review-panel";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
@@ -130,8 +128,19 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          <CourseSyllabusCard courseId={course.id} />
-          <CourseSyllabusReviewPanel courseId={course.id} />
+          <div className="bg-card rounded-xl border p-5">
+            <h2 className="font-semibold">教学大纲解析与审核</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              在独立工作区上传大纲、跟踪 AI
+              解析进度，对照原文审核课程目标、教学内容和目标—考核方式占比。
+            </p>
+            <Link
+              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+              href={`/teacher/courses/${course.id}/syllabus`}
+            >
+              进入教学大纲工作区
+            </Link>
+          </div>
 
           <div className="bg-card rounded-xl border p-5">
             <h2 className="font-semibold">课程考核方案</h2>

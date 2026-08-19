@@ -93,6 +93,8 @@ export interface OpenAICompatibleProviderConfig {
   endpointType?: AIEndpointType;
   thinkingMode?: AIThinkingMode;
   syllabusMaxCompletionTokens?: number;
+  knowledgeGraphMaxCompletionTokens?: number;
+  qualityReportMaxCompletionTokens?: number;
   timeoutMs?: number;
   logger?: ProviderLogger;
 }
@@ -132,7 +134,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     return this.completeJson(
       buildSyllabusParseMessages(input, options.validationError),
       options.signal,
-      this.config.syllabusMaxCompletionTokens ?? 8_192,
+      this.config.syllabusMaxCompletionTokens ?? 32_768,
     );
   }
 
@@ -165,6 +167,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           },
         ],
         options.signal,
+        this.config.knowledgeGraphMaxCompletionTokens ?? 8_192,
       )
     ).content;
   }
@@ -231,7 +234,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           { role: "user", content: JSON.stringify(input) },
         ],
         options.signal,
-        2_500,
+        this.config.qualityReportMaxCompletionTokens ?? 8_192,
       )
     ).content;
   }

@@ -101,6 +101,7 @@ const syllabus: SyllabusParseOutput = {
     {
       objectiveCode: "O1",
       assessmentCode: "A1",
+      allocationRate: 100,
       sourceRefs: [{ page: 1, verified: true }],
     },
   ],

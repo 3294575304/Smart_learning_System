@@ -4,12 +4,14 @@ import test from "node:test";
 import { GradeValueStatus, QualityReportSourceType } from "@prisma/client";
 
 import type { AIProvider } from "@/services/ai/provider";
+import { OpenAICompatibleProvider } from "@/services/ai/openai-compatible";
 import {
   buildDeterministicNarrative,
   calculateQualityReportStatistics,
 } from "@/services/quality-reports/calculation";
 import { executeQualityReportNarrative } from "@/services/quality-reports/ai-execution";
 import type { QualityReportSourceSnapshot } from "@/services/quality-reports/schemas";
+import type { QualityReportAIInput } from "@/services/quality-reports/schemas";
 
 const source: QualityReportSourceSnapshot = {
   course: {
@@ -78,7 +80,7 @@ test("报告 AI 只接收去标识化聚合并接受严格结构文字", async (
   assert.doesNotMatch(serializedInput, /20260001|不会发送给 AI/u);
 });
 
-test("报告 AI 连续两次输出无效时保留确定性基础报告", async () => {
+test("报告 AI 连续三次输出无效时保留确定性基础报告", async () => {
   let attempts = 0;
   const result = await executeQualityReportNarrative(
     provider(() => {
@@ -89,8 +91,76 @@ test("报告 AI 连续两次输出无效时保留确定性基础报告", async (
     statistics,
     baseline,
   );
-  assert.equal(attempts, 2);
+  assert.equal(attempts, 3);
   assert.equal(result.fallbackUsed, true);
   assert.equal(result.errorCode, "AI_NARRATIVE_INVALID");
   assert.deepEqual(result.output, baseline);
 });
+
+test(
+  "教学质量报告 Provider 默认预留 8192 个输出 token",
+  { concurrency: false },
+  async () => {
+    const originalFetch = globalThis.fetch;
+    const requestBodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = async (_input, init) => {
+      requestBodies.push(
+        JSON.parse(String(init?.body)) as Record<string, unknown>,
+      );
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  gradeAnalysis: "成绩分析",
+                  outcomeAnalysis: "目标分析",
+                  outcomeDetails: [],
+                  studentEvaluation: "学生评价",
+                  courseSummary: "课程总结",
+                  improvementMeasures: "持续改进",
+                }),
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+    try {
+      const aiInput: QualityReportAIInput = {
+        course: { name: "Python", courseNo: "PY", term: "2026-1" },
+        statistics: {
+          participantCount: 1,
+          mean: 80,
+          passRate: 1,
+          excellentRate: 0,
+          componentMeans: [],
+          outcomes: [],
+          attendance: { sessionCount: 0, presentRate: null },
+        },
+        survey: null,
+        dataAvailability: {
+          publishedSyllabus: true,
+          outcomeAttainmentCount: 0,
+          outcomeCount: 0,
+          surveyAvailable: false,
+          attendanceAvailable: false,
+        },
+        deterministicBaseline: baseline,
+      };
+      const openAIProvider = new OpenAICompatibleProvider({
+        apiKey: "test",
+        baseUrl: "https://example.invalid/v1",
+        model: "test",
+      });
+      await openAIProvider.writeQualityReportNarrative!(aiInput, {
+        signal: new AbortController().signal,
+      });
+      assert.equal(requestBodies[0]?.max_tokens, 8_192);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  },
+);

@@ -1,6 +1,7 @@
 import { AssessmentComponentType } from "@prisma/client";
 
 import type { ExtractedPdfPage } from "@/services/syllabus-parsing/pdf-extractor";
+import { extractObjectiveAssessmentMatrix } from "@/services/syllabus-parsing/objective-assessment-matrix";
 import type { SyllabusParseOutput } from "@/services/syllabus-parsing/schemas";
 import type { AssessmentSchemeStructure } from "@/services/assessment-schemes/schemas";
 
@@ -23,43 +24,51 @@ function componentType(value: string): AssessmentComponentType {
   return AssessmentComponentType.OTHER;
 }
 
-function mappingPercentages(
-  pages: readonly ExtractedPdfPage[],
-  objectiveCount: number,
-  assessmentCount: number,
+function structuredMappingPercentages(
+  syllabus: SyllabusParseOutput,
 ): { values: number[]; sourcePages: number[] } | null {
-  const firstIndex = pages.findIndex((page) =>
-    page.text.replace(/\s+/gu, "").includes("课程目标在各考核方式中占比"),
+  const byPair = new Map(
+    syllabus.objectiveAssessmentMappings.map((mapping) => [
+      `${mapping.objectiveCode}\u0000${mapping.assessmentCode}`,
+      mapping,
+    ]),
   );
-  if (firstIndex < 0) return null;
-  const relevant = pages.slice(
-    firstIndex,
-    Math.min(firstIndex + 3, pages.length),
+  const ordered = syllabus.objectives.flatMap((objective) =>
+    syllabus.assessments.map((assessment) =>
+      byPair.get(`${objective.code}\u0000${assessment.code}`),
+    ),
   );
-  const joined = relevant.map((page) => page.text).join("\n");
-  const end = joined.search(/各考核方式占总成绩权重|考核方式评分标准/u);
-  const section = end >= 0 ? joined.slice(0, end) : joined;
-  const values = [...section.matchAll(/(\d+(?:\.\d+)?)\s*%/gu)].map((match) =>
-    Number(match[1]),
-  );
-  const required = objectiveCount * assessmentCount;
-  if (required === 0 || values.length < required) return null;
-  const candidate = values.slice(0, required);
+  if (
+    ordered.length === 0 ||
+    ordered.some((mapping) => !mapping || mapping.allocationRate === null)
+  ) {
+    return null;
+  }
+  const values = ordered.map((mapping) => mapping?.allocationRate ?? 0);
   for (
     let assessmentIndex = 0;
-    assessmentIndex < assessmentCount;
+    assessmentIndex < syllabus.assessments.length;
     assessmentIndex += 1
   ) {
-    const total = Array.from(
-      { length: objectiveCount },
-      (_, objectiveIndex) =>
-        candidate[objectiveIndex * assessmentCount + assessmentIndex] ?? 0,
-    ).reduce((sum, value) => sum + value, 0);
+    const total = syllabus.objectives.reduce(
+      (sum, _objective, objectiveIndex) =>
+        sum +
+        (values[
+          objectiveIndex * syllabus.assessments.length + assessmentIndex
+        ] ?? 0),
+      0,
+    );
     if (Math.abs(total - 100) > 0.000001) return null;
   }
   return {
-    values: candidate,
-    sourcePages: relevant.map((page) => page.pageNumber),
+    values,
+    sourcePages: [
+      ...new Set(
+        ordered.flatMap((mapping) =>
+          (mapping?.sourceRefs ?? []).map((ref) => ref.page),
+        ),
+      ),
+    ],
   };
 }
 
@@ -99,11 +108,13 @@ export function buildAssessmentSchemeFromSyllabus(
   syllabus: SyllabusParseOutput,
   pages: readonly ExtractedPdfPage[],
 ): AssessmentSchemeStructure {
-  const mapping = mappingPercentages(
-    pages,
-    syllabus.objectives.length,
-    syllabus.assessments.length,
-  );
+  const mapping =
+    structuredMappingPercentages(syllabus) ??
+    extractObjectiveAssessmentMatrix(
+      pages,
+      syllabus.objectives.length,
+      syllabus.assessments.length,
+    );
   const rubric = gradingBands(pages);
   const warnings: string[] = [];
   if (!mapping && syllabus.objectiveAssessmentMappings.length > 0) {
@@ -116,9 +127,9 @@ export function buildAssessmentSchemeFromSyllabus(
       "未能从正式大纲原文确定性提取完整评分分档，满分和达成阈值需要教师补充。",
     );
   }
-  const mappingRefs = (mapping?.sourcePages ?? []).map((page) => ({
+  const mappingRefs = (mapping?.sourcePages ?? []).map((page, index) => ({
     page,
-    quote: "课程目标在各考核方式中占比",
+    ...(index === 0 ? { quote: "课程目标在各考核方式中占比" } : {}),
     verified: true,
   }));
   return {

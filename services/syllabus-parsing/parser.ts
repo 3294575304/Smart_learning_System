@@ -5,6 +5,7 @@ import {
   SYLLABUS_MAX_AI_ATTEMPTS,
 } from "@/services/syllabus-parsing/constants";
 import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
+import { extractObjectiveAssessmentMatrix } from "@/services/syllabus-parsing/objective-assessment-matrix";
 import {
   syllabusParseOutputSchema,
   type SyllabusParseInput,
@@ -106,6 +107,17 @@ function applyDeterministicWarnings(
         `Assessment weights total ${total}%, not 100%; teacher review required.`,
       );
   }
+  if (output.assessments.length > 0 && output.objectives.length > 0) {
+    const expected = output.assessments.length * output.objectives.length;
+    const numeric = output.objectiveAssessmentMappings.filter(
+      (item) => item.allocationRate !== null,
+    ).length;
+    if (numeric !== expected) {
+      warnings.add(
+        `课程目标—考核方式占比仅提取 ${numeric}/${expected} 个数值；生成课程目标达成度前请在大纲审核页补齐。`,
+      );
+    }
+  }
   const { totalHours, theoryHours, practiceHours } = output.courseInfo;
   if (
     totalHours !== null &&
@@ -152,6 +164,38 @@ function applyDeterministicWarnings(
     warnings.add("未提取到适用专业；教学质量报告封面需要教师确认专业信息。");
   }
   return { ...output, warnings: [...warnings] };
+}
+
+function enrichObjectiveAssessmentMatrix(
+  output: SyllabusParseOutput,
+  input: SyllabusParseInput,
+): SyllabusParseOutput {
+  const extracted = extractObjectiveAssessmentMatrix(
+    input.pages,
+    output.objectives.length,
+    output.assessments.length,
+  );
+  if (!extracted) return output;
+  const sourceRefs = extracted.sourcePages.map((page, index) => ({
+    page,
+    ...(index === 0 ? { quote: "课程目标在各考核方式中占比" } : {}),
+    verified: false,
+  }));
+  return {
+    ...output,
+    objectiveAssessmentMappings: output.objectives.flatMap(
+      (objective, objectiveIndex) =>
+        output.assessments.map((assessment, assessmentIndex) => ({
+          objectiveCode: objective.code,
+          assessmentCode: assessment.code,
+          allocationRate:
+            extracted.values[
+              objectiveIndex * output.assessments.length + assessmentIndex
+            ] ?? null,
+          sourceRefs,
+        })),
+    ),
+  };
 }
 
 function responseEnvelope(raw: unknown): AIProviderResponse {
@@ -264,7 +308,7 @@ export async function parseSyllabusStructure(
           continue;
         }
         throw new SyllabusParseOperationError(
-          "AI output was truncated after one compact repair attempt.",
+          "AI output was truncated after two compact repair attempts.",
           502,
           "AI_OUTPUT_TRUNCATED",
           { attempts },
@@ -297,7 +341,13 @@ export async function parseSyllabusStructure(
       const validationStartedAt = Date.now();
       try {
         const output = applyDeterministicWarnings(
-          verifySourceReferences(syllabusParseOutputSchema.parse(json), input),
+          verifySourceReferences(
+            enrichObjectiveAssessmentMatrix(
+              syllabusParseOutputSchema.parse(json),
+              input,
+            ),
+            input,
+          ),
         );
         metrics.validationDurationMs = Date.now() - validationStartedAt;
         attempts.push(metrics);

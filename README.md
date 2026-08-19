@@ -65,7 +65,7 @@ AI 驱动的个性化教学平台。MVP 已完成并通过演示验收；V1.0 �
 
 - `POST /api/student/submissions/:submissionId/analysis` 为当前已批改作答生成或复用学情分析。
 - `GET /api/student/submissions/:submissionId/analysis` 读取与当前数据指纹匹配的已有分析。
-- 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_API_TYPE`（DeepSeek 等兼容接口使用 `chat-completions`，OpenAI Responses API 使用 `responses`）、`AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。大纲长结构化输出单独使用毫秒单位的 `SYLLABUS_AI_TIMEOUT_MS`，默认 `180000`，允许覆盖到 `600000`；`SYLLABUS_AI_MAX_COMPLETION_TOKENS` 默认 `8192`、最高 `384000`，会按配置值实际传给 Provider。DeepSeek V4 默认思考会占用输出预算，系统对官方 DeepSeek 地址默认关闭思考，也可通过 `AI_THINKING_MODE` 显式覆盖。
+- 本地默认使用 `MockAIProvider`；真实环境可将 `AI_PROVIDER` 配置为 `openai-compatible`，并设置 `AI_API_TYPE`（DeepSeek 等兼容接口使用 `chat-completions`，OpenAI Responses API 使用 `responses`）、`AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_PSEUDONYM_SALT`。大纲长结构化输出单独使用 `SYLLABUS_AI_TIMEOUT_MS`（默认 `300000`，最高 `600000`）和 `SYLLABUS_AI_MAX_COMPLETION_TOKENS`（默认 `32768`，最高 `384000`）；知识图谱关系增强使用 `KNOWLEDGE_GRAPH_AI_TIMEOUT_MS`（默认 `180000`）和 `KNOWLEDGE_GRAPH_AI_MAX_COMPLETION_TOKENS`（默认 `8192`）；教学质量报告文字使用 `QUALITY_REPORT_AI_TIMEOUT_MS`（默认 `120000`）和 `QUALITY_REPORT_AI_MAX_COMPLETION_TOKENS`（默认 `8192`）。三类长任务均以完整、可校验成品为优先并最多进行两次修复重试。DeepSeek V4 默认思考会占用输出预算，系统对官方 DeepSeek 地址默认关闭思考，也可通过 `AI_THINKING_MODE` 显式覆盖。
 - 模型输出会经过严格 Zod 校验，失败最多重试一次；仍失败时返回基于正确率的规则结果。分析接口独立于交卷和成绩接口，AI 故障不会影响成绩查看。
 
 ## 教学大纲结构化解析
@@ -73,17 +73,17 @@ AI 驱动的个性化教学平台。MVP 已完成并通过演示验收；V1.0 �
 - `POST /api/teacher/courses/:courseId/syllabus/parse` 解析教师课程当前版本的文本型教学大纲 PDF；`GET` 查询当前草稿和历史版本。
 - 解析结果只保存为草稿，不会自动发布知识点或覆盖正式课程结构。
 - PDF 按页提取文本，不支持扫描件 OCR；加密、损坏、无文本和超限文件会返回可理解的业务错误。
-- AI 输出经过严格 Zod 校验，失败最多重试一次。相同教学大纲版本和解析器版本会复用成功结果，并阻止并发重复解析。
-- 教师在课程详情页的“教学大纲解析与审核”区域对照 PDF 页码和短原文修改审核稿；保存会创建不可变审核修订，并使用期望修订号阻止并发覆盖。
+- AI 输出经过严格 Zod 校验，格式、截断或结构失败最多进行两次针对性修复重试。相同教学大纲版本和解析器版本会复用成功结果，并阻止并发重复解析。
+- 教师从课程详情进入独立的 `/teacher/courses/:courseId/syllabus` 工作区，对照 PDF 页码和短原文修改审核稿；保存会创建不可变审核修订，并使用期望修订号阻止并发覆盖。
 - `PATCH /api/teacher/courses/:courseId/syllabus/parse/:draftId/review` 保存审核修订，`POST .../:draftId/publish` 显式发布，`GET /api/teacher/courses/:courseId/syllabus/published` 查询当前和历史正式版本。
 - 发布结果是不可变、版本化的课程大纲结构快照。同一审核修订重复发布幂等；上传新 PDF 不会覆盖旧正式版本，页面会提示旧版本来源已过期。
-- v2 结构覆盖课程信息、目标、章节、知识点、先修关系、重点难点、考核映射和教材资料。旧 v1 草稿保持只读且不补造字段来源。
+- v5 结构覆盖课程信息、目标、章节、知识点、先修关系、重点难点、考核项目、课程目标—考核方式数值占比和教材资料。固定样本的 3×5 占比矩阵由 AI 识别并使用 PDF 原文确定性复核；教师可逐格审核，每种考核方式列合计必须为 100%。旧结构继续兼容读取，缺失数值不补造。
 - 当前仍未实现题目自动绑定、OCR 和持久化后台 worker；教学大纲解析继续在 POST 请求内执行。教材、课件和实践指导书的完整分类上传管理界面仍为后续可选增强。
 
 ## Python 课程知识图谱
 
 - 教师可在课程详情进入知识图谱工作区；图谱只能基于 `Course.currentPublishedSyllabusStructureId` 指向的正式大纲结构生成。
-- 章节、知识点、包含关系和大纲明确的先修关系由确定性程序转换；AI 仅提出 `RELATED` 无向关系，输出严格校验且最多重试一次。
+- 章节、知识点、包含关系和大纲明确的先修关系由确定性程序转换；AI 仅提出 `RELATED` 无向关系，输出严格校验且最多进行两次修复重试。
 - 图谱采用“生成草稿 → 不可变审核修订 → 显式发布”的版本流程。正式版本同时保存完整快照及 PostgreSQL 节点、关系记录。
 - 生成请求先持久化任务状态，再在请求结束后的后台阶段执行；教师端通过轮询展示进度和失败恢复，不使用 WebSocket/SSE。
 - 图谱模型与 MVP 的全局 `KnowledgePoint` 隔离，通过课程级稳定 `KnowledgeGraphConcept` 衔接图谱版本、题目绑定、作业快照、答题证据和课程掌握度；不会改写旧的全局知识点、推荐或错题数据。

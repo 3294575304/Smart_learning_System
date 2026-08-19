@@ -2,6 +2,11 @@ import { ZodError } from "zod";
 
 import type { AIProvider } from "@/services/ai/provider";
 import type { QualityReportStatistics } from "@/services/quality-reports/calculation";
+import {
+  QUALITY_REPORT_AI_TIMEOUT_MS,
+  QUALITY_REPORT_MAX_AI_ATTEMPTS,
+  QUALITY_REPORT_MAX_AI_TIMEOUT_MS,
+} from "@/services/quality-reports/constants";
 import type { QualityReportNarrative } from "@/services/quality-reports/docx-writer";
 import {
   qualityReportNarrativeSchema,
@@ -78,9 +83,18 @@ export async function executeQualityReportNarrative(
   }
   const input = inputFor(source, statistics, baseline);
   let validationError: string | undefined;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (
+    let attempt = 0;
+    attempt < QUALITY_REPORT_MAX_AI_ATTEMPTS;
+    attempt += 1
+  ) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12_000);
+    const configuredTimeout = Number(process.env.QUALITY_REPORT_AI_TIMEOUT_MS);
+    const timeout =
+      Number.isInteger(configuredTimeout) && configuredTimeout > 0
+        ? Math.min(configuredTimeout, QUALITY_REPORT_MAX_AI_TIMEOUT_MS)
+        : QUALITY_REPORT_AI_TIMEOUT_MS;
+    const timer = setTimeout(() => controller.abort(), timeout);
     try {
       const raw = await provider.writeQualityReportNarrative(input, {
         signal: controller.signal,

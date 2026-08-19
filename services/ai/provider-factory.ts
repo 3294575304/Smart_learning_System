@@ -8,6 +8,9 @@ import {
   type AIEndpointType,
 } from "@/services/ai/provider";
 import {
+  DEFAULT_KNOWLEDGE_GRAPH_MAX_COMPLETION_TOKENS,
+  DEFAULT_QUALITY_REPORT_MAX_COMPLETION_TOKENS,
+  parseOperationMaxCompletionTokens,
   parseSyllabusMaxCompletionTokens,
   resolveAIThinkingMode,
 } from "@/services/ai/provider-config";
@@ -36,6 +39,14 @@ export function createAIProvider(): AIProvider {
   const syllabusMaxCompletionTokens = parseSyllabusMaxCompletionTokens(
     process.env.SYLLABUS_AI_MAX_COMPLETION_TOKENS,
   );
+  const knowledgeGraphMaxCompletionTokens = parseOperationMaxCompletionTokens(
+    process.env.KNOWLEDGE_GRAPH_AI_MAX_COMPLETION_TOKENS,
+    DEFAULT_KNOWLEDGE_GRAPH_MAX_COMPLETION_TOKENS,
+  );
+  const qualityReportMaxCompletionTokens = parseOperationMaxCompletionTokens(
+    process.env.QUALITY_REPORT_AI_MAX_COMPLETION_TOKENS,
+    DEFAULT_QUALITY_REPORT_MAX_COMPLETION_TOKENS,
+  );
   return new OpenAICompatibleProvider({
     apiKey,
     baseUrl,
@@ -43,6 +54,8 @@ export function createAIProvider(): AIProvider {
     endpointType: parseEndpointType(process.env.AI_API_TYPE),
     thinkingMode: resolveAIThinkingMode(process.env.AI_THINKING_MODE, baseUrl),
     syllabusMaxCompletionTokens,
+    knowledgeGraphMaxCompletionTokens,
+    qualityReportMaxCompletionTokens,
     timeoutMs: parseTimeout(process.env.AI_TIMEOUT_MS),
   });
 }
