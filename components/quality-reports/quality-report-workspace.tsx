@@ -457,7 +457,11 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
       const payload = (await response.json()) as ApiEnvelope<unknown>;
       if (!response.ok || !payload.success)
         throw new Error(payload.error ?? "报告生成请求失败");
-      setMessage("报告生成任务已提交。上传成绩不会写入正式成绩台账。");
+      setMessage(
+        sourceType === "PLATFORM"
+          ? "报告生成任务已提交；如当前成绩尚无达成度版本，系统会先自动完成确定性计算。"
+          : "报告生成任务已提交；系统将按正式目标—考核方式占比在报告快照内计算达成度，上传成绩不会写入正式成绩台账。",
+      );
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "报告生成请求失败");
@@ -482,6 +486,7 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
           <h2 className="font-semibold">生成课程教学质量分析</h2>
           <p className="mt-1 text-sm text-gray-600">
             使用平台正式数据或上传独立成绩文件；两种来源都会冻结为不可变快照，并自动纳入同班级最近一次已关闭问卷的匿名聚合结果。
+            平台来源会自动生成或复用当前正式成绩的达成度版本；上传来源会将正式考核方案按考核名称与成绩列对齐，并在报告快照内确定性计算达成度。
             系统先生成严格套用 2024 版模板的 AI
             审核稿，教师逐项核对并确认后才生成正式 DOCX。
           </p>
@@ -535,7 +540,7 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
                 type="file"
               />
               <span className="mt-1 block text-xs text-amber-700">
-                只进入本次报告快照，不覆盖或补录正式成绩。
+                只进入本次报告快照，不覆盖或补录正式成绩；课程目标达成度使用当前正式考核方案的目标占比计算。
               </span>
             </label>
             <label className="block text-sm">

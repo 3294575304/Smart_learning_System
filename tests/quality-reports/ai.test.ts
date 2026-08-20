@@ -63,12 +63,15 @@ test("报告 AI 只接收去标识化聚合并接受严格结构文字", async (
     provider((input) => {
       serializedInput = JSON.stringify(input);
       return {
-        gradeAnalysis: "成绩分析",
-        outcomeAnalysis: "目标分析",
+        gradeAnalysis:
+          "成绩分析引用了班级总体成绩、分数段分布和考核项目均值，并据此识别相对薄弱环节。现有结果只反映本次冻结数据快照，不直接推断教学因果；后续应结合试题覆盖、评分标准和学习过程证据进一步复核，并使用同口径数据验证变化，同时关注有效样本数、特殊状态人数及不同分数段的结构变化。",
+        outcomeAnalysis: "当前没有目标达成数据，因此不作达成结论。",
         outcomeDetails: [],
         studentEvaluation: "学生评价",
-        courseSummary: "课程总结",
-        improvementMeasures: "持续改进",
+        courseSummary:
+          "课程总结综合成绩总体水平、分数段结构与分项考核表现，明确区分现有证据与缺失数据。当前未提供课程目标定量结果、问卷和出勤汇总，因此结论限于成绩统计，不对学生表现或教学效果作超出数据范围的推断，并保留下一轮同口径复核空间。",
+        improvementMeasures:
+          "第一，针对最低分考核环节归类典型错误并安排讲评，以同类题正确率和低分段人数验证；第二，复核考核内容与课程目标的一致性，以同口径达成度和有效样本数验证；第三，补充学生反馈和出勤证据，比较问卷响应率、学生自评与客观成绩的差异。所有措施均记录实施时间、覆盖学生范围、责任人和下一轮复核指标。",
       };
     }),
     source,
@@ -76,7 +79,7 @@ test("报告 AI 只接收去标识化聚合并接受严格结构文字", async (
     baseline,
   );
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.output.improvementMeasures, "持续改进");
+  assert.match(result.output.improvementMeasures, /同口径达成度/u);
   assert.doesNotMatch(serializedInput, /20260001|不会发送给 AI/u);
 });
 
@@ -136,6 +139,7 @@ test(
           mean: 80,
           passRate: 1,
           excellentRate: 0,
+          distribution: [],
           componentMeans: [],
           outcomes: [],
           attendance: { sessionCount: 0, presentRate: null },

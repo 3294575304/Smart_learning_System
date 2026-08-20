@@ -41,6 +41,11 @@ import {
 import { buildQualityReportDocx } from "@/services/quality-reports/docx-writer";
 import { QualityReportOperationError } from "@/services/quality-reports/errors";
 import {
+  calculateUploadedOutcomeAttainment,
+  matchFormalComponentsToReportComponents,
+  remapOutcomeAllocations,
+} from "@/services/quality-reports/outcome-calculation";
+import {
   qualityReportPlatformInputSchema,
   qualityReportNarrativeSchema,
   qualityReportReviewSchema,
@@ -54,6 +59,7 @@ import { buildQualityReportWorkbook } from "@/services/quality-reports/xlsx-writ
 import { enhanceQualityReportNarrative } from "@/services/quality-reports/ai";
 import { auditQualityReportDraft } from "@/services/quality-reports/quality-audit";
 import { getStorageService } from "@/services/storage";
+import { generateTeacherOutcomeAttainment } from "@/services/outcome-attainment/service";
 import {
   storedSyllabusParseOutputSchema,
   type SyllabusParseOutput,
@@ -97,6 +103,16 @@ async function ownedCourse(teacherId: string, courseId: string) {
       currentPublishedAssessmentScheme: {
         select: {
           id: true,
+          components: {
+            where: { enabled: true },
+            orderBy: { sortOrder: "asc" },
+            select: {
+              code: true,
+              name: true,
+              weight: true,
+              sortOrder: true,
+            },
+          },
           outcomes: {
             orderBy: { sortOrder: "asc" },
             include: {
@@ -434,9 +450,9 @@ async function platformSource(
             description: outcome.description,
             threshold: Number(outcome.attainmentThreshold) / 100,
             attainmentIndex:
-              result?.attainmentIndex === null || !result
+              result?.meanScore === null || !result
                 ? null
-                : Number(result.attainmentIndex),
+                : Number(result.meanScore) / 100,
             participantCount: result?.participantCount ?? 0,
             componentAllocations: outcome.mappings.map((mapping) => ({
               componentCode: mapping.component.code,
@@ -522,6 +538,22 @@ async function uploadSource(
         studentScores: [],
       }))
     : syllabusOnlyOutcomes(syllabusStructure);
+  const formalComponents =
+    course.currentPublishedAssessmentScheme?.components.map((component) => ({
+      ...component,
+      weight: Number(component.weight) / 100,
+    })) ?? [];
+  const componentCodeMap = matchFormalComponentsToReportComponents(
+    parsed.components,
+    formalComponents,
+  );
+  const reportOutcomes = calculateUploadedOutcomeAttainment(
+    parsed.components,
+    parsed.students,
+    componentCodeMap
+      ? remapOutcomeAllocations(officialOutcomes, componentCodeMap)
+      : officialOutcomes,
+  );
   return {
     data,
     extension,
@@ -544,7 +576,7 @@ async function uploadSource(
       classroom,
       sourceType: QualityReportSourceType.UPLOAD,
       ...parsed,
-      outcomes: officialOutcomes,
+      outcomes: reportOutcomes,
       attendance: { sessionCount: 0, presentRate: null },
       survey,
       syllabus: syllabusSnapshot(course.currentPublishedSyllabusStructure),
@@ -555,6 +587,7 @@ async function uploadSource(
           course.currentPublishedSyllabusStructure?.id ?? null,
         schemeId: course.currentPublishedAssessmentScheme?.id ?? null,
         outcomeAttainmentRunId: null,
+        outcomeCalculationSource: "UPLOAD_SNAPSHOT",
       },
     }),
   };
@@ -722,10 +755,35 @@ export async function queuePlatformQualityReport(
   input: unknown,
   context: AuditRequestContext,
 ) {
+  const parsedInput = qualityReportPlatformInputSchema.parse(input);
+  const ownedGradebook = await prisma.courseGradebook.findFirst({
+    where: {
+      id: parsedInput.gradebookId,
+      courseId,
+      course: { teacherId },
+      classroom: { teacherId },
+      currentPublicationId: { not: null },
+    },
+    select: { id: true },
+  });
+  if (!ownedGradebook)
+    throw new ResourceNotFoundError("已发布成绩台账不存在。");
+  const outcomeAttainmentRunId =
+    parsedInput.outcomeAttainmentRunId ??
+    (
+      await generateTeacherOutcomeAttainment(
+        teacherId,
+        parsedInput.gradebookId,
+        context,
+      )
+    ).id;
   return queueReport(
     teacherId,
     courseId,
-    await platformSource(teacherId, courseId, input),
+    await platformSource(teacherId, courseId, {
+      ...parsedInput,
+      outcomeAttainmentRunId,
+    }),
     context,
   );
 }

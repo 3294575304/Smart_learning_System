@@ -212,7 +212,9 @@ export interface QualityReportAIInput {
     mean: number | null;
     passRate: number | null;
     excellentRate: number | null;
+    distribution: Array<{ label: string; count: number; ratio: number }>;
     componentMeans: Array<{
+      code: string;
       name: string;
       weight: number;
       mean: number | null;
@@ -220,8 +222,14 @@ export interface QualityReportAIInput {
     outcomes: Array<{
       code: string;
       title: string;
+      description: string | null;
       threshold: number | null;
       attainmentIndex: number | null;
+      participantCount: number;
+      componentAllocations: Array<{
+        componentCode: string;
+        allocationRate: number;
+      }>;
     }>;
     attendance: { sessionCount: number; presentRate: number | null };
   };

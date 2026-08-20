@@ -229,7 +229,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         [
           {
             role: "system",
-            content: `你只根据去标识化的课程聚合统计撰写教学质量分析初稿，供教师人工审核。严格返回 JSON：{"gradeAnalysis":"...","outcomeAnalysis":"...","outcomeDetails":[{"code":"课程目标代码","analysis":"..."}],"studentEvaluation":"...","courseSummary":"...","improvementMeasures":"..."}。outcomeDetails 只能使用输入中已有课程目标代码且每个目标恰好一项。成绩分析应说明总体分布与薄弱考核环节；课程目标分析必须区分有定量证据、缺少定量证据和未达阈值；有问卷时说明响应率并将学生自评与客观达成度对照但不得相互替代；持续改进措施应对应已观察到的薄弱环节并说明下一轮如何验证。不得编造统计、学生身份或因果关系；数据不足时明确说明缺什么、影响什么结论。每段不超过 1000 个汉字。${repair}`,
+            content: `你只根据去标识化的课程聚合统计撰写可供教师审核的教学质量分析初稿。严格返回 JSON：{"gradeAnalysis":"...","outcomeAnalysis":"...","outcomeDetails":[{"code":"课程目标代码","analysis":"..."}],"studentEvaluation":"...","courseSummary":"...","improvementMeasures":"..."}。outcomeDetails 只能使用输入中已有课程目标代码且每个目标恰好一项。写作要求：1）成绩分析引用平均分、及格率、优秀率、分数段分布及各考核环节均值，说明证据支持的强弱项，120-600 字；2）有达成度时，总体分析逐项比较达成度与期望值并指出差距，每项目标分析结合目标描述、考核方式占比、达成度和样本数解释，分别不少于 100 字；缺少定量证据时明确缺口，不作达成结论；3）有问卷时说明响应率，将学生自评与客观达成度对照但不得相互替代；4）课程总结综合成绩、目标、问卷与出勤中实际存在的证据，不写空泛评价；5）持续改进至少提出三项“证据—行动—验证指标”闭环措施，140-800 字。不得编造统计、学生身份或因果关系，不得用“加强教学、提高质量”等空话替代具体措施。每个字段不超过 1200 个汉字。${repair}`,
           },
           { role: "user", content: JSON.stringify(input) },
         ],

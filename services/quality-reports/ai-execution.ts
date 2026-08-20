@@ -30,15 +30,27 @@ function inputFor(
       mean: statistics.mean,
       passRate: statistics.passRate,
       excellentRate: statistics.excellentRate,
+      distribution: statistics.distribution,
       componentMeans: statistics.componentMeans.map(
-        ({ name, weight, mean }) => ({ name, weight, mean }),
+        ({ code, name, weight, mean }) => ({ code, name, weight, mean }),
       ),
       outcomes: statistics.outcomes.map(
-        ({ code, title, threshold, attainmentIndex }) => ({
+        ({
           code,
           title,
+          description,
           threshold,
           attainmentIndex,
+          participantCount,
+          componentAllocations,
+        }) => ({
+          code,
+          title,
+          description: description ?? null,
+          threshold,
+          attainmentIndex,
+          participantCount,
+          componentAllocations: componentAllocations ?? [],
         }),
       ),
       attendance: statistics.attendance,
@@ -64,6 +76,43 @@ function inputFor(
       improvementMeasures: baseline.improvementMeasures,
     },
   };
+}
+
+function validateNarrativeDepth(
+  narrative: ReturnType<typeof qualityReportNarrativeSchema.parse>,
+  input: QualityReportAIInput,
+) {
+  const length = (value: string) => value.replace(/\s+/gu, "").length;
+  const issues: string[] = [];
+  if (input.statistics.participantCount > 0) {
+    if (length(narrative.gradeAnalysis) < 120)
+      issues.push("成绩分析至少需要 120 个有效字符并引用总体与分项统计");
+    if (length(narrative.courseSummary) < 100)
+      issues.push("课程总结至少需要 100 个有效字符并综合多类证据");
+    if (length(narrative.improvementMeasures) < 140)
+      issues.push("持续改进措施至少需要 140 个有效字符并包含行动与验证方法");
+  }
+  if (input.dataAvailability.outcomeAttainmentCount > 0) {
+    if (length(narrative.outcomeAnalysis) < 100)
+      issues.push("课程目标总体分析至少需要 100 个有效字符");
+    const calculatedCodes = new Set(
+      input.statistics.outcomes
+        .filter(
+          (item) => item.attainmentIndex !== null && item.threshold !== null,
+        )
+        .map((item) => item.code),
+    );
+    for (const detail of narrative.outcomeDetails) {
+      if (calculatedCodes.has(detail.code) && length(detail.analysis) < 100)
+        issues.push(`课程目标 ${detail.code} 分析至少需要 100 个有效字符`);
+    }
+  }
+  if (
+    input.dataAvailability.surveyAvailable &&
+    length(narrative.studentEvaluation) < 80
+  )
+    issues.push("学生评价概括至少需要 80 个有效字符");
+  if (issues.length) throw new Error(issues.join("；"));
 }
 
 export async function executeQualityReportNarrative(
@@ -112,6 +161,7 @@ export async function executeQualityReportNarrative(
         expectedCodes.some((code, index) => code !== returnedCodes[index])
       )
         throw new Error("课程目标分析代码与正式统计范围不一致");
+      validateNarrativeDepth(enhanced, input);
       return {
         output: { ...baseline, ...enhanced },
         fallbackUsed: false,
