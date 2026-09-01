@@ -152,6 +152,8 @@ enum LearnerProfileEvidenceState {
 }
 
 enum AIQuestionMappingBatchStatus {
+  PENDING
+  PROCESSING
   READY
   FAILED
   CONFIRMED
@@ -792,11 +794,14 @@ model BackgroundJob {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
-  requestedBy        User?                  @relation("BackgroundJobRequester", fields: [requestedById], references: [id], onDelete: Restrict)
-  course             Course?                @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  attempts           BackgroundJobAttempt[]
-  programmingAttempt ProgrammingAttempt?
-  qualityReport      CourseQualityReport?
+  requestedBy          User?                   @relation("BackgroundJobRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  course               Course?                 @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  attempts             BackgroundJobAttempt[]
+  programmingAttempt   ProgrammingAttempt?
+  qualityReport        CourseQualityReport?
+  syllabusParseDraft   SyllabusParseDraft?
+  knowledgeGraphDraft  KnowledgeGraphDraft?
+  questionMappingBatch AIQuestionMappingBatch?
 
   @@unique([type, idempotencyKey])
   @@index([status, nextAttemptAt, createdAt])
@@ -1085,6 +1090,7 @@ model SyllabusParseDraft {
   courseId              String
   syllabusId            String
   requestedById         String
+  backgroundJobId       String?             @unique
   status                SyllabusParseStatus @default(PENDING)
   parserVersion         String              @db.VarChar(50)
   promptVersion         String              @db.VarChar(50)
@@ -1115,6 +1121,7 @@ model SyllabusParseDraft {
   course              Course                       @relation(fields: [courseId], references: [id], onDelete: Restrict)
   syllabus            CourseSyllabus               @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
   requestedBy         User                         @relation("SyllabusParseRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  backgroundJob       BackgroundJob?               @relation(fields: [backgroundJobId], references: [id], onDelete: Restrict)
   reviewRevisions     SyllabusReviewRevision[]
   publishedStructures PublishedSyllabusStructure[]
 
@@ -1914,6 +1921,7 @@ model KnowledgeGraphDraft {
   courseId                   String
   sourceSyllabusStructureId  String
   requestedById              String
+  backgroundJobId            String?              @unique
   status                     KnowledgeGraphStatus @default(PENDING)
   generatorVersion           String               @db.VarChar(50)
   promptVersion              String               @db.VarChar(50)
@@ -1929,6 +1937,7 @@ model KnowledgeGraphDraft {
   aiInferenceJson            Json?
   generatedStructureJson     Json?
   errorCode                  String?              @db.VarChar(100)
+  attemptId                  String?              @db.VarChar(36)
   aiEnhancementStatus        AIEnhancementStatus  @default(NOT_ATTEMPTED)
   aiWarningCode              String?              @db.VarChar(100)
   aiWarningMessage           String?
@@ -1942,6 +1951,7 @@ model KnowledgeGraphDraft {
   course                  Course                           @relation(fields: [courseId], references: [id], onDelete: Restrict)
   sourceSyllabusStructure PublishedSyllabusStructure       @relation(fields: [sourceSyllabusStructureId], references: [id], onDelete: Restrict)
   requestedBy             User                             @relation("KnowledgeGraphDraftRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  backgroundJob           BackgroundJob?                   @relation(fields: [backgroundJobId], references: [id], onDelete: Restrict)
   reviewRevisions         KnowledgeGraphReviewRevision[]
   publishedVersions       PublishedKnowledgeGraphVersion[]
 
@@ -2430,6 +2440,7 @@ model AIQuestionMappingBatch {
   courseId            String
   graphVersionId      String
   createdById         String
+  backgroundJobId     String?                      @unique
   status              AIQuestionMappingBatchStatus @default(READY)
   inputFingerprint    String                       @db.Char(64)
   provider            String?                      @db.VarChar(100)
@@ -2443,10 +2454,11 @@ model AIQuestionMappingBatch {
   createdAt           DateTime                     @default(now())
   updatedAt           DateTime                     @updatedAt
 
-  course       Course                         @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  graphVersion PublishedKnowledgeGraphVersion @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
-  createdBy    User                           @relation("AIQuestionMappingBatchCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  candidates   AIQuestionMappingCandidate[]
+  course        Course                         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  graphVersion  PublishedKnowledgeGraphVersion @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
+  createdBy     User                           @relation("AIQuestionMappingBatchCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  backgroundJob BackgroundJob?                 @relation(fields: [backgroundJobId], references: [id], onDelete: Restrict)
+  candidates    AIQuestionMappingCandidate[]
 
   @@unique([createdById, courseId, inputFingerprint])
   @@index([courseId, status, createdAt])

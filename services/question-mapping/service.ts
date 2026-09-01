@@ -15,6 +15,11 @@ import {
   type AIProvider,
 } from "@/services/ai/provider";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import {
+  completeBackgroundJob,
+  createBackgroundJob,
+  failBackgroundJob,
+} from "@/services/background-jobs/repository";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { learnerProfileFingerprint } from "@/services/learner-profiles/fingerprint";
@@ -22,6 +27,7 @@ import { QuestionGraphBindingError } from "@/services/question-graph-bindings/er
 import { localQuestionConceptCandidates } from "@/services/question-mapping/candidates";
 import {
   QUESTION_MAPPING_MODEL,
+  QUESTION_MAPPING_JOB_TYPE,
   QUESTION_MAPPING_PROMPT_VERSION,
   QUESTION_MAPPING_RULE_VERSION,
   createQuestionMappingBatchSchema,
@@ -164,6 +170,298 @@ async function ownedCourse(teacherId: string, courseId: string) {
     throw new QuestionGraphBindingError("该课程尚未发布正式知识图谱", 409);
   }
   return course;
+}
+
+async function mappingSource(
+  teacherId: string,
+  courseId: string,
+  questionIds: string[],
+  graphVersionId: string,
+) {
+  const [questions, graphVersion] = await Promise.all([
+    prisma.question.findMany({
+      where: {
+        id: { in: questionIds },
+        creatorId: teacherId,
+        deletedAt: null,
+        graphBindingSets: { none: { courseId } },
+      },
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        tags: true,
+        type: true,
+        difficulty: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.publishedKnowledgeGraphVersion.findUniqueOrThrow({
+      where: { id: graphVersionId },
+      select: {
+        id: true,
+        versionNumber: true,
+        nodes: {
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            conceptId: true,
+            code: true,
+            name: true,
+            description: true,
+          },
+        },
+      },
+    }),
+  ]);
+  if (!questions.length)
+    throw new QuestionGraphBindingError(
+      "所选题目不存在，或都已有人工确认绑定",
+      409,
+    );
+  if (!graphVersion.nodes.length)
+    throw new QuestionGraphBindingError("正式知识图谱没有可绑定节点", 409);
+  return { questions, graphVersion };
+}
+
+function configuredMappingProvider() {
+  let provider: AIProvider | null = null;
+  let providerName = "unavailable";
+  let model = "unavailable";
+  try {
+    provider = createAIProvider();
+    providerName = provider.name;
+    model = provider.model;
+  } catch {
+    // The worker can still generate deterministic local fallback candidates.
+  }
+  return { provider, providerName, model };
+}
+
+export async function queueQuestionMappingBatch(
+  teacherId: string,
+  courseId: string,
+  rawInput: unknown,
+  context: AuditRequestContext,
+) {
+  const input = createQuestionMappingBatchSchema.parse(rawInput);
+  const course = await ownedCourse(teacherId, courseId);
+  const graphVersionId = course.currentPublishedKnowledgeGraphVersionId!;
+  const { questions } = await mappingSource(
+    teacherId,
+    courseId,
+    input.questionIds,
+    graphVersionId,
+  );
+  const configured = configuredMappingProvider();
+  const inputFingerprint = learnerProfileFingerprint({
+    idempotencyKey: input.idempotencyKey,
+    promptVersion: QUESTION_MAPPING_PROMPT_VERSION,
+    ruleVersion: QUESTION_MAPPING_RULE_VERSION,
+    provider: configured.providerName,
+    model: configured.model,
+    graphVersionId,
+    questions: questions.map((question) => ({
+      id: question.id,
+      updatedAt: question.updatedAt.toISOString(),
+      title: question.title,
+      content: question.content,
+      tags: question.tags,
+    })),
+  });
+  const existing = await prisma.aIQuestionMappingBatch.findUnique({
+    where: {
+      createdById_courseId_inputFingerprint: {
+        createdById: teacherId,
+        courseId,
+        inputFingerprint,
+      },
+    },
+  });
+  if (existing) return getQuestionMappingBatch(teacherId, existing.id);
+
+  const batch = await prisma.$transaction(async (transaction) => {
+    const created = await transaction.aIQuestionMappingBatch.create({
+      data: {
+        courseId,
+        graphVersionId,
+        createdById: teacherId,
+        status: AIQuestionMappingBatchStatus.PENDING,
+        inputFingerprint,
+        provider: configured.providerName,
+        model: configured.model,
+        promptVersion: QUESTION_MAPPING_PROMPT_VERSION,
+        ruleVersion: QUESTION_MAPPING_RULE_VERSION,
+      },
+    });
+    const job = await createBackgroundJob(
+      {
+        type: QUESTION_MAPPING_JOB_TYPE,
+        requestedById: teacherId,
+        courseId,
+        idempotencyKey: created.id,
+        input: {
+          batchId: created.id,
+          teacherId,
+          courseId,
+          questionIds: questions.map((question) => question.id),
+          context,
+        },
+        maxAttempts: 3,
+      },
+      transaction,
+    );
+    return transaction.aIQuestionMappingBatch.update({
+      where: { id: created.id },
+      data: { backgroundJobId: job.id },
+    });
+  });
+  return getQuestionMappingBatch(teacherId, batch.id);
+}
+
+export async function executeClaimedQuestionMappingJob(
+  jobId: string,
+  leaseId: string,
+  input: {
+    batchId: string;
+    teacherId: string;
+    courseId: string;
+    questionIds: string[];
+    context: AuditRequestContext;
+  },
+) {
+  const batch = await prisma.aIQuestionMappingBatch.findFirst({
+    where: { id: input.batchId, backgroundJobId: jobId },
+  });
+  if (!batch) throw new ResourceNotFoundError("候选批次任务不存在");
+  if (
+    batch.status === AIQuestionMappingBatchStatus.READY ||
+    batch.status === AIQuestionMappingBatchStatus.CONFIRMED
+  ) {
+    await completeBackgroundJob(jobId, {
+      leaseId,
+      result: { batchId: batch.id },
+      resourceUsage: {},
+    });
+    return getQuestionMappingBatch(input.teacherId, batch.id);
+  }
+  try {
+    await prisma.aIQuestionMappingBatch.update({
+      where: { id: batch.id },
+      data: {
+        status: AIQuestionMappingBatchStatus.PROCESSING,
+        failureCode: null,
+        failureSummary: null,
+      },
+    });
+    const { questions, graphVersion } = await mappingSource(
+      input.teacherId,
+      input.courseId,
+      input.questionIds,
+      batch.graphVersionId,
+    );
+    const configured = configuredMappingProvider();
+    const aiInput: QuestionMappingAIInput = {
+      questions: questions.map((question) => ({
+        id: question.id,
+        title: question.title,
+        content: question.content,
+        type: question.type,
+        difficulty: question.difficulty,
+      })),
+      concepts: graphVersion.nodes.map((node) => ({
+        id: node.conceptId,
+        code: node.code,
+        name: node.name,
+        description: node.description,
+      })),
+    };
+    const generation = await generateCandidates(
+      configured.provider,
+      aiInput,
+      graphVersion.nodes,
+    );
+    await completeBackgroundJob(
+      jobId,
+      {
+        leaseId,
+        result: { batchId: batch.id },
+        resourceUsage: {},
+      },
+      async (transaction) => {
+        await transaction.aIQuestionMappingCandidate.deleteMany({
+          where: { batchId: batch.id },
+        });
+        for (const question of questions) {
+          const candidates = generation.candidates.get(question.id) ?? [];
+          await transaction.aIQuestionMappingCandidate.createMany({
+            data: candidates.map((candidate, index) => ({
+              batchId: batch.id,
+              questionId: question.id,
+              conceptId: candidate.conceptId,
+              publishedNodeId: candidate.publishedNodeId,
+              confidence: new Prisma.Decimal(candidate.confidence),
+              reason: candidate.reason,
+              rank: index + 1,
+            })),
+          });
+        }
+        await transaction.aIQuestionMappingBatch.update({
+          where: { id: batch.id },
+          data: {
+            status: AIQuestionMappingBatchStatus.READY,
+            provider: generation.provider,
+            model: generation.model,
+            failureCode: generation.failure?.code ?? null,
+            failureSummary: generation.failure?.summary ?? null,
+          },
+        });
+        await writeGovernanceAuditLog(transaction, {
+          actorId: input.teacherId,
+          action: AuditAction.AI_QUESTION_MAPPING_BATCH_CREATED,
+          targetType: AuditTargetType.COURSE,
+          targetId: input.courseId,
+          summary: "生成题目 Concept 候选批次",
+          beforeData: null,
+          afterData: {
+            batchId: batch.id,
+            graphVersionId: graphVersion.id,
+            questionCount: questions.length,
+            provider: generation.provider,
+            model: generation.model,
+            fallbackUsed: Boolean(generation.failure),
+          },
+          context: input.context,
+        });
+      },
+    );
+    return getQuestionMappingBatch(input.teacherId, batch.id);
+  } catch (error) {
+    await failBackgroundJob(
+      jobId,
+      {
+        leaseId,
+        errorCode: "QUESTION_MAPPING_GENERATION_FAILED",
+        retryable: true,
+        resourceUsage: {},
+      },
+      async (transaction, _job, willRetry) =>
+        transaction.aIQuestionMappingBatch.update({
+          where: { id: batch.id },
+          data: {
+            status: willRetry
+              ? AIQuestionMappingBatchStatus.PENDING
+              : AIQuestionMappingBatchStatus.FAILED,
+            failureCode: "QUESTION_MAPPING_GENERATION_FAILED",
+            failureSummary: willRetry
+              ? "候选生成暂时失败，后台任务将自动重试"
+              : "候选生成失败，请重新发起",
+          },
+        }),
+    );
+    throw error;
+  }
 }
 
 export async function createQuestionMappingBatch(
@@ -341,6 +639,16 @@ export async function getQuestionMappingBatch(
   const batch = await prisma.aIQuestionMappingBatch.findFirst({
     where: { id: batchId, createdById: teacherId },
     include: {
+      backgroundJob: {
+        select: {
+          status: true,
+          progress: true,
+          attemptCount: true,
+          maxAttempts: true,
+          errorCode: true,
+          nextAttemptAt: true,
+        },
+      },
       course: { select: { id: true, name: true } },
       graphVersion: { select: { versionNumber: true } },
       candidates: {

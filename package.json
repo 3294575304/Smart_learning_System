@@ -21,7 +21,8 @@
     "test:sandbox-capabilities": "node --conditions=react-server --import tsx scripts/verify-sandbox-capabilities.ts",
     "test:programming-runtime": "tsx tests/programming-attempts/real-runtime.ts",
     "build:sandbox-executor": "tsc -p services/sandbox-executor-server/tsconfig.json",
-    "build:programming-judge-worker": "tsc -p services/programming-judge-worker/tsconfig.json"
+    "build:programming-judge-worker": "tsc -p services/programming-judge-worker/tsconfig.json",
+    "build:background-worker": "esbuild services/background-worker/main.ts --bundle --platform=node --format=esm --target=node20 --conditions=react-server --packages=external --outfile=.data/background-worker-build/main.js"
   },
   "engines": {
     "node": ">=20.9.0"
@@ -49,6 +50,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "dotenv": "^16.6.1",
+    "esbuild": "~0.28.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.20",
     "postcss": "^8.5.18",

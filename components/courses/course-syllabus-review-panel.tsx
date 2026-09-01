@@ -188,7 +188,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
     );
     setParsing(false);
     if (!result.success) return setError(result.error);
-    setNotice("教学大纲解析完成，请审核后保存。 ");
+    setNotice("教学大纲已进入持久化后台队列，解析完成后可审核保存。");
     await load();
   }
 

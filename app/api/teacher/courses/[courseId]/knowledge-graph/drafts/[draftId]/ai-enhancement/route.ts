@@ -1,16 +1,13 @@
 import { Role } from "@prisma/client";
-import { after } from "next/server";
 import { z } from "zod";
 
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { knowledgeGraphApiError } from "@/lib/knowledge-graph-api";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
 import { auditRequestContext } from "@/services/audit/request-context";
+import { scheduleBackgroundWorkerWakeup } from "@/services/background-jobs/wakeup";
 import { courseIdSchema } from "@/services/courses/schemas";
-import {
-  executeTeacherKnowledgeGraphAiEnhancement,
-  queueTeacherKnowledgeGraphAiEnhancement,
-} from "@/services/knowledge-graph/service";
+import { queueTeacherKnowledgeGraphAiEnhancement } from "@/services/knowledge-graph/service";
 
 interface Context {
   params: Promise<{ courseId: string; draftId: string }>;
@@ -28,22 +25,9 @@ export async function POST(request: Request, context: Context) {
       user.id,
       courseId.data,
       draftId.data,
+      auditRequestContext(request),
     );
-    if (queued.shouldExecute) {
-      const requestContext = auditRequestContext(request);
-      after(async () => {
-        try {
-          await executeTeacherKnowledgeGraphAiEnhancement(
-            user.id,
-            courseId.data,
-            draftId.data,
-            requestContext,
-          );
-        } catch {
-          // The persistent AI enhancement state exposes a safe warning to polling clients.
-        }
-      });
-    }
+    if (queued.shouldExecute) scheduleBackgroundWorkerWakeup();
     return apiSuccess(queued, queued.reused ? 200 : 202);
   } catch (error) {
     return knowledgeGraphApiError(error);

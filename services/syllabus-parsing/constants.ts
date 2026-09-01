@@ -1,6 +1,7 @@
 export const SYLLABUS_PARSER_VERSION = "syllabus-parser-v5";
 export const SYLLABUS_PROMPT_VERSION = "syllabus-structure-v5";
 export const SYLLABUS_RULE_VERSION = "syllabus-validation-v5";
+export const SYLLABUS_PARSE_JOB_TYPE = "SYLLABUS_PARSE";
 export const SYLLABUS_MAX_PAGES = 200;
 export const SYLLABUS_MAX_EXTRACTED_CHARACTERS = 300_000;
 export const SYLLABUS_MAX_AI_ATTEMPTS = 3;

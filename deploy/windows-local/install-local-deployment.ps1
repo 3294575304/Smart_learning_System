@@ -54,6 +54,7 @@ $runtimeRoot = Join-Path $RepoRoot ".data/local-deployment"
 $logRoot = Join-Path $runtimeRoot "logs"
 $configPath = Join-Path $runtimeRoot "service-config.json"
 $workerBuildRoot = Join-Path $RepoRoot ".data/programming-judge-worker-build"
+$backgroundWorkerBuildRoot = Join-Path $RepoRoot ".data/background-worker-build"
 $nextBuildDirectory = ".data/next-production"
 $nextBuildRoot = Join-Path $RepoRoot $nextBuildDirectory
 New-Item -ItemType Directory -Force -Path $runtimeRoot, $logRoot | Out-Null
@@ -78,6 +79,10 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) {
       throw "Programming judge worker build failed"
     }
+    & $npmExecutable run build:background-worker
+    if ($LASTEXITCODE -ne 0) {
+      throw "Persistent background worker build failed"
+    }
   } finally {
     foreach ($generatedTypeFile in $generatedTypeFiles) {
       [System.IO.File]::WriteAllBytes(
@@ -101,6 +106,9 @@ if ($null -eq $routesManifest.dataRoutes -or
 }
 if (-not (Test-Path -LiteralPath (Join-Path $workerBuildRoot "main.js"))) {
   throw "Programming judge worker build is missing"
+}
+if (-not (Test-Path -LiteralPath (Join-Path $backgroundWorkerBuildRoot "main.js"))) {
+  throw "Persistent background worker build is missing"
 }
 [System.IO.File]::WriteAllText(
   (Join-Path $workerBuildRoot "package.json"),
@@ -150,6 +158,12 @@ $config = [ordered]@{
     PROGRAMMING_JUDGE_POLL_INTERVAL_MS = "1000"
     PROGRAMMING_JUDGE_LEASE_DURATION_MS = "30000"
     PROGRAMMING_JUDGE_RECOVERY_INTERVAL_MS = "30000"
+    BACKGROUND_LONG_TASK_WORKER_ID = "windows-local-long-task-$($env:COMPUTERNAME.ToLowerInvariant())"
+    BACKGROUND_LONG_TASK_WORKER_POLL_INTERVAL_MS = "2000"
+    BACKGROUND_LONG_TASK_WORKER_LEASE_DURATION_MS = "120000"
+    BACKGROUND_LONG_TASK_WORKER_RECOVERY_INTERVAL_MS = "30000"
+    BACKGROUND_LONG_TASK_WORKER_WAKE_PORT = "18789"
+    BACKGROUND_LONG_TASK_WORKER_WAKE_URL = "http://127.0.0.1:18789/wake"
   }
 }
 [System.IO.File]::WriteAllText(
@@ -178,7 +192,8 @@ if ($LASTEXITCODE -ne 0) {
 $taskDefinitions = @(
   @{ Name = "Zhixue-SSH-Tunnel"; Script = "run-tunnel.ps1" },
   @{ Name = "Zhixue-Next"; Script = "run-next.ps1" },
-  @{ Name = "Zhixue-Judge-Worker"; Script = "run-worker.ps1" }
+  @{ Name = "Zhixue-Judge-Worker"; Script = "run-worker.ps1" },
+  @{ Name = "Zhixue-Background-Worker"; Script = "run-background-worker.ps1" }
 )
 foreach ($definition in $taskDefinitions) {
   Stop-ScheduledTask -TaskName $definition.Name -ErrorAction SilentlyContinue
@@ -188,7 +203,8 @@ $deploymentProcesses = Get-CimInstance Win32_Process | Where-Object {
   ($_.Name -eq "node.exe" -and (
     $_.CommandLine -like "*$RepoRoot\node_modules\next\dist\bin\next start -H 127.0.0.1 -p 3000*" -or
     $_.CommandLine -like "*$RepoRoot\node_modules\next\dist\bin\next start -H ::1 -p 3000*" -or
-    $_.CommandLine -like "*$RepoRoot\.data\programming-judge-worker-build\main.js*"
+    $_.CommandLine -like "*$RepoRoot\.data\programming-judge-worker-build\main.js*" -or
+    $_.CommandLine -like "*$RepoRoot\.data\background-worker-build\main.js*"
   )) -or
   ($_.Name -eq "ssh.exe" -and
     $_.CommandLine -like "*-L 18788:127.0.0.1:8788*" -and
@@ -202,6 +218,8 @@ foreach ($logName in @(
   "next.stderr.log",
   "worker.stdout.log",
   "worker.stderr.log",
+  "background-worker.stdout.log",
+  "background-worker.stderr.log",
   "tunnel.stdout.log",
   "tunnel.stderr.log"
 )) {
@@ -235,6 +253,8 @@ Wait-LocalPort -Port 18788 -TimeoutSeconds 15
 Start-ScheduledTask -TaskName "Zhixue-Next"
 Wait-LocalPort -Port 3000 -TimeoutSeconds 30
 Start-ScheduledTask -TaskName "Zhixue-Judge-Worker"
+Start-ScheduledTask -TaskName "Zhixue-Background-Worker"
+Wait-LocalPort -Port 18789 -TimeoutSeconds 15
 Start-Sleep -Seconds 2
 
 $health = Invoke-RestMethod -Uri "http://127.0.0.1:18788/health" -Headers @{

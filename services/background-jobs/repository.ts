@@ -25,7 +25,12 @@ const SERIALIZABLE = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
 };
 
-export async function createBackgroundJob(rawInput: CreateBackgroundJobInput) {
+type BackgroundJobClient = typeof prisma | Prisma.TransactionClient;
+
+export async function createBackgroundJob(
+  rawInput: CreateBackgroundJobInput,
+  client: BackgroundJobClient = prisma,
+) {
   const input = createBackgroundJobSchema.parse(rawInput);
   const inputFingerprint = backgroundJobFingerprint({
     requestedById: input.requestedById ?? null,
@@ -33,38 +38,27 @@ export async function createBackgroundJob(rawInput: CreateBackgroundJobInput) {
     maxAttempts: input.maxAttempts,
     input: input.input,
   });
-  try {
-    return await prisma.backgroundJob.create({
-      data: {
+  const job = await client.backgroundJob.upsert({
+    where: {
+      type_idempotencyKey: {
         type: input.type,
-        requestedById: input.requestedById ?? null,
-        courseId: input.courseId ?? null,
         idempotencyKey: input.idempotencyKey,
-        inputFingerprint,
-        input: input.input as Prisma.InputJsonObject,
-        maxAttempts: input.maxAttempts,
       },
-    });
-  } catch (error: unknown) {
-    if (
-      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-      error.code !== "P2002"
-    ) {
-      throw error;
-    }
-    const existing = await prisma.backgroundJob.findUnique({
-      where: {
-        type_idempotencyKey: {
-          type: input.type,
-          idempotencyKey: input.idempotencyKey,
-        },
-      },
-    });
-    if (!existing || existing.inputFingerprint !== inputFingerprint) {
-      throw new BackgroundJobInputConflictError();
-    }
-    return existing;
-  }
+    },
+    create: {
+      type: input.type,
+      requestedById: input.requestedById ?? null,
+      courseId: input.courseId ?? null,
+      idempotencyKey: input.idempotencyKey,
+      inputFingerprint,
+      input: input.input as Prisma.InputJsonObject,
+      maxAttempts: input.maxAttempts,
+    },
+    update: {},
+  });
+  if (job.inputFingerprint !== inputFingerprint)
+    throw new BackgroundJobInputConflictError();
+  return job;
 }
 
 export async function claimNextBackgroundJob(

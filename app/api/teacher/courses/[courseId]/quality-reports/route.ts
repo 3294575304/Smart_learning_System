@@ -1,14 +1,13 @@
 import { Role } from "@prisma/client";
-import { after } from "next/server";
 
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { qualityReportApiError } from "@/lib/quality-report-api";
 import { auditRequestContext } from "@/services/audit/request-context";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
+import { scheduleBackgroundWorkerWakeup } from "@/services/background-jobs/wakeup";
 import { courseIdSchema } from "@/services/courses/schemas";
 import {
   getTeacherQualityReports,
-  processQualityReportJob,
   queuePlatformQualityReport,
   queueUploadedQualityReport,
 } from "@/services/quality-reports/service";
@@ -68,16 +67,7 @@ export async function POST(request: Request, context: Context) {
         requestContext,
       );
     }
-    if (queued.shouldExecute) {
-      const reportId = queued.report.id;
-      after(async () => {
-        try {
-          await processQualityReportJob(reportId, requestContext);
-        } catch {
-          // Persistent task and report records expose a safe retryable failure.
-        }
-      });
-    }
+    if (queued.shouldExecute) scheduleBackgroundWorkerWakeup();
     return apiSuccess(queued, queued.reused ? 200 : 202);
   } catch (error) {
     return qualityReportApiError(error);

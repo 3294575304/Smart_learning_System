@@ -5,6 +5,7 @@ import {
   KnowledgeGraphStatus,
   Prisma,
 } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
 import { createAIProvider } from "@/services/ai/provider-factory";
@@ -13,7 +14,14 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import {
+  completeBackgroundJob,
+  createBackgroundJob,
+  failBackgroundJob,
+} from "@/services/background-jobs/repository";
+import {
+  KNOWLEDGE_GRAPH_AI_ENHANCEMENT_JOB_TYPE,
   KNOWLEDGE_GRAPH_GENERATOR_VERSION,
+  KNOWLEDGE_GRAPH_JOB_TYPE,
   KNOWLEDGE_GRAPH_PROMPT_VERSION,
   KNOWLEDGE_GRAPH_RULE_VERSION,
 } from "@/services/knowledge-graph/constants";
@@ -115,6 +123,7 @@ export async function generateTeacherKnowledgeGraph(
       },
       update: {},
     }));
+  const attemptId = randomUUID();
   const claimed = await prisma.knowledgeGraphDraft.updateMany({
     where: {
       id: draft.id,
@@ -138,6 +147,7 @@ export async function generateTeacherKnowledgeGraph(
       generatedStructureJson: Prisma.JsonNull,
       startedAt: new Date(),
       completedAt: null,
+      attemptId,
     },
   });
   if (claimed.count !== 1)
@@ -153,10 +163,20 @@ export async function generateTeacherKnowledgeGraph(
       source.structureJson,
     );
     const base = deterministicGraph(courseId, syllabus);
-    await prisma.knowledgeGraphDraft.update({
-      where: { id: draft.id },
+    const baseSaved = await prisma.knowledgeGraphDraft.updateMany({
+      where: {
+        id: draft.id,
+        attemptId,
+        status: KnowledgeGraphStatus.PROCESSING,
+      },
       data: { deterministicStructureJson: json(base), progress: 45 },
     });
+    if (baseSaved.count !== 1)
+      throw new KnowledgeGraphOperationError(
+        "知识图谱任务已由新的执行接管。",
+        409,
+        "JOB_INTERRUPTED",
+      );
     const ai = await runOptionalKnowledgeGraphAiEnhancement(
       base,
       () => dependencies.provider ?? createAIProvider(),
@@ -165,8 +185,12 @@ export async function generateTeacherKnowledgeGraph(
     const saved = await prisma.$transaction(async (tx) => {
       if (dependencies.failSuccessWriteForTest)
         throw new Error("Simulated knowledge graph persistence failure");
-      const persisted = await tx.knowledgeGraphDraft.update({
-        where: { id: draft.id },
+      const persistedWrite = await tx.knowledgeGraphDraft.updateMany({
+        where: {
+          id: draft.id,
+          attemptId,
+          status: KnowledgeGraphStatus.PROCESSING,
+        },
         data: {
           status: KnowledgeGraphStatus.SUCCEEDED,
           provider: ai.provider?.name ?? null,
@@ -185,6 +209,15 @@ export async function generateTeacherKnowledgeGraph(
           errorCode: null,
           completedAt: new Date(),
         },
+      });
+      if (persistedWrite.count !== 1)
+        throw new KnowledgeGraphOperationError(
+          "知识图谱任务已由新的执行接管。",
+          409,
+          "JOB_INTERRUPTED",
+        );
+      const persisted = await tx.knowledgeGraphDraft.findUniqueOrThrow({
+        where: { id: draft.id },
       });
       await writeGovernanceAuditLog(tx, {
         actorId: teacherId,
@@ -206,8 +239,12 @@ export async function generateTeacherKnowledgeGraph(
     });
     return { reused: false, draft: { ...saved, structure } };
   } catch (error) {
-    await prisma.knowledgeGraphDraft.update({
-      where: { id: draft.id },
+    await prisma.knowledgeGraphDraft.updateMany({
+      where: {
+        id: draft.id,
+        attemptId,
+        status: KnowledgeGraphStatus.PROCESSING,
+      },
       data: {
         status: KnowledgeGraphStatus.FAILED,
         progress: 100,
@@ -236,6 +273,7 @@ export async function generateTeacherKnowledgeGraph(
 export async function queueTeacherKnowledgeGraph(
   teacherId: string,
   courseId: string,
+  context: AuditRequestContext = { ipAddress: null, userAgent: null },
 ) {
   let draft = await findOrCreateTeacherKnowledgeGraphDraft(teacherId, courseId);
   if (draft.status === KnowledgeGraphStatus.FAILED) {
@@ -257,6 +295,30 @@ export async function queueTeacherKnowledgeGraph(
       },
     });
   }
+  if (draft.status === KnowledgeGraphStatus.PENDING) {
+    draft = await prisma.$transaction(async (transaction) => {
+      const job = await createBackgroundJob(
+        {
+          type: KNOWLEDGE_GRAPH_JOB_TYPE,
+          requestedById: teacherId,
+          courseId,
+          idempotencyKey: `${draft.id}:base:${draft.executionCount}`,
+          input: {
+            draftId: draft.id,
+            teacherId,
+            courseId,
+            context,
+          },
+          maxAttempts: 3,
+        },
+        transaction,
+      );
+      return transaction.knowledgeGraphDraft.update({
+        where: { id: draft.id },
+        data: { backgroundJobId: job.id },
+      });
+    });
+  }
   return {
     reused:
       draft.status === KnowledgeGraphStatus.SUCCEEDED ||
@@ -266,10 +328,60 @@ export async function queueTeacherKnowledgeGraph(
   };
 }
 
+export async function executeClaimedKnowledgeGraphJob(
+  jobId: string,
+  leaseId: string,
+  input: { draftId: string; teacherId: string; courseId: string },
+  context: AuditRequestContext,
+) {
+  try {
+    await prisma.knowledgeGraphDraft.updateMany({
+      where: {
+        id: input.draftId,
+        backgroundJobId: jobId,
+        status: KnowledgeGraphStatus.PROCESSING,
+      },
+      data: { status: KnowledgeGraphStatus.PENDING },
+    });
+    const generated = await generateTeacherKnowledgeGraph(
+      input.teacherId,
+      input.courseId,
+      context,
+    );
+    await completeBackgroundJob(jobId, {
+      leaseId,
+      result: { draftId: input.draftId },
+      resourceUsage: {},
+    });
+    return generated;
+  } catch (error) {
+    await failBackgroundJob(
+      jobId,
+      {
+        leaseId,
+        errorCode: "KNOWLEDGE_GRAPH_GENERATION_FAILED",
+        retryable: true,
+        resourceUsage: {},
+      },
+      async (transaction, _job, willRetry) =>
+        transaction.knowledgeGraphDraft.updateMany({
+          where: { id: input.draftId, backgroundJobId: jobId },
+          data: {
+            status: willRetry
+              ? KnowledgeGraphStatus.PENDING
+              : KnowledgeGraphStatus.FAILED,
+          },
+        }),
+    );
+    throw error;
+  }
+}
+
 export async function queueTeacherKnowledgeGraphAiEnhancement(
   teacherId: string,
   courseId: string,
   draftId: string,
+  context: AuditRequestContext = { ipAddress: null, userAgent: null },
 ) {
   const currentSource = await getCurrentPublishedSyllabusForKnowledgeGraph(
     teacherId,
@@ -320,11 +432,87 @@ export async function queueTeacherKnowledgeGraphAiEnhancement(
   const queued = await prisma.knowledgeGraphDraft.findUniqueOrThrow({
     where: { id: draft.id },
   });
+  let backgroundJobId = queued.backgroundJobId;
+  if (claimed.count === 1) {
+    backgroundJobId = await prisma.$transaction(async (transaction) => {
+      const job = await createBackgroundJob(
+        {
+          type: KNOWLEDGE_GRAPH_AI_ENHANCEMENT_JOB_TYPE,
+          requestedById: teacherId,
+          courseId,
+          idempotencyKey: `${draft.id}:ai:${queued.executionCount}`,
+          input: { draftId: draft.id, teacherId, courseId, context },
+          maxAttempts: 3,
+        },
+        transaction,
+      );
+      await transaction.knowledgeGraphDraft.update({
+        where: { id: draft.id },
+        data: { backgroundJobId: job.id },
+      });
+      return job.id;
+    });
+  }
   return {
     reused: claimed.count !== 1,
     shouldExecute: claimed.count === 1,
-    draft: queued,
+    draft: { ...queued, backgroundJobId },
   };
+}
+
+export async function executeClaimedKnowledgeGraphAiEnhancementJob(
+  jobId: string,
+  leaseId: string,
+  input: { draftId: string; teacherId: string; courseId: string },
+  context: AuditRequestContext,
+) {
+  try {
+    await prisma.knowledgeGraphDraft.updateMany({
+      where: {
+        id: input.draftId,
+        backgroundJobId: jobId,
+        status: KnowledgeGraphStatus.SUCCEEDED,
+      },
+      data: {
+        attemptId: leaseId,
+        aiEnhancementStatus: AIEnhancementStatus.PROCESSING,
+      },
+    });
+    const result = await executeTeacherKnowledgeGraphAiEnhancement(
+      input.teacherId,
+      input.courseId,
+      input.draftId,
+      context,
+      { attemptId: leaseId },
+    );
+    await completeBackgroundJob(jobId, {
+      leaseId,
+      result: { draftId: input.draftId },
+      resourceUsage: {},
+    });
+    return result;
+  } catch (error) {
+    await failBackgroundJob(
+      jobId,
+      {
+        leaseId,
+        errorCode: "KNOWLEDGE_GRAPH_AI_ENHANCEMENT_FAILED",
+        retryable: true,
+        resourceUsage: {},
+      },
+      async (transaction, _job, willRetry) =>
+        transaction.knowledgeGraphDraft.updateMany({
+          where: { id: input.draftId, backgroundJobId: jobId },
+          data: {
+            aiEnhancementStatus: AIEnhancementStatus.FAILED,
+            aiWarningMessage: willRetry
+              ? "AI 增强暂时失败，后台任务将自动重试。"
+              : "AI 增强重试失败，基础草稿仍可审核和发布。",
+          },
+        }),
+    );
+    throw error;
+  }
 }
 
 export async function executeTeacherKnowledgeGraphAiEnhancement(
@@ -335,6 +523,7 @@ export async function executeTeacherKnowledgeGraphAiEnhancement(
   dependencies: {
     provider?: AIProvider;
     logger?: Pick<Console, "error">;
+    attemptId?: string;
   } = {},
 ) {
   const logger = dependencies.logger ?? console;
@@ -344,7 +533,13 @@ export async function executeTeacherKnowledgeGraphAiEnhancement(
       courseId,
     );
     const draft = await prisma.knowledgeGraphDraft.findFirst({
-      where: { id: draftId, courseId },
+      where: {
+        id: draftId,
+        courseId,
+        ...(dependencies.attemptId
+          ? { attemptId: dependencies.attemptId }
+          : {}),
+      },
     });
     if (!draft) throw new ResourceNotFoundError("知识图谱草稿不存在。");
     if (
@@ -371,8 +566,13 @@ export async function executeTeacherKnowledgeGraphAiEnhancement(
     );
     const structure = mergeRelated(base, ai.inference);
     const saved = await prisma.$transaction(async (tx) => {
-      const persisted = await tx.knowledgeGraphDraft.update({
-        where: { id: draft.id },
+      const persistedWrite = await tx.knowledgeGraphDraft.updateMany({
+        where: {
+          id: draft.id,
+          ...(dependencies.attemptId
+            ? { attemptId: dependencies.attemptId }
+            : {}),
+        },
         data: {
           provider: ai.provider?.name ?? null,
           model: ai.provider?.model ?? null,
@@ -387,6 +587,15 @@ export async function executeTeacherKnowledgeGraphAiEnhancement(
           failureCount: ai.status === AIEnhancementStatus.FAILED ? 1 : 0,
           successCount: structure.nodes.length + structure.edges.length,
         },
+      });
+      if (persistedWrite.count !== 1)
+        throw new KnowledgeGraphOperationError(
+          "AI 增强任务已由新的执行接管。",
+          409,
+          "JOB_INTERRUPTED",
+        );
+      const persisted = await tx.knowledgeGraphDraft.findUniqueOrThrow({
+        where: { id: draft.id },
       });
       await writeGovernanceAuditLog(tx, {
         actorId: teacherId,
@@ -410,6 +619,9 @@ export async function executeTeacherKnowledgeGraphAiEnhancement(
       where: {
         id: draftId,
         courseId,
+        ...(dependencies.attemptId
+          ? { attemptId: dependencies.attemptId }
+          : {}),
         aiEnhancementStatus: AIEnhancementStatus.PROCESSING,
       },
       data: {

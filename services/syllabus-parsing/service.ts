@@ -12,6 +12,7 @@ import type { StorageService } from "@/services/storage/types";
 import {
   DEFAULT_SYLLABUS_AI_TIMEOUT_MS,
   MAX_SYLLABUS_AI_TIMEOUT_MS,
+  SYLLABUS_PARSE_JOB_TYPE,
   SYLLABUS_PARSER_VERSION,
   SYLLABUS_PROMPT_VERSION,
   SYLLABUS_RULE_VERSION,
@@ -314,6 +315,121 @@ export async function createTeacherSyllabusParse(
       500,
       code,
     );
+  }
+}
+
+export async function queueTeacherSyllabusParse(
+  teacherId: string,
+  courseId: string,
+): Promise<{
+  draft: SyllabusParseDraftView;
+  reused: boolean;
+  shouldExecute: boolean;
+}> {
+  const syllabus = await currentSyllabusOrThrow(teacherId, courseId);
+  let draft = await getOrCreateDraft(teacherId, courseId, syllabus.id);
+  if (draft.status === SyllabusParseStatus.SUCCEEDED) {
+    return {
+      draft: draftView(draft, syllabus, syllabus.id),
+      reused: true,
+      shouldExecute: false,
+    };
+  }
+  if (draft.status === SyllabusParseStatus.PROCESSING) {
+    return {
+      draft: draftView(draft, syllabus, syllabus.id),
+      reused: true,
+      shouldExecute: false,
+    };
+  }
+  if (draft.status === SyllabusParseStatus.FAILED) {
+    draft = await prisma.syllabusParseDraft.update({
+      where: { id: draft.id },
+      data: {
+        status: SyllabusParseStatus.PENDING,
+        errorCode: null,
+        completedAt: null,
+      },
+    });
+  }
+  const { createBackgroundJob } =
+    await import("@/services/background-jobs/repository");
+  draft = await prisma.$transaction(async (transaction) => {
+    const job = await createBackgroundJob(
+      {
+        type: SYLLABUS_PARSE_JOB_TYPE,
+        requestedById: teacherId,
+        courseId,
+        idempotencyKey: `${draft.id}:${draft.executionCount}`,
+        input: { draftId: draft.id, teacherId, courseId },
+        maxAttempts: 3,
+      },
+      transaction,
+    );
+    return transaction.syllabusParseDraft.update({
+      where: { id: draft.id },
+      data: { backgroundJobId: job.id },
+    });
+  });
+  return {
+    draft: draftView(draft, syllabus, syllabus.id),
+    reused: false,
+    shouldExecute: true,
+  };
+}
+
+export async function executeClaimedSyllabusParseJob(
+  jobId: string,
+  leaseId: string,
+  input: { draftId: string; teacherId: string; courseId: string },
+) {
+  const { completeBackgroundJob, failBackgroundJob } =
+    await import("@/services/background-jobs/repository");
+  try {
+    await prisma.syllabusParseDraft.updateMany({
+      where: {
+        id: input.draftId,
+        backgroundJobId: jobId,
+        status: SyllabusParseStatus.PROCESSING,
+      },
+      data: {
+        status: SyllabusParseStatus.PENDING,
+        attemptId: null,
+      },
+    });
+    const result = await createTeacherSyllabusParse(
+      input.teacherId,
+      input.courseId,
+    );
+    await completeBackgroundJob(jobId, {
+      leaseId,
+      result: { draftId: input.draftId },
+      resourceUsage: {},
+    });
+    return result;
+  } catch (error) {
+    await failBackgroundJob(
+      jobId,
+      {
+        leaseId,
+        errorCode:
+          error instanceof SyllabusParseOperationError
+            ? error.code
+            : "SYLLABUS_PARSE_INTERNAL_ERROR",
+        retryable: true,
+        resourceUsage: {},
+      },
+      async (transaction, _job, willRetry) =>
+        transaction.syllabusParseDraft.updateMany({
+          where: { id: input.draftId, backgroundJobId: jobId },
+          data: {
+            status: willRetry
+              ? SyllabusParseStatus.PENDING
+              : SyllabusParseStatus.FAILED,
+          },
+        }),
+    );
+    throw error;
   }
 }
 

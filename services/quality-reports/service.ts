@@ -612,26 +612,30 @@ async function queueReport(
   if (existing) {
     if (
       existing.backgroundJob &&
-      (existing.status === QualityReportStatus.QUEUED ||
-        existing.status === QualityReportStatus.FAILED)
+      existing.status === QualityReportStatus.QUEUED
+    ) {
+      return { report: existing, reused: true, shouldExecute: true };
+    }
+    if (
+      existing.backgroundJob &&
+      existing.status === QualityReportStatus.FAILED
     ) {
       const retried = await prisma.$transaction(async (transaction) => {
-        await transaction.backgroundJob.update({
-          where: { id: existing.backgroundJob!.id },
-          data: {
-            status: "PENDING",
-            progress: 0,
-            attemptCount: 0,
-            nextAttemptAt: new Date(),
-            currentLeaseId: null,
-            errorCode: null,
-            retryable: null,
-            completedAt: null,
+        const job = await createBackgroundJob(
+          {
+            type: QUALITY_REPORT_JOB_TYPE,
+            requestedById: teacherId,
+            courseId,
+            idempotencyKey: `${existing.id}:retry:${existing.backgroundJob!.id}`,
+            input: { reportId: existing.id, context },
+            maxAttempts: 3,
           },
-        });
+          transaction,
+        );
         return transaction.courseQualityReport.update({
           where: { id: existing.id },
           data: {
+            backgroundJobId: job.id,
             status: QualityReportStatus.QUEUED,
             errorCode: null,
             completedAt: null,
@@ -727,22 +731,24 @@ async function queueReport(
         },
         context,
       });
-      return report;
+      const job = await createBackgroundJob(
+        {
+          type: QUALITY_REPORT_JOB_TYPE,
+          requestedById: teacherId,
+          courseId,
+          idempotencyKey: report.id,
+          input: { reportId: report.id, context },
+          maxAttempts: 3,
+        },
+        transaction,
+      );
+      return transaction.courseQualityReport.update({
+        where: { id: report.id },
+        data: { backgroundJobId: job.id },
+        include: { backgroundJob: true },
+      });
     });
-    const job = await createBackgroundJob({
-      type: QUALITY_REPORT_JOB_TYPE,
-      requestedById: teacherId,
-      courseId,
-      idempotencyKey: created.id,
-      input: { reportId: created.id },
-      maxAttempts: 3,
-    });
-    const report = await prisma.courseQualityReport.update({
-      where: { id: created.id },
-      data: { backgroundJobId: job.id },
-      include: { backgroundJob: true },
-    });
-    return { report, reused: false, shouldExecute: true };
+    return { report: created, reused: false, shouldExecute: true };
   } catch (error) {
     if (sourceStorageKey) await storage.delete(sourceStorageKey);
     throw error;
@@ -816,7 +822,25 @@ export async function processQualityReportJob(
     leaseDurationMs: 120_000,
   });
   if (!claimed?.currentLeaseId) return null;
-  const leaseId = claimed.currentLeaseId;
+  return executeClaimedQualityReportJob(
+    reportId,
+    claimed.id,
+    claimed.currentLeaseId,
+    context,
+  );
+}
+
+export async function executeClaimedQualityReportJob(
+  reportId: string,
+  backgroundJobId: string,
+  leaseId: string,
+  context: AuditRequestContext,
+) {
+  const report = await prisma.courseQualityReport.findFirst({
+    where: { id: reportId, backgroundJobId },
+  });
+  if (!report)
+    throw new ResourceNotFoundError("报告生成任务与业务记录不匹配。");
   const storage = getStorageService();
   let docxKey: string | null = null;
   let workbookKey: string | null = null;
@@ -852,7 +876,7 @@ export async function processQualityReportJob(
         errorCode: narrativeExecution.errorCode,
       },
     );
-    await heartbeatBackgroundJob(report.backgroundJobId, {
+    await heartbeatBackgroundJob(backgroundJobId, {
       leaseId,
       progress: 40,
       leaseDurationMs: 120_000,
@@ -861,17 +885,17 @@ export async function processQualityReportJob(
       buildQualityReportDocx(source, statistics, narrative),
       Promise.resolve(buildQualityReportWorkbook(source)),
     ]);
-    docxKey = `quality-reports/${report.courseId}/drafts/${report.id}.docx`;
-    workbookKey = `quality-reports/${report.courseId}/outputs/${report.id}.xlsx`;
+    docxKey = `quality-reports/${report.courseId}/drafts/${report.id}-${leaseId}.docx`;
+    workbookKey = `quality-reports/${report.courseId}/outputs/${report.id}-${leaseId}.xlsx`;
     await storage.save(docxKey, docx);
     await storage.save(workbookKey, workbook);
-    await heartbeatBackgroundJob(report.backgroundJobId, {
+    await heartbeatBackgroundJob(backgroundJobId, {
       leaseId,
       progress: 90,
       leaseDurationMs: 120_000,
     });
     await completeBackgroundJob(
-      report.backgroundJobId,
+      backgroundJobId,
       {
         leaseId,
         result: { reportId },
@@ -930,7 +954,7 @@ export async function processQualityReportJob(
     if (docxKey) await storage.delete(docxKey);
     if (workbookKey) await storage.delete(workbookKey);
     await failBackgroundJob(
-      report.backgroundJobId,
+      backgroundJobId,
       {
         leaseId,
         errorCode: "QUALITY_REPORT_GENERATION_FAILED",

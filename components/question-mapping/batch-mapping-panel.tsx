@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 
@@ -34,6 +34,13 @@ interface Batch {
   failureCode: string | null;
   failureSummary: string | null;
   candidates: Candidate[];
+  backgroundJob: {
+    status: string;
+    progress: number;
+    attemptCount: number;
+    maxAttempts: number;
+    errorCode: string | null;
+  } | null;
 }
 
 export function BatchMappingPanel({
@@ -61,6 +68,30 @@ export function BatchMappingPanel({
     return [...map.values()];
   }, [batch]);
 
+  const selectDefaultCandidates = useCallback((value: Batch) => {
+    const defaults: Record<string, "PRIMARY"> = {};
+    for (const candidate of value.candidates) {
+      if (candidate.rank === 1) defaults[candidate.id] = "PRIMARY";
+    }
+    setSelectedCandidates(defaults);
+  }, []);
+
+  useEffect(() => {
+    if (!batch || !["PENDING", "PROCESSING"].includes(batch.status)) return;
+    const timer = window.setInterval(async () => {
+      const result = await requestAssignmentApi<Batch>(
+        `/api/teacher/question-mapping-batches/${batch.id}`,
+      );
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setBatch(result.data);
+      if (result.data.status === "READY") selectDefaultCandidates(result.data);
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [batch, selectDefaultCandidates]);
+
   async function generate() {
     if (!selectedQuestions.length) {
       setError("请至少选择一道尚未人工绑定的题目");
@@ -85,11 +116,7 @@ export function BatchMappingPanel({
       return;
     }
     setBatch(result.data);
-    const defaults: Record<string, "PRIMARY"> = {};
-    for (const candidate of result.data.candidates) {
-      if (candidate.rank === 1) defaults[candidate.id] = "PRIMARY";
-    }
-    setSelectedCandidates(defaults);
+    if (result.data.status === "READY") selectDefaultCandidates(result.data);
   }
 
   async function confirm() {
@@ -182,7 +209,19 @@ export function BatchMappingPanel({
             Provider {batch.provider ?? "—"} · Model {batch.model ?? "—"} ·
             Prompt {batch.promptVersion} · Rule {batch.ruleVersion}
           </p>
-          {batch.failureSummary ? (
+          {["PENDING", "PROCESSING"].includes(batch.status) ? (
+            <p className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+              候选已进入持久化后台队列，独立 worker
+              正在生成；离开页面不会中断任务。
+              {batch.backgroundJob
+                ? `（第 ${batch.backgroundJob.attemptCount}/${batch.backgroundJob.maxAttempts} 次尝试）`
+                : null}
+            </p>
+          ) : batch.status === "FAILED" ? (
+            <p className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              {batch.failureSummary ?? "候选生成失败，请重新发起。"}
+            </p>
+          ) : batch.failureSummary ? (
             <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
               {batch.failureSummary}（{batch.failureCode}）
             </p>
@@ -255,7 +294,7 @@ export function BatchMappingPanel({
           </div>
           <button
             className="mt-5 rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            disabled={pending !== null}
+            disabled={pending !== null || batch.status !== "READY"}
             onClick={() => void confirm()}
             type="button"
           >

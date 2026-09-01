@@ -4,6 +4,7 @@ import { z } from "zod";
 export const QUESTION_MAPPING_PROMPT_VERSION = "question-concept-map-v2";
 export const QUESTION_MAPPING_RULE_VERSION = "question-concept-confirm-v1";
 export const QUESTION_MAPPING_MODEL = "local-deterministic-mapper-v1";
+export const QUESTION_MAPPING_JOB_TYPE = "QUESTION_MAPPING_BATCH";
 
 export interface QuestionMappingAIInput {
   questions: Array<{

@@ -26,6 +26,7 @@ import type { ComponentType, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import { LogoutButton } from "@/components/auth/logout-button";
+import { buildBreadcrumbs } from "@/components/dashboard/breadcrumbs";
 import { NotificationIndicator } from "@/components/notifications/notification-indicator";
 import { cn } from "@/lib/utils";
 import type { AuthenticatedUser } from "@/services/auth/types";
@@ -93,6 +94,16 @@ const SEGMENT_LABELS: Record<string, string> = {
   announcements: "系统公告",
   "course-templates": "课程模板",
   courses: "课程管理",
+  syllabus: "教学大纲",
+  "assessment-scheme": "考核方案",
+  gradebook: "成绩台账",
+  attendance: "出勤台账",
+  "quality-report": "教学质量分析",
+  profiles: "课程画像",
+  "knowledge-graph": "知识图谱",
+  "question-mapping": "题目知识点映射",
+  "teaching-progress": "教学进度",
+  "outcome-attainment": "课程目标达成度",
   students: "学生名单",
   import: "导入",
   teacher: "教师工作台",
@@ -134,16 +145,7 @@ function pageTitle(pathname: string, items: NavigationItem[]): string {
 }
 
 function Breadcrumbs({ pathname }: { pathname: string }) {
-  const segments = pathname.split("/").filter(Boolean);
-  const crumbs = segments.map((segment, index) => {
-    const href = `/${segments.slice(0, index + 1).join("/")}`;
-    const looksLikeId = !SEGMENT_LABELS[segment];
-    return {
-      href,
-      label: SEGMENT_LABELS[segment] ?? "详情",
-      linkable: !looksLikeId && index < segments.length - 1,
-    };
-  });
+  const crumbs = buildBreadcrumbs(pathname, SEGMENT_LABELS);
 
   return (
     <nav aria-label="面包屑" className="min-w-0 overflow-hidden">
