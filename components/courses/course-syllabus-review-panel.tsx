@@ -596,34 +596,66 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                   <div className="mt-3 space-y-2">
                     {chapter.knowledgePoints.map((point, pointIndex) => (
                       <div
-                        className="grid gap-2 rounded border bg-white p-2 sm:grid-cols-[120px_1fr_auto]"
+                        className="rounded border bg-white p-2"
                         key={`${point.code}-${pointIndex}`}
                       >
-                        <input
-                          aria-label="知识点编码"
-                          className={inputClass}
-                          value={point.code}
+                        <div className="grid gap-2 sm:grid-cols-[120px_1fr_130px_auto]">
+                          <input
+                            aria-label="知识点编码"
+                            className={inputClass}
+                            value={point.code}
+                            onChange={(e) =>
+                              change((d) => {
+                                d.chapters[chapterIndex]!.knowledgePoints[
+                                  pointIndex
+                                ]!.code = e.target.value;
+                              })
+                            }
+                          />
+                          <input
+                            aria-label="知识点名称"
+                            className={inputClass}
+                            value={point.name}
+                            onChange={(e) =>
+                              change((d) => {
+                                d.chapters[chapterIndex]!.knowledgePoints[
+                                  pointIndex
+                                ]!.name = e.target.value;
+                              })
+                            }
+                          />
+                          <select
+                            aria-label="知识点重要程度"
+                            className={inputClass}
+                            value={point.importance}
+                            onChange={(e) =>
+                              change((d) => {
+                                d.chapters[chapterIndex]!.knowledgePoints[
+                                  pointIndex
+                                ]!.importance = e.target.value as
+                                  "CORE" | "NORMAL" | "EXTENDED";
+                              })
+                            }
+                          >
+                            <option value="CORE">核心</option>
+                            <option value="NORMAL">一般</option>
+                            <option value="EXTENDED">拓展</option>
+                          </select>
+                          <SourceRefs refs={point.sourceRefs} />
+                        </div>
+                        <textarea
+                          aria-label="知识点描述"
+                          className={`${inputClass} mt-2 min-h-16`}
+                          placeholder="具体内容边界、操作要点或教学要求"
+                          value={point.description ?? ""}
                           onChange={(e) =>
                             change((d) => {
                               d.chapters[chapterIndex]!.knowledgePoints[
                                 pointIndex
-                              ]!.code = e.target.value;
+                              ]!.description = e.target.value || null;
                             })
                           }
                         />
-                        <input
-                          aria-label="知识点名称"
-                          className={inputClass}
-                          value={point.name}
-                          onChange={(e) =>
-                            change((d) => {
-                              d.chapters[chapterIndex]!.knowledgePoints[
-                                pointIndex
-                              ]!.name = e.target.value;
-                            })
-                          }
-                        />
-                        <SourceRefs refs={point.sourceRefs} />
                       </div>
                     ))}
                   </div>

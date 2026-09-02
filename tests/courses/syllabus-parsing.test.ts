@@ -40,6 +40,7 @@ import {
 import {
   createTeacherSyllabusParse,
   getTeacherSyllabusParses,
+  isRetryableSyllabusParseFailure,
 } from "@/services/syllabus-parsing/service";
 
 const prisma = new PrismaClient();
@@ -69,7 +70,7 @@ const validOutput: SyllabusParseOutput = {
     {
       code: "OBJ-1",
       title: "Programming foundations",
-      description: "Understand Python foundations.",
+      description: "Python",
       sourceRefs: [{ page: 1, verified: false }],
     },
   ],
@@ -219,12 +220,17 @@ test("strict AI JSON validation retries once and accepts a repaired output", asy
   assert.deepEqual(result.output, validOutput);
 });
 
-test("2024 Python 固定样本验收结构覆盖目标、章节、实验、学时和考核权重", async () => {
+test("2024 Python 固定样本验收结构覆盖目标原文、细粒度知识点、实验、学时和考核权重", async () => {
   const expected = structuredClone(validOutput);
+  const objectiveTexts = [
+    "课程目标 1：掌握 Python 程序设计的基础知识，能够运用程序设计方法分析并解决实际问题。",
+    "课程目标 2：具备使用 Python 开发、调试与测试程序的能力，并能评价解决方案。",
+    "课程目标 3：形成规范严谨的工程意识、持续学习意识和团队协作素养。",
+  ];
   expected.objectives = Array.from({ length: 3 }, (_, index) => ({
     code: "OBJ-" + (index + 1),
-    title: ["知识", "能力", "素养"][index]!,
-    description: "课程目标 " + (index + 1),
+    title: "课程目标 " + (index + 1),
+    description: objectiveTexts[index]!,
     sourceRefs: [{ page: 3, verified: false }],
   }));
   expected.chapters = Array.from({ length: 11 }, (_, index) => ({
@@ -236,8 +242,8 @@ test("2024 Python 固定样本验收结构覆盖目标、章节、实验、学�
     knowledgePoints: [
       {
         code: "KP-" + (index + 1) + "-1",
-        name: "知识点 " + (index + 1),
-        description: null,
+        name: "具体小知识点 " + (index + 1),
+        description: "内容边界与教学要求 " + (index + 1),
         importance: "CORE" as const,
         sourceRefs: [
           { page: Math.min(6, 3 + Math.floor(index / 3)), verified: false },
@@ -286,12 +292,18 @@ test("2024 Python 固定样本验收结构覆盖目标、章节、实验、学�
             ? "课程目标在各考核方式中占比 平时表现 课程作业 期中考试 课程实验 期末考试 目标1 50% 60% 60% 50% 60% 目标2 25% 20% 30% 25% 30%"
             : index === 8
               ? "目标3 25% 20% 10% 25% 10% 合计 100% 100% 100% 100% 100% 各考核方式占总成绩权重 10% 5% 5% 20% 60%"
-              : "固定样本第 " + (index + 1) + " 页",
+              : index === 2
+                ? objectiveTexts.join(" ")
+                : "固定样本第 " + (index + 1) + " 页",
       })),
     },
   );
 
   assert.equal(execution.output.objectives.length, 3);
+  assert.deepEqual(
+    execution.output.objectives.map((objective) => objective.description),
+    objectiveTexts,
+  );
   assert.equal(execution.output.chapters.length, 11);
   assert.equal(
     execution.output.chapters.reduce(
@@ -339,7 +351,7 @@ test("2024 Python 固定样本验收结构覆盖目标、章节、实验、学�
   );
 });
 
-test("v5 AI 输出必须显式包含实践项目且旧存量结构只读兼容", () => {
+test("v6 AI 输出必须显式包含实践项目且旧存量结构只读兼容", () => {
   const legacy = structuredClone(validOutput) as Record<string, unknown>;
   delete legacy.practiceItems;
   const mappings = legacy.objectiveAssessmentMappings as Array<
@@ -652,6 +664,93 @@ test("syllabus prompt requires compact page-only references by default", () => {
   assert.match(messages[0]?.content ?? "", /完整性优先/u);
   assert.match(messages[0]?.content ?? "", /allocationRate/u);
   assert.match(messages[0]?.content ?? "", /合计必须为 100/u);
+  assert.match(messages[0]?.content ?? "", /逐字保留原文中的完整课程目标/u);
+  assert.match(messages[0]?.content ?? "", /不得摘要、改写、合并、拆分或省略/u);
+  assert.match(messages[0]?.content ?? "", /下一级具体小知识点/u);
+  assert.match(messages[0]?.content ?? "", /KP-章序-点序/u);
+});
+
+test("paraphrased course objectives are rejected and repaired with verbatim source text", async () => {
+  const sourceObjective =
+    "课程目标 1：掌握 Python 程序设计的基础知识，能够运用程序设计方法分析并解决实际问题。";
+  let calls = 0;
+  const result = await parseSyllabusStructure(
+    providerWith((_input, options) => {
+      calls += 1;
+      const output = structuredClone(validOutput);
+      output.objectives[0]!.title = "课程目标 1";
+      output.objectives[0]!.description =
+        calls === 1 ? "掌握 Python 并解决问题。" : sourceObjective;
+      output.objectives[0]!.sourceRefs = [{ page: 1, verified: false }];
+      if (calls === 2) {
+        assert.match(options.validationError ?? "", /完整复现 PDF 原文/u);
+      }
+      return output;
+    }),
+    {
+      courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+      pages: [{ pageNumber: 1, text: sourceObjective }],
+    },
+  );
+  assert.equal(calls, 2);
+  assert.equal(result.output.objectives[0]?.description, sourceObjective);
+});
+
+test("PDF 字形间空白和错误引用页不会误判课程目标或触发额外 AI 调用", async () => {
+  const objective =
+    "掌握Python语言的基本语法规则和编程规范，理解面向对象编程思想。";
+  let calls = 0;
+  const output = structuredClone(validOutput);
+  output.objectives[0] = {
+    code: "OBJ-1",
+    title: "课程目标 1",
+    description: objective,
+    sourceRefs: [{ page: 1, verified: false }],
+  };
+  const result = await parseSyllabusStructure(
+    providerWith(() => {
+      calls += 1;
+      return output;
+    }),
+    {
+      courseHint: { name: "Python", courseNo: "PY101", term: "2026" },
+      pages: [
+        { pageNumber: 1, text: "课程基本信息" },
+        {
+          pageNumber: 3,
+          text: "掌 握 Python 语言的基本语法规则和编程规范，理解面向对象编程思想。",
+        },
+      ],
+    },
+  );
+  assert.equal(calls, 1);
+  assert.deepEqual(result.output.objectives[0]?.sourceRefs, [
+    { page: 3, verified: false },
+  ]);
+});
+
+test("已完成内部修复仍无效的 AI 输出不再触发后台任务重复计费", () => {
+  assert.equal(
+    isRetryableSyllabusParseFailure(
+      new SyllabusParseOperationError(
+        "invalid output",
+        502,
+        "INVALID_AI_OUTPUT",
+      ),
+    ),
+    false,
+  );
+  assert.equal(
+    isRetryableSyllabusParseFailure(
+      new SyllabusParseOperationError(
+        "provider timeout",
+        502,
+        "PROVIDER_TIMEOUT",
+      ),
+    ),
+    true,
+  );
+  assert.equal(isRetryableSyllabusParseFailure(new Error("unknown")), false);
 });
 
 test("terminal writes use attemptId so a late result cannot overwrite a newer attempt", async () => {

@@ -24,6 +24,9 @@ test("教学大纲审核界面包含来源、保存、发布、脏状态和历�
   assert.match(source, /structure\.practiceItems\.length/u);
   assert.match(source, /实践项目学时/u);
   assert.match(source, /关联章节编码/u);
+  assert.match(source, /知识点描述/u);
+  assert.match(source, /知识点重要程度/u);
+  assert.match(source, /具体内容边界、操作要点或教学要求/u);
   assert.match(source, /课程目标在各考核方式中占比/u);
   assert.match(source, /allocationRate/u);
   assert.match(source, /列合计/u);

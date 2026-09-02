@@ -46,6 +46,22 @@ interface ParseDependencies {
   failSuccessWriteForTest?: boolean;
 }
 
+const RETRYABLE_SYLLABUS_PARSE_ERROR_CODES = new Set([
+  "PROVIDER_TIMEOUT",
+  "PROVIDER_UNAVAILABLE",
+  "PROVIDER_EMPTY_RESPONSE",
+  "SYLLABUS_STORAGE_READ_FAILED",
+  "SYLLABUS_PARSE_INTERNAL_ERROR",
+  "JOB_INTERRUPTED",
+]);
+
+export function isRetryableSyllabusParseFailure(error: unknown): boolean {
+  return (
+    error instanceof SyllabusParseOperationError &&
+    RETRYABLE_SYLLABUS_PARSE_ERROR_CODES.has(error.code)
+  );
+}
+
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
@@ -416,7 +432,7 @@ export async function executeClaimedSyllabusParseJob(
           error instanceof SyllabusParseOperationError
             ? error.code
             : "SYLLABUS_PARSE_INTERNAL_ERROR",
-        retryable: true,
+        retryable: isRetryableSyllabusParseFailure(error),
         resourceUsage: {},
       },
       async (transaction, _job, willRetry) =>

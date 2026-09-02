@@ -43,6 +43,10 @@ export class MockAIProvider implements AIProvider {
     if (options.signal.aborted) {
       throw new DOMException("AI request aborted", "AbortError");
     }
+    const sourcePage = input.pages[0]?.pageNumber ?? 1;
+    const sourceText =
+      input.pages[0]?.text.replace(/\s+/gu, " ").trim().slice(0, 1_000) ||
+      "Python 程序设计";
     const output: SyllabusParseOutput = {
       courseInfo: {
         courseName: input.courseHint.name,
@@ -58,18 +62,14 @@ export class MockAIProvider implements AIProvider {
         applicableMajors: null,
         teachingCollege: null,
         description: "Python 程序设计课程基础信息。",
-        sourceRefs: [
-          { page: input.pages[0]?.pageNumber ?? 1, verified: false },
-        ],
+        sourceRefs: [{ page: sourcePage, verified: false }],
       },
       objectives: [
         {
           code: "OBJ-1",
           title: "课程目标 1",
-          description: "理解 Python 程序设计基础并能够解决基础问题。",
-          sourceRefs: [
-            { page: input.pages[0]?.pageNumber ?? 1, verified: false },
-          ],
+          description: sourceText,
+          sourceRefs: [{ page: sourcePage, verified: false }],
         },
       ],
       chapters: [
@@ -79,18 +79,14 @@ export class MockAIProvider implements AIProvider {
           description: "根据教学大纲文本形成的稳定 Mock 章节。",
           suggestedHours: null,
           order: 1,
-          sourceRefs: [
-            { page: input.pages[0]?.pageNumber ?? 1, verified: false },
-          ],
+          sourceRefs: [{ page: sourcePage, verified: false }],
           knowledgePoints: [
             {
               code: "KP-1",
               name: "Python 基础语法",
               description: null,
               importance: "CORE",
-              sourceRefs: [
-                { page: input.pages[0]?.pageNumber ?? 1, verified: false },
-              ],
+              sourceRefs: [{ page: sourcePage, verified: false }],
             },
           ],
         },

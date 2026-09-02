@@ -43,8 +43,14 @@ export interface SyllabusParseExecution {
 
 class SourceReferenceValidationError extends Error {}
 
+class ObjectiveTextValidationError extends Error {}
+
 function normalizedQuote(value: string): string {
   return value.replace(/\s+/gu, " ").trim();
+}
+
+function canonicalObjectiveText(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/gu, "");
 }
 
 function verifySourceReferences(
@@ -90,6 +96,45 @@ function verifySourceReferences(
     ];
   }
   return verified;
+}
+
+function verifyObjectiveTextsAreVerbatim(
+  output: SyllabusParseOutput,
+  input: SyllabusParseInput,
+): SyllabusParseOutput {
+  let offset = 0;
+  const pages = input.pages.map((page) => {
+    const text = canonicalObjectiveText(page.text);
+    const segment = {
+      pageNumber: page.pageNumber,
+      start: offset,
+      end: offset + text.length,
+      text,
+    };
+    offset = segment.end;
+    return segment;
+  });
+  const documentText = pages.map((page) => page.text).join("");
+  output.objectives.forEach((objective, index) => {
+    const objectiveText = canonicalObjectiveText(objective.description);
+    const sourceStart = documentText.indexOf(objectiveText);
+    if (sourceStart < 0) {
+      throw new ObjectiveTextValidationError(
+        `objectives.${index}.description 必须完整复现 PDF 原文，不得摘要或改写`,
+      );
+    }
+    const sourceEnd = sourceStart + objectiveText.length;
+    const sourcePages = pages
+      .filter((page) => page.end > sourceStart && page.start < sourceEnd)
+      .map((page) => page.pageNumber);
+    objective.sourceRefs = sourcePages.map((page) => {
+      const existing = objective.sourceRefs.find(
+        (reference) => reference.page === page,
+      );
+      return existing ?? { page, verified: false };
+    });
+  });
+  return output;
 }
 
 function applyDeterministicWarnings(
@@ -219,6 +264,7 @@ function validationDetails(error: unknown): string {
       .join("; ");
   if (error instanceof SyntaxError) return "Response was not valid JSON";
   if (error instanceof SourceReferenceValidationError) return error.message;
+  if (error instanceof ObjectiveTextValidationError) return error.message;
   return "Provider returned invalid output";
 }
 
@@ -342,8 +388,11 @@ export async function parseSyllabusStructure(
       try {
         const output = applyDeterministicWarnings(
           verifySourceReferences(
-            enrichObjectiveAssessmentMatrix(
-              syllabusParseOutputSchema.parse(json),
+            verifyObjectiveTextsAreVerbatim(
+              enrichObjectiveAssessmentMatrix(
+                syllabusParseOutputSchema.parse(json),
+                input,
+              ),
               input,
             ),
             input,
