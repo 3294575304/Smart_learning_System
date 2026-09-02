@@ -718,7 +718,7 @@ test("PDF 字形间空白和错误引用页不会误判课程目标或触发额�
         { pageNumber: 1, text: "课程基本信息" },
         {
           pageNumber: 3,
-          text: "掌 握 Python 语言的基本语法规则和编程规范，理解面向对象编程思想。",
+          text: "1. 知识 掌 握 Python 语言的基本语法规则和编程规范，理解面向对象编程思想。",
         },
       ],
     },
@@ -727,6 +727,7 @@ test("PDF 字形间空白和错误引用页不会误判课程目标或触发额�
   assert.deepEqual(result.output.objectives[0]?.sourceRefs, [
     { page: 3, verified: false },
   ]);
+  assert.equal(result.output.objectives[0]?.title, "知识");
 });
 
 test("已完成内部修复仍无效的 AI 输出不再触发后台任务重复计费", () => {

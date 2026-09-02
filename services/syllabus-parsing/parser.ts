@@ -98,7 +98,19 @@ function verifySourceReferences(
   return verified;
 }
 
-function verifyObjectiveTextsAreVerbatim(
+function objectiveTitleBefore(
+  documentText: string,
+  sourceStart: number,
+  ordinal: number,
+): string | null {
+  const prefix = documentText.slice(Math.max(0, sourceStart - 80), sourceStart);
+  const match = prefix.match(
+    new RegExp(`${ordinal}(?:[.、:：])?([\\p{Script=Han}A-Za-z]{1,12})$`, "u"),
+  );
+  return match?.[1] ?? null;
+}
+
+export function verifyAndEnrichObjectiveTexts(
   output: SyllabusParseOutput,
   input: SyllabusParseInput,
 ): SyllabusParseOutput {
@@ -133,6 +145,12 @@ function verifyObjectiveTextsAreVerbatim(
       );
       return existing ?? { page, verified: false };
     });
+    const sourceTitle = objectiveTitleBefore(
+      documentText,
+      sourceStart,
+      index + 1,
+    );
+    if (sourceTitle) objective.title = sourceTitle;
   });
   return output;
 }
@@ -388,7 +406,7 @@ export async function parseSyllabusStructure(
       try {
         const output = applyDeterministicWarnings(
           verifySourceReferences(
-            verifyObjectiveTextsAreVerbatim(
+            verifyAndEnrichObjectiveTexts(
               enrichObjectiveAssessmentMatrix(
                 syllabusParseOutputSchema.parse(json),
                 input,

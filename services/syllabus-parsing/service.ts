@@ -19,7 +19,10 @@ import {
 } from "@/services/syllabus-parsing/constants";
 import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
 import { extractTextFromPdf } from "@/services/syllabus-parsing/pdf-extractor";
-import { parseSyllabusStructure } from "@/services/syllabus-parsing/parser";
+import {
+  parseSyllabusStructure,
+  verifyAndEnrichObjectiveTexts,
+} from "@/services/syllabus-parsing/parser";
 import {
   claimParseDraft,
   createPendingParseDraft,
@@ -474,13 +477,40 @@ export async function getTeacherSyllabusParses(
       syllabus.id,
     ),
   );
+  const current =
+    views.find(
+      (item) =>
+        item.isCurrentSyllabusVersion &&
+        item.parserVersion === SYLLABUS_PARSER_VERSION,
+    ) ?? null;
+  if (
+    current?.status === SyllabusParseStatus.SUCCEEDED &&
+    current.result &&
+    current.parserVersion !== "syllabus-parser-v1" &&
+    current.result.objectives.some((objective) =>
+      /^课程目标\s*\d+$/u.test(objective.title),
+    )
+  ) {
+    try {
+      const data = await getStorageService().read(syllabus.storageKey);
+      const extracted = await extractTextFromPdf(data);
+      current.result = verifyAndEnrichObjectiveTexts(
+        storedSyllabusParseOutputSchema.parse(current.result),
+        {
+          courseHint: {
+            name: syllabus.course.name,
+            courseNo: syllabus.course.courseNo,
+            term: syllabus.course.term,
+          },
+          pages: extracted.pages,
+        },
+      );
+    } catch {
+      // Keep the stored draft readable if a historical source file is unavailable.
+    }
+  }
   return {
-    current:
-      views.find(
-        (item) =>
-          item.isCurrentSyllabusVersion &&
-          item.parserVersion === SYLLABUS_PARSER_VERSION,
-      ) ?? null,
+    current,
     history: views,
   };
 }
