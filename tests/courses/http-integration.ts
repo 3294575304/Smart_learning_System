@@ -1839,6 +1839,14 @@ async function main(): Promise<void> {
           where: { targetId: { in: createdSyllabusIds } },
         });
       }
+      await prisma.backgroundJobAttempt.deleteMany({
+        where: {
+          job: { courseId: { in: createdCourseIds } },
+        },
+      });
+      await prisma.backgroundJob.deleteMany({
+        where: { courseId: { in: createdCourseIds } },
+      });
       await prisma.course.deleteMany({
         where: { id: { in: createdCourseIds } },
       });
