@@ -110,3 +110,67 @@ test("有正式目标但未计算达成度时给出补算提示而非目标缺�
   assert.ok(codes.has("OUTCOME_ATTAINMENT_MISSING"));
   assert.equal(codes.has("COURSE_OBJECTIVES_MISSING"), false);
 });
+
+test("自动审查阻止 A/B 公式不一致并提示问卷目标映射缺口", () => {
+  const input: QualityReportSourceSnapshot = {
+    ...source(),
+    course: {
+      ...source().course,
+      credits: 4,
+      college: "计算机学院",
+      major: "计算机相关专业",
+    },
+    syllabus: {
+      publishedStructureId: "cm0000000000000000000002",
+      versionNumber: 1,
+      courseName: "Python 程序设计",
+      courseCategory: "专业选修课",
+      courseNature: "选修",
+      credits: 4,
+      teachingCollege: "计算机学院",
+      applicableMajors: "计算机相关专业",
+      objectiveCount: 1,
+      assessmentCount: 1,
+    },
+    outcomes: [
+      {
+        code: "1.1",
+        title: "知识目标",
+        description: "掌握 Python 基础语法。",
+        threshold: 0.68,
+        attainmentIndex: 0.9,
+        participantCount: 1,
+        componentAllocations: [{ componentCode: "final", allocationRate: 1 }],
+        studentScores: [0.8],
+      },
+    ],
+    survey: {
+      surveyId: "cm0000000000000000000003",
+      title: "结课问卷",
+      mode: "ANONYMOUS",
+      summaryRevisionId: "cm0000000000000000000004",
+      summaryRevisionNumber: 1,
+      responseCount: 5,
+      eligibleCount: 5,
+      responseRate: 1,
+      minSampleSize: 5,
+      isSuppressed: false,
+      overallMean: 4.2,
+      outcomes: [{ code: "2.1", title: "能力目标", count: 5, mean: 4.2 }],
+      dimensions: [],
+      themes: [],
+      themeNarrative: "",
+      ruleVersion: "course-survey-summary-v1",
+    },
+  };
+  const stats = calculateQualityReportStatistics(input);
+  const audit = auditQualityReportDraft(
+    input,
+    stats,
+    buildDeterministicNarrative(input, stats),
+  );
+  const codes = new Set(audit.issues.map((item) => item.code));
+  assert.ok(codes.has("OUTCOME_ATTAINMENT_FORMULA_MISMATCH"));
+  assert.ok(codes.has("SURVEY_OUTCOME_MAPPING_INCOMPLETE"));
+  assert.equal(audit.status, "INCOMPLETE");
+});

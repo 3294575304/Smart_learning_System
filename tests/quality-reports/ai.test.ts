@@ -163,8 +163,74 @@ test(
         signal: new AbortController().signal,
       });
       assert.equal(requestBodies[0]?.max_tokens, 8_192);
+      const messages = JSON.stringify(requestBodies[0]?.messages);
+      assert.match(messages, /weightedAverage/u);
+      assert.match(messages, /不得编造历年对比/u);
+      assert.match(messages, /displayName/u);
+      assert.match(messages, /120-220字/u);
     } finally {
       globalThis.fetch = originalFetch;
     }
   },
 );
+
+test("AI 接收展示名称，回传内部编号仅保留在关联字段中", async () => {
+  const noScores: QualityReportSourceSnapshot = {
+    ...source,
+    students: [],
+    outcomes: [
+      {
+        code: "OBJ-2",
+        title: "能力目标",
+        threshold: null,
+        attainmentIndex: null,
+        participantCount: 0,
+        studentScores: [],
+      },
+    ],
+  };
+  const stats = calculateQualityReportStatistics(noScores);
+  const draft = buildDeterministicNarrative(noScores, stats);
+  let displayName: string | undefined;
+  const result = await executeQualityReportNarrative(
+    provider((raw) => {
+      const input = raw as QualityReportAIInput;
+      displayName = input.statistics.outcomes[0]?.displayName;
+      return {
+        ...input.deterministicBaseline,
+        outcomeAnalysis: "OBJ-2暂无完整证据。",
+        outcomeDetails: [
+          { code: "OBJ-2", analysis: "课程目标OBJ-2暂无定量证据。" },
+        ],
+      };
+    }),
+    noScores,
+    stats,
+    draft,
+  );
+  assert.equal(displayName, "课程目标1");
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.output.outcomeAnalysis, "课程目标1暂无完整证据。");
+  assert.deepEqual(result.output.outcomeDetails, [
+    { code: "OBJ-2", analysis: "课程目标1暂无定量证据。" },
+  ]);
+});
+
+test("AI 成绩分析超出版面预算时重试后降级，不截断教师或模型正文", async () => {
+  let attempts = 0;
+  const result = await executeQualityReportNarrative(
+    provider((raw) => {
+      attempts += 1;
+      return {
+        ...(raw as QualityReportAIInput).deterministicBaseline,
+        gradeAnalysis: "成绩证据".repeat(56),
+      };
+    }),
+    source,
+    statistics,
+    baseline,
+  );
+  assert.equal(attempts, 3);
+  assert.equal(result.fallbackUsed, true);
+  assert.deepEqual(result.output, baseline);
+});

@@ -96,7 +96,7 @@ test("报告接入问卷聚合但明确与客观达成度分开呈现", () => {
     calculateQualityReportStatistics(withSurvey),
   );
   assert.match(narrative.studentEvaluation, /8\/10/u);
-  assert.match(narrative.studentEvaluation, /OBJ-1 4\.10\/5/u);
+  assert.match(narrative.studentEvaluation, /课程目标1 4\.10\/5/u);
   assert.match(narrative.studentEvaluation, /与客观达成度分开/u);
 });
 
@@ -122,4 +122,77 @@ test("已识别课程目标但缺少达成度时不会误报为全部达标", ()
   );
   assert.match(narrative.outcomeAnalysis, /没有可核验/u);
   assert.doesNotMatch(narrative.outcomeAnalysis, /均达到/u);
+});
+
+test("按模板 A/B 口径计算目标统计并关联归一化学生自评", () => {
+  const withOutcomeEvidence: QualityReportSourceSnapshot = {
+    ...source,
+    components: [
+      { code: "regular", name: "平时表现", weight: 0.4 },
+      { code: "final", name: "期末考试", weight: 0.6 },
+    ],
+    students: [
+      {
+        studentId: null,
+        studentNo: "001",
+        displayName: "甲",
+        status: GradeValueStatus.SCORED,
+        componentScores: { regular: 80, final: 70 },
+        totalScore: 74,
+      },
+      {
+        studentId: null,
+        studentNo: "002",
+        displayName: "乙",
+        status: GradeValueStatus.SCORED,
+        componentScores: { regular: 70, final: 60 },
+        totalScore: 64,
+      },
+    ],
+    outcomes: [
+      {
+        code: "1.1",
+        title: "知识目标",
+        description: "掌握基础知识。",
+        threshold: 0.7,
+        attainmentIndex: 0.71,
+        participantCount: 2,
+        componentAllocations: [
+          { componentCode: "regular", allocationRate: 0.5 },
+          { componentCode: "final", allocationRate: 0.25 },
+        ],
+        studentScores: [0.8, 60],
+      },
+    ],
+    survey: {
+      surveyId: "cm0000000000000000000002",
+      title: "结课问卷",
+      mode: "ANONYMOUS",
+      summaryRevisionId: "cm0000000000000000000003",
+      summaryRevisionNumber: 1,
+      responseCount: 2,
+      eligibleCount: 2,
+      responseRate: 1,
+      minSampleSize: 2,
+      isSuppressed: false,
+      overallMean: 4.5,
+      outcomes: [{ code: " 1.1 ", title: "知识目标", count: 2, mean: 4.5 }],
+      dimensions: [],
+      themes: [],
+      themeNarrative: "",
+      ruleVersion: "course-survey-summary-v1",
+    },
+  };
+  const result = calculateQualityReportStatistics(withOutcomeEvidence);
+  const outcome = result.outcomes[0];
+  assert.equal(outcome?.weightedAverage, 24.75);
+  assert.equal(outcome?.weightedMaximum, 35);
+  assert.equal(outcome?.computedAttainmentIndex, 0.7071);
+  assert.equal(outcome?.aboveThresholdCount, 1);
+  assert.equal(outcome?.aboveThresholdRate, 0.5);
+  assert.equal(outcome?.aboveHighCount, 1);
+  assert.equal(outcome?.median, 0.7);
+  assert.equal(outcome?.minimum, 0.6);
+  assert.equal(outcome?.maximum, 0.8);
+  assert.equal(outcome?.surveyNormalized, 0.9);
 });

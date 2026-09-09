@@ -6,7 +6,7 @@ import {
   type QualityReportSourceSnapshot,
 } from "@/services/quality-reports/schemas";
 
-export const QUALITY_REPORT_AUDIT_RULE_VERSION = "quality-report-audit-v1";
+export const QUALITY_REPORT_AUDIT_RULE_VERSION = "quality-report-audit-v2";
 
 type AuditIssue = QualityReportAudit["issues"][number];
 
@@ -233,6 +233,28 @@ export function auditQualityReportDraft(
         ["outcomes.componentAllocations"],
       );
     }
+    const calculationMismatches = statistics.outcomes.filter(
+      (outcome) =>
+        outcome.attainmentIndex !== null &&
+        outcome.computedAttainmentIndex !== null &&
+        Math.abs(outcome.attainmentIndex - outcome.computedAttainmentIndex) >
+          0.005,
+    );
+    if (calculationMismatches.length > 0) {
+      add(
+        "OUTCOME_ATTAINMENT_FORMULA_MISMATCH",
+        "ERROR",
+        "OUTCOME_ATTAINMENT",
+        "课程目标达成度与模板 A/B 公式不一致",
+        `目标 ${calculationMismatches.map((item) => item.code).join("、")} 的正式达成度与按本报告分项平均分、考核权重及目标分配比例复算的 A/B 不一致。`,
+        "核对成绩发布、课程目标—考核方式映射和达成度计算版本；确保同一快照下 A/B 与正式达成度一致后重新生成。",
+        [
+          "outcomes.attainmentIndex",
+          "outcomes.componentAllocations",
+          "students.componentScores",
+        ],
+      );
+    }
     const scoresMissing = statistics.outcomes.filter(
       (outcome) => !outcome.studentScores?.length,
     );
@@ -269,6 +291,24 @@ export function auditQualityReportDraft(
       "可继续保留隐私保护提示；如需完整统计，应提高响应数后重新关闭并汇总问卷。",
       ["survey.responseCount", "survey.minSampleSize"],
     );
+  } else {
+    const surveyOutcomeCodes = new Set(
+      source.survey.outcomes.map((item) => normalized(item.code)),
+    );
+    const unmatchedOutcomes = statistics.outcomes.filter(
+      (outcome) => !surveyOutcomeCodes.has(normalized(outcome.code)),
+    );
+    if (unmatchedOutcomes.length > 0) {
+      add(
+        "SURVEY_OUTCOME_MAPPING_INCOMPLETE",
+        "WARNING",
+        "SURVEY",
+        "问卷课程目标与客观目标未完整对应",
+        `目标 ${unmatchedOutcomes.map((item) => item.code).join("、")} 没有同代码的学生自评结果，主客观对照图只展示其客观达成度。`,
+        "核对问卷题目绑定的课程目标代码；如代码发生版本变更，请重新发布问卷并在关闭后生成汇总。",
+        ["survey.outcomes", "outcomes.code"],
+      );
+    }
   }
 
   if (
@@ -313,6 +353,34 @@ export function auditQualityReportDraft(
       `需要教师重点补充：${genericSections.map(([name]) => name).join("、")}。`,
       "在人工审核区补充基于现有统计的判断、证据边界和可验证的改进措施；不得虚构缺失数据。",
       genericSections.map(([name]) => `narrative.${name}`),
+    );
+  }
+  const denseSections = [
+    ["成绩分析", narrative.gradeAnalysis, 220],
+    ["课程目标总体分析", narrative.outcomeAnalysis, 320],
+    ["学生评价概括", narrative.studentEvaluation, 450],
+    ["课程总结", narrative.courseSummary, 700],
+    ["持续改进措施", narrative.improvementMeasures, 700],
+  ].filter(([, value, maximum]) =>
+    typeof value === "string" && typeof maximum === "number"
+      ? value.replace(/\s+/gu, "").length > maximum
+      : false,
+  );
+  const denseOutcomeDetails = narrative.outcomeDetails.filter(
+    (item) => item.analysis.replace(/\s+/gu, "").length > 320,
+  );
+  if (denseSections.length > 0 || denseOutcomeDetails.length > 0) {
+    add(
+      "NARRATIVE_LAYOUT_DENSE",
+      "WARNING",
+      "AI_NARRATIVE",
+      "分析文字过长，可能破坏模板分页",
+      `建议压缩：${[
+        ...denseSections.map(([name]) => name),
+        ...denseOutcomeDetails.map((item) => `课程目标 ${item.code}`),
+      ].join("、")}。`,
+      "保留关键数据、判断和验证指标，删除重复背景与泛化表述后再导出 DOCX。",
+      ["narrative"],
     );
   }
 

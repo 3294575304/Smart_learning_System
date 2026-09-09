@@ -8,6 +8,7 @@ import {
   QUALITY_REPORT_MAX_AI_TIMEOUT_MS,
 } from "@/services/quality-reports/constants";
 import type { QualityReportNarrative } from "@/services/quality-reports/docx-writer";
+import { normalizeQualityReportNarrative } from "@/services/quality-reports/presentation";
 import {
   qualityReportNarrativeSchema,
   type QualityReportAIInput,
@@ -35,22 +36,52 @@ function inputFor(
         ({ code, name, weight, mean }) => ({ code, name, weight, mean }),
       ),
       outcomes: statistics.outcomes.map(
-        ({
+        (
+          {
+            code,
+            title,
+            description,
+            threshold,
+            attainmentIndex,
+            participantCount,
+            componentAllocations,
+            weightedAverage,
+            weightedMaximum,
+            computedAttainmentIndex,
+            aboveHighCount,
+            aboveHighRate,
+            aboveThresholdCount,
+            aboveThresholdRate,
+            median,
+            minimum,
+            maximum,
+            surveyMean,
+            surveyNormalized,
+            surveyResponseCount,
+          },
+          index,
+        ) => ({
           code,
-          title,
-          description,
-          threshold,
-          attainmentIndex,
-          participantCount,
-          componentAllocations,
-        }) => ({
-          code,
+          displayName: `课程目标${index + 1}`,
           title,
           description: description ?? null,
           threshold,
           attainmentIndex,
           participantCount,
           componentAllocations: componentAllocations ?? [],
+          weightedAverage,
+          weightedMaximum,
+          computedAttainmentIndex,
+          aboveHighCount,
+          aboveHighRate,
+          aboveThresholdCount,
+          aboveThresholdRate,
+          median,
+          minimum,
+          maximum,
+          surveyMean,
+          surveyNormalized,
+          surveyResponseCount,
         }),
       ),
       attendance: statistics.attendance,
@@ -92,6 +123,17 @@ function validateNarrativeDepth(
     if (length(narrative.improvementMeasures) < 140)
       issues.push("持续改进措施至少需要 140 个有效字符并包含行动与验证方法");
   }
+  const maximumLengths = [
+    ["成绩分析", narrative.gradeAnalysis, 220],
+    ["课程目标总体分析", narrative.outcomeAnalysis, 320],
+    ["学生评价概括", narrative.studentEvaluation, 450],
+    ["课程总结", narrative.courseSummary, 700],
+    ["持续改进措施", narrative.improvementMeasures, 700],
+  ] as const;
+  for (const [label, value, maximum] of maximumLengths) {
+    if (length(value) > maximum)
+      issues.push(`${label}不得超过 ${maximum} 个有效字符，以保持模板分页稳定`);
+  }
   if (input.dataAvailability.outcomeAttainmentCount > 0) {
     if (length(narrative.outcomeAnalysis) < 100)
       issues.push("课程目标总体分析至少需要 100 个有效字符");
@@ -105,6 +147,10 @@ function validateNarrativeDepth(
     for (const detail of narrative.outcomeDetails) {
       if (calculatedCodes.has(detail.code) && length(detail.analysis) < 100)
         issues.push(`课程目标 ${detail.code} 分析至少需要 100 个有效字符`);
+      if (length(detail.analysis) > 320)
+        issues.push(
+          `课程目标 ${detail.code} 分析不得超过 320 个有效字符，以保持模板分页稳定`,
+        );
     }
   }
   if (
@@ -163,7 +209,10 @@ export async function executeQualityReportNarrative(
         throw new Error("课程目标分析代码与正式统计范围不一致");
       validateNarrativeDepth(enhanced, input);
       return {
-        output: { ...baseline, ...enhanced },
+        output: normalizeQualityReportNarrative(
+          { ...baseline, ...enhanced },
+          source.outcomes,
+        ),
         fallbackUsed: false,
         provider: provider.name,
         model: provider.model,

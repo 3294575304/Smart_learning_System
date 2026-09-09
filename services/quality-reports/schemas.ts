@@ -221,6 +221,7 @@ export interface QualityReportAIInput {
     }>;
     outcomes: Array<{
       code: string;
+      displayName?: string;
       title: string;
       description: string | null;
       threshold: number | null;
@@ -230,6 +231,19 @@ export interface QualityReportAIInput {
         componentCode: string;
         allocationRate: number;
       }>;
+      weightedAverage: number | null;
+      weightedMaximum: number | null;
+      computedAttainmentIndex: number | null;
+      aboveHighCount: number;
+      aboveHighRate: number | null;
+      aboveThresholdCount: number;
+      aboveThresholdRate: number | null;
+      median: number | null;
+      minimum: number | null;
+      maximum: number | null;
+      surveyMean: number | null;
+      surveyNormalized: number | null;
+      surveyResponseCount: number | null;
     }>;
     attendance: { sessionCount: number; presentRate: number | null };
   };

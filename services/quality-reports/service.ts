@@ -1016,6 +1016,16 @@ export async function approveTeacherQualityReport(
     gradeComposition: baseline.gradeComposition,
     ...reviewedNarrative,
   });
+  if (
+    reviewedAudit.issues.some(
+      (item) => item.code === "OUTCOME_ATTAINMENT_FORMULA_MISMATCH",
+    )
+  )
+    throw new QualityReportOperationError(
+      "课程目标达成度与报告模板 A/B 复算结果不一致，请核对成绩和目标分配后重新生成。",
+      409,
+      "OUTCOME_ATTAINMENT_FORMULA_MISMATCH",
+    );
   const expectedCodes = statistics.outcomes.map((item) => item.code).sort();
   const reviewedCodes = reviewedNarrative.outcomeDetails
     .map((item) => item.code)

@@ -9,6 +9,7 @@ import type { z } from "zod";
 
 import type { QualityReportStatistics } from "@/services/quality-reports/calculation";
 import { QUALITY_REPORT_TEMPLATE_CHECKSUM } from "@/services/quality-reports/constants";
+import { normalizeQualityReportNarrative } from "@/services/quality-reports/presentation";
 import {
   qualityReportNarrativeSchema,
   type QualityReportSourceSnapshot,
@@ -69,7 +70,7 @@ export async function buildQualityReportDocx(
       JSON.stringify({
         source,
         statistics,
-        narrative,
+        narrative: normalizeQualityReportNarrative(narrative, source.outcomes),
         reviewed: options.reviewed,
       }),
       "utf8",

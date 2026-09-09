@@ -9,6 +9,7 @@ test("正式 DOCX 只能在教师审核后下载且审核采用乐观并发", as
   assert.match(service, /updateMany\(\{/u);
   assert.match(service, /QUALITY_REPORT_REVIEW_REQUIRED/u);
   assert.match(service, /QUALITY_REPORT_APPROVED/u);
+  assert.match(service, /OUTCOME_ATTAINMENT_FORMULA_MISMATCH/u);
 });
 
 test("DOCX 生成器固定校验模板并保留外部审核签字区", async () => {
@@ -21,7 +22,11 @@ test("DOCX 生成器固定校验模板并保留外部审核签字区", async () 
     generator,
     /The template's review opinions, signatures and dates are intentionally untouched/u,
   );
-  assert.match(generator, /grade-distribution\.png/u);
+  assert.doesNotMatch(generator, /grade-distribution\.png/u);
   assert.match(generator, /outcome-summary\.png/u);
   assert.match(generator, /studentScores/u);
+  assert.match(generator, /加权平均分\\nA/u);
+  assert.match(generator, /加权总分\\nB/u);
+  assert.match(generator, /surveyNormalized/u);
+  assert.match(generator, /w:tblLayout/u);
 });
