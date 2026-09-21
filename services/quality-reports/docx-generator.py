@@ -272,10 +272,13 @@ def scatter_chart(code, scores, threshold, output):
     image.save(output)
 
 
-def add_picture(cell, path, width=5.1):
+def add_picture(cell, path, width=5.1, heading=None):
     paragraph = cell.add_paragraph()
     format_paragraph(paragraph, center=True, line=1.0)
     paragraph.paragraph_format.keep_together = True
+    if heading:
+        add_text(paragraph, heading, bold=True)
+        paragraph.add_run().add_break()
     paragraph.add_run().add_picture(path, width=Inches(width))
 
 
@@ -563,17 +566,21 @@ format_paragraph(paragraph, before=3, line=1.3, keep_next=True)
 add_text(paragraph, "3.课程目标个体评价分布图及分析", bold=True)
 paragraph = outcome_cell.add_paragraph()
 format_paragraph(paragraph, line=1.25)
-add_text(paragraph, "横坐标为本次有效学生序号，纵坐标为个体达成度；蓝色菱形表示学生个体结果，金色横线为课程目标期望值。比例统计以本次有效学生明细为分母。")
+add_text(paragraph, "下图展示学生各课程目标的达成情况，横坐标为学生序号，纵坐标为达成度，横线表示课程目标期望值。")
 details = {item["code"]: item["analysis"] for item in narrative.get("outcomeDetails", [])}
 for index, outcome in enumerate(outcomes, start=2):
-    paragraph = outcome_cell.add_paragraph()
-    format_paragraph(paragraph, before=3, line=1.25, keep_next=True)
-    add_text(paragraph, f"课程目标{display_number(outcome['code'])}达成情况分析：", bold=True)
+    heading = f"课程目标{display_number(outcome['code'])}达成情况分析："
     if outcome.get("studentScores") and outcome.get("threshold") is not None:
         path = os.path.join(work_dir, f"outcome-{index}.png")
         scatter_chart(outcome["code"], outcome["studentScores"], outcome["threshold"], path)
-        add_picture(outcome_cell, path, 4.0)
+        # Word can ignore keepNext within a split outer table row. Keep the
+        # heading, picture and caption in one indivisible paragraph instead.
+        add_picture(outcome_cell, path, 4.0, heading=heading)
         add_caption(outcome_cell, f"图{index} 课程目标{display_number(outcome['code'])}达成情况分布", bold=True)
+    else:
+        paragraph = outcome_cell.add_paragraph()
+        format_paragraph(paragraph, before=3, line=1.25)
+        add_text(paragraph, heading, bold=True)
     paragraph = outcome_cell.add_paragraph()
     format_paragraph(paragraph, line=1.5, indent=True)
     add_text(paragraph, details.get(outcome["code"], "暂无分析文字。"))

@@ -16,6 +16,7 @@ import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 import type { QuestionMappingAIInput } from "@/services/question-mapping/schemas";
 import type { SelfReflectionAIInput } from "@/services/self-reflections/schemas";
+import { buildQualityReportPrompt } from "@/services/quality-reports/prompt";
 import type { QualityReportAIInput } from "@/services/quality-reports/schemas";
 
 const chatResponseSchema = z
@@ -221,15 +222,12 @@ export class OpenAICompatibleProvider implements AIProvider {
     input: QualityReportAIInput,
     options: AIProviderOptions,
   ): Promise<unknown> {
-    const repair = options.validationError
-      ? `上次输出无效：${options.validationError}。请修复。`
-      : "";
     return (
       await this.completeJson(
         [
           {
             role: "system",
-            content: `你只根据去标识化的课程聚合统计撰写可供教师审核的教学质量分析初稿，写作观感应接近高校课程质量报告：客观、紧凑、分点清楚、先数据后判断。严格返回 JSON：{"gradeAnalysis":"...","outcomeAnalysis":"...","outcomeDetails":[{"code":"课程目标代码","analysis":"..."}],"studentEvaluation":"...","courseSummary":"...","improvementMeasures":"..."}。outcomeDetails 的 code 字段只能使用输入中已有课程目标代码且每个目标恰好一项；code 仅供系统关联，所有 analysis 和其他正文字符串必须使用输入的 displayName（如“课程目标1”）或目标名称，不得出现 OBJ-1、OBJ-2、OBJ-3 等内部代码。正文为纯文本，不输出 Markdown 标题、加粗标记、表格或图表；字体、段落、分页和图表由模板生成器统一控制，不用空行凑版面。输入中的 weightedAverage、weightedMaximum、computedAttainmentIndex 对应模板定量表的 A、B、A/B；aboveThresholdRate、aboveHighRate、median、minimum、maximum用于逐学生目标分布分析；surveyMean、surveyNormalized是学生自评，只能与客观达成度对照，不能替代。写作要求：1）成绩分析控制在120-220字，引用平均分、及格率、优秀率以及最强和最弱考核环节的均值，说明证据支持的差异；分数段人数比例、全部考核权重和均值已有表格展示，不逐项重复抄写；2）课程目标总体分析逐项比较达成度与期望值，有学生自评时再比较主客观差异，100-320 字；每项目标分析结合目标描述、主要考核证据、达成度、达标人数比例、0.80以上比例、分布范围和样本数，100-320 字，禁止只复述一行数值；缺少证据时明确缺口，不作达成结论；3）学生评价说明响应人数、响应率、量表均值和已提供的开放题主题；没有或受小样本保护时只说明数据边界；4）课程总结用“1. …”格式列出3—6点，只综合成绩、目标、问卷与出勤中实际存在的证据，100-700字；5）持续改进用“1. …”格式列出3—5项“证据—行动—验证指标”闭环措施，140-700字。不得编造历年对比、教材适切性、教学方法效果、学生身份、未提供的课堂活动或因果关系；不得使用“加强教学、提高质量”等空话替代具体措施；不得照抄输入中的基础文字。${repair}`,
+            content: buildQualityReportPrompt(options.validationError),
           },
           { role: "user", content: JSON.stringify(input) },
         ],

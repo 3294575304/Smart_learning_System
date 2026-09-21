@@ -17,15 +17,17 @@
 npx prisma migrate deploy
 ```
 
-手动准备并启动三个本地任务：
+手动准备并启动四个本地任务：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy/windows-local/install-local-deployment.ps1
 ```
 
+首次运行前，请准备当前 Windows 用户 SSH 目录中的私钥和已核验的远程主机指纹文件。脚本默认使用 `$HOME\.ssh\codex_sandbox_known_hosts_20260808`；如果文件位置不同，请显式传入 `-KnownHostsPath`。不要创建空文件或直接使用未经核验的 `ssh-keyscan` 输出。
+
 仅在已经确认独立生产构建完整、只需重启或更新任务设置时，才可传入 `-SkipBuild`。
 
-任务分别为 `Zhixue-SSH-Tunnel`、`Zhixue-Next` 和 `Zhixue-Judge-Worker`。它们不注册登录、定时或失败重启触发器，只在运行启动脚本时启动；停止后不会自行恢复。任务通过 `IgnoreNew` 保持单实例。运行时配置保存在被 Git 忽略的 `.data/local-deployment/service-config.json`，安装脚本会为该文件单独关闭 ACL 继承，仅允许当前用户和 SYSTEM 读取；日志保存在同目录的 `logs` 下。脚本不会输出远程执行器密钥或后台任务密钥。
+任务分别为 `Zhixue-SSH-Tunnel`、`Zhixue-Next`、`Zhixue-Judge-Worker` 和 `Zhixue-Background-Worker`。它们不注册登录、定时或失败重启触发器，只在运行启动脚本时启动；停止后不会自行恢复。任务通过 `IgnoreNew` 保持单实例。运行时配置保存在被 Git 忽略的 `.data/local-deployment/service-config.json`，安装脚本会为该文件单独关闭 ACL 继承，仅允许当前用户和 SYSTEM 读取；日志保存在同目录的 `logs` 下。脚本不会输出远程执行器密钥或后台任务密钥。
 
 仓库根目录提供成对的手动命令：
 
@@ -36,6 +38,8 @@ powershell -ExecutionPolicy Bypass -File .\start-all.ps1
 # 停止应用、worker 和 SSH 隧道
 powershell -ExecutionPolicy Bypass -File .\stop-all.ps1
 ```
+
+启动脚本会在生成 Prisma Client 和执行 migration 前停止本项目的应用、两类 worker、SSH 隧道和 Next.js 开发预览（包括 3001 端口预览），释放 Windows 上的 Prisma 引擎 DLL。`stop-all.ps1` 也包含这些进程；不会停止其他项目的 Node 服务或 PostgreSQL。若仍提示 DLL 被占用，请关闭本仓库的 Prisma Studio 或其他使用 Prisma 的独立脚本后重试。
 
 重新登录或重启 Windows 后任务保持停止，需再次手动执行 `start-all.ps1`。如果未来确实需要无人登录自启，应另行设计服务账户和 ACL，不应在手动部署脚本中隐式启用。
 

@@ -15,6 +15,12 @@ assert len(doc.tables) == 8
 assert len(doc.inline_shapes) == 6
 text = "".join(doc.element.body.itertext())
 assert "OBJ" not in text.upper()
+assert "本次纳入" not in text and "特殊状态或缺失数据" not in text
+assert "同口径" not in text and "不相互替代" not in text
+assert "有效学生" not in text
+goal_figures = [p for p in doc.tables[5].cell(5, 0).paragraphs if p._p.xpath(".//w:drawing") and p.text.startswith("课程目标")]
+assert len(goal_figures) == 3
+assert all(p.paragraph_format.keep_together is True for p in goal_figures)
 assert "课程目标1" in text and "课程目标2" in text and "课程目标3" in text
 assert [doc.tables[5].cell(5, 0).tables[0].cell(i, 0).text for i in range(4, 7)] == ["1", "2", "3"]
 assert "".join(doc.tables[7]._tbl.itertext()) == "".join(base.tables[7]._tbl.itertext())

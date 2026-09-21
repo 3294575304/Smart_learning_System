@@ -53,7 +53,7 @@ async function ownedCourse(teacherId: string, courseId: string) {
   return course;
 }
 
-function defaultSurveyQuestions(structureJson: Prisma.JsonValue) {
+export function defaultSurveyQuestions(structureJson: Prisma.JsonValue) {
   const structure =
     storedPublishableSyllabusStructureSchema.parse(structureJson);
   let sortOrder = 1;
