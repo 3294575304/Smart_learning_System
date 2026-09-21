@@ -1,7 +1,10 @@
 import { GradeValueStatus } from "@prisma/client";
 
 import type { QualityReportSourceSnapshot } from "@/services/quality-reports/schemas";
-import { normalizeQualityReportNarrative } from "@/services/quality-reports/presentation";
+import {
+  buildGradeComposition,
+  normalizeQualityReportNarrative,
+} from "@/services/quality-reports/presentation";
 
 export type QualityReportOutcomeStatistics =
   QualityReportSourceSnapshot["outcomes"][number] & {
@@ -194,111 +197,130 @@ export function calculateQualityReportStatistics(
   };
 }
 
+function buildStudentEvaluation(source: QualityReportSourceSnapshot) {
+  const survey = source.survey;
+  if (!survey) return "学生评价待补充。";
+  if (survey.isSuppressed) return "问卷反馈较少，暂不作总体评价。";
+  const positive = survey.dimensions.filter(
+    (item) => item.count > 0 && item.title && item.mean >= 4,
+  );
+  const needsAttention = survey.dimensions.filter(
+    (item) => item.count > 0 && item.title && item.mean < 3,
+  );
+  const comments = [
+    positive.length
+      ? `问卷中，学生对${positive.map((item) => item.title).join("、")}的评价较好。`
+      : "",
+    needsAttention.length
+      ? `学生对${needsAttention.map((item) => item.title).join("、")}的评价偏低，后续教学需要重视这些方面的意见。`
+      : "",
+    survey.themes.length
+      ? `学生反馈涉及${survey.themes
+          .slice(0, 3)
+          .map((item) => item.label)
+          .join("、")}。`
+      : "",
+  ].filter(Boolean);
+  const overall = survey.overallMean;
+  if (overall !== null) {
+    comments.push(
+      overall >= 4
+        ? "总体上，参与问卷的学生对本课程评价良好。"
+        : overall >= 3
+          ? "总体上，参与问卷的学生对本课程评价尚可，教学内容与学习支持仍有改进空间。"
+          : "总体上，参与问卷的学生对本课程评价偏低，需要进一步了解学习中的困难，调整教学安排。",
+    );
+  }
+  return comments.join("\n") || "学生评价待补充。";
+}
+
 export function buildDeterministicNarrative(
   source: QualityReportSourceSnapshot,
   stats: QualityReportStatistics,
 ) {
-  const percent = (value: number | null) =>
-    value === null ? "暂无" : `${(value * 100).toFixed(1)}%`;
-  const formula = source.components
-    .map(
-      (component) => `${component.name}×${round(component.weight * 100, 2)}%`,
-    )
-    .join(" + ");
-  const weakest = [...stats.componentMeans]
+  const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
+  const ranked = stats.componentMeans
     .filter((item) => item.mean !== null)
-    .sort((left, right) => (left.mean ?? 0) - (right.mean ?? 0))[0];
-  const strongest = [...stats.componentMeans]
-    .filter((item) => item.mean !== null)
-    .sort((left, right) => (right.mean ?? 0) - (left.mean ?? 0))[0];
+    .sort((left, right) => (left.mean ?? 0) - (right.mean ?? 0));
+  const weakest = ranked[0];
+  const strongest = ranked[ranked.length - 1];
+  const hasDifference = weakest && strongest && weakest.mean !== strongest.mean;
   const evaluated = stats.outcomes.filter(
     (item) => item.attainmentIndex !== null && item.threshold !== null,
   );
   const below = evaluated.filter(
-    (item) => item.attainmentIndex! < item.threshold!,
+    (item) => (item.attainmentIndex ?? 0) < (item.threshold ?? 0),
   );
-  const missingOutcomes = stats.outcomes.filter(
+  const missing = stats.outcomes.filter(
     (item) => item.attainmentIndex === null || item.threshold === null,
   );
-  const outcomeDetails = stats.outcomes.map((item) => {
-    const allocationByCode = new Map(
-      (item.componentAllocations ?? []).map((allocation) => [
-        allocation.componentCode,
-        allocation.allocationRate,
-      ]),
-    );
-    const evidence = source.components
-      .map((component) => ({
-        name: component.name,
-        contribution:
-          component.weight * (allocationByCode.get(component.code) ?? 0),
-      }))
-      .filter((entry) => entry.contribution > 0)
-      .sort((left, right) => right.contribution - left.contribution);
-    const evidenceSummary = evidence.length
-      ? `主要量化证据来自${evidence
-          .slice(0, 3)
-          .map((entry) => entry.name)
-          .join("、")}等考核环节。`
-      : "当前目标与考核环节的数值映射不完整。";
-    return {
-      code: item.code,
-      analysis:
-        item.attainmentIndex === null || item.threshold === null
-          ? `课程目标 ${item.code}（${item.title}）已从正式课程结构识别，但暂无完整的达成度与期望值。${evidenceSummary}需补齐可核验的考核证据后再形成达成结论。`
-          : `课程目标 ${item.code}（${item.title}）的达成度为 ${item.attainmentIndex.toFixed(2)}，期望值为 ${item.threshold.toFixed(2)}，纳入 ${item.participantCount} 名有效学生，${
-              item.attainmentIndex >= item.threshold
-                ? `高于期望值 ${(item.attainmentIndex - item.threshold).toFixed(2)}`
-                : `低于期望值 ${(item.threshold - item.attainmentIndex).toFixed(2)}`
-            }。${
-              item.aboveThresholdRate === null
-                ? "暂无逐学生分布明细。"
-                : `达到期望值的学生为 ${item.aboveThresholdCount} 人（${percent(item.aboveThresholdRate)}），达到 0.80 及以上的学生为 ${item.aboveHighCount} 人（${percent(item.aboveHighRate)}）；个体达成度中位数为 ${item.median?.toFixed(2) ?? "暂无"}，范围为 ${item.minimum?.toFixed(2) ?? "暂无"}—${item.maximum?.toFixed(2) ?? "暂无"}。`
-            }${evidenceSummary}${
-              item.surveyNormalized === null
-                ? ""
-                : `对应学生自评均值为 ${item.surveyMean?.toFixed(2)}/5（归一化 ${item.surveyNormalized.toFixed(2)}），与客观达成度相差 ${Math.abs(item.surveyNormalized - item.attainmentIndex).toFixed(2)}；两类证据分别呈现，不相互替代。`
-            }`,
-    };
-  });
+  const label = (item: { code: string }) =>
+    `课程目标${source.outcomes.findIndex((outcome) => outcome.code === item.code) + 1}`;
+  const outcomeAnalysis = !evaluated.length
+    ? "课程目标达成情况待补充。"
+    : `${
+        below.length
+          ? `${below.map(label).join("、")}尚未达到期望值，相关学习内容仍需加强。`
+          : "各项已完成评价的课程目标均达到期望值，课程总体学习要求基本达成。"
+      }${missing.length ? `${missing.map(label).join("、")}的达成情况待补充。` : ""}`;
+  const gradeAnalysis =
+    stats.mean === null
+      ? "成绩分析待补充。"
+      : `班级总评平均分为${stats.mean.toFixed(2)}分。${
+          hasDifference
+            ? `分项考核中，学生在“${strongest.name}”环节的成绩相对较好，“${weakest.name}”环节相对薄弱，后续应加强相关内容的讲解与练习。`
+            : "后续教学可结合各分数段学生的作答情况安排讲评与练习，帮助学生巩固所学内容。"
+        }${stats.passRate !== null && stats.passRate < 1 ? "对尚未及格的学生，应及时了解学习困难，安排有针对性的辅导。" : ""}`;
+  const outcomeDetails = stats.outcomes.map((item) => ({
+    code: item.code,
+    analysis:
+      item.attainmentIndex === null || item.threshold === null
+        ? `${label(item)}的达成情况待补充。`
+        : `${label(item)}的达成度为${item.attainmentIndex.toFixed(2)}，${item.attainmentIndex >= item.threshold ? "达到" : "未达到"}期望值${item.threshold.toFixed(2)}。${item.aboveThresholdRate === null ? "" : `达到期望值的学生占${percent(item.aboveThresholdRate)}。`}${
+            item.attainmentIndex >= item.threshold
+              ? `班级整体达到该目标的学习要求，后续可围绕“${item.title}”安排巩固与拓展练习。`
+              : `后续应围绕“${item.title}”安排重点讲解和分步练习，帮助学生逐步达到课程要求。`
+          }`,
+  }));
+  const studentEvaluation = buildStudentEvaluation(source);
+  const summary = [
+    stats.mean === null
+      ? ""
+      : hasDifference
+        ? `分项考核表现存在差异，“${weakest.name}”相关内容需要在后续教学中进一步巩固。`
+        : "后续教学需结合学生的具体作答情况，继续做好课程内容的巩固与应用训练。",
+    evaluated.length ? outcomeAnalysis : "",
+    source.survey &&
+    !source.survey.isSuppressed &&
+    source.survey.overallMean !== null
+      ? (studentEvaluation.split("\n").at(-1) ?? "")
+      : "",
+  ].filter(Boolean);
+  const measures =
+    stats.mean === null && !evaluated.length
+      ? []
+      : [
+          hasDifference
+            ? `针对“${weakest.name}”环节，整理学生作答中的典型问题，安排专题讲评和由易到难的练习。讲评后让学生独立订正，并及时反馈仍未解决的问题。`
+            : "结合学生作答中的典型问题安排讲评，将基础练习与综合任务衔接，帮助学生在独立完成任务的过程中巩固课程知识。",
+          below.length
+            ? `围绕${below.map(label).join("、")}对应的学习内容，细化练习步骤，增加示范与独立练习的衔接，帮助学生逐步达到课程要求。`
+            : "结合课程目标设计递进任务，在基础练习之后增加知识综合运用的机会，并根据学生完成情况调整讲解重点。",
+          "根据学生不同的学习基础提供分层练习和答疑辅导，及时回应学习中的疑问，帮助学生形成适合自己的学习方法。",
+        ];
   return normalizeQualityReportNarrative(
     {
-      gradeComposition: `总评成绩 = ${formula}。有效成绩 ${stats.participantCount} 人，特殊状态或缺失数据 ${stats.excludedCount} 人。`,
-      gradeAnalysis:
-        stats.mean === null
-          ? "暂无可用于统计的有效成绩。"
-          : `本次纳入 ${stats.participantCount} 名有效学生，班级平均分 ${stats.mean.toFixed(2)}，及格率 ${percent(stats.passRate)}，优秀率 ${percent(stats.excellentRate)}。${strongest ? `“${strongest.name}”平均分最高（${strongest.mean?.toFixed(2)}）` : ""}${weakest ? `，“${weakest.name}”平均分最低（${weakest.mean?.toFixed(2)}）` : ""}。成绩分布与考核均值见表；上述差异用于定位需复核的考核环节，不直接推断教学因果。后续应结合试题覆盖和评分标准复核，并以同口径统计验证改进。`,
-      outcomeAnalysis:
-        stats.outcomes.length === 0
-          ? "当前数据源未提供正式课程目标，无法形成课程目标达成分析。"
-          : evaluated.length === 0
-            ? `已识别 ${stats.outcomes.length} 项正式课程目标，但当前没有可核验的定量达成度与期望值，报告不作达成结论。`
-            : `${
-                below.length
-                  ? `${below.map((item) => `${item.code}（${item.attainmentIndex!.toFixed(2)}/${item.threshold!.toFixed(2)}）`).join("、")} 低于各自达成阈值，应结合对应考核证据复核教学与评价设计。`
-                  : `已有定量结果的课程目标均达到设定阈值：${evaluated.map((item) => `${item.code} ${item.attainmentIndex!.toFixed(2)}/${item.threshold!.toFixed(2)}`).join("，")}。仍需结合分项成绩、学生反馈和不同目标的相对差异持续改进。`
-              }${
-                missingOutcomes.length
-                  ? ` ${missingOutcomes.map((item) => item.code).join("、")} 缺少完整达成数据，不纳入上述判断。`
-                  : ""
-              }`,
+      gradeComposition: buildGradeComposition(source.components),
+      gradeAnalysis,
+      outcomeAnalysis,
       outcomeDetails,
-      studentEvaluation: source.survey
-        ? source.survey.isSuppressed
-          ? `结课问卷收到 ${source.survey.responseCount}/${source.survey.eligibleCount} 份回答，低于 ${source.survey.minSampleSize} 份小样本阈值，因此不展示量表细分或开放题主题。学生自评不替代客观成绩与课程目标定量达成度。`
-          : `结课问卷收到 ${source.survey.responseCount}/${source.survey.eligibleCount} 份回答，响应率 ${(source.survey.responseRate * 100).toFixed(1)}%，五级量表总体均值 ${source.survey.overallMean?.toFixed(2) ?? "暂无"}。${
-              source.survey.outcomes.length
-                ? `课程目标自评：${source.survey.outcomes.map((item) => `${item.code} ${item.mean.toFixed(2)}/5`).join("，")}。`
-                : ""
-            }${source.survey.themeNarrative}以上为学生定性自评，与客观达成度分开呈现。`
-        : "暂无已关闭且完成聚合的课程问卷数据，学生评价留待教师补充；报告不作推断。",
-      courseSummary:
-        stats.mean === null
-          ? "当前缺少可用于课程质量分析的有效成绩，暂不形成确定性质量结论。"
-          : `1. 本次统计纳入 ${stats.participantCount} 名学生，班级平均分为 ${stats.mean.toFixed(2)}，及格率为 ${percent(stats.passRate)}，优秀率为 ${percent(stats.excellentRate)}。\n2. ${evaluated.length ? `${evaluated.length} 项课程目标具有可核验定量结果，其中 ${evaluated.length - below.length} 项达到期望值。` : "当前课程目标尚无完整定量结果。"}\n3. ${source.survey ? `结课问卷响应率为 ${percent(source.survey.responseRate)}，学生自评作为独立定性证据。` : "当前未纳入结课问卷汇总。"}\n4. ${stats.attendance.presentRate === null ? "当前未纳入有效出勤汇总。" : `出勤到课率为 ${percent(stats.attendance.presentRate)}。`}各类证据口径分开呈现，结论限于本次冻结的数据快照。`,
-      improvementMeasures: weakest
-        ? `1. 针对“${weakest.name}”平均分相对最低的现象，按知识点归类典型错误，增加讲评、即时反馈和分层练习；下一轮以该环节平均分、低分段人数及相同题型正确率验证。\n2. 围绕${below.length ? `${below.map((item) => item.code).join("、")} 未达期望值` : "各课程目标已达期望值但仍有差异"}，按目标—考核方式占比复核试题覆盖、评分标准和教学活动的一致性；以同口径目标达成度及有效样本数验证。\n3. ${source.survey ? "结合问卷中学生自评与客观成绩的差异安排访谈或针对性学习支持" : "补充结课问卷并收集学生对内容难点、教学活动和考核方式的反馈"}；下一轮同时比较问卷响应率、自评均值与客观达成度，不以单一证据替代综合判断。`
-        : "建议补齐有效成绩和课程目标证据后再形成针对性改进措施。",
+      studentEvaluation,
+      courseSummary: summary.length
+        ? summary.map((text, index) => `${index + 1}. ${text}`).join("\n")
+        : "课程总结待补充。",
+      improvementMeasures: measures.length
+        ? measures.map((text, index) => `${index + 1}. ${text}`).join("\n")
+        : "持续改进措施待补充。",
     },
     source.outcomes,
   );

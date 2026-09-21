@@ -9,6 +9,7 @@ import {
 } from "@/services/quality-reports/constants";
 import type { QualityReportNarrative } from "@/services/quality-reports/docx-writer";
 import { normalizeQualityReportNarrative } from "@/services/quality-reports/presentation";
+import { REPORT_PROCESS_LANGUAGE } from "@/services/quality-reports/prompt";
 import {
   qualityReportNarrativeSchema,
   type QualityReportAIInput,
@@ -86,7 +87,16 @@ function inputFor(
       ),
       attendance: statistics.attendance,
     },
-    survey: source.survey,
+    survey: source.survey?.isSuppressed
+      ? {
+          ...source.survey,
+          overallMean: null,
+          outcomes: [],
+          dimensions: [],
+          themes: [],
+          themeNarrative: "",
+        }
+      : source.survey,
     dataAvailability: {
       publishedSyllabus: Boolean(source.syllabus),
       outcomeAttainmentCount: statistics.outcomes.filter(
@@ -115,13 +125,29 @@ function validateNarrativeDepth(
 ) {
   const length = (value: string) => value.replace(/\s+/gu, "").length;
   const issues: string[] = [];
+  const prose = [
+    narrative.gradeAnalysis,
+    narrative.outcomeAnalysis,
+    ...narrative.outcomeDetails.map((item) => item.analysis),
+    narrative.studentEvaluation,
+    narrative.courseSummary,
+    narrative.improvementMeasures,
+  ];
+  if (
+    prose.some((text) =>
+      REPORT_PROCESS_LANGUAGE.test(text.replace(/\s+/gu, "")),
+    )
+  )
+    issues.push(
+      "删除统计处理过程、模板说明和机械化复核套话，改写为教师对教学与学习情况的自然总结",
+    );
   if (input.statistics.participantCount > 0) {
-    if (length(narrative.gradeAnalysis) < 120)
-      issues.push("成绩分析至少需要 120 个有效字符并引用总体与分项统计");
-    if (length(narrative.courseSummary) < 100)
-      issues.push("课程总结至少需要 100 个有效字符并综合多类证据");
-    if (length(narrative.improvementMeasures) < 140)
-      issues.push("持续改进措施至少需要 140 个有效字符并包含行动与验证方法");
+    if (length(narrative.gradeAnalysis) < 40)
+      issues.push("成绩分析至少需要 40 个有效字符，简洁说明成绩表现");
+    if (length(narrative.courseSummary) < 60)
+      issues.push("课程总结至少需要 60 个有效字符，说明教学情况");
+    if (length(narrative.improvementMeasures) < 60)
+      issues.push("持续改进措施至少需要 60 个有效字符，写清具体教学安排");
   }
   const maximumLengths = [
     ["成绩分析", narrative.gradeAnalysis, 220],
@@ -135,8 +161,8 @@ function validateNarrativeDepth(
       issues.push(`${label}不得超过 ${maximum} 个有效字符，以保持模板分页稳定`);
   }
   if (input.dataAvailability.outcomeAttainmentCount > 0) {
-    if (length(narrative.outcomeAnalysis) < 100)
-      issues.push("课程目标总体分析至少需要 100 个有效字符");
+    if (length(narrative.outcomeAnalysis) < 40)
+      issues.push("课程目标总体分析至少需要 40 个有效字符");
     const calculatedCodes = new Set(
       input.statistics.outcomes
         .filter(
@@ -145,8 +171,8 @@ function validateNarrativeDepth(
         .map((item) => item.code),
     );
     for (const detail of narrative.outcomeDetails) {
-      if (calculatedCodes.has(detail.code) && length(detail.analysis) < 100)
-        issues.push(`课程目标 ${detail.code} 分析至少需要 100 个有效字符`);
+      if (calculatedCodes.has(detail.code) && length(detail.analysis) < 40)
+        issues.push(`课程目标 ${detail.code} 分析至少需要 40 个有效字符`);
       if (length(detail.analysis) > 320)
         issues.push(
           `课程目标 ${detail.code} 分析不得超过 320 个有效字符，以保持模板分页稳定`,
@@ -154,10 +180,12 @@ function validateNarrativeDepth(
     }
   }
   if (
-    input.dataAvailability.surveyAvailable &&
-    length(narrative.studentEvaluation) < 80
+    input.survey &&
+    !input.survey.isSuppressed &&
+    input.survey.dimensions.length > 0 &&
+    length(narrative.studentEvaluation) < 40
   )
-    issues.push("学生评价概括至少需要 80 个有效字符");
+    issues.push("学生评价概括至少需要 40 个有效字符");
   if (issues.length) throw new Error(issues.join("；"));
 }
 
@@ -198,6 +226,8 @@ export async function executeQualityReportNarrative(
       const enhanced = qualityReportNarrativeSchema.parse(
         typeof raw === "string" ? JSON.parse(raw) : raw,
       );
+      if (!source.survey || source.survey.isSuppressed)
+        enhanced.studentEvaluation = baseline.studentEvaluation;
       const expectedCodes = statistics.outcomes.map((item) => item.code).sort();
       const returnedCodes = enhanced.outcomeDetails
         .map((item) => item.code)

@@ -64,14 +64,14 @@ test("报告 AI 只接收去标识化聚合并接受严格结构文字", async (
       serializedInput = JSON.stringify(input);
       return {
         gradeAnalysis:
-          "成绩分析引用了班级总体成绩、分数段分布和考核项目均值，并据此识别相对薄弱环节。现有结果只反映本次冻结数据快照，不直接推断教学因果；后续应结合试题覆盖、评分标准和学习过程证据进一步复核，并使用同口径数据验证变化，同时关注有效样本数、特殊状态人数及不同分数段的结构变化。",
+          "本班总评平均分为80分，学生整体成绩较好。后续教学可结合学生的具体作答情况安排讲评，将基础练习与综合任务衔接，帮助学生进一步巩固课程知识。",
         outcomeAnalysis: "当前没有目标达成数据，因此不作达成结论。",
         outcomeDetails: [],
         studentEvaluation: "学生评价",
         courseSummary:
-          "课程总结综合成绩总体水平、分数段结构与分项考核表现，明确区分现有证据与缺失数据。当前未提供课程目标定量结果、问卷和出勤汇总，因此结论限于成绩统计，不对学生表现或教学效果作超出数据范围的推断，并保留下一轮同口径复核空间。",
+          "本班学生总评成绩整体较好。后续教学应在巩固课程基础知识的同时，结合具体作答情况安排综合任务与分层辅导，使学生能够及时发现学习中的问题，并通过订正和练习逐步提高独立完成任务的能力。",
         improvementMeasures:
-          "第一，针对最低分考核环节归类典型错误并安排讲评，以同类题正确率和低分段人数验证；第二，复核考核内容与课程目标的一致性，以同口径达成度和有效样本数验证；第三，补充学生反馈和出勤证据，比较问卷响应率、学生自评与客观成绩的差异。所有措施均记录实施时间、覆盖学生范围、责任人和下一轮复核指标。",
+          "1. 结合具体作答情况整理典型错误，安排集中讲评，并让学生独立完成订正。2. 围绕课程学习要求设计递进练习，为基础不同的学生提供相应的练习材料。3. 增加答疑与反馈机会，帮助学生解决独立练习时遇到的问题。",
       };
     }),
     source,
@@ -79,7 +79,7 @@ test("报告 AI 只接收去标识化聚合并接受严格结构文字", async (
     baseline,
   );
   assert.equal(result.fallbackUsed, false);
-  assert.match(result.output.improvementMeasures, /同口径达成度/u);
+  assert.match(result.output.improvementMeasures, /递进练习/u);
   assert.doesNotMatch(serializedInput, /20260001|不会发送给 AI/u);
 });
 
@@ -167,12 +167,120 @@ test(
       assert.match(messages, /weightedAverage/u);
       assert.match(messages, /不得编造历年对比/u);
       assert.match(messages, /displayName/u);
-      assert.match(messages, /120-220字/u);
+      assert.match(messages, /40-220字/u);
+      assert.match(messages, /学生普遍认为课程的基本概念/u);
+      assert.match(messages, /范文仅用于文风参照/u);
+      assert.match(messages, /主题标签和提及次数不能证明褒贬/u);
     } finally {
       globalThis.fetch = originalFetch;
     }
   },
 );
+
+test("机械化正文触发重写，持续失败时返回不含套话的基础报告", async () => {
+  let attempts = 0;
+  const emptySource = { ...source, students: [] };
+  const emptyStatistics = calculateQualityReportStatistics(emptySource);
+  const emptyBaseline = buildDeterministicNarrative(
+    emptySource,
+    emptyStatistics,
+  );
+  const result = await executeQualityReportNarrative(
+    provider((raw) => {
+      attempts += 1;
+      return {
+        ...(raw as QualityReportAIInput).deterministicBaseline,
+        gradeAnalysis:
+          "本次纳入1名有效学生，平均分80分。成绩分布与各考核环节权重、均值已由表格展示，此处不逐项重复。后续以同口径统计验证改进。",
+      };
+    }),
+    emptySource,
+    emptyStatistics,
+    emptyBaseline,
+  );
+  assert.equal(attempts, 3);
+  assert.equal(result.fallbackUsed, true);
+  assert.doesNotMatch(
+    JSON.stringify(result.output),
+    /本次纳入|同口径|此处不逐项重复/u,
+  );
+});
+
+test("模型收到文风修复原因后可成功重写，无需凑满旧版字数", async () => {
+  const emptySource = { ...source, students: [] };
+  const stats = calculateQualityReportStatistics(emptySource);
+  const draft = buildDeterministicNarrative(emptySource, stats);
+  const repairMessages: Array<string | undefined> = [];
+  const repairingProvider: AIProvider = {
+    ...provider(() => ({})),
+    writeQualityReportNarrative: async (input, options) => {
+      repairMessages.push(options.validationError);
+      return {
+        ...input.deterministicBaseline,
+        gradeAnalysis: options.validationError
+          ? "成绩分析待补充。"
+          : "本次纳入0名有效学生。",
+      };
+    },
+  };
+  const result = await executeQualityReportNarrative(
+    repairingProvider,
+    emptySource,
+    stats,
+    draft,
+  );
+  assert.equal(repairMessages.length, 2);
+  assert.match(repairMessages[1] ?? "", /自然总结/u);
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.output.gradeAnalysis, "成绩分析待补充。");
+});
+
+test("小样本问卷不发送细分数据，也不接受模型编造的学生评价", async () => {
+  const suppressed: QualityReportSourceSnapshot = {
+    ...source,
+    students: [],
+    survey: {
+      surveyId: "cm0000000000000000000002",
+      title: "结课问卷",
+      mode: "ANONYMOUS",
+      summaryRevisionId: "cm0000000000000000000003",
+      summaryRevisionNumber: 1,
+      responseCount: 2,
+      eligibleCount: 10,
+      responseRate: 0.2,
+      minSampleSize: 5,
+      isSuppressed: true,
+      overallMean: 5,
+      outcomes: [],
+      dimensions: [{ code: "CONTENT", title: "教学内容", count: 2, mean: 5 }],
+      themes: [{ key: "DETAIL", label: "不应发送的主题", count: 1 }],
+      themeNarrative: "不应发送的原始概括",
+      ruleVersion: "test",
+    },
+  };
+  const stats = calculateQualityReportStatistics(suppressed);
+  const draft = buildDeterministicNarrative(suppressed, stats);
+  let inputText = "";
+  const result = await executeQualityReportNarrative(
+    provider((raw) => {
+      const input = raw as QualityReportAIInput;
+      inputText = JSON.stringify(input);
+      return {
+        ...input.deterministicBaseline,
+        studentEvaluation: "学生普遍认为教学方法有效，课程目标全部达成。",
+      };
+    }),
+    suppressed,
+    stats,
+    draft,
+  );
+  assert.equal(result.fallbackUsed, false);
+  assert.doesNotMatch(inputText, /不应发送|教学内容/u);
+  assert.equal(
+    result.output.studentEvaluation,
+    "问卷反馈较少，暂不作总体评价。",
+  );
+});
 
 test("AI 接收展示名称，回传内部编号仅保留在关联字段中", async () => {
   const noScores: QualityReportSourceSnapshot = {

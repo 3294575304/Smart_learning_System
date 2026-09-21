@@ -8,6 +8,8 @@ import {
   calculateQualityReportStatistics,
 } from "@/services/quality-reports/calculation";
 import type { QualityReportSourceSnapshot } from "@/services/quality-reports/schemas";
+import { buildGradeComposition } from "@/services/quality-reports/presentation";
+import { REPORT_PROCESS_LANGUAGE } from "@/services/quality-reports/prompt";
 
 const source: QualityReportSourceSnapshot = {
   course: {
@@ -57,6 +59,37 @@ const source: QualityReportSourceSnapshot = {
   sourceReference: {},
 };
 
+test("成绩构成使用模板名称和紧凑格式，保留实际权重与自定义考核项", () => {
+  assert.equal(
+    buildGradeComposition([
+      { name: "平时表现", weight: 0.1 },
+      { name: "课程作业", weight: 0.05 },
+      { name: "期中考试", weight: 0.05 },
+      { name: "课程实验", weight: 0.2 },
+      { name: "期末考试", weight: 0.6 },
+    ]),
+    "在线学习10%+在线作业5%+期中机考5%+头歌在线编程（含实验）20%+期末60%",
+  );
+  assert.equal(
+    buildGradeComposition([
+      { name: "项目展示", weight: 0.375 },
+      { name: "期末考试", weight: 0.625 },
+    ]),
+    "项目展示37.5%+期末62.5%",
+  );
+});
+
+test("降级报告不含统计处理套话，单项考核不强行比较强弱", () => {
+  const narrative = buildDeterministicNarrative(
+    source,
+    calculateQualityReportStatistics(source),
+  );
+  assert.equal(narrative.gradeComposition, "期末100%");
+  assert.doesNotMatch(JSON.stringify(narrative), REPORT_PROCESS_LANGUAGE);
+  assert.doesNotMatch(narrative.gradeAnalysis, /最高|最低|相对薄弱/u);
+  assert.equal(narrative.studentEvaluation, "学生评价待补充。");
+});
+
 test("特殊状态与缺失成绩不进入成绩分布分母", () => {
   const result = calculateQualityReportStatistics(source);
   assert.equal(result.participantCount, 2);
@@ -69,7 +102,7 @@ test("特殊状态与缺失成绩不进入成绩分布分母", () => {
   );
 });
 
-test("报告接入问卷聚合但明确与客观达成度分开呈现", () => {
+test("学生评价用自然语言概括问卷且不照抄主题次数或客观达成结论", () => {
   const withSurvey: QualityReportSourceSnapshot = {
     ...source,
     survey: {
@@ -95,9 +128,12 @@ test("报告接入问卷聚合但明确与客观达成度分开呈现", () => {
     withSurvey,
     calculateQualityReportStatistics(withSurvey),
   );
-  assert.match(narrative.studentEvaluation, /8\/10/u);
-  assert.match(narrative.studentEvaluation, /课程目标1 4\.10\/5/u);
-  assert.match(narrative.studentEvaluation, /与客观达成度分开/u);
+  assert.match(narrative.studentEvaluation, /学生反馈涉及实践与练习/u);
+  assert.match(narrative.studentEvaluation, /评价良好/u);
+  assert.doesNotMatch(
+    narrative.studentEvaluation,
+    /8\/10|4\.10|响应率|客观达成|普遍认为|增加实践/u,
+  );
 });
 
 test("已识别课程目标但缺少达成度时不会误报为全部达标", () => {
@@ -120,7 +156,7 @@ test("已识别课程目标但缺少达成度时不会误报为全部达标", ()
     withUncalculatedOutcome,
     calculateQualityReportStatistics(withUncalculatedOutcome),
   );
-  assert.match(narrative.outcomeAnalysis, /没有可核验/u);
+  assert.match(narrative.outcomeAnalysis, /达成情况待补充/u);
   assert.doesNotMatch(narrative.outcomeAnalysis, /均达到/u);
 });
 
