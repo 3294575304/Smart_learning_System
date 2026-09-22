@@ -1,7 +1,15 @@
 "use client";
 
 import { CourseStatus } from "@prisma/client";
-import { CheckCircle2, LoaderCircle, School, Trash2, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  BookOpenCheck,
+  CheckCircle2,
+  LoaderCircle,
+  School,
+  Trash2,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import React, { useState } from "react";
 
@@ -71,7 +79,7 @@ function CourseDeleteAction({
     <>
       <button
         aria-label={`删除课程“${course.name}”`}
-        className="text-destructive hover:bg-destructive/10 inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium"
+        className="text-muted-foreground hover:bg-destructive/5 hover:text-destructive inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
         onClick={openDialog}
         type="button"
       >
@@ -204,10 +212,10 @@ export function TeacherCourseList({
           title="暂无课程"
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
           {courses.map((course) => (
             <article
-              className="bg-card rounded-xl border p-5 transition-colors hover:bg-gray-50"
+              className="bg-card rounded-xl border p-5 transition-shadow hover:shadow-md"
               key={course.id}
             >
               <div className="flex items-start justify-between gap-3">
@@ -215,7 +223,10 @@ export function TeacherCourseList({
                   className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
                   href={`/teacher/courses/${course.id}`}
                 >
-                  <h3 className="truncate font-semibold">{course.name}</h3>
+                  <span className="mb-4 flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <BookOpenCheck aria-hidden="true" className="size-5" />
+                  </span>
+                  <h3 className="font-semibold break-words">{course.name}</h3>
                   <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
                     {course.description ?? "暂无课程说明"}
                   </p>
@@ -226,10 +237,6 @@ export function TeacherCourseList({
                   >
                     {COURSE_STATUS_LABELS[course.status]}
                   </span>
-                  <CourseDeleteAction
-                    course={course}
-                    onDeleted={handleDeleted}
-                  />
                 </div>
               </div>
 
@@ -237,14 +244,18 @@ export function TeacherCourseList({
                 className="block rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
                 href={`/teacher/courses/${course.id}`}
               >
-                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <div className="mt-5 grid grid-cols-2 gap-4 rounded-lg bg-slate-50/80 p-4 text-sm">
                   <div>
                     <p className="text-muted-foreground text-xs">课程号</p>
-                    <p className="mt-1 font-medium">{course.courseNo}</p>
+                    <p className="mt-1 font-medium break-all">
+                      {course.courseNo}
+                    </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">学期</p>
-                    <p className="mt-1 font-medium">{course.term}</p>
+                    <p className="mt-1 font-medium break-words">
+                      {course.term}
+                    </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">关联班级</p>
@@ -259,14 +270,21 @@ export function TeacherCourseList({
                 </div>
 
                 <div className="mt-4 flex items-center justify-between gap-3 text-xs">
-                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">
+                  <span className="text-muted-foreground min-w-0 truncate">
                     {course.template.name}
                   </span>
-                  <span className="text-muted-foreground">
-                    {course.activeClassroomCount} 个开课班级
+                  <span className="inline-flex shrink-0 items-center gap-1 font-medium text-slate-700">
+                    课程详情
+                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
                   </span>
                 </div>
               </Link>
+              <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3">
+                <span className="text-muted-foreground text-xs">
+                  {course.activeClassroomCount} 个开课班级
+                </span>
+                <CourseDeleteAction course={course} onDeleted={handleDeleted} />
+              </div>
             </article>
           ))}
         </div>

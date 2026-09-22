@@ -30,8 +30,9 @@ $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 $environmentPath = Join-Path $RepoRoot ".env"
 $packagePath = Join-Path $RepoRoot "package.json"
 $installerPath = Join-Path $RepoRoot "deploy/windows-local/install-local-deployment.ps1"
+$stopScriptPath = Join-Path $RepoRoot "stop-all.ps1"
 
-foreach ($requiredPath in @($environmentPath, $packagePath, $installerPath)) {
+foreach ($requiredPath in @($environmentPath, $packagePath, $installerPath, $stopScriptPath)) {
   if (-not (Test-Path -LiteralPath $requiredPath)) {
     throw "Required file does not exist: $requiredPath"
   }
@@ -58,9 +59,13 @@ if (-not (Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction Silent
 Push-Location $RepoRoot
 try {
   Write-Output "[2/4] Preparing Prisma..."
+  # Windows cannot replace the Prisma engine DLL while Next.js or a worker
+  # has it loaded. Release repository runtimes before generation and migration.
+  Write-Output "Stopping existing repository services and development previews..."
+  & $stopScriptPath -RepoRoot $RepoRoot -SandboxHost $SandboxHost
   & $npmExecutable run prisma:generate
   if ($LASTEXITCODE -ne 0) {
-    throw "Prisma Client generation failed."
+    throw "Prisma Client generation failed. If the engine DLL is locked, close other Prisma scripts or Prisma Studio using this repository and retry."
   }
   if (-not $SkipMigration) {
     & $npxExecutable prisma migrate deploy

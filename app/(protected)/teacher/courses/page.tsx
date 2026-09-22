@@ -31,33 +31,25 @@ export default async function TeacherCoursesPage({}: PageProps) {
       <PageHeader
         actions={
           <Link
-            className="flex items-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+            className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 focus-visible:outline-2 focus-visible:outline-offset-2"
             href="#new-course"
           >
             <Plus className="h-4 w-4" />
             创建课程
           </Link>
         }
-        description="查看课程模板、创建课程并把自己的班级关联到课程下。"
+        description="管理课程与班级，组织日常教学。"
         title="课程管理"
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <TeacherCourseList initialCourses={courses} />
 
         <aside className="space-y-4">
-          <section className="bg-card rounded-xl border p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-semibold">可用课程模板</h2>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  只有启用的模板才能创建课程。
-                </p>
-              </div>
-              <span className="text-muted-foreground text-sm">
-                {templates.length} 个
-              </span>
-            </div>
+          <details className="bg-card rounded-xl border p-5">
+            <summary className="cursor-pointer rounded-sm text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4">
+              可用课程模板 · {templates.length}
+            </summary>
             {templates.length === 0 ? (
               <div className="mt-4">
                 <EmptyState
@@ -93,12 +85,15 @@ export default async function TeacherCoursesPage({}: PageProps) {
                 ))}
               </div>
             )}
-          </section>
+          </details>
 
-          <section id="new-course" className="bg-card rounded-xl border p-5">
+          <section
+            id="new-course"
+            className="bg-card scroll-mt-6 rounded-xl border p-5"
+          >
             <h2 className="font-semibold">创建课程</h2>
             <p className="text-muted-foreground mt-1 mb-5 text-sm">
-              先选模板，再填写课程号、学期和基础名称。
+              选择模板，填写课程基本信息。
             </p>
             {templates.length === 0 ? (
               <EmptyState
