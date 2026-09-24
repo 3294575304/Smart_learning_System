@@ -38,3 +38,16 @@ prisma/*.db-journal
 
 # test coverage
 /coverage
+
+
+.env
+.env.local
+.env.*.local
+
+# secrets and private keys - never commit
+*.pem
+*.key
+!*.pub.key
+
+# local scratch and debug output
+/tmp
