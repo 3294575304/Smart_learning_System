@@ -51,3 +51,4 @@ prisma/*.db-journal
 
 # local scratch and debug output
 /tmp
+.workbuddy/memory/2026-09-24.md
