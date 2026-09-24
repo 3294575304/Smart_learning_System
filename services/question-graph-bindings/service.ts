@@ -11,7 +11,10 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { QuestionGraphBindingError } from "@/services/question-graph-bindings/errors";
-import type { SaveGraphBindingsData } from "@/services/question-graph-bindings/schemas";
+import type {
+  GraphConceptQuestionsQuery,
+  SaveGraphBindingsData,
+} from "@/services/question-graph-bindings/schemas";
 
 async function ownedQuestion(
   teacherId: string,
@@ -55,6 +58,140 @@ export async function listTeacherBindingCourses(teacherId: string) {
       currentPublishedKnowledgeGraphVersionId: true,
     },
   });
+}
+
+export async function getGraphQuestionCoverage(
+  teacherId: string,
+  courseId: string,
+) {
+  const course = await ownedCourse(teacherId, courseId);
+  if (!course.currentPublishedKnowledgeGraphVersionId)
+    return { graphVersionId: null, versionNumber: null, points: [] };
+
+  const version = await prisma.publishedKnowledgeGraphVersion.findFirst({
+    where: { id: course.currentPublishedKnowledgeGraphVersionId, courseId },
+    select: {
+      id: true,
+      versionNumber: true,
+      nodes: {
+        where: { nodeType: "KNOWLEDGE_POINT", concept: { courseId } },
+        orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+        select: {
+          id: true,
+          conceptId: true,
+          code: true,
+          name: true,
+          concept: { select: { stableKey: true } },
+        },
+      },
+    },
+  });
+  if (!version)
+    throw new QuestionGraphBindingError("当前正式知识图谱不可用", 409);
+
+  // 旧版本绑定通过课程内稳定 Concept 解析，只统计本教师仍可管理的题目。
+  const counts = await prisma.questionKnowledgeGraphBinding.groupBy({
+    by: ["conceptId"],
+    where: {
+      courseId,
+      conceptId: { in: version.nodes.map((node) => node.conceptId) },
+      question: { creatorId: teacherId, deletedAt: null },
+    },
+    _count: { _all: true },
+  });
+  const countByConcept = new Map(
+    counts.map((item) => [item.conceptId, item._count._all]),
+  );
+  return {
+    graphVersionId: version.id,
+    versionNumber: version.versionNumber,
+    points: version.nodes.map((node) => ({
+      conceptId: node.conceptId,
+      conceptKey: node.concept.stableKey,
+      publishedNodeId: node.id,
+      name: node.name,
+      code: node.code,
+      questionCount: countByConcept.get(node.conceptId) ?? 0,
+    })),
+  };
+}
+
+export async function listGraphConceptQuestions(
+  teacherId: string,
+  courseId: string,
+  conceptId: string,
+  query: GraphConceptQuestionsQuery,
+) {
+  const course = await ownedCourse(teacherId, courseId);
+  if (course.currentPublishedKnowledgeGraphVersionId !== query.graphVersionId)
+    throw new QuestionGraphBindingError(
+      "正式图谱已更新，请刷新题目关联后重试",
+      409,
+    );
+  const node = await prisma.publishedKnowledgeGraphNode.findFirst({
+    where: {
+      graphVersionId: query.graphVersionId,
+      conceptId,
+      concept: { courseId },
+      nodeType: "KNOWLEDGE_POINT",
+    },
+    select: { id: true },
+  });
+  if (!node) throw new ResourceNotFoundError("知识点不存在");
+
+  const bindingScope = { courseId, conceptId };
+  const where: Prisma.QuestionWhereInput = {
+    creatorId: teacherId,
+    deletedAt: null,
+    graphBindings:
+      query.mode === "BOUND" ? { some: bindingScope } : { none: bindingScope },
+    ...(query.keyword
+      ? {
+          OR: [
+            { title: { contains: query.keyword, mode: "insensitive" } },
+            { content: { contains: query.keyword, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+  const [total, questions] = await prisma.$transaction([
+    prisma.question.count({ where }),
+    prisma.question.findMany({
+      where,
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        type: true,
+        difficulty: true,
+        status: true,
+        graphBindings: {
+          where: bindingScope,
+          select: {
+            bindingType: true,
+            sourceGraphVersion: { select: { versionNumber: true } },
+          },
+        },
+      },
+    }),
+  ]);
+  return {
+    items: questions.map(({ graphBindings, ...question }) => ({
+      ...question,
+      bindingType: graphBindings[0]?.bindingType ?? null,
+      sourceVersionNumber:
+        graphBindings[0]?.sourceGraphVersion.versionNumber ?? null,
+    })),
+    pagination: {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.ceil(total / query.pageSize),
+    },
+  };
 }
 
 export async function listBindableNodes(

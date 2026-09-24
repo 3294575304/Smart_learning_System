@@ -18,6 +18,22 @@ export const graphBindingCourseQuerySchema = z.object({
   courseId: z.string().cuid(),
 });
 
+export const graphConceptQuestionsPathSchema = bindableNodePathSchema.extend({
+  conceptId: z.string().cuid(),
+});
+
+export const graphConceptQuestionsQuerySchema = z.object({
+  graphVersionId: z.string().cuid(),
+  mode: z.enum(["BOUND", "AVAILABLE"]).default("BOUND"),
+  keyword: z.string().trim().max(120).default(""),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(30).default(10),
+});
+
+export type GraphConceptQuestionsQuery = z.output<
+  typeof graphConceptQuestionsQuerySchema
+>;
+
 export const clearGraphBindingsSchema = graphBindingCourseQuerySchema.extend({
   expectedRevision: z.number().int().min(0),
 });
