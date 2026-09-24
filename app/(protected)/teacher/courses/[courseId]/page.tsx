@@ -1,9 +1,10 @@
 import { CourseStatus, Role } from "@prisma/client";
-import { School, Users } from "lucide-react";
+import { ArrowLeft, School, Users } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CourseClassroomManager } from "@/components/courses/course-classroom-manager";
+import { CourseWorkspaceNavigation } from "@/components/courses/course-workspace-navigation";
 import { CourseForm } from "@/components/courses/course-form";
 import { CourseStudentRosterImportCard } from "@/components/courses/course-student-roster-import-card";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -52,13 +53,14 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
       <PageHeader
         actions={
           <Link
-            className="rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium transition-colors hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2"
             href="/teacher/courses"
           >
-            返回列表
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            课程列表
           </Link>
         }
-        description="查看课程基础信息、关联班级和基础统计。"
+        description={`${course.courseNo} · ${course.term}`}
         title={course.name}
       />
 
@@ -83,8 +85,15 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <section className="space-y-4">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="min-w-0 space-y-5">
+          <CourseWorkspaceNavigation courseId={course.id} />
+
+          <CourseStudentRosterImportCard
+            courseId={course.id}
+            linkedClassrooms={course.linkedClassrooms}
+          />
+
           <div className="bg-card rounded-xl border p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -99,12 +108,12 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
                 {COURSE_STATUS_LABELS[course.status]}
               </span>
             </div>
-            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div>
                 <p className="text-muted-foreground text-xs">模板</p>
                 <p className="mt-1 font-medium">
                   {course.template.name}
-                  <span className="text-muted-foreground ml-2 text-xs">
+                  <span className="text-muted-foreground mt-1 block text-xs break-all">
                     {course.template.code}
                   </span>
                 </p>
@@ -128,124 +137,10 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          <div className="bg-card rounded-xl border p-5">
-            <h2 className="font-semibold">教学大纲解析与审核</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              在独立工作区上传大纲、跟踪 AI
-              解析进度，对照原文审核课程目标、教学内容和目标—考核方式占比。
-            </p>
-            <Link
-              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-              href={`/teacher/courses/${course.id}/syllabus`}
-            >
-              进入教学大纲工作区
-            </Link>
-          </div>
-
-          <div className="bg-card rounded-xl border p-5">
-            <h2 className="font-semibold">课程考核方案</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              从正式大纲生成考核项目、课程目标比例和评分标准，审核后发布版本。
-            </p>
-            <Link
-              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-              href={`/teacher/courses/${course.id}/assessment-scheme`}
-            >
-              进入考核方案
-            </Link>
-          </div>
-
-          <div className="bg-card rounded-xl border p-5">
-            <h2 className="font-semibold">成绩与出勤台账</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              管理班级成绩项目、平台作业同步、模板导入、正式成绩和课程目标达成度。
-            </p>
-            <Link
-              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-              href={`/teacher/courses/${course.id}/gradebook`}
-            >
-              进入成绩台账
-            </Link>
-            <Link
-              className="mt-4 ml-2 inline-flex rounded-md border px-4 py-2 text-sm font-medium"
-              href={`/teacher/courses/${course.id}/attendance`}
-            >
-              进入出勤台账
-            </Link>
-          </div>
-
-          <div className="bg-card rounded-xl border p-5">
-            <h2 className="font-semibold">结课教学质量问卷</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              从正式大纲生成问卷草稿，支持匿名或实名发布、小样本保护和课程目标自评汇总。
-            </p>
-            <Link
-              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-              href={`/teacher/courses/${course.id}/surveys`}
-            >
-              进入结课问卷
-            </Link>
-          </div>
-
-          <div className="bg-card rounded-xl border p-5">
-            <h2 className="font-semibold">课程教学质量分析</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              使用平台正式课程数据或独立上传成绩，生成待审查 DOCX
-              和可追溯的成绩计算工作簿。
-            </p>
-            <Link
-              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-              href={`/teacher/courses/${course.id}/quality-report`}
-            >
-              进入教学质量分析
-            </Link>
-          </div>
-
-          <div className="bg-card rounded-xl border p-5">
-            <h2 className="font-semibold">课程画像与证据</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              查看班级概览、学生确定性画像、概念掌握度与原始评分证据。
-            </p>
-            <Link
-              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-              href={`/teacher/courses/${course.id}/profiles`}
-            >
-              进入课程画像
-            </Link>
-          </div>
-
-          <div className="bg-card rounded-xl border p-5">
-            <h2 className="font-semibold">Python 课程知识图谱</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              基于已发布的正式大纲结构生成、审核并发布版本化图谱。
-            </p>
-            <Link
-              className="mt-4 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-              href={`/teacher/courses/${course.id}/knowledge-graph`}
-            >
-              进入知识图谱
-            </Link>
-            <Link
-              className="mt-4 ml-2 inline-flex rounded-md border px-4 py-2 text-sm font-medium"
-              href={`/teacher/courses/${course.id}/question-mapping`}
-            >
-              批量题目映射
-            </Link>
-            <Link
-              className="mt-4 ml-2 inline-flex rounded-md border px-4 py-2 text-sm font-medium"
-              href={`/teacher/courses/${course.id}/teaching-progress`}
-            >
-              配置教学进度
-            </Link>
-          </div>
-
-          <CourseStudentRosterImportCard
-            courseId={course.id}
-            linkedClassrooms={course.linkedClassrooms}
-          />
-
-          <div className="bg-card rounded-xl border p-5">
-            <h2 className="font-semibold">编辑课程基础信息</h2>
+          <details className="bg-card group rounded-xl border p-5">
+            <summary className="cursor-pointer rounded-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4">
+              编辑课程基础信息
+            </summary>
             <p className="text-muted-foreground mt-1 mb-5 text-sm">
               这里只修改课程号、学期、名称和描述，不影响班级关联。
             </p>
@@ -260,7 +155,7 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
               mode="edit"
               template={course.template}
             />
-          </div>
+          </details>
         </section>
 
         <CourseClassroomManager
