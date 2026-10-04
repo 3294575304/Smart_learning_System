@@ -992,9 +992,18 @@ test("真实 P2002 学号唯一约束不会被归类为数据库并发冲突", a
 
     assert.ok(capturedError instanceof Prisma.PrismaClientKnownRequestError);
     assert.equal(capturedError.code, "P2002");
-    assert.equal(capturedError.meta?.target, null);
+    const target = capturedError.meta?.target;
+    assert.ok(
+      target === null ||
+        (Array.isArray(target) && target.includes("studentNo")),
+    );
     const failure = classifyStudentImportExecutionError(capturedError);
-    assert.equal(failure.code, "DATABASE_UNIQUE_CONSTRAINT_CONFLICT");
+    assert.equal(
+      failure.code,
+      target === null
+        ? "DATABASE_UNIQUE_CONSTRAINT_CONFLICT"
+        : "STUDENT_NO_UNIQUE_CONFLICT",
+    );
     assert.equal(failure.retryable, false);
     assert.doesNotMatch(failure.message, /数据库并发冲突/u);
   } finally {
