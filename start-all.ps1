@@ -2,7 +2,7 @@ param(
   [string]$RepoRoot = $PSScriptRoot,
   [string]$SandboxHost = "8.133.167.139",
   [string]$SshKeyPath = "",
-  [string]$KnownHostsPath = "C:\Users\HONOR\.ssh\codex_sandbox_known_hosts_20260808",
+  [string]$KnownHostsPath = (Join-Path $HOME ".ssh\codex_sandbox_known_hosts_20260808"),
   [switch]$SkipBuild,
   [switch]$SkipMigration
 )
@@ -40,6 +40,31 @@ foreach ($requiredPath in @($environmentPath, $packagePath, $installerPath, $sto
 
 $npmExecutable = (Get-Command npm.cmd -ErrorAction Stop).Source
 $npxExecutable = (Get-Command npx.cmd -ErrorAction Stop).Source
+$sshCommand = Get-Command ssh.exe -ErrorAction SilentlyContinue
+if ($null -eq $sshCommand) {
+  throw "OpenSSH Client is required. Install the Windows optional feature 'OpenSSH.Client', then reopen PowerShell."
+}
+$sshExecutable = $sshCommand.Source
+
+if (-not (Test-Path -LiteralPath $KnownHostsPath -PathType Leaf)) {
+  throw "SSH known_hosts file is missing: $KnownHostsPath. Prepare a verified host-key file and pass -KnownHostsPath."
+}
+
+if (-not [string]::IsNullOrWhiteSpace($SshKeyPath) -and
+    -not (Test-Path -LiteralPath $SshKeyPath -PathType Leaf)) {
+  throw "SSH private key file is missing: $SshKeyPath"
+}
+
+if ([string]::IsNullOrWhiteSpace($SshKeyPath)) {
+  $repoKeyPath = Join-Path $RepoRoot "codex.pem"
+  if (Test-Path -LiteralPath $repoKeyPath -PathType Leaf) {
+    $SshKeyPath = $repoKeyPath
+  }
+}
+if ([string]::IsNullOrWhiteSpace($SshKeyPath) -or
+    -not (Test-Path -LiteralPath $SshKeyPath -PathType Leaf)) {
+  throw "SSH private key file is missing. Put codex.pem in the repository root or pass -SshKeyPath."
+}
 
 Write-Output "[1/4] Checking PostgreSQL..."
 $postgresServices = @(Get-Service -ErrorAction SilentlyContinue | Where-Object {

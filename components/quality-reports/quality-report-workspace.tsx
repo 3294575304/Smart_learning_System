@@ -257,7 +257,7 @@ function ReviewEditor({
           ) : null}
         </div>
       ) : (
-        <p className="rounded-md bg-slate-100 p-3 text-xs text-slate-700">
+        <p className="rounded-md bg-sky-100/70 p-3 text-xs text-slate-700">
           该报告生成于自动完整性审查上线前；建议重新生成新版本以获得缺失数据提示。
         </p>
       )}
@@ -329,7 +329,7 @@ function ReviewEditor({
           下载 AI 审核稿
         </a>
         <button
-          className="rounded-md bg-gray-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+          className="rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
           disabled={busy}
           onClick={() => void approve()}
           type="button"
@@ -499,7 +499,7 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
         <div className="flex gap-3">
           {(["PLATFORM", "UPLOAD"] as const).map((value) => (
             <button
-              className={`rounded-md border px-4 py-2 text-sm ${sourceType === value ? "bg-gray-900 text-white" : "bg-white"}`}
+              className={`rounded-md border px-4 py-2 text-sm ${sourceType === value ? "bg-sky-600 text-white" : "bg-white"}`}
               key={value}
               onClick={() => setSourceType(value)}
               type="button"
@@ -661,7 +661,7 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
           </p>
         ) : null}
         <button
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           disabled={busy}
           type="submit"
         >

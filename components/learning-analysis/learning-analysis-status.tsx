@@ -19,7 +19,7 @@ export function LearningAnalysisStatus({ status, onRetry }: Props) {
       </p>
       {pending && onRetry ? (
         <button
-          className="mt-4 rounded-md border px-4 py-2 text-sm hover:bg-gray-50"
+          className="mt-4 rounded-md border px-4 py-2 text-sm hover:bg-sky-50/70"
           onClick={onRetry}
           type="button"
         >

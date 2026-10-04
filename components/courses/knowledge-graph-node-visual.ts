@@ -21,6 +21,7 @@ type GraphLabel = THREE.Sprite & { text: string };
 
 function createLabel(node: VisualNode): GraphLabel {
   const isPoint = node.type === "KNOWLEDGE_POINT";
+  const isChapter = node.type === "CHAPTER";
   const textHeight = isPoint ? 0.012 : 0.016;
   // 先配置空标签，最后写入正文，避免反复绘制高分辨率长文本。
   const label = new SpriteText("", textHeight, node.color);
@@ -35,11 +36,14 @@ function createLabel(node: VisualNode): GraphLabel {
         .getStyle();
   // SpriteText 的边距、圆角、边框与 textHeight 使用相同的场景单位。
   // 必须随字号缩放，否则 0.1 的边距就会比 0.016 的文字大数倍。
-  label.padding = [textHeight * 0.16, textHeight * 0.08];
-  label.borderRadius = textHeight * 0.15;
-  label.borderWidth = isPoint ? 0 : textHeight * 0.015;
+  label.padding = [
+    textHeight * (isChapter ? 0.24 : 0.16),
+    textHeight * (isChapter ? 0.12 : 0.08),
+  ];
+  label.borderRadius = textHeight * (isChapter ? 0.42 : 0.15);
+  label.borderWidth = isPoint ? 0 : textHeight * (isChapter ? 0.025 : 0.015);
   label.borderColor = new THREE.Color(node.color)
-    .lerp(new THREE.Color("#ffffff"), 0.55)
+    .lerp(new THREE.Color("#ffffff"), isChapter ? 0.45 : 0.55)
     .getStyle();
   label.material.sizeAttenuation = false;
   label.material.depthWrite = false;

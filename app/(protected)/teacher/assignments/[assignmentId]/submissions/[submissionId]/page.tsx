@@ -138,13 +138,13 @@ export default async function SubmissionGradingPage({ params }: Props) {
                     </div>
                   </div>
                   <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                    <div className="rounded-md bg-gray-50 p-3">
+                    <div className="rounded-md bg-sky-50/70 p-3">
                       <dt className="text-muted-foreground">学生答案</dt>
                       <dd className="mt-1 whitespace-pre-wrap">
                         {answer.studentAnswer}
                       </dd>
                     </div>
-                    <div className="rounded-md bg-gray-50 p-3">
+                    <div className="rounded-md bg-sky-50/70 p-3">
                       <dt className="text-muted-foreground">
                         正确答案 / 参考答案
                       </dt>
@@ -174,7 +174,7 @@ export default async function SubmissionGradingPage({ params }: Props) {
                       submissionId={submissionId.data}
                     />
                   ) : answer.teacherFeedback ? (
-                    <p className="mt-4 rounded-md border-l-4 border-gray-300 bg-gray-50 p-3 text-sm">
+                    <p className="mt-4 rounded-md border-l-4 border-sky-200 bg-sky-50/70 p-3 text-sm">
                       教师反馈：{answer.teacherFeedback}
                     </p>
                   ) : null}

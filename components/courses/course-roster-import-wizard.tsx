@@ -70,7 +70,7 @@ function WizardSteps({ currentStep }: { currentStep: number }) {
             aria-current={active ? "step" : undefined}
             className={`rounded-lg border p-3 ${
               active
-                ? "border-gray-900 bg-gray-900 text-white"
+                ? "border-sky-600 bg-sky-600 text-white"
                 : complete
                   ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                   : "bg-white text-gray-600"
@@ -84,7 +84,7 @@ function WizardSteps({ currentStep }: { currentStep: number }) {
                     ? "bg-white text-gray-900"
                     : complete
                       ? "bg-emerald-600 text-white"
-                      : "bg-gray-100 text-gray-700"
+                      : "bg-sky-100/70 text-gray-700"
                 }`}
               >
                 {complete ? "✓" : step.number}
@@ -140,7 +140,7 @@ function FileHistory({
   return (
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full min-w-[720px] text-left text-sm">
-        <thead className="bg-gray-50 text-xs text-gray-600">
+        <thead className="bg-sky-50/70 text-xs text-gray-600">
           <tr>
             <th className="px-4 py-3 font-medium">选择</th>
             <th className="px-4 py-3 font-medium">版本与文件</th>
@@ -248,7 +248,7 @@ function PreviewRowsTable({ preview }: { preview: StudentImportPreviewPage }) {
   return (
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full min-w-[980px] text-left text-sm">
-        <thead className="bg-gray-50 text-xs text-gray-600">
+        <thead className="bg-sky-50/70 text-xs text-gray-600">
           <tr>
             <th className="px-4 py-3 font-medium">行号</th>
             <th className="px-4 py-3 font-medium">学号</th>
@@ -293,7 +293,7 @@ function PreviewRowsTable({ preview }: { preview: StudentImportPreviewPage }) {
                       }{" "}
                       个提醒
                     </summary>
-                    <ul className="mt-2 space-y-2 rounded-md bg-gray-50 p-3 text-xs">
+                    <ul className="mt-2 space-y-2 rounded-md bg-sky-50/70 p-3 text-xs">
                       {row.issues.map((issue, index) => (
                         <li
                           className="break-words"
@@ -334,7 +334,7 @@ function ResultRows({
   return (
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full min-w-[760px] text-left text-sm">
-        <thead className="bg-gray-50 text-xs text-gray-600">
+        <thead className="bg-sky-50/70 text-xs text-gray-600">
           <tr>
             <th className="px-4 py-3 font-medium">行号</th>
             <th className="px-4 py-3 font-medium">学号</th>
@@ -571,7 +571,7 @@ export function CourseRosterImportWizard({
             </p>
           </div>
           {preview ? (
-            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">
+            <span className="rounded-full bg-sky-100/70 px-3 py-1 text-xs text-gray-700">
               批次状态：{BATCH_STATUS_LABELS[preview.batch.status]}
             </span>
           ) : null}
@@ -622,7 +622,7 @@ export function CourseRosterImportWizard({
               </p>
             </div>
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-sky-50/70 disabled:opacity-60"
               disabled={isUploading}
               onClick={() => fileInputRef.current?.click()}
               type="button"
@@ -701,7 +701,7 @@ export function CourseRosterImportWizard({
 
           <div className="flex justify-end">
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
               disabled={
                 isPreviewing ||
                 isUploading ||
@@ -807,7 +807,7 @@ export function CourseRosterImportWizard({
           ) : null}
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              className="inline-flex items-center justify-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-sky-50/70"
               onClick={() => setCurrentStep(2)}
               type="button"
             >
@@ -815,7 +815,7 @@ export function CourseRosterImportWizard({
               调整字段映射
             </button>
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={
                 isExecuting ||
                 !preview.batch.summary.canImport ||
@@ -867,7 +867,7 @@ export function CourseRosterImportWizard({
               </div>
 
               {execution.summary.createdUserRows === 0 ? (
-                <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-700">
+                <div className="rounded-lg border bg-sky-50/70 p-4 text-sm text-gray-700">
                   本批次没有新增待认领学生身份。
                 </div>
               ) : (

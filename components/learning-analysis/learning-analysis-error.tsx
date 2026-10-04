@@ -13,7 +13,7 @@ export function LearningAnalysisError({ message, onRetry }: Props) {
       <h2 className="text-lg font-semibold">学情分析</h2>
       <p className="mt-2 text-sm break-words text-gray-600">{message}</p>
       <button
-        className="mt-4 rounded-md border px-4 py-2 text-sm hover:bg-gray-50"
+        className="mt-4 rounded-md border px-4 py-2 text-sm hover:bg-sky-50/70"
         onClick={onRetry}
         type="button"
       >

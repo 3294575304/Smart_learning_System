@@ -135,7 +135,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
               <p className="mt-3 text-sm text-red-700">{feedback}</p>
             ) : null}
             <button
-              className="mt-4 rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+              className="mt-4 rounded-md bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
               disabled={pending || !conceptIds.length}
               onClick={() => void save()}
               type="button"

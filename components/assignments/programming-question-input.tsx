@@ -104,7 +104,7 @@ export function ProgrammingQuestionInput({
     <div className="mt-4 space-y-3">
       <textarea
         aria-label="Python 代码"
-        className="min-h-72 w-full rounded-md border bg-slate-950 p-4 font-mono text-sm text-slate-100 disabled:opacity-60"
+        className="min-h-72 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900 disabled:opacity-60"
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         spellCheck={false}

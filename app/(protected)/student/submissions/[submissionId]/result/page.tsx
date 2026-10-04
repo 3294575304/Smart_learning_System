@@ -85,13 +85,13 @@ export default async function ResultPage({ params }: Props) {
                   </span>
                 </div>
                 <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                  <div className="rounded-md bg-gray-50 p-3">
+                  <div className="rounded-md bg-sky-50/70 p-3">
                     <dt className="text-muted-foreground">你的答案</dt>
                     <dd className="mt-1 whitespace-pre-wrap">
                       {answer.studentAnswer}
                     </dd>
                   </div>
-                  <div className="rounded-md bg-gray-50 p-3">
+                  <div className="rounded-md bg-sky-50/70 p-3">
                     <dt className="text-muted-foreground">正确 / 参考答案</dt>
                     <dd className="mt-1 whitespace-pre-wrap">
                       {answer.correctAnswer}
@@ -118,7 +118,17 @@ export default async function ResultPage({ params }: Props) {
           </div>
         ) : null}
         {result.isPublished ? (
-          <LearningAnalysisCard submissionId={result.id} />
+          <LearningAnalysisCard
+            knowledgePointLabels={Object.fromEntries(
+              result.answers.flatMap((answer) =>
+                answer.knowledgePoints.map((knowledgePoint) => [
+                  knowledgePoint.id,
+                  knowledgePoint.name,
+                ]),
+              ),
+            )}
+            submissionId={result.id}
+          />
         ) : null}
       </section>
     );

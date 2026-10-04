@@ -1,6 +1,7 @@
 "use client";
 
 import { QuestionStatus, QuestionVisibility } from "@prisma/client";
+import { Ban, Globe, LoaderCircle, ShieldOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -67,13 +68,30 @@ export function QuestionGovernanceAction({
   }
 
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap items-center gap-2">
       <button
-        className="text-sm text-blue-700 disabled:text-gray-400"
+        aria-label={
+          question.visibility === QuestionVisibility.PUBLIC
+            ? "撤销公共题目"
+            : "设为公共题目"
+        }
+        className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-white px-2.5 py-2 text-xs font-medium text-blue-700 transition hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
         disabled={pending || question.status !== QuestionStatus.ACTIVE}
         onClick={updateVisibility}
+        title={
+          question.visibility === QuestionVisibility.PUBLIC
+            ? "撤销公共状态"
+            : "设为公共"
+        }
         type="button"
       >
+        {pending ? (
+          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+        ) : question.visibility === QuestionVisibility.PUBLIC ? (
+          <ShieldOff aria-hidden="true" className="size-4" />
+        ) : (
+          <Globe aria-hidden="true" className="size-4" />
+        )}
         {pending
           ? "处理中…"
           : question.visibility === QuestionVisibility.PUBLIC
@@ -82,11 +100,18 @@ export function QuestionGovernanceAction({
       </button>
       {question.status === QuestionStatus.ACTIVE ? (
         <button
-          className="text-sm text-red-600 disabled:text-gray-400"
+          aria-label="停用题目"
+          className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 py-2 text-xs font-medium text-red-700 transition hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
           disabled={pending}
           onClick={disable}
+          title="停用题目"
           type="button"
         >
+          {pending ? (
+            <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+          ) : (
+            <Ban aria-hidden="true" className="size-4" />
+          )}
           停用
         </button>
       ) : null}

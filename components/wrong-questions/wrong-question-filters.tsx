@@ -64,7 +64,7 @@ export function WrongQuestionFilters({ query, filterOptions }: Props) {
           />
         </label>
         <button
-          className="mt-5 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+          className="mt-5 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white"
           type="submit"
         >
           搜索

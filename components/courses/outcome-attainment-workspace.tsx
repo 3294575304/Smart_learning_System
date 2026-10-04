@@ -92,7 +92,7 @@ export function OutcomeAttainmentWorkspace({
         </p>
         <button
           disabled={busy}
-          className="mt-3 rounded-md bg-gray-900 px-4 py-2 text-sm text-white"
+          className="mt-3 rounded-md bg-sky-600 px-4 py-2 text-sm text-white"
           onClick={() => void generate()}
         >
           {busy ? "正在计算…" : "生成/复算达成度"}

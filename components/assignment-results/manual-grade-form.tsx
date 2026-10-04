@@ -67,7 +67,7 @@ export function ManualGradeForm({
 
   return (
     <form
-      className="mt-4 space-y-4 rounded-lg border bg-gray-50 p-4"
+      className="mt-4 space-y-4 rounded-lg border bg-sky-50/70 p-4"
       onSubmit={form.handleSubmit(submit)}
     >
       <div className="grid gap-4 md:grid-cols-[12rem_1fr]">
@@ -116,7 +116,7 @@ export function ManualGradeForm({
         </p>
       ) : null}
       <button
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         disabled={form.formState.isSubmitting}
         type="submit"
       >

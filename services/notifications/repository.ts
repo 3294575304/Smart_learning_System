@@ -82,7 +82,7 @@ export function findOwnedNotification(
 ) {
   return prisma.notification.findFirst({
     where: { id: notificationId, recipientId },
-    select: { id: true, readAt: true },
+    select: notificationListSelect,
   });
 }
 

@@ -1,5 +1,11 @@
 import { AIInsightType, Role } from "@prisma/client";
-import { BrainCircuit } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  BrainCircuit,
+  GitBranch,
+  UserRound,
+} from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
@@ -35,24 +41,67 @@ export default async function StudentAnalyticsPage() {
           </Link>
         }
         description="基于已批改作业、知识点掌握度和已有 AI 分析了解当前学习状态。"
-        title="学情分析"
+        title="学习分析"
       />
 
-      <section className="bg-card rounded-xl border p-5 sm:p-6">
-        <h2 className="font-semibold">课程画像</h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          查看按课程冻结的画像快照、证据状态和评分证据下钻。
-        </p>
+      <section className="rounded-2xl border bg-white p-5 sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-100/70 text-slate-700">
+            <BookOpen aria-hidden="true" className="size-5" />
+          </span>
+          <div>
+            <h2 className="font-semibold">我的课程</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              先进入课程学习中心查看整体状态，再按需下钻画像或知识图谱。
+            </p>
+          </div>
+        </div>
         {profileCourses.length ? (
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
             {profileCourses.map((course) => (
-              <Link
-                className="rounded-md border bg-white px-4 py-2 text-sm font-medium"
-                href={`/student/courses/${course.id}/profile`}
+              <article
+                className="overflow-hidden rounded-xl border border-sky-100 bg-white shadow-sm shadow-sky-100/70"
                 key={course.id}
               >
-                {course.name} · {course.term}
-              </Link>
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
+                        {course.courseNo ?? "课程"}
+                      </p>
+                      <h3 className="mt-1 truncate font-semibold text-slate-950">
+                        {course.name}
+                      </h3>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-sky-100/70 px-3 py-1 text-xs text-slate-500">
+                      {course.term}
+                    </span>
+                  </div>
+                  <Link
+                    className="mt-5 flex items-center justify-between rounded-lg bg-sky-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:outline-none"
+                    href={`/student/courses/${course.id}/learning-center`}
+                  >
+                    进入课程学习中心
+                    <ArrowRight aria-hidden="true" className="size-4" />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 border-t bg-sky-50/70">
+                  <Link
+                    className="flex items-center gap-2 border-r px-4 py-3 text-sm text-slate-600 transition hover:bg-sky-100/70 hover:text-slate-950"
+                    href={`/student/courses/${course.id}/profile`}
+                  >
+                    <UserRound aria-hidden="true" className="size-4" />
+                    我的课程画像
+                  </Link>
+                  <Link
+                    className="flex items-center gap-2 px-4 py-3 text-sm text-slate-600 transition hover:bg-sky-100/70 hover:text-slate-950"
+                    href={`/student/courses/${course.id}/knowledge-graph`}
+                  >
+                    <GitBranch aria-hidden="true" className="size-4" />
+                    课程知识图谱
+                  </Link>
+                </div>
+              </article>
             ))}
           </div>
         ) : (
@@ -88,13 +137,13 @@ export default async function StudentAnalyticsPage() {
                 {overview.latestAnalysis.summary ?? "本次分析未提供文字总结。"}
               </p>
               <dl className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-gray-50 p-3">
+                <div className="rounded-lg bg-sky-50/70 p-3">
                   <dt className="text-muted-foreground text-xs">综合得分</dt>
                   <dd className="mt-1 text-xl font-semibold">
                     {overview.latestAnalysis.overallScore ?? "—"}
                   </dd>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-3">
+                <div className="rounded-lg bg-sky-50/70 p-3">
                   <dt className="text-muted-foreground text-xs">分析样本</dt>
                   <dd className="mt-1 text-xl font-semibold">
                     {overview.latestAnalysis.sampleSize}
@@ -145,9 +194,9 @@ export default async function StudentAnalyticsPage() {
                     {mastery.masteryScore}%
                   </span>
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-sky-100/70">
                   <div
-                    className="h-full rounded-full bg-gray-800"
+                    className="h-full rounded-full bg-sky-600"
                     style={{ width: `${mastery.masteryScore}%` }}
                   />
                 </div>
@@ -177,7 +226,7 @@ export default async function StudentAnalyticsPage() {
                   {insight.detail}
                 </p>
                 {insight.recommendedAction ? (
-                  <p className="mt-3 rounded-md bg-gray-50 p-3 text-sm">
+                  <p className="mt-3 rounded-md bg-sky-50/70 p-3 text-sm">
                     {insight.recommendedAction}
                   </p>
                 ) : null}

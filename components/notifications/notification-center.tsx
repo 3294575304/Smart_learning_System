@@ -1,7 +1,15 @@
 "use client";
 
 import { NotificationPriority, NotificationType } from "@prisma/client";
-import { Bell, CheckCheck, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Bell,
+  ArrowRight,
+  Check,
+  CheckCheck,
+  ChevronLeft,
+  ChevronRight,
+  LoaderCircle,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -51,6 +59,7 @@ export function NotificationCenter({
     priority: "",
   });
   const [loading, setLoading] = useState(false);
+  const [pendingReadId, setPendingReadId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -73,11 +82,16 @@ export function NotificationCenter({
     setResult(response.data);
   }
 
-  async function openNotification(
-    notificationId: string,
-    actionUrl: string | null,
-    isUnread: boolean,
+  function applyFilter<Key extends keyof Filters>(
+    key: Key,
+    value: Filters[Key],
   ) {
+    const nextFilters = { ...filters, [key]: value };
+    setFilters(nextFilters);
+    void load(1, nextFilters);
+  }
+
+  async function openNotification(notificationId: string, isUnread: boolean) {
     setError(null);
     if (isUnread) {
       setLoading(true);
@@ -92,11 +106,32 @@ export function NotificationCenter({
       }
       window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
     }
-    if (actionUrl) {
-      router.push(actionUrl);
+    router.push(`/notifications/${encodeURIComponent(notificationId)}`);
+  }
+
+  async function markOneRead(notificationId: string) {
+    setError(null);
+    setPendingReadId(notificationId);
+    const response = await requestNotificationApi<{ readAt: Date }>(
+      `/api/notifications/${encodeURIComponent(notificationId)}/read`,
+      { method: "PATCH" },
+    );
+    setPendingReadId(null);
+    if (!response.success) {
+      setError(response.error);
       return;
     }
-    await load(result.pagination.page);
+
+    setResult((current) => ({
+      ...current,
+      items: current.items.map((item) =>
+        item.id === notificationId ? { ...item, readAt: new Date() } : item,
+      ),
+    }));
+    window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+    if (filters.status === "UNREAD") {
+      await load(result.pagination.page);
+    }
   }
 
   async function markAllRead() {
@@ -137,15 +172,12 @@ export function NotificationCenter({
         </button>
       </header>
 
-      <div className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-3 lg:grid-cols-[12rem_14rem_12rem_auto]">
+      <div className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-3">
         <select
           aria-label="已读状态"
           className="rounded-md border bg-white px-3 py-2 text-sm"
           onChange={(event) =>
-            setFilters((current) => ({
-              ...current,
-              status: event.target.value as Filters["status"],
-            }))
+            applyFilter("status", event.target.value as Filters["status"])
           }
           value={filters.status}
         >
@@ -157,10 +189,7 @@ export function NotificationCenter({
           aria-label="通知类型"
           className="rounded-md border bg-white px-3 py-2 text-sm"
           onChange={(event) =>
-            setFilters((current) => ({
-              ...current,
-              type: event.target.value as Filters["type"],
-            }))
+            applyFilter("type", event.target.value as Filters["type"])
           }
           value={filters.type}
         >
@@ -175,10 +204,7 @@ export function NotificationCenter({
           aria-label="通知优先级"
           className="rounded-md border bg-white px-3 py-2 text-sm"
           onChange={(event) =>
-            setFilters((current) => ({
-              ...current,
-              priority: event.target.value as Filters["priority"],
-            }))
+            applyFilter("priority", event.target.value as Filters["priority"])
           }
           value={filters.priority}
         >
@@ -189,14 +215,6 @@ export function NotificationCenter({
             </option>
           ))}
         </select>
-        <button
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          disabled={loading}
-          onClick={() => void load(1)}
-          type="button"
-        >
-          应用筛选
-        </button>
       </div>
 
       {error ? (
@@ -229,37 +247,71 @@ export function NotificationCenter({
           {result.items.map((item) => {
             const unread = item.readAt === null;
             return (
-              <button
-                className={`w-full rounded-xl border p-4 text-left transition hover:border-gray-400 ${unread ? "border-l-4 border-l-blue-600 bg-blue-50/40" : "bg-white"}`}
+              <article
+                className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center ${unread ? "border-l-4 border-l-blue-600 bg-blue-50/40" : "bg-white"}`}
                 key={item.id}
-                onClick={() =>
-                  void openNotification(item.id, item.actionUrl, unread)
-                }
-                type="button"
               >
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-700">
-                    {TYPE_LABELS[item.type]}
-                  </span>
-                  {item.priority !== NotificationPriority.NORMAL ? (
-                    <span className="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-800">
-                      {PRIORITY_LABELS[item.priority]}
+                <button
+                  className="min-w-0 flex-1 rounded-md text-left focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+                  onClick={() => void openNotification(item.id, unread)}
+                  type="button"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-700">
+                        {TYPE_LABELS[item.type]}
+                      </span>
+                      {item.priority !== NotificationPriority.NORMAL ? (
+                        <span className="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-800">
+                          {PRIORITY_LABELS[item.priority]}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${unread ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-600"}`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`size-1.5 rounded-full ${unread ? "bg-blue-600" : "bg-gray-400"}`}
+                      />
+                      {unread ? "未读" : "已读"}
                     </span>
-                  ) : null}
-                  <span className="text-gray-500">
+                  </div>
+                  <span className="mt-2 block text-xs text-gray-500">
                     {formatTime(item.createdAt)}
                   </span>
-                  <span className="ml-auto font-medium text-gray-600">
-                    {unread ? "未读" : "已读"}
+                  <h2 className="mt-2 font-semibold text-gray-950">
+                    {item.title}
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 whitespace-pre-wrap text-gray-600">
+                    {item.content}
+                  </p>
+                  <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-700">
+                    查看通知详情
+                    <ArrowRight aria-hidden="true" className="size-4" />
                   </span>
-                </div>
-                <h2 className="mt-3 font-semibold text-gray-950">
-                  {item.title}
-                </h2>
-                <p className="mt-1 text-sm leading-6 whitespace-pre-wrap text-gray-600">
-                  {item.content}
-                </p>
-              </button>
+                </button>
+                {unread ? (
+                  <button
+                    aria-label={`将“${item.title}”标记为已读`}
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 self-end rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-wait disabled:opacity-50 sm:self-center"
+                    disabled={loading || pendingReadId !== null}
+                    onClick={() => void markOneRead(item.id)}
+                    title="只标记此通知为已读"
+                    type="button"
+                  >
+                    {pendingReadId === item.id ? (
+                      <LoaderCircle
+                        aria-hidden="true"
+                        className="size-4 animate-spin"
+                      />
+                    ) : (
+                      <Check aria-hidden="true" className="size-4" />
+                    )}
+                    标记已读
+                  </button>
+                ) : null}
+              </article>
             );
           })}
         </div>

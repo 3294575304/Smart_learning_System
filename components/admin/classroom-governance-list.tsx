@@ -1,4 +1,4 @@
-import { School } from "lucide-react";
+import { Eye, School } from "lucide-react";
 import Link from "next/link";
 
 import { ClassroomGovernanceAction } from "@/components/admin/classroom-governance-action";
@@ -61,11 +61,14 @@ export function ClassroomGovernanceList({
                     : "归档"}
               </td>
               <td className="px-4 py-3">
-                <div className="flex gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <Link
-                    className="text-sm underline underline-offset-4"
+                    aria-label={`查看班级 ${classroom.name}`}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
                     href={`/admin/classrooms/${classroom.id}`}
+                    title="查看班级详情"
                   >
+                    <Eye aria-hidden="true" className="size-4" />
                     查看详情
                   </Link>
                   <ClassroomGovernanceAction classroom={classroom} />

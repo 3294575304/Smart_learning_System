@@ -511,7 +511,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
             </p>
           </div>
           <button
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
             disabled={
               busy ||
               !state?.sourceSyllabusStructureId ||
@@ -572,7 +572,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
               {coverage.points.length} 个知识点已有题目
             </span>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-sky-100/70">
             <div
               className="h-full bg-emerald-500"
               style={{
@@ -724,7 +724,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                     <label className="space-y-1">
                       <span className="text-xs text-gray-500">节点编码</span>
                       <input
-                        className="w-full rounded border bg-slate-50 px-2 py-1.5"
+                        className="w-full rounded border bg-sky-50/60 px-2 py-1.5"
                         readOnly
                         value={selectedNode.code}
                       />
@@ -732,7 +732,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                     <label className="space-y-1">
                       <span className="text-xs text-gray-500">节点类型</span>
                       <input
-                        className="w-full rounded border bg-slate-50 px-2 py-1.5"
+                        className="w-full rounded border bg-sky-50/60 px-2 py-1.5"
                         readOnly
                         value={nodeTypeLabel[selectedNode.type]}
                       />
@@ -814,7 +814,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                       </div>
                     </>
                   ) : null}
-                  <div className="rounded bg-slate-50 p-3 text-xs text-gray-600">
+                  <div className="rounded bg-sky-50/60 p-3 text-xs text-gray-600">
                     <p>来源：{sourceLabel[selectedNode.sourceType]}</p>
                     <p className="mt-1">
                       原文：
@@ -945,7 +945,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                 .filter((edge) => edgeType === "ALL" || edge.type === edgeType)
                 .map((edge) => (
                   <div
-                    className="grid items-center gap-2 rounded bg-slate-50 p-3 text-sm md:grid-cols-[90px_1fr_1fr_1fr_auto]"
+                    className="grid items-center gap-2 rounded bg-sky-50/60 p-3 text-sm md:grid-cols-[90px_1fr_1fr_1fr_auto]"
                     key={edge.key}
                   >
                     <span>{edgeTypeLabel[edge.type]}</span>
@@ -1004,7 +1004,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
               保存审核稿
             </button>
             <button
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
               disabled={busy || dirty || !state?.review}
               onClick={() => void publish()}
             >

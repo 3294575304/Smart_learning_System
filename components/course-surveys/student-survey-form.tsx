@@ -112,7 +112,7 @@ export function StudentSurveyForm({
             <div className="grid gap-2 sm:grid-cols-5">
               {COURSE_SURVEY_LIKERT_LABELS.map((label, index) => (
                 <label
-                  className={`cursor-pointer rounded-md border p-3 text-center text-sm ${answers[question.id] === index + 1 ? "border-gray-900 bg-gray-900 text-white" : "hover:bg-gray-50"}`}
+                  className={`cursor-pointer rounded-md border p-3 text-center text-sm ${answers[question.id] === index + 1 ? "border-sky-600 bg-sky-600 text-white" : "hover:bg-sky-50/70"}`}
                   key={label}
                 >
                   <input
@@ -151,7 +151,7 @@ export function StudentSurveyForm({
         </p>
       ) : null}
       <button
-        className="rounded-md bg-gray-900 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+        className="rounded-md bg-sky-600 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
         disabled={busy}
         onClick={() => void submit()}
         type="button"

@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Minus, Plus } from "lucide-react";
+import { Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
 import dynamic from "next/dynamic";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
@@ -21,9 +21,12 @@ interface ForceNode {
   x: number;
   y: number;
   z: number;
-  fx: number;
-  fy: number;
-  fz: number;
+  vx?: number;
+  vy?: number;
+  vz?: number;
+  fx?: number;
+  fy?: number;
+  fz?: number;
 }
 interface ForceLink {
   id: string;
@@ -80,6 +83,8 @@ export function KnowledgeGraphCanvas3D({
   selectedKey,
   onSelect,
   questionCountByPoint,
+  nodeColorByKey,
+  nodeColorHelp,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -87,6 +92,8 @@ export function KnowledgeGraphCanvas3D({
   selectedKey: string | null;
   onSelect: (key: string) => void;
   questionCountByPoint?: Map<string, number>;
+  nodeColorByKey?: Map<string, string>;
+  nodeColorHelp?: string;
 }) {
   const fgRef = useRef<FGMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -136,9 +143,7 @@ export function KnowledgeGraphCanvas3D({
           name: node.name,
           type: node.type,
           ...position,
-          fx: position.x,
-          fy: position.y,
-          fz: position.z,
+          color: nodeColorByKey?.get(node.key) ?? position.color,
         };
       }),
       links: edges
@@ -151,7 +156,7 @@ export function KnowledgeGraphCanvas3D({
           color: relationColor[edge.type],
         })),
     };
-  }, [nodes, edges, layout]);
+  }, [nodes, edges, layout, nodeColorByKey]);
   const highlighted = useMemo(() => {
     const keys = new Set<string>();
     if (selectedKey) {
@@ -211,6 +216,11 @@ export function KnowledgeGraphCanvas3D({
     (node: ForceNode | null) => setHoverKey(node?.id ?? null),
     [],
   );
+  const handleNodeDragEnd = useCallback((node: ForceNode) => {
+    node.fx = node.x;
+    node.fy = node.y;
+    node.fz = node.z;
+  }, []);
 
   useEffect(() => {
     const fg = fgRef.current;
@@ -274,6 +284,27 @@ export function KnowledgeGraphCanvas3D({
     (duration = 500) => fitNodes(graphData.nodes, duration),
     [fitNodes, graphData.nodes],
   );
+  const resetNodeLayout = useCallback(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    for (const node of graphData.nodes) {
+      const position = layout.get(node.id);
+      if (!position) continue;
+      node.x = position.x;
+      node.y = position.y;
+      node.z = position.z;
+      node.vx = 0;
+      node.vy = 0;
+      node.vz = 0;
+      node.fx = position.x;
+      node.fy = position.y;
+      node.fz = position.z;
+    }
+    fg.d3ReheatSimulation();
+    fg.refresh();
+    needsFit.current = false;
+    fitView();
+  }, [graphData.nodes, layout, fitView]);
   useEffect(() => {
     needsFit.current = true;
     setHoverKey(null);
@@ -348,9 +379,9 @@ export function KnowledgeGraphCanvas3D({
   }, [updateNodeVisuals, fitView]);
   return (
     <div
-      className="min-w-0 overflow-hidden rounded-lg border bg-slate-50"
+      className="min-w-0 overflow-hidden rounded-lg border bg-sky-50/60"
       role="figure"
-      aria-label="课程知识图谱，可拖动平移并使用按钮缩放"
+      aria-label="课程知识图谱，可拖动节点、平移并使用按钮缩放"
       onPointerDownCapture={() => {
         needsFit.current = false;
       }}
@@ -360,7 +391,7 @@ export function KnowledgeGraphCanvas3D({
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-white px-3 py-2">
         <div className="text-xs leading-5 text-gray-600">
-          彩色标题：课程 / 章节 · 同章知识点同色
+          {nodeColorHelp ?? "彩色标题：课程 / 章节 · 同章知识点同色"}
           <br />
           悬停查看名称 · 点击章节展开阅读 · 橙色球为选中节点
         </div>
@@ -384,6 +415,16 @@ export function KnowledgeGraphCanvas3D({
             <Plus className="h-4 w-4" />
           </button>
           <button
+            aria-label="复位节点布局"
+            title="复位节点布局"
+            type="button"
+            className="flex items-center gap-1 rounded border px-2 py-1.5 text-xs"
+            onClick={resetNodeLayout}
+          >
+            <RotateCcw className="h-4 w-4" />
+            复位节点
+          </button>
+          <button
             aria-label="重置图谱视图"
             type="button"
             className="flex items-center gap-1 rounded border px-2 py-1.5 text-xs"
@@ -398,7 +439,7 @@ export function KnowledgeGraphCanvas3D({
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 text-xs text-gray-500">
-        <span>左键旋转 · 右键平移 · 滚轮缩放</span>
+        <span>拖动节点移动 · 左键旋转 · 右键平移 · 滚轮缩放</span>
         <label className="flex items-center gap-1">
           <input
             type="checkbox"
@@ -424,7 +465,7 @@ export function KnowledgeGraphCanvas3D({
             nodeThreeObject={nodeThreeObject}
             nodeThreeObjectExtend={false}
             nodeLabel={nodeTooltip}
-            enableNodeDrag={false}
+            enableNodeDrag={true}
             showNavInfo={false}
             linkColor={linkColor}
             linkLabel={linkLabel}
@@ -433,6 +474,7 @@ export function KnowledgeGraphCanvas3D({
             linkDirectionalArrowLength={linkArrowLength}
             linkDirectionalArrowRelPos={0.9}
             onNodeClick={handleNodeClick}
+            onNodeDragEnd={handleNodeDragEnd}
             onNodeHover={handleNodeHover}
             warmupTicks={0}
             cooldownTicks={0}

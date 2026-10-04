@@ -38,7 +38,7 @@ export function StartAttemptButton({ assignmentId, disabled = false }: Props) {
   return (
     <div>
       <button
-        className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+        className="rounded-md bg-sky-600 px-4 py-2 text-white disabled:opacity-50"
         disabled={disabled || pending}
         onClick={start}
         type="button"

@@ -333,7 +333,7 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
             </button>
           ) : null}
           <button
-            className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+            className="rounded-md bg-sky-600 px-4 py-2 text-white disabled:opacity-50"
             disabled={submitting || saveState === "saving"}
             onClick={submit}
             type="button"
@@ -352,8 +352,8 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
             aria-current={index === activeQuestionIndex ? "step" : undefined}
             className={`min-w-10 rounded-md border px-3 py-2 text-sm ${
               index === activeQuestionIndex
-                ? "border-black bg-black text-white"
-                : "bg-white hover:bg-gray-50"
+                ? "border-sky-600 bg-sky-600 text-white"
+                : "bg-white hover:bg-sky-50/70"
             }`}
             key={question.id}
             onClick={() => selectQuestion(index)}

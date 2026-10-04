@@ -211,7 +211,7 @@ export function AnnouncementManager({
           </label>
         </div>
         <button
-          className="mt-4 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="mt-4 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
           disabled={form.formState.isSubmitting}
           type="submit"
         >
@@ -279,14 +279,14 @@ export function AnnouncementManager({
                 {announcement.status === AnnouncementStatus.DRAFT ? (
                   <div className="flex shrink-0 gap-2">
                     <button
-                      className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                       onClick={() => startEditing(announcement)}
                       type="button"
                     >
                       <Pencil className="h-4 w-4" /> 编辑
                     </button>
                     <button
-                      className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none disabled:cursor-wait disabled:opacity-50"
                       disabled={pendingId === announcement.id}
                       onClick={() => void publish(announcement)}
                       type="button"

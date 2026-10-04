@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Pencil, Users } from "lucide-react";
 
 import { UserStatusAction } from "@/components/admin/user-status-action";
 import {
@@ -79,11 +79,14 @@ export function UserList({
                   {user.createdAt.toLocaleString("zh-CN")}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Link
-                      className="text-sm underline underline-offset-4"
+                      aria-label={`编辑用户 ${user.displayName ?? user.email ?? user.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
                       href={`/admin/users/${user.id}/edit`}
+                      title="编辑用户"
                     >
+                      <Pencil aria-hidden="true" className="size-4" />
                       编辑
                     </Link>
                     <UserStatusAction

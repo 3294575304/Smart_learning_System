@@ -20,8 +20,8 @@ export const RECOMMENDATION_STATUS_STYLES: Record<
   PENDING: "bg-blue-50 text-blue-700",
   STARTED: "bg-amber-50 text-amber-700",
   COMPLETED: "bg-green-50 text-green-700",
-  DISMISSED: "bg-gray-100 text-gray-600",
-  EXPIRED: "bg-gray-100 text-gray-600",
+  DISMISSED: "bg-sky-100/70 text-gray-600",
+  EXPIRED: "bg-sky-100/70 text-gray-600",
 };
 
 export const DIFFICULTY_LABELS: Record<number, string> = {

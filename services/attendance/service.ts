@@ -14,6 +14,7 @@ import type { AuditRequestContext } from "@/services/audit/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { calculateAttendanceRate } from "@/services/attendance/calculation";
 import { AttendanceOperationError } from "@/services/attendance/errors";
+import { getStudentCourseContext } from "@/services/courses/student-access";
 
 async function ownedCourse(
   teacherId: string,
@@ -395,11 +396,18 @@ export async function getTeacherCourseAttendance(
   };
 }
 
-export async function getStudentAttendance(studentId: string) {
+export async function getStudentAttendance(
+  studentId: string,
+  courseId?: string,
+) {
+  const course = courseId
+    ? await getStudentCourseContext(studentId, courseId)
+    : null;
   const records = await prisma.attendanceRecord.findMany({
     where: {
       studentId,
       session: {
+        ...(courseId ? { courseId } : {}),
         classroom: {
           memberships: { some: { studentId, status: MembershipStatus.ACTIVE } },
         },
@@ -420,6 +428,7 @@ export async function getStudentAttendance(studentId: string) {
     (record) => record.session.status === AttendanceSessionStatus.CLOSED,
   );
   return {
+    ...(course ? { course } : {}),
     records,
     summary: calculateAttendanceRate(
       closed.map((record) => record.currentStatus),

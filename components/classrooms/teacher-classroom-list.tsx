@@ -29,7 +29,7 @@ function DissolveAction({
           aria-expanded={menuOpen}
           aria-haspopup="menu"
           aria-label={`打开“${classroom.name}”班级操作菜单`}
-          className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+          className="rounded-md p-2 text-gray-500 hover:bg-sky-100/70 hover:text-gray-900"
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -114,7 +114,7 @@ export function TeacherClassroomList({
         <div className="grid gap-4 md:grid-cols-2">
           {classrooms.map((classroom) => (
             <article
-              className="bg-card rounded-xl border p-5 transition-colors hover:bg-gray-50"
+              className="bg-card rounded-xl border p-5 transition-colors hover:bg-sky-50/70"
               key={classroom.id}
             >
               <div className="flex items-start justify-between gap-3">

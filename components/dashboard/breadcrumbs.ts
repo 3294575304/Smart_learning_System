@@ -1,3 +1,5 @@
+import { getSegmentLabels, SEGMENT_LABELS } from "./navigation";
+
 export interface BreadcrumbItem {
   href: string;
   label: string;
@@ -6,9 +8,10 @@ export interface BreadcrumbItem {
 
 export function buildBreadcrumbs(
   pathname: string,
-  segmentLabels: Readonly<Record<string, string>>,
+  segmentLabels: Readonly<Record<string, string>> = SEGMENT_LABELS,
 ): BreadcrumbItem[] {
   const segments = pathname.split("/").filter(Boolean);
+  const labels = getSegmentLabels(pathname, segmentLabels);
 
   return segments.map((segment, index) => {
     const href = `/${segments.slice(0, index + 1).join("/")}`;
@@ -20,10 +23,9 @@ export function buildBreadcrumbs(
       href,
       label: isTeacherCourseDetail
         ? "课程管理详情"
-        : (segmentLabels[segment] ?? "详情"),
+        : (labels[segment] ?? "详情"),
       linkable:
-        hasChildPage &&
-        (isTeacherCourseDetail || Boolean(segmentLabels[segment])),
+        hasChildPage && (isTeacherCourseDetail || Boolean(labels[segment])),
     };
   });
 }

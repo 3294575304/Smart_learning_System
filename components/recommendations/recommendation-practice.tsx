@@ -122,13 +122,13 @@ function PracticeResult({
             </span>
           </div>
           <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-            <div className="rounded-md bg-gray-50 p-3">
+            <div className="rounded-md bg-sky-50/70 p-3">
               <dt className="text-gray-500">你的答案</dt>
               <dd className="mt-1 whitespace-pre-wrap">
                 {answer.studentAnswer}
               </dd>
             </div>
-            <div className="rounded-md bg-gray-50 p-3">
+            <div className="rounded-md bg-sky-50/70 p-3">
               <dt className="text-gray-500">正确答案</dt>
               <dd className="mt-1 whitespace-pre-wrap">
                 {answer.correctAnswer}
@@ -261,7 +261,7 @@ export function RecommendationPractice({ recommendation }: Props) {
             </p>
             <textarea
               aria-label="Python 代码"
-              className="mt-4 min-h-80 w-full rounded-md border bg-slate-950 p-4 font-mono text-sm text-slate-100"
+              className="mt-4 min-h-80 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900"
               disabled={programmingPending || Boolean(programmingAttemptId)}
               onChange={(event) => setCode(event.target.value)}
               value={code}
@@ -279,7 +279,7 @@ export function RecommendationPractice({ recommendation }: Props) {
             />
           ) : (
             <button
-              className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-sky-600 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
               disabled={programmingPending || !code.trim()}
               onClick={() => void submitProgramming()}
               type="button"
@@ -348,7 +348,7 @@ export function RecommendationPractice({ recommendation }: Props) {
             </p>
           ) : null}
           <button
-            className="rounded-md bg-black px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-sky-600 px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             disabled={form.formState.isSubmitting}
             type="submit"
           >

@@ -115,7 +115,7 @@ export function AdminDashboard() {
       <PageHeader
         actions={
           <button
-            className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-medium hover:bg-sky-50/70 disabled:cursor-wait disabled:opacity-60"
             disabled={refreshing}
             onClick={refresh}
             type="button"

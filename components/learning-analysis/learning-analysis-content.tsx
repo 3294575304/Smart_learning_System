@@ -5,10 +5,16 @@ import {
   type LearningAnalysis,
   type LearningAnalysisMetadata,
 } from "@/components/learning-analysis/learning-analysis-types";
+import {
+  knowledgePointLabel,
+  localizeKnowledgePointReferences,
+  type KnowledgePointLabels,
+} from "@/components/learning-analysis/knowledge-point-labels";
 
 interface Props {
   analysis: LearningAnalysis;
   metadata: LearningAnalysisMetadata | null;
+  knowledgePointLabels: KnowledgePointLabels;
 }
 
 const levelLabels: Record<LearningAnalysis["overallLevel"], string> = {
@@ -33,7 +39,11 @@ function EmptyItem({ children }: { children: string }) {
   return <p className="text-sm text-gray-500">{children}</p>;
 }
 
-export function LearningAnalysisContent({ analysis, metadata }: Props) {
+export function LearningAnalysisContent({
+  analysis,
+  metadata,
+  knowledgePointLabels,
+}: Props) {
   const safeConfidence = Number.isFinite(analysis.confidence)
     ? Math.min(1, Math.max(0, analysis.confidence))
     : 0;
@@ -76,8 +86,18 @@ export function LearningAnalysisContent({ analysis, metadata }: Props) {
                   className="min-w-0 text-sm break-words"
                   key={item.knowledgePointId}
                 >
-                  <strong>{item.knowledgePointId}</strong>
-                  <p className="mt-1 text-gray-600">{item.reason}</p>
+                  <strong>
+                    {knowledgePointLabel(
+                      item.knowledgePointId,
+                      knowledgePointLabels,
+                    )}
+                  </strong>
+                  <p className="mt-1 text-gray-600">
+                    {localizeKnowledgePointReferences(
+                      item.reason,
+                      knowledgePointLabels,
+                    )}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -95,11 +115,21 @@ export function LearningAnalysisContent({ analysis, metadata }: Props) {
                   className="min-w-0 text-sm break-words"
                   key={item.knowledgePointId}
                 >
-                  <strong>{item.knowledgePointId}</strong>
+                  <strong>
+                    {knowledgePointLabel(
+                      item.knowledgePointId,
+                      knowledgePointLabels,
+                    )}
+                  </strong>
                   <span className="ml-2 text-gray-500">
                     程度 {item.severity}/5
                   </span>
-                  <p className="mt-1 text-gray-600">{item.reason}</p>
+                  <p className="mt-1 text-gray-600">
+                    {localizeKnowledgePointReferences(
+                      item.reason,
+                      knowledgePointLabels,
+                    )}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -120,7 +150,12 @@ export function LearningAnalysisContent({ analysis, metadata }: Props) {
                   key={`${item.type}-${index}`}
                 >
                   <strong>{errorPatternLabels[item.type]}</strong>
-                  <p className="mt-1 text-gray-600">{item.evidence}</p>
+                  <p className="mt-1 text-gray-600">
+                    {localizeKnowledgePointReferences(
+                      item.evidence,
+                      knowledgePointLabels,
+                    )}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -135,7 +170,10 @@ export function LearningAnalysisContent({ analysis, metadata }: Props) {
             <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-gray-700">
               {analysis.suggestions.map((suggestion, index) => (
                 <li className="break-words" key={`${suggestion}-${index}`}>
-                  {suggestion}
+                  {localizeKnowledgePointReferences(
+                    suggestion,
+                    knowledgePointLabels,
+                  )}
                 </li>
               ))}
             </ol>
@@ -143,7 +181,7 @@ export function LearningAnalysisContent({ analysis, metadata }: Props) {
         </section>
       </div>
 
-      <section className="grid gap-4 rounded-lg bg-gray-50 p-4 sm:grid-cols-2">
+      <section className="grid gap-4 rounded-lg bg-sky-50/70 p-4 sm:grid-cols-2">
         <div>
           <h3 className="text-sm font-medium">推荐练习难度</h3>
           <p className="mt-1 text-2xl font-semibold">
@@ -157,11 +195,11 @@ export function LearningAnalysisContent({ analysis, metadata }: Props) {
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={confidencePercent}
-            className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200"
+            className="mt-2 h-2 overflow-hidden rounded-full bg-sky-100"
             role="progressbar"
           >
             <div
-              className="h-full rounded-full bg-gray-800"
+              className="h-full rounded-full bg-sky-600"
               style={{ width: `${confidencePercent}%` }}
             />
           </div>

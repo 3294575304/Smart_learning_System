@@ -31,7 +31,7 @@ export function StartRecommendationButton({ recommendationId, status }: Props) {
   ) {
     return (
       <Link
-        className="inline-flex min-h-10 items-center justify-center rounded-md bg-black px-4 text-sm font-medium text-white"
+        className="inline-flex min-h-10 items-center justify-center rounded-md bg-sky-600 px-4 text-sm font-medium text-white"
         href={recommendationPracticePath(recommendationId)}
       >
         {status === RecommendationStatus.COMPLETED ? "查看结果" : "继续练习"}
@@ -60,7 +60,7 @@ export function StartRecommendationButton({ recommendationId, status }: Props) {
     <div>
       <button
         aria-busy={pending}
-        className="min-h-10 rounded-md bg-black px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="min-h-10 rounded-md bg-sky-600 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         disabled={isStartRecommendationDisabled(pending)}
         onClick={() => void start()}
         type="button"

@@ -1,8 +1,10 @@
 import { Role } from "@prisma/client";
-import { ClipboardList } from "lucide-react";
+import { ArrowRight, ClipboardList } from "lucide-react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { PageIndex } from "@/components/dashboard/page-index";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
@@ -10,6 +12,9 @@ import {
   type StudentAssignmentListQuery,
 } from "@/services/assignments/schemas";
 import { listStudentAssignments } from "@/services/assignments/service";
+import { ResourceNotFoundError } from "@/services/auth/policy";
+import { courseIdSchema } from "@/services/courses/schemas";
+import { getStudentCourseContext } from "@/services/courses/student-access";
 
 const PAGE_SIZE = 8;
 
@@ -42,13 +47,36 @@ function stateLabel(state: ReturnType<typeof assignmentState>): string {
   return FILTERS.find((filter) => filter.value === state)?.label ?? state;
 }
 
-function pageHref(query: StudentAssignmentListQuery, page: number): string {
-  return `/student/assignments?status=${query.status}&page=${page}`;
+function pageHref(
+  query: StudentAssignmentListQuery,
+  page: number,
+  courseId?: string,
+): string {
+  const params = new URLSearchParams({
+    status: query.status,
+    page: String(page),
+  });
+  if (courseId) params.set("courseId", courseId);
+  return `/student/assignments?${params.toString()}`;
 }
 
 export default async function StudentAssignmentsPage({ searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
+  const rawCourseId =
+    typeof raw.courseId === "string" ? raw.courseId : undefined;
+  const parsedCourseId =
+    rawCourseId !== undefined ? courseIdSchema.safeParse(rawCourseId) : null;
+  if (parsedCourseId && !parsedCourseId.success) notFound();
+  let course: Awaited<ReturnType<typeof getStudentCourseContext>> | null = null;
+  if (parsedCourseId?.success) {
+    try {
+      course = await getStudentCourseContext(student.id, parsedCourseId.data);
+    } catch (error) {
+      if (error instanceof ResourceNotFoundError) notFound();
+      throw error;
+    }
+  }
   const parsed = studentAssignmentListQuerySchema.safeParse({
     page: typeof raw.page === "string" ? raw.page : undefined,
     status: typeof raw.status === "string" ? raw.status : undefined,
@@ -56,7 +84,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
   const query = parsed.success
     ? parsed.data
     : studentAssignmentListQuerySchema.parse({});
-  const assignments = await listStudentAssignments(student.id);
+  const assignments = await listStudentAssignments(student.id, course?.id);
   const now = new Date();
   const filtered = assignments.filter(
     (assignment) =>
@@ -70,7 +98,24 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
   return (
     <section className="space-y-6">
       <PageHeader
-        description="查看待完成、作答中、已提交与已截止作业，继续作答或进入成绩详情。"
+        actions={
+          <Link
+            className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+            href={
+              course
+                ? `/student/courses/${course.id}/learning-center`
+                : "/student/tasks"
+            }
+          >
+            {course ? "返回课程学习中心" : "返回学习任务"}
+          </Link>
+        }
+        description={
+          course
+            ? `仅显示「${course.name}」中分配给你的作业。`
+            : "查看各门课程待完成、作答中、已提交与已截止的作业。"
+        }
+        eyebrow={course?.name}
         title="我的作业"
       />
 
@@ -83,10 +128,10 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
             aria-current={query.status === filter.value ? "page" : undefined}
             className={`shrink-0 rounded-full border px-4 py-2 text-sm ${
               query.status === filter.value
-                ? "border-gray-900 bg-gray-900 text-white"
+                ? "border-sky-600 bg-sky-600 text-white"
                 : "bg-white hover:bg-gray-50"
             }`}
-            href={`/student/assignments?status=${filter.value}`}
+            href={pageHref({ ...query, status: filter.value }, 1, course?.id)}
             key={filter.value}
           >
             {filter.label}
@@ -100,7 +145,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
             query.status === "ALL" ? null : (
               <Link
                 className="text-sm font-medium underline"
-                href="/student/assignments"
+                href={pageHref({ ...query, status: "ALL" }, 1, course?.id)}
               >
                 查看全部作业
               </Link>
@@ -146,7 +191,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
                 <p className="mt-1 text-xs text-gray-500">
                   截止：{assignment.dueAt.toLocaleString("zh-CN")}
                 </p>
-                <p className="mt-4 text-sm font-medium">
+                <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-700">
                   {state === "IN_PROGRESS"
                     ? "继续作答"
                     : state === "SUBMITTED"
@@ -154,7 +199,8 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
                       : state === "EXPIRED"
                         ? "查看详情"
                         : "开始作业"}
-                </p>
+                  <ArrowRight aria-hidden="true" className="size-4" />
+                </span>
               </Link>
             );
           })}
@@ -162,27 +208,13 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
       )}
 
       {totalPages > 1 ? (
-        <nav aria-label="作业分页" className="flex justify-center gap-3">
-          {page > 1 ? (
-            <Link
-              className="rounded-md border bg-white px-3 py-2 text-sm"
-              href={pageHref(query, page - 1)}
-            >
-              上一页
-            </Link>
-          ) : null}
-          <span className="px-2 py-2 text-sm text-gray-500">
-            第 {page} / {totalPages} 页
-          </span>
-          {page < totalPages ? (
-            <Link
-              className="rounded-md border bg-white px-3 py-2 text-sm"
-              href={pageHref(query, page + 1)}
-            >
-              下一页
-            </Link>
-          ) : null}
-        </nav>
+        <PageIndex
+          ariaLabel="作业分页"
+          hrefForPage={(targetPage) => pageHref(query, targetPage, course?.id)}
+          page={page}
+          summary={`第 ${page} / ${totalPages} 页`}
+          totalPages={totalPages}
+        />
       ) : null}
     </section>
   );

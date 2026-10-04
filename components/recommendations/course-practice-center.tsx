@@ -13,18 +13,43 @@ interface CourseOption {
   concepts: Array<{ id: string; code: string; name: string }>;
 }
 
-export function CoursePracticeCenter({ courses }: { courses: CourseOption[] }) {
+export function CoursePracticeCenter({
+  courses,
+  initialCourseId,
+  initialConceptId,
+}: {
+  courses: CourseOption[];
+  initialCourseId?: string;
+  initialConceptId?: string;
+}) {
+  const requestedCourse = courses.find(
+    (item) => item.courseId === initialCourseId,
+  );
   const [selectedCourseId, setSelectedCourseId] = useState(
-    courses[0]?.courseId ?? "",
+    requestedCourse?.courseId ?? courses[0]?.courseId ?? "",
   );
   const course =
     courses.find((item) => item.courseId === selectedCourseId) ?? courses[0];
-  const [conceptIds, setConceptIds] = useState<string[]>([]);
+  const initialSelectionUnavailable = Boolean(
+    initialConceptId &&
+    (!requestedCourse ||
+      !requestedCourse.concepts.some((item) => item.id === initialConceptId)),
+  );
+  const [conceptIds, setConceptIds] = useState<string[]>(() =>
+    initialConceptId &&
+    requestedCourse?.concepts.some((item) => item.id === initialConceptId)
+      ? [initialConceptId]
+      : [],
+  );
   const [questionType, setQuestionType] = useState<QuestionType | "">("");
   const [count, setCount] = useState(5);
   const [difficulty, setDifficulty] = useState(3);
   const [pending, setPending] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(
+    initialSelectionUnavailable
+      ? "该知识点尚未纳入当前教学进度，暂不能生成定向练习。"
+      : null,
+  );
 
   async function generate() {
     if (!course || pending) return;
@@ -176,7 +201,7 @@ export function CoursePracticeCenter({ courses }: { courses: CourseOption[] }) {
           ))}
         </div>
       </fieldset>
-      <div className="rounded-md bg-slate-50 p-3 text-sm">
+      <div className="rounded-md bg-sky-50/60 p-3 text-sm">
         确认条件：{conceptIds.length || "全部已授"} 个知识点 ·{" "}
         {questionType || "全部题型"} · {count} 题 · 难度 {difficulty}。图谱版本{" "}
         {course.graphVersionNumber ?? "未发布"}，进度修订{" "}
@@ -188,7 +213,7 @@ export function CoursePracticeCenter({ courses }: { courses: CourseOption[] }) {
         </p>
       ) : null}
       <button
-        className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+        className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
         disabled={pending || !course.concepts.length}
         onClick={() => void generate()}
         type="button"

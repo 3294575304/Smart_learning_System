@@ -1,9 +1,8 @@
 import { Role } from "@prisma/client";
-import Link from "next/link";
-
 import { AuditLogFilters } from "@/components/admin/audit-log-filters";
 import { AuditLogList } from "@/components/admin/audit-log-list";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { PageIndex } from "@/components/dashboard/page-index";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
   auditLogListQuerySchema,
@@ -64,24 +63,12 @@ export default async function AuditLogsPage({
       </div>
       <AuditLogList logs={logs.items} />
       {logs.pagination.totalPages > 1 ? (
-        <nav className="flex justify-center gap-3">
-          {query.page > 1 ? (
-            <Link
-              className="rounded-md border px-3 py-2"
-              href={pageHref(query, query.page - 1)}
-            >
-              上一页
-            </Link>
-          ) : null}
-          {query.page < logs.pagination.totalPages ? (
-            <Link
-              className="rounded-md border px-3 py-2"
-              href={pageHref(query, query.page + 1)}
-            >
-              下一页
-            </Link>
-          ) : null}
-        </nav>
+        <PageIndex
+          ariaLabel="审计日志分页"
+          hrefForPage={(page) => pageHref(query, page)}
+          page={logs.pagination.page}
+          totalPages={logs.pagination.totalPages}
+        />
       ) : null}
     </section>
   );

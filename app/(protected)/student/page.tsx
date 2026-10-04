@@ -5,13 +5,12 @@ import {
   BookOpenCheck,
   BrainCircuit,
   CheckCircle2,
-  Clock3,
+  GraduationCap,
   Sparkles,
   Target,
 } from "lucide-react";
 import Link from "next/link";
 
-import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { TrendChart } from "@/components/dashboard/trend-chart";
@@ -28,7 +27,7 @@ export default async function StudentPage() {
         actions={
           dashboard.pendingAssignments[0] ? (
             <Link
-              className="flex items-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+              className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white"
               href={`/student/assignments/${dashboard.pendingAssignments[0].id}`}
             >
               开始作业
@@ -127,7 +126,7 @@ export default async function StudentPage() {
                       className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${
                         hoursLeft !== null && hoursLeft <= 72
                           ? "bg-amber-50 text-amber-700"
-                          : "bg-gray-100 text-gray-600"
+                          : "bg-sky-100/70 text-gray-600"
                       }`}
                     >
                       {hoursLeft === null
@@ -169,7 +168,7 @@ export default async function StudentPage() {
                       {knowledgePoint.masteryScore}%
                     </span>
                   </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-sky-100/70">
                     <div
                       className="h-full rounded-full bg-amber-500"
                       style={{ width: `${knowledgePoint.masteryScore}%` }}
@@ -223,7 +222,7 @@ export default async function StudentPage() {
             <div className="mt-4 space-y-3">
               {dashboard.recommendations.map((recommendation) => (
                 <Link
-                  className="block rounded-lg border p-4 transition-colors hover:bg-gray-50"
+                  className="block rounded-lg border p-4 transition-colors hover:bg-sky-50/70"
                   href={`/student/recommendations/${recommendation.id}`}
                   key={recommendation.id}
                 >
@@ -247,13 +246,13 @@ export default async function StudentPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["全部作业", "/student/assignments", Clock3],
+          ["我的课程", "/student/courses", GraduationCap],
           ["我的成绩", "/student/results", BarChart3],
-          ["学情分析", "/student/analytics", BrainCircuit],
-          ["推荐练习", "/student/recommendations", Sparkles],
+          ["学习分析", "/student/analytics", BrainCircuit],
+          ["练习中心", "/student/recommendations", Sparkles],
         ].map(([label, href, Icon]) => (
           <Link
-            className="bg-card flex items-center gap-3 rounded-lg border p-4 text-sm font-medium hover:bg-gray-50"
+            className="bg-card flex items-center gap-3 rounded-lg border p-4 text-sm font-medium hover:bg-sky-50/70"
             href={href as string}
             key={label as string}
           >
@@ -261,16 +260,6 @@ export default async function StudentPage() {
             {label as string}
           </Link>
         ))}
-      </section>
-
-      <section className="bg-card rounded-xl border p-5 sm:p-6">
-        <h2 className="font-semibold">加入班级</h2>
-        <p className="text-muted-foreground mt-1 mb-4 text-sm">
-          输入教师提供的邀请码加入新班级。
-        </p>
-        <div className="max-w-md">
-          <JoinClassroomForm />
-        </div>
       </section>
     </section>
   );

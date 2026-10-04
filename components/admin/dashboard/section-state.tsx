@@ -13,7 +13,7 @@ export function DashboardPanel({
   children: ReactNode;
 }) {
   return (
-    <section className="bg-card rounded-xl border p-5 shadow-sm shadow-black/[0.02]">
+    <section className="bg-card rounded-xl border border-sky-100 p-5 shadow-sm shadow-sky-100/70">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="font-semibold">{title}</h2>

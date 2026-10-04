@@ -29,10 +29,10 @@ export const PREVIEW_STATUS_LABELS: Record<StudentImportPreviewStatus, string> =
 
 export const PREVIEW_STATUS_STYLES: Record<StudentImportPreviewStatus, string> =
   {
-    PENDING: "bg-gray-100 text-gray-700",
+    PENDING: "bg-sky-100/70 text-gray-700",
     NEW_USER: "bg-blue-50 text-blue-700",
     EXISTING_USER: "bg-emerald-50 text-emerald-700",
-    ALREADY_ENROLLED: "bg-slate-100 text-slate-700",
+    ALREADY_ENROLLED: "bg-sky-100/70 text-slate-700",
     COURSE_MISMATCH: "bg-amber-50 text-amber-800",
     INVALID: "bg-red-50 text-red-700",
     DUPLICATE: "bg-orange-50 text-orange-800",

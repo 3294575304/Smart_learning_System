@@ -26,7 +26,7 @@ export default async function StudentLearnerProfilePage({ params }: Props) {
             className="text-muted-foreground text-sm underline"
             href="/student/analytics"
           >
-            返回学情分析
+            返回学习分析
           </Link>
           <h1 className="mt-3 text-2xl font-semibold">
             {profile.course.name} · 我的课程画像

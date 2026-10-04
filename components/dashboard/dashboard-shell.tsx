@@ -2,31 +2,28 @@
 
 import { Role } from "@prisma/client";
 import {
-  BarChart3,
-  BookOpenCheck,
-  BrainCircuit,
+  ChevronDown,
   ChevronRight,
-  ClipboardList,
-  ClipboardCheck,
   GraduationCap,
-  Home,
   Menu,
-  Megaphone,
-  School,
-  ScrollText,
-  ShieldCheck,
-  Sparkles,
-  Settings,
   Users,
+  UserPlus,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ComponentType, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { LogoutButton } from "@/components/auth/logout-button";
+import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
 import { buildBreadcrumbs } from "@/components/dashboard/breadcrumbs";
+import {
+  getDashboardPageTitle,
+  isNavigationItemActive,
+  NAVIGATION,
+  type NavigationGroup,
+} from "@/components/dashboard/navigation";
 import { NotificationIndicator } from "@/components/notifications/notification-indicator";
 import { cn } from "@/lib/utils";
 import type { AuthenticatedUser } from "@/services/auth/types";
@@ -39,113 +36,20 @@ interface DashboardShellProps {
   children: ReactNode;
 }
 
-interface NavigationItem {
-  href: string;
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-  disabled?: boolean;
-}
-
 const ROLE_LABELS: Record<Role, string> = {
   ADMIN: "管理员",
   TEACHER: "教师",
   STUDENT: "学生",
 };
 
-const NAVIGATION: Record<Role, NavigationItem[]> = {
-  ADMIN: [
-    { href: "/admin", label: "平台概览", icon: ShieldCheck },
-    { href: "/admin/users", label: "用户管理", icon: Users },
-    { href: "/admin/questions", label: "公共题库", icon: BookOpenCheck },
-    { href: "/admin/classrooms", label: "班级治理", icon: School },
-    { href: "/admin/course-templates", label: "课程模板", icon: BookOpenCheck },
-    { href: "/admin/audit-logs", label: "审计日志", icon: ScrollText },
-    { href: "/admin/announcements", label: "系统公告", icon: Megaphone },
-    { href: "/admin/system-config", label: "系统配置", icon: Settings },
-  ],
-  TEACHER: [
-    { href: "/teacher", label: "工作台", icon: Home },
-    { href: "/teacher/courses", label: "课程管理", icon: BookOpenCheck },
-    { href: "/teacher/classrooms", label: "班级管理", icon: School },
-    { href: "/teacher/questions", label: "题库管理", icon: BookOpenCheck },
-    { href: "/teacher/assignments", label: "作业管理", icon: ClipboardList },
-    { href: "/teacher/results", label: "成绩统计", icon: BarChart3 },
-  ],
-  STUDENT: [
-    { href: "/student", label: "学习主页", icon: Home },
-    { href: "/student/assignments", label: "我的作业", icon: ClipboardList },
-    { href: "/student/surveys", label: "课程问卷", icon: ClipboardCheck },
-    { href: "/student/results", label: "我的成绩", icon: BarChart3 },
-    {
-      href: "/student/wrong-questions",
-      label: "我的错题",
-      icon: BookOpenCheck,
-    },
-    { href: "/student/analytics", label: "学情分析", icon: BrainCircuit },
-    { href: "/student/recommendations", label: "推荐练习", icon: Sparkles },
-  ],
-};
-
-const SEGMENT_LABELS: Record<string, string> = {
-  admin: "平台概览",
-  users: "用户管理",
-  "audit-logs": "审计日志",
-  "system-config": "系统配置",
-  announcements: "系统公告",
-  "course-templates": "课程模板",
-  courses: "课程管理",
-  syllabus: "教学大纲",
-  "assessment-scheme": "考核方案",
-  gradebook: "成绩台账",
-  attendance: "出勤台账",
-  "quality-report": "教学质量分析",
-  profiles: "课程画像",
-  "knowledge-graph": "知识图谱",
-  "question-mapping": "题目知识点映射",
-  "teaching-progress": "教学进度",
-  "outcome-attainment": "课程目标达成度",
-  students: "学生名单",
-  import: "导入",
-  teacher: "教师工作台",
-  student: "学习主页",
-  classrooms: "班级管理",
-  classes: "班级管理",
-  questions: "题库管理",
-  assignments: "作业管理",
-  surveys: "课程问卷",
-  submissions: "提交记录",
-  results: "成绩统计",
-  result: "提交结果",
-  "wrong-questions": "我的错题",
-  analytics: "学情分析",
-  recommendations: "推荐练习",
-  notifications: "通知中心",
-  practice: "练习",
-  answer: "在线答题",
-  new: "新建",
-  edit: "编辑",
-};
-
-function isCurrentPath(pathname: string, href: string): boolean {
-  if (href === "/teacher" || href === "/student" || href === "/admin") {
-    return pathname === href;
-  }
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function pageTitle(pathname: string, items: NavigationItem[]): string {
-  const exactLabel =
-    SEGMENT_LABELS[pathname.split("/").filter(Boolean).at(-1) ?? ""];
-  if (exactLabel) return exactLabel;
-
-  const match = [...items]
-    .sort((left, right) => right.href.length - left.href.length)
-    .find((item) => isCurrentPath(pathname, item.href));
-  return match?.label ?? "页面详情";
+function displayUserName(user: AuthenticatedUser): string {
+  const displayName = user.displayName?.trim();
+  if (displayName?.toLowerCase() === "user") return "用户";
+  return displayName || user.email || "用户";
 }
 
 function Breadcrumbs({ pathname }: { pathname: string }) {
-  const crumbs = buildBreadcrumbs(pathname, SEGMENT_LABELS);
+  const crumbs = buildBreadcrumbs(pathname);
 
   return (
     <nav aria-label="面包屑" className="min-w-0 overflow-hidden">
@@ -173,37 +77,62 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
 }
 
 function SidebarNavigation({
-  items,
+  groups,
   pathname,
+  student = false,
   onNavigate,
 }: {
-  items: NavigationItem[];
+  groups: NavigationGroup[];
   pathname: string;
+  student?: boolean;
   onNavigate?: () => void;
 }) {
   return (
-    <nav aria-label="主导航" className="space-y-1 px-3 py-4">
-      {items.map((item) => {
-        const Icon = item.icon;
-        const active = isCurrentPath(pathname, item.href);
-        return (
-          <Link
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-              active
-                ? "bg-gray-900 text-white shadow-sm"
-                : "text-gray-600 hover:bg-gray-100 hover:text-gray-950",
-            )}
-            href={item.href}
-            key={item.href}
-            onClick={onNavigate}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
+    <nav aria-label="主导航" className="space-y-5 px-3 py-4">
+      {groups.map((group) => (
+        <div
+          key={group.label ?? "overview"}
+          role={group.label ? "group" : undefined}
+          aria-label={group.label}
+        >
+          {group.label ? (
+            <p className="mb-2 px-3 text-xs font-medium tracking-wide text-slate-500">
+              {group.label}
+            </p>
+          ) : null}
+          <div className="space-y-1">
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const active = isNavigationItemActive(pathname, item);
+              return (
+                <Link
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:outline-none",
+                    active
+                      ? student
+                        ? "bg-sky-50 text-sky-800"
+                        : "bg-gradient-to-r from-sky-500 to-emerald-500 text-white shadow-sm"
+                      : "text-gray-600 hover:bg-sky-50 hover:text-sky-800",
+                  )}
+                  href={item.href}
+                  key={item.href}
+                  onClick={onNavigate}
+                >
+                  {student && active ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-y-2.5 left-0 w-0.5 rounded-full bg-sky-600"
+                    />
+                  ) : null}
+                  <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </nav>
   );
 }
@@ -217,32 +146,75 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const navigationItems = NAVIGATION[user.role];
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [joinClassroomDialogOpen, setJoinClassroomDialogOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const navigationGroups = NAVIGATION[user.role];
+  const userName = displayUserName(user);
   const currentPageTitle = useMemo(
-    () => pageTitle(pathname, navigationItems),
-    [navigationItems, pathname],
+    () => getDashboardPageTitle(pathname, navigationGroups),
+    [navigationGroups, pathname],
   );
 
   useEffect(() => {
     setMobileMenuOpen(false);
+    setAccountMenuOpen(false);
+    setJoinClassroomDialogOpen(false);
   }, [pathname]);
 
   useEffect(() => {
-    document.body.style.overflow = mobileMenuOpen ? "hidden" : "";
+    document.body.style.overflow =
+      mobileMenuOpen || joinClassroomDialogOpen ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [mobileMenuOpen]);
+  }, [joinClassroomDialogOpen, mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!accountMenuRef.current?.contains(event.target as Node)) {
+        setAccountMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setAccountMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [accountMenuOpen]);
+
+  useEffect(() => {
+    if (!joinClassroomDialogOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setJoinClassroomDialogOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [joinClassroomDialogOpen]);
 
   return (
-    <div className="bg-muted/40 min-h-screen">
-      <aside className="bg-background fixed inset-y-0 left-0 z-30 hidden w-64 border-r lg:flex lg:flex-col">
+    <div className="via-background min-h-screen bg-gradient-to-br from-sky-50/80 to-emerald-50/60">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-sky-100 bg-white/95 lg:flex lg:flex-col">
         <div className="flex h-16 items-center border-b px-6">
           <Link
             className="flex items-center gap-2 font-semibold"
             href="/dashboard"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900 text-white">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-emerald-500 text-white">
               <GraduationCap className="h-5 w-5" />
             </span>
             <span>{platformName}</span>
@@ -254,29 +226,11 @@ export function DashboardShell({
               {title}
             </p>
           </div>
-          <SidebarNavigation items={navigationItems} pathname={pathname} />
-        </div>
-        <div className="border-t p-4">
-          <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
-            {(() => {
-              const displayName = user.displayName ?? user.email ?? "用户";
-              return (
-                <>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold shadow-sm">
-                    {displayName.slice(0, 1).toUpperCase()}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {displayName}
-                    </p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {ROLE_LABELS[user.role]}
-                    </p>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
+          <SidebarNavigation
+            groups={navigationGroups}
+            pathname={pathname}
+            student={user.role === Role.STUDENT}
+          />
         </div>
       </aside>
 
@@ -284,7 +238,7 @@ export function DashboardShell({
         <div className="fixed inset-0 z-40 lg:hidden">
           <button
             aria-label="关闭菜单"
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-sky-950/20"
             onClick={() => setMobileMenuOpen(false)}
             type="button"
           />
@@ -295,7 +249,7 @@ export function DashboardShell({
                 href="/dashboard"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900 text-white">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-emerald-500 text-white">
                   <GraduationCap className="h-5 w-5" />
                 </span>
                 {platformName}
@@ -311,7 +265,8 @@ export function DashboardShell({
             </div>
             <div className="flex-1 overflow-y-auto">
               <SidebarNavigation
-                items={navigationItems}
+                groups={navigationGroups}
+                student={user.role === Role.STUDENT}
                 onNavigate={() => setMobileMenuOpen(false)}
                 pathname={pathname}
               />
@@ -320,12 +275,25 @@ export function DashboardShell({
               <div className="flex items-center gap-3 text-sm">
                 <Users className="text-muted-foreground h-4 w-4" />
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{user.displayName}</p>
+                  <p className="truncate font-medium">{userName}</p>
                   <p className="text-muted-foreground truncate text-xs">
                     {user.email} · {ROLE_LABELS[user.role]}
                   </p>
                 </div>
               </div>
+              {user.role === Role.STUDENT ? (
+                <button
+                  className="flex w-full items-center gap-2 rounded-lg border border-sky-100 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-sky-50"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setJoinClassroomDialogOpen(true);
+                  }}
+                  type="button"
+                >
+                  <UserPlus className="h-4 w-4 text-sky-600" />
+                  加入班级
+                </button>
+              ) : null}
               <LogoutButton />
             </div>
           </aside>
@@ -350,18 +318,73 @@ export function DashboardShell({
               </p>
               <Breadcrumbs pathname={pathname} />
             </div>
-            <div className="hidden items-center gap-4 sm:flex">
+            <div className="ml-auto flex items-center gap-2">
               <NotificationIndicator />
-              <div className="max-w-52 text-right text-sm">
-                <p className="truncate font-medium">{user.displayName}</p>
-                <p className="text-muted-foreground truncate text-xs">
-                  {ROLE_LABELS[user.role]} · {user.email}
-                </p>
+              <div className="relative hidden sm:block" ref={accountMenuRef}>
+                <button
+                  aria-expanded={accountMenuOpen}
+                  aria-haspopup="dialog"
+                  aria-label={`${userName}个人中心`}
+                  className="flex items-center gap-2 rounded-xl border border-sky-100 bg-white/90 px-2.5 py-1.5 text-left shadow-sm transition hover:border-sky-200 hover:bg-sky-50"
+                  onClick={() => setAccountMenuOpen((open) => !open)}
+                  type="button"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-emerald-500 text-sm font-semibold text-white">
+                    {userName.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="max-w-28 truncate text-sm font-medium">
+                    {userName}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 text-gray-500 transition-transform",
+                      accountMenuOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {accountMenuOpen ? (
+                  <div
+                    aria-label="账号菜单"
+                    className="absolute top-[calc(100%+0.5rem)] right-0 z-50 w-64 rounded-xl border border-sky-100 bg-white p-3 shadow-xl"
+                    role="dialog"
+                  >
+                    <div className="flex items-center gap-3 border-b border-sky-100 px-1 pb-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-emerald-500 font-semibold text-white">
+                        {userName.slice(0, 1).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">
+                          {userName}
+                        </p>
+                        <p className="text-muted-foreground truncate text-xs">
+                          {user.email}
+                        </p>
+                        <p className="mt-0.5 text-xs text-sky-700">
+                          {ROLE_LABELS[user.role]}
+                        </p>
+                      </div>
+                    </div>
+                    {user.role === Role.STUDENT ? (
+                      <button
+                        className="my-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-sky-50 hover:text-sky-800"
+                        onClick={() => {
+                          setAccountMenuOpen(false);
+                          setJoinClassroomDialogOpen(true);
+                        }}
+                        type="button"
+                      >
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
+                          <UserPlus className="h-4 w-4" />
+                        </span>
+                        加入班级
+                      </button>
+                    ) : null}
+                    <div className="pt-3">
+                      <LogoutButton />
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <LogoutButton />
-            </div>
-            <div className="sm:hidden">
-              <NotificationIndicator />
             </div>
           </div>
         </header>
@@ -377,6 +400,49 @@ export function DashboardShell({
           {children}
         </main>
       </div>
+
+      {user.role === Role.STUDENT && joinClassroomDialogOpen ? (
+        <div
+          aria-label="加入班级窗口"
+          aria-modal="true"
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          role="dialog"
+        >
+          <button
+            aria-label="关闭加入班级窗口"
+            className="absolute inset-0 bg-sky-950/25 backdrop-blur-[1px]"
+            onClick={() => setJoinClassroomDialogOpen(false)}
+            type="button"
+          />
+          <section className="relative w-full max-w-md rounded-2xl border border-sky-100 bg-white p-5 shadow-2xl sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">
+                  加入班级
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  输入教师提供的班级邀请码，加入后即可查看对应课程和作业。
+                </p>
+              </div>
+              <button
+                aria-label="关闭"
+                className="shrink-0 rounded-lg p-2 text-slate-500 transition hover:bg-sky-50 hover:text-slate-900"
+                onClick={() => setJoinClassroomDialogOpen(false)}
+                type="button"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-5">
+              <JoinClassroomForm
+                compact
+                inputId="join-classroom-dialog-code"
+                onSuccess={() => setJoinClassroomDialogOpen(false)}
+              />
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

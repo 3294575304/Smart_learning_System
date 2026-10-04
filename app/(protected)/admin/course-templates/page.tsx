@@ -1,5 +1,5 @@
 import { Role } from "@prisma/client";
-import { BookOpenCheck, Plus } from "lucide-react";
+import { BookOpenCheck, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { CourseTemplateActions } from "@/components/courses/course-template-actions";
@@ -22,7 +22,7 @@ export default async function AdminCourseTemplatesPage() {
       <PageHeader
         actions={
           <Link
-            className="flex items-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+            className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
             href="/admin/course-templates/new"
           >
             <Plus className="h-4 w-4" />
@@ -92,9 +92,12 @@ export default async function AdminCourseTemplatesPage() {
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <Link
-                  className="text-sm font-medium underline underline-offset-4"
+                  aria-label={`编辑模板 ${template.name}`}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
                   href={`/admin/course-templates/${template.id}/edit`}
+                  title="编辑课程模板"
                 >
+                  <Pencil aria-hidden="true" className="size-4" />
                   编辑
                 </Link>
                 <CourseTemplateActions

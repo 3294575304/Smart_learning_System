@@ -3,6 +3,7 @@ import {
   AuditAction,
   AuditTargetType,
   KnowledgeGraphStatus,
+  MembershipStatus,
   Prisma,
 } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -847,6 +848,59 @@ export async function getTeacherKnowledgeGraph(
         ) ?? null,
       history,
     },
+  };
+}
+
+export async function getStudentPublishedKnowledgeGraph(
+  studentId: string,
+  courseId: string,
+) {
+  const course = await prisma.course.findFirst({
+    where: {
+      id: courseId,
+      classrooms: {
+        some: {
+          memberships: {
+            some: { studentId, status: MembershipStatus.ACTIVE },
+          },
+        },
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      currentPublishedKnowledgeGraphVersion: {
+        select: {
+          id: true,
+          versionNumber: true,
+          publishedAt: true,
+          structureJson: true,
+          nodes: {
+            select: {
+              conceptId: true,
+              concept: { select: { stableKey: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!course) throw new ResourceNotFoundError("课程不存在");
+  const version = course.currentPublishedKnowledgeGraphVersion;
+  return {
+    course: { id: course.id, name: course.name },
+    published: version
+      ? {
+          id: version.id,
+          versionNumber: version.versionNumber,
+          publishedAt: version.publishedAt,
+          structure: parseGraph(version.structureJson),
+          concepts: version.nodes.map((node) => ({
+            conceptId: node.conceptId,
+            stableKey: node.concept.stableKey,
+          })),
+        }
+      : null,
   };
 }
 

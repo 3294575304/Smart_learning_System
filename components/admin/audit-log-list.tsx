@@ -141,7 +141,7 @@ export function AuditLogList({ logs }: { logs: AuditLogView[] }) {
               </time>
             </div>
             {changes.length > 0 ? (
-              <details className="mt-3 rounded-md bg-gray-50 p-3 text-sm">
+              <details className="mt-3 rounded-md bg-sky-50/70 p-3 text-sm">
                 <summary className="cursor-pointer font-medium">
                   查看变更摘要
                 </summary>

@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import {
   Prisma,
   PrismaClient,
+  ProgrammingTestVisibility,
   QuestionType,
   QuestionVisibility,
 } from "@prisma/client";
@@ -229,6 +230,20 @@ async function main(): Promise<void> {
       where: { id: created.data.id },
       data: { visibility: QuestionVisibility.PUBLIC },
     });
+    await prisma.questionKnowledgePoint.updateMany({
+      where: { questionId: created.data.id },
+      data: { weight: new Prisma.Decimal("0.375") },
+    });
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/questions/${created.data.id}/copy`,
+          teacherCookie,
+          "POST",
+        )
+      ).status,
+      404,
+    );
     assert.equal(
       (
         await requestJson(
@@ -259,6 +274,83 @@ async function main(): Promise<void> {
     const copied = (await copyResponse.json()) as ApiSuccess<QuestionResponse>;
     questionIds.push(copied.data.id);
     assert.equal(copied.data.visibility, QuestionVisibility.PRIVATE);
+    const copiedKnowledgePoint =
+      await prisma.questionKnowledgePoint.findFirstOrThrow({
+        where: { questionId: copied.data.id },
+      });
+    assert.equal(copiedKnowledgePoint.weight.toString(), "0.375");
+
+    const programmingSource = await prisma.question.create({
+      data: {
+        creatorId: teacher.id,
+        title: `集成测试编程题-${randomBytes(3).toString("hex")}`,
+        content: "实现两个整数相加。",
+        type: QuestionType.PYTHON_PROGRAMMING,
+        difficulty: 2,
+        visibility: QuestionVisibility.PUBLIC,
+        status: "ACTIVE",
+        explanation: "读取两个整数并输出其和。",
+      },
+    });
+    questionIds.push(programmingSource.id);
+    const programmingConfigResponse = await requestJson(
+      `/api/teacher/questions/${programmingSource.id}/programming-config`,
+      teacherCookie,
+      "POST",
+      {
+        standardCode: "a, b = map(int, input().split())\nprint(a + b)",
+        starterCode: "a, b = map(int, input().split())\n",
+        totalPoints: 10,
+        limits: {
+          cpuTimeMs: 1000,
+          wallTimeMs: 3000,
+          memoryBytes: 67_108_864,
+          outputBytes: 16_384,
+          processCount: 4,
+        },
+        testCases: [
+          {
+            visibility: ProgrammingTestVisibility.PUBLIC,
+            name: "公开样例",
+            stdin: "2 3\n",
+            expectedOutput: "5\n",
+            points: 5,
+            sortOrder: 1,
+          },
+          {
+            visibility: ProgrammingTestVisibility.HIDDEN,
+            name: "隐藏用例",
+            stdin: "10 7\n",
+            expectedOutput: "17\n",
+            points: 5,
+            sortOrder: 2,
+          },
+        ],
+      },
+    );
+    assert.equal(programmingConfigResponse.status, 201);
+    const programmingCopyResponse = await requestJson(
+      `/api/teacher/questions/${programmingSource.id}/copy`,
+      teacherTwoCookie,
+      "POST",
+    );
+    assert.equal(programmingCopyResponse.status, 201);
+    const programmingCopy =
+      (await programmingCopyResponse.json()) as ApiSuccess<QuestionResponse>;
+    questionIds.push(programmingCopy.data.id);
+    const copiedProgrammingConfig =
+      await prisma.programmingQuestionConfigRevision.findFirstOrThrow({
+        where: { questionId: programmingCopy.data.id },
+        include: { testCases: { orderBy: { sortOrder: "asc" } } },
+      });
+    assert.equal(copiedProgrammingConfig.createdById, teacherTwo.id);
+    assert.equal(copiedProgrammingConfig.testCases.length, 2);
+    assert.equal(
+      copiedProgrammingConfig.testCases[1]?.visibility,
+      ProgrammingTestVisibility.HIDDEN,
+    );
+    assert.equal(copiedProgrammingConfig.testCases[1]?.expectedOutput, "17\n");
+
     const copiedDelete = await requestJson(
       `/api/teacher/questions/${copied.data.id}`,
       teacherTwoCookie,
@@ -345,6 +437,14 @@ async function main(): Promise<void> {
       });
     }
     if (questionIds.length > 0) {
+      await prisma.programmingTestCase.deleteMany({
+        where: {
+          configRevision: { questionId: { in: questionIds } },
+        },
+      });
+      await prisma.programmingQuestionConfigRevision.deleteMany({
+        where: { questionId: { in: questionIds } },
+      });
       await prisma.question.deleteMany({ where: { id: { in: questionIds } } });
     }
     if (sessionIds.length > 0) {

@@ -59,7 +59,7 @@ function DistributionBars<T extends string | number>({
                 role="img"
               >
                 <div
-                  className="h-full rounded-full bg-gray-800"
+                  className="h-full rounded-full bg-sky-600"
                   style={{
                     width: `${item.count === 0 ? 0 : Math.max(3, (item.count / maximum) * 100)}%`,
                   }}

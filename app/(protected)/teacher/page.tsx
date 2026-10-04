@@ -26,10 +26,10 @@ const STATUS_LABELS: Record<AssignmentStatus, string> = {
 };
 
 const STATUS_STYLES: Record<AssignmentStatus, string> = {
-  DRAFT: "bg-gray-100 text-gray-700",
+  DRAFT: "bg-sky-100/70 text-gray-700",
   PUBLISHED: "bg-emerald-50 text-emerald-700",
   CLOSED: "bg-amber-50 text-amber-700",
-  ARCHIVED: "bg-slate-100 text-slate-600",
+  ARCHIVED: "bg-sky-100/70 text-slate-600",
 };
 
 export default async function TeacherPage() {
@@ -42,13 +42,13 @@ export default async function TeacherPage() {
         actions={
           <>
             <Link
-              className="rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              className="rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-sky-50/70"
               href="/teacher/questions/new"
             >
               新建题目
             </Link>
             <Link
-              className="flex items-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
               href="/teacher/assignments/new"
             >
               <Plus className="h-4 w-4" />
@@ -136,7 +136,7 @@ export default async function TeacherPage() {
                       {knowledgePoint.answeredCount} 题
                     </span>
                   </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-sky-100/70">
                     <div
                       className="h-full rounded-full bg-amber-500"
                       style={{ width: `${knowledgePoint.accuracy}%` }}
@@ -243,7 +243,7 @@ export default async function TeacherPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {dashboard.activeClassrooms.map((classroom) => (
                 <Link
-                  className="rounded-lg border p-4 transition-colors hover:bg-gray-50"
+                  className="rounded-lg border p-4 transition-colors hover:bg-sky-50/70"
                   href={`/teacher/classrooms/${classroom.id}`}
                   key={classroom.id}
                 >
@@ -278,7 +278,7 @@ export default async function TeacherPage() {
             ["成绩统计", "/teacher/results", BarChart3],
           ].map(([label, href, Icon]) => (
             <Link
-              className="bg-card flex items-center gap-3 rounded-lg border p-4 text-sm font-medium transition-colors hover:bg-gray-50"
+              className="bg-card flex items-center gap-3 rounded-lg border p-4 text-sm font-medium transition-colors hover:bg-sky-50/70"
               href={href as string}
               key={label as string}
             >

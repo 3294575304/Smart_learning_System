@@ -1,4 +1,4 @@
-import { BookOpenCheck } from "lucide-react";
+import { ArrowRight, BookOpenCheck, Eye } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
@@ -106,17 +106,25 @@ export function WrongQuestionList({
                 ? item.knowledgePoints.map((point) => point.name).join("、")
                 : "未关联"}
             </span>
-            <Link className="underline" href={sourceHref(item)}>
+            <Link
+              className="inline-flex items-center gap-1 text-blue-700 underline underline-offset-2"
+              href={sourceHref(item)}
+            >
+              <Eye aria-hidden="true" className="size-3.5" />
               来源：{item.sourceLabel}
             </Link>
           </div>
 
           <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-5">
             <Link
-              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+              aria-label={`查看错题 ${item.title} 详情并重新练习`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               href={`/student/wrong-questions/${item.id}`}
+              title="查看详情并重新练习"
             >
+              <BookOpenCheck aria-hidden="true" className="size-4" />
               查看详情与重新练习
+              <ArrowRight aria-hidden="true" className="size-4" />
             </Link>
             <MasteryToggleButton
               compact

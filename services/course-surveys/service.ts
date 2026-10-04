@@ -32,6 +32,7 @@ import type {
 import { buildSurveySummary } from "@/services/course-surveys/summary";
 import { createNotifications } from "@/services/notifications/service";
 import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
+import { getStudentCourseContext } from "@/services/courses/student-access";
 
 function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -376,7 +377,7 @@ export async function publishCourseSurvey(
         title: "结课问卷已发布",
         content: `${survey.teacher.profile?.displayName ?? "任课教师"}发布了《${survey.title}》。问卷不计入成绩，请在截止时间前完成。`,
         priority: NotificationPriority.NORMAL,
-        actionUrl: `/student/surveys/${survey.id}`,
+        actionUrl: "/student/surveys",
         sourceType: NotificationSourceType.COURSE_SURVEY,
         sourceId: survey.id,
         deduplicationKey: `course-survey-published:${survey.id}`,
@@ -477,7 +478,11 @@ async function studentSurvey(studentId: string, surveyId: string) {
   return survey;
 }
 
-export async function listStudentCourseSurveys(studentId: string) {
+export async function listStudentCourseSurveys(
+  studentId: string,
+  courseId?: string,
+) {
+  if (courseId) await getStudentCourseContext(studentId, courseId);
   const now = new Date();
   const surveys = await prisma.courseSurvey.findMany({
     where: {
@@ -489,6 +494,7 @@ export async function listStudentCourseSurveys(studentId: string) {
         },
       ],
       classroom: {
+        ...(courseId ? { courseId } : {}),
         status: "ACTIVE",
         memberships: { some: { studentId, status: MembershipStatus.ACTIVE } },
       },

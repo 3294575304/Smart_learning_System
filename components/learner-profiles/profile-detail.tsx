@@ -125,7 +125,7 @@ export function LearnerProfileDetail({ profile }: { profile: Profile }) {
                       {concept.historicalEvidence.latestReferences.map(
                         (item) => (
                           <li
-                            className="rounded bg-slate-50 p-3"
+                            className="rounded bg-sky-50/60 p-3"
                             key={item.evidenceId}
                           >
                             {item.sourceType === "RECOMMENDATION_PRACTICE"
@@ -172,7 +172,7 @@ function DimensionCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-lg bg-slate-50 p-4">
+    <div className="rounded-lg bg-sky-50/60 p-4">
       <p className="text-muted-foreground text-xs">{label}</p>
       <p className="mt-2 font-medium">
         {state ? evidenceLabels[state] : "无证据"}

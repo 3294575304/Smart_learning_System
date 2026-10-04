@@ -480,7 +480,7 @@ export async function listStudentLearnerProfileCourses(studentId: string) {
       },
     },
   });
-  return [
+  const courses = [
     ...new Map(
       memberships
         .map((item) => item.classroom.course)
@@ -490,4 +490,9 @@ export async function listStudentLearnerProfileCourses(studentId: string) {
         .map((course) => [course.id, course]),
     ).values(),
   ];
+  return courses.sort(
+    (left, right) =>
+      right.term.localeCompare(left.term, "zh-CN", { numeric: true }) ||
+      left.name.localeCompare(right.name, "zh-CN", { numeric: true }),
+  );
 }

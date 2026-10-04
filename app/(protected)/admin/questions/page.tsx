@@ -1,9 +1,8 @@
 import { Role } from "@prisma/client";
-import Link from "next/link";
-
 import { QuestionGovernanceFilters } from "@/components/admin/question-governance-filters";
 import { QuestionGovernanceList } from "@/components/admin/question-governance-list";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { PageIndex } from "@/components/dashboard/page-index";
 import {
   adminQuestionListQuerySchema,
   type AdminQuestionListQuery,
@@ -79,24 +78,12 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
       </div>
       <QuestionGovernanceList questions={questions.items} />
       {questions.pagination.totalPages > 1 ? (
-        <nav className="flex justify-center gap-3">
-          {query.page > 1 ? (
-            <Link
-              className="rounded-md border px-3 py-2"
-              href={pageHref(query, query.page - 1)}
-            >
-              上一页
-            </Link>
-          ) : null}
-          {query.page < questions.pagination.totalPages ? (
-            <Link
-              className="rounded-md border px-3 py-2"
-              href={pageHref(query, query.page + 1)}
-            >
-              下一页
-            </Link>
-          ) : null}
-        </nav>
+        <PageIndex
+          ariaLabel="公共题库分页"
+          hrefForPage={(page) => pageHref(query, page)}
+          page={questions.pagination.page}
+          totalPages={questions.pagination.totalPages}
+        />
       ) : null}
     </section>
   );

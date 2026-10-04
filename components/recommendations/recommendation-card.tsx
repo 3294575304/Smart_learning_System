@@ -42,7 +42,7 @@ export function RecommendationCard({ action, item }: Props) {
         </span>
       </div>
 
-      <section className="mt-4 min-w-0 rounded-lg bg-gray-50 p-3">
+      <section className="mt-4 min-w-0 rounded-lg bg-sky-50/70 p-3">
         <h3 className="text-xs font-medium text-gray-500">推荐原因</h3>
         <p className="mt-1 text-sm leading-6 break-words whitespace-pre-wrap text-gray-700">
           {item.reason}
@@ -57,7 +57,7 @@ export function RecommendationCard({ action, item }: Props) {
           <ul className="mt-2 flex min-w-0 flex-wrap gap-2">
             {item.knowledgePoints.map((knowledgePoint) => (
               <li
-                className="max-w-full rounded-md bg-gray-100 px-2 py-1 text-xs break-words"
+                className="max-w-full rounded-md bg-sky-100/70 px-2 py-1 text-xs break-words"
                 key={knowledgePoint.id}
               >
                 {knowledgePoint.name}

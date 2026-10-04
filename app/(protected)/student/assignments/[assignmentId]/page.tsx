@@ -50,7 +50,7 @@ export default async function StudentAssignmentPage({ params }: Props) {
         <div className="flex flex-wrap gap-3">
           {inProgress ? (
             <Link
-              className="rounded-md bg-black px-4 py-2 text-white"
+              className="rounded-md bg-sky-600 px-4 py-2 text-white"
               href={`/student/submissions/${inProgress.id}/answer`}
             >
               继续作答
@@ -59,7 +59,7 @@ export default async function StudentAssignmentPage({ params }: Props) {
             <StartAttemptButton assignmentId={assignment.id} />
           ) : null}
           {assignment.isExpired ? (
-            <p className="rounded-md bg-gray-100 px-4 py-2 text-sm text-gray-600">
+            <p className="rounded-md bg-sky-100/70 px-4 py-2 text-sm text-gray-600">
               作业已截止，不能再提交。
             </p>
           ) : null}
@@ -88,7 +88,7 @@ export default async function StudentAssignmentPage({ params }: Props) {
             <div className="mt-3 space-y-2">
               {submitted.map((attempt) => (
                 <Link
-                  className="flex justify-between rounded-md border p-3 text-sm hover:bg-gray-50"
+                  className="flex justify-between rounded-md border p-3 text-sm hover:bg-sky-50/70"
                   href={`/student/submissions/${attempt.id}/result`}
                   key={attempt.id}
                 >

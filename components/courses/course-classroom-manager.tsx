@@ -200,7 +200,7 @@ export function CourseClassroomManager({
                             ? "bg-emerald-50 text-emerald-700"
                             : classroom.currentCourse
                               ? "bg-amber-50 text-amber-700"
-                              : "bg-gray-100 text-gray-600"
+                              : "bg-sky-100/70 text-gray-600"
                         }`}
                       >
                         {isLinked

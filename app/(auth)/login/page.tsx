@@ -18,12 +18,12 @@ export default async function LoginPage() {
   const config = await getPublicSystemConfig();
 
   return (
-    <main className="bg-muted/40 flex min-h-screen items-center justify-center px-6 py-12">
-      <section className="bg-card w-full max-w-md rounded-xl border p-8 shadow-sm">
-        <p className="text-muted-foreground text-sm font-medium">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-100/70 via-white to-emerald-100/60 px-6 py-12">
+      <section className="bg-card w-full max-w-md rounded-2xl border border-sky-100 p-8 shadow-xl shadow-sky-100/70">
+        <p className="text-sm font-medium text-sky-700">
           AI Smart Learning Platform
         </p>
-        <h1 className="mt-2 text-3xl font-semibold">
+        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
           登录{config.platformName}
         </h1>
         <p className="text-muted-foreground mt-2 text-sm">

@@ -23,6 +23,10 @@ test("analysis content renders all result sections and low-confidence guidance",
   const html = renderToStaticMarkup(
     createElement(LearningAnalysisContent, {
       analysis: baseAnalysis,
+      knowledgePointLabels: {
+        "kp-mastered": "列表",
+        "kp-weak": "循环结构",
+      },
       metadata: {
         source: "AI",
         model: "model-v1",
@@ -45,6 +49,9 @@ test("analysis content renders all result sections and low-confidence guidance",
   ]) {
     assert.match(html, new RegExp(text, "u"));
   }
+  assert.match(html, /列表/u);
+  assert.match(html, /循环结构/u);
+  assert.doesNotMatch(html, /kp-mastered|kp-weak/u);
 });
 
 test("rule fallback and empty lists render as normal local content", () => {
@@ -58,6 +65,7 @@ test("rule fallback and empty lists render as normal local content", () => {
         suggestions: [],
         confidence: 0.8,
       },
+      knowledgePointLabels: {},
       metadata: {
         source: "RULE",
         model: null,

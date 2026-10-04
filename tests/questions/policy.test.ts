@@ -7,6 +7,7 @@ import {
   assertTeacherCanEditQuestion,
   assertTeacherQuestionIsPrivate,
   assertTeacherOwnsQuestion,
+  canTeacherCopyQuestion,
   canTeacherViewQuestion,
 } from "@/services/questions/policy";
 
@@ -24,6 +25,30 @@ test("教师可以查看自己的私有题和其他人的公共题", () => {
       visibility: QuestionVisibility.PUBLIC,
     }),
     true,
+  );
+});
+
+test("只有其他教师的公共题可以复制到当前教师题库", () => {
+  assert.equal(
+    canTeacherCopyQuestion("teacher-1", {
+      creatorId: "teacher-2",
+      visibility: QuestionVisibility.PUBLIC,
+    }),
+    true,
+  );
+  assert.equal(
+    canTeacherCopyQuestion("teacher-1", {
+      creatorId: "teacher-1",
+      visibility: QuestionVisibility.PUBLIC,
+    }),
+    false,
+  );
+  assert.equal(
+    canTeacherCopyQuestion("teacher-1", {
+      creatorId: "teacher-2",
+      visibility: QuestionVisibility.PRIVATE,
+    }),
+    false,
   );
 });
 

@@ -66,7 +66,7 @@ export function DissolveClassroomDialog({
     <div
       aria-labelledby={`dissolve-classroom-${classroom.id}`}
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-sky-950/25 p-4 backdrop-blur-[1px]"
       role="alertdialog"
     >
       <div className="w-full max-w-md rounded-xl border bg-white p-6 shadow-xl">
@@ -84,7 +84,7 @@ export function DissolveClassroomDialog({
           </div>
           <button
             aria-label="关闭解散确认框"
-            className="rounded-md p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+            className="rounded-md p-1 text-gray-500 hover:bg-sky-100/70 disabled:opacity-50"
             disabled={isDissolving}
             onClick={closeDialog}
             type="button"
@@ -93,7 +93,7 @@ export function DissolveClassroomDialog({
           </button>
         </div>
 
-        <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 rounded-lg border bg-gray-50 p-4 text-sm">
+        <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 rounded-lg border bg-sky-50/70 p-4 text-sm">
           <dt className="text-muted-foreground">班级</dt>
           <dd className="font-medium">{classroom.name}</dd>
           <dt className="text-muted-foreground">学生</dt>

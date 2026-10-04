@@ -76,6 +76,13 @@ const wrongQuestionInclude = Prisma.validator<Prisma.WrongQuestionInclude>()({
         select: {
           id: true,
           studentId: true,
+          conceptSnapshots: {
+            orderBy: [{ bindingType: "asc" }, { createdAt: "asc" }],
+            select: {
+              conceptId: true,
+              resolvedNode: { select: { name: true } },
+            },
+          },
         },
       },
     },
@@ -194,6 +201,17 @@ function filteredWhere(
                   content: { contains: query.keyword, mode: "insensitive" },
                 },
               ],
+            },
+          },
+        },
+        {
+          recommendationAnswer: {
+            is: {
+              recommendation: {
+                conceptSnapshots: {
+                  some: { conceptId: query.knowledgePointId },
+                },
+              },
             },
           },
         },
@@ -352,6 +370,14 @@ function assignmentKnowledgePoints(
 function recommendationKnowledgePoints(
   record: WrongQuestionRecord,
 ): WrongQuestionKnowledgePoint[] {
+  const conceptSnapshots =
+    record.recommendationAnswer?.recommendation.conceptSnapshots ?? [];
+  if (conceptSnapshots.length) {
+    return conceptSnapshots.map((snapshot) => ({
+      id: snapshot.conceptId,
+      name: snapshot.resolvedNode.name,
+    }));
+  }
   return (
     record.sourceQuestion?.knowledgePointLinks.map((item) => ({
       id: item.knowledgePoint.id,

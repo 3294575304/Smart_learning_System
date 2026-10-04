@@ -325,11 +325,11 @@ export function QuestionGraphBindingPanel({
             })}
           </div>
           {message ? (
-            <p className="rounded bg-gray-50 p-2 text-sm">{message}</p>
+            <p className="rounded bg-sky-50/70 p-2 text-sm">{message}</p>
           ) : null}
           <div className="flex gap-2">
             <button
-              className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
+              className="rounded bg-sky-600 px-4 py-2 text-white disabled:opacity-50"
               disabled={!graphVersionId || status === "saving"}
               type="button"
               onClick={() => void save()}

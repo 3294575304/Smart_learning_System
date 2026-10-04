@@ -35,7 +35,7 @@ export default async function TeacherCourseRosterImportPage({
       <PageHeader
         actions={
           <Link
-            className="inline-flex items-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            className="inline-flex items-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-sky-50/70"
             href={`/teacher/courses/${course.id}`}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -46,7 +46,7 @@ export default async function TeacherCourseRosterImportPage({
         title="学生名单导入"
       />
 
-      <div className="flex items-start gap-3 rounded-lg border bg-gray-50 p-4 text-sm text-gray-700">
+      <div className="flex items-start gap-3 rounded-lg border bg-sky-50/70 p-4 text-sm text-gray-700">
         <UsersRound className="mt-0.5 h-5 w-5 shrink-0" />
         <p>
           仅处理当前教师课程及其关联班级。正式导入使用服务端幂等与事务保护，重复提交不会重复创建身份或班级预分配。

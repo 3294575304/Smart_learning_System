@@ -1,7 +1,9 @@
 import { Role, SubmissionStatus } from "@prisma/client";
+import { ClipboardCheck, Eye } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { PageIndex } from "@/components/dashboard/page-index";
 import { PublishResultsButton } from "@/components/assignment-results/publish-results-button";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -89,9 +91,10 @@ export default async function TeacherSubmissionsPage({
           <div className="flex flex-col items-end gap-2">
             <PublishResultsButton assignmentId={assignmentId.data} />
             <Link
-              className="text-sm underline"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               href={`/teacher/assignments/${assignmentId.data}/results`}
             >
+              <Eye aria-hidden="true" className="size-4" />
               查看成绩统计
             </Link>
           </div>
@@ -108,7 +111,7 @@ export default async function TeacherSubmissionsPage({
                 aria-current={active ? "page" : undefined}
                 className={
                   active
-                    ? "rounded-full bg-gray-900 px-4 py-2 text-sm text-white"
+                    ? "rounded-full bg-sky-600 px-4 py-2 text-sm text-white"
                     : "rounded-full border bg-white px-4 py-2 text-sm"
                 }
                 href={href}
@@ -167,9 +170,24 @@ export default async function TeacherSubmissionsPage({
                     </td>
                     <td className="px-5 py-4">
                       <Link
-                        className="font-medium underline"
+                        aria-label={`${submission.status === SubmissionStatus.PENDING_REVIEW ? "进入批改" : "查看详情"}：${submission.student.displayName}`}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
                         href={`/teacher/assignments/${assignmentId.data}/submissions/${submission.id}`}
+                        title={
+                          submission.status === SubmissionStatus.PENDING_REVIEW
+                            ? "进入批改"
+                            : "查看提交详情"
+                        }
                       >
+                        {submission.status ===
+                        SubmissionStatus.PENDING_REVIEW ? (
+                          <ClipboardCheck
+                            aria-hidden="true"
+                            className="size-4"
+                          />
+                        ) : (
+                          <Eye aria-hidden="true" className="size-4" />
+                        )}
                         {submission.status === SubmissionStatus.PENDING_REVIEW
                           ? "进入批改"
                           : "查看详情"}
@@ -183,35 +201,15 @@ export default async function TeacherSubmissionsPage({
         )}
 
         {result.pagination.totalPages > 1 ? (
-          <nav aria-label="提交分页" className="flex justify-center gap-3">
-            {query.data.page > 1 ? (
-              <Link
-                className="rounded-md border bg-white px-3 py-2 text-sm"
-                href={pageHref(
-                  assignmentId.data,
-                  query.data,
-                  query.data.page - 1,
-                )}
-              >
-                上一页
-              </Link>
-            ) : null}
-            <span className="px-2 py-2 text-sm text-gray-500">
-              第 {query.data.page} / {result.pagination.totalPages} 页
-            </span>
-            {query.data.page < result.pagination.totalPages ? (
-              <Link
-                className="rounded-md border bg-white px-3 py-2 text-sm"
-                href={pageHref(
-                  assignmentId.data,
-                  query.data,
-                  query.data.page + 1,
-                )}
-              >
-                下一页
-              </Link>
-            ) : null}
-          </nav>
+          <PageIndex
+            ariaLabel="提交分页"
+            hrefForPage={(page) =>
+              pageHref(assignmentId.data, query.data, page)
+            }
+            page={result.pagination.page}
+            summary={`第 ${result.pagination.page} / ${result.pagination.totalPages} 页`}
+            totalPages={result.pagination.totalPages}
+          />
         ) : null}
       </section>
     );

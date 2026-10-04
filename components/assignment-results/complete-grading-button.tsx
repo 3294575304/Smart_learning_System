@@ -41,7 +41,7 @@ export function CompleteGradingButton({ assignmentId, submissionId }: Props) {
   return (
     <div className="space-y-2">
       <button
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         disabled={pending}
         onClick={() => void complete()}
         type="button"

@@ -48,6 +48,7 @@ export default async function QuestionDetailPage({
           </p>
         </div>
         <QuestionActions
+          canCopy={question.canCopy}
           canDelete={question.canDelete}
           canEdit={question.canEdit}
           questionId={question.id}
