@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { courseSummaryCoverage } from "./summary-coverage";
 
 import type { AIProvider } from "@/services/ai/provider";
 import type { QualityReportStatistics } from "@/services/quality-reports/calculation";
@@ -27,6 +28,7 @@ function inputFor(
       courseNo: source.course.courseNo,
       term: source.course.term,
     },
+    syllabus: source.syllabus,
     statistics: {
       participantCount: statistics.participantCount,
       mean: statistics.mean,
@@ -125,6 +127,12 @@ function validateNarrativeDepth(
 ) {
   const length = (value: string) => value.replace(/\s+/gu, "").length;
   const issues: string[] = [];
+  for (const topic of courseSummaryCoverage(narrative.courseSummary)) {
+    if (!topic.covered)
+      issues.push(
+        `课程总结缺少主题：${topic.label}；资料不足时明确说明待补充，不编造结论`,
+      );
+  }
   const prose = [
     narrative.gradeAnalysis,
     narrative.outcomeAnalysis,

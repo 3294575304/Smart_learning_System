@@ -150,9 +150,15 @@ function detailFromRecord(
       automaticScore:
         answer.assignmentQuestion.typeSnapshot === QuestionType.SHORT_ANSWER
           ? null
-          : decimalNumber(answer.score),
+          : answer.assignmentQuestion.typeSnapshot ===
+              QuestionType.PYTHON_PROGRAMMING
+            ? decimalNumber(answer.programmingAttempts[0]?.score ?? null)
+            : decimalNumber(answer.score),
       manualScore:
-        answer.assignmentQuestion.typeSnapshot === QuestionType.SHORT_ANSWER
+        answer.assignmentQuestion.typeSnapshot === QuestionType.SHORT_ANSWER ||
+        (answer.assignmentQuestion.typeSnapshot ===
+          QuestionType.PYTHON_PROGRAMMING &&
+          answer.graderId !== null)
           ? decimalNumber(answer.score)
           : null,
       isCorrect: answer.isCorrect,
@@ -279,8 +285,10 @@ export async function listTeacherAssignmentSubmissions(
         decimalNumber(submission.maxScore) ?? assignment.totalPoints.toNumber(),
       requiresManualReview: submission.answers.some(
         (answer) =>
-          answer.assignmentQuestion.typeSnapshot ===
-            QuestionType.SHORT_ANSWER &&
+          (answer.assignmentQuestion.typeSnapshot ===
+            QuestionType.SHORT_ANSWER ||
+            answer.assignmentQuestion.typeSnapshot ===
+              QuestionType.PYTHON_PROGRAMMING) &&
           answer.gradingStatus === GradingStatus.MANUAL_REVIEW_REQUIRED,
       ),
     })),
@@ -309,6 +317,7 @@ export async function saveManualAnswerGrade(
   submissionId: string,
   answerId: string,
   input: ManualGradeAnswerData,
+  auditContext: AuditRequestContext = { ipAddress: null, userAgent: null },
 ): Promise<TeacherSubmissionDetail> {
   await runAssignmentSerializable(async (transaction) => {
     const answer = await transaction.studentAnswer.findFirst({
@@ -323,6 +332,14 @@ export async function saveManualAnswerGrade(
       select: {
         id: true,
         gradingStatus: true,
+        score: true,
+        teacherFeedback: true,
+        programmingAttempts: {
+          where: { kind: "FORMAL_JUDGE" },
+          orderBy: { revisionNumber: "desc" },
+          take: 1,
+          select: { id: true, status: true, score: true },
+        },
         assignmentQuestion: {
           select: { typeSnapshot: true, points: true },
         },
@@ -330,7 +347,23 @@ export async function saveManualAnswerGrade(
       },
     });
     if (!answer) throw new ResourceNotFoundError("待批改答案不存在");
-    if (answer.assignmentQuestion.typeSnapshot !== QuestionType.SHORT_ANSWER) {
+    const isProgramming =
+      answer.assignmentQuestion.typeSnapshot ===
+      QuestionType.PYTHON_PROGRAMMING;
+    if (
+      isProgramming &&
+      (answer.programmingAttempts[0]?.status !== "SUCCEEDED" ||
+        !input.feedback?.trim())
+    ) {
+      throw new AssignmentOperationError(
+        "编程题须先完成判题，复核给分必须填写评分依据",
+        400,
+      );
+    }
+    if (
+      answer.assignmentQuestion.typeSnapshot !== QuestionType.SHORT_ANSWER &&
+      !isProgramming
+    ) {
       throw new AssignmentOperationError(
         "客观题自动得分不能通过人工批改接口修改",
       );
@@ -342,6 +375,12 @@ export async function saveManualAnswerGrade(
       throw new AssignmentOperationError("人工得分不能超过当前题目分值", 400);
     }
 
+    if (
+      answer.gradingStatus === GradingStatus.GRADED &&
+      answer.score?.equals(input.score) &&
+      (answer.teacherFeedback ?? "") === (input.feedback || "")
+    )
+      return;
     const now = new Date();
     const updated = await transaction.studentAnswer.updateMany({
       where: {
@@ -366,6 +405,29 @@ export async function saveManualAnswerGrade(
     });
     if (updated.count !== 1) {
       throw new AssignmentOperationError("评分状态已发生变化，请刷新后重试");
+    }
+    if (isProgramming) {
+      await writeTeachingAuditLog(transaction, {
+        actorId: teacherId,
+        action: AuditAction.SUBMISSION_GRADING_COMPLETED,
+        targetType: AuditTargetType.SUBMISSION,
+        targetId: submissionId,
+        summary: "编程题部分给分复核（保留自动判题原分）",
+        beforeData: {
+          answerId: answer.id,
+          score: decimalNumber(answer.score),
+          attemptId: answer.programmingAttempts[0]?.id ?? null,
+          automaticScore: decimalNumber(
+            answer.programmingAttempts[0]?.score ?? null,
+          ),
+        },
+        afterData: {
+          answerId: answer.id,
+          score: input.score,
+          reason: input.feedback,
+        },
+        context: auditContext,
+      });
     }
     await appendAssessmentLearningEventsAndProjectEvidence(transaction, [
       answer.id,
@@ -449,7 +511,8 @@ export async function completeSubmissionGrading(
           !answer ||
           !latestAttempt ||
           latestAttempt.status !== "SUCCEEDED" ||
-          answer.gradingStatus !== GradingStatus.AUTO_GRADED ||
+          (answer.gradingStatus !== GradingStatus.AUTO_GRADED &&
+            answer.gradingStatus !== GradingStatus.GRADED) ||
           answer.score === null ||
           answer.score.lt(0) ||
           answer.score.gt(question.points)

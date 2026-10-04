@@ -10,16 +10,16 @@ import Link from "next/link";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import type { AdminQuestionListQuery } from "@/services/admin/questions/schemas";
 import type { AdminQuestionCreatorOption } from "@/services/admin/questions/types";
-import type { KnowledgePointOption } from "@/services/questions/types";
+import type { QuestionImportCourseOption } from "@/services/question-import/types";
 
 export function QuestionGovernanceFilters({
   query,
   creators,
-  knowledgePoints,
+  courses,
 }: {
   query: AdminQuestionListQuery;
   creators: AdminQuestionCreatorOption[];
-  knowledgePoints: KnowledgePointOption[];
+  courses: QuestionImportCourseOption[];
 }) {
   return (
     <form className="space-y-4 rounded-xl border bg-white p-4" method="get">
@@ -62,17 +62,17 @@ export function QuestionGovernanceFilters({
             </select>
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-medium text-gray-600">知识点</span>
+            <span className="text-xs font-medium text-gray-600">课程分类</span>
             <select
               className="w-full rounded-md border bg-white px-3 py-2 text-sm"
-              defaultValue={query.knowledgePointId ?? ""}
-              name="knowledgePointId"
+              defaultValue={query.courseId ?? ""}
+              name="courseId"
               onChange={(event) => event.currentTarget.form?.requestSubmit()}
             >
-              <option value="">全部知识点</option>
-              {knowledgePoints.map((point) => (
+              <option value="">全部课程</option>
+              {courses.map((point) => (
                 <option key={point.id} value={point.id}>
-                  {point.name}（{point.code}）
+                  {point.name}（{point.courseNo}）
                 </option>
               ))}
             </select>

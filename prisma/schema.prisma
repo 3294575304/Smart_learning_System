@@ -19,6 +19,10 @@ enum UserStatus {
 }
 
 enum AuditAction {
+  COURSE_ROSTER_UPDATED
+  SUBMISSION_ATTACHMENT_UPLOADED
+  SUBMISSION_ATTACHMENT_DOWNLOADED
+  SUBMISSION_ATTACHMENT_DELETED
   USER_CREATED
   USER_UPDATED
   USER_ROLE_CHANGED
@@ -37,6 +41,7 @@ enum AuditAction {
   QUESTION_MADE_PUBLIC
   QUESTION_MADE_PRIVATE
   QUESTION_DISABLED
+  QUESTION_BULK_IMPORTED
   CLASSROOM_CLOSED_BY_ADMIN
   CLASSROOM_DISSOLVED
   COURSE_TEMPLATE_CREATED
@@ -691,6 +696,8 @@ model User {
   createdRecommendationPolicies      CourseRecommendationPolicyRevision[] @relation("CourseRecommendationPolicyCreatedBy")
   courseRecommendationCycles         CourseRecommendationCycle[]          @relation("CourseRecommendationStudent")
   recommendationConceptEvidences     RecommendationConceptEvidence[]      @relation("RecommendationConceptEvidenceStudent")
+  questionFavorites                  StudentQuestionFavorite[]
+  learningConversations              StudentLearningConversation[]
   selfReflections                    StudentSelfReflection[]              @relation("StudentSelfReflectionStudent")
   requestedQualityReports            CourseQualityReport[]                @relation("QualityReportRequestedBy")
   reviewedQualityReports             CourseQualityReport[]                @relation("QualityReportReviewedBy")
@@ -926,12 +933,13 @@ model StudentIdentity {
 }
 
 model StudentIdentityClassroomAssignment {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   studentIdentityId String
   classroomId       String
   sourceBatchId     String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  withdrawnAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   studentIdentity StudentIdentity     @relation(fields: [studentIdentityId], references: [id], onDelete: Restrict)
   classroom       Classroom           @relation(fields: [classroomId], references: [id], onDelete: Restrict)
@@ -959,6 +967,7 @@ model CourseTemplate {
 }
 
 model Course {
+  categorizedQuestions                    Question[]   @relation("QuestionCategoryCourse")
   id                                      String       @id @default(cuid())
   templateId                              String
   teacherId                               String
@@ -1016,6 +1025,8 @@ model Course {
   currentRecommendationPolicyRevision   CourseRecommendationPolicyRevision?   @relation("CurrentCourseRecommendationPolicy", fields: [currentRecommendationPolicyRevisionId], references: [id], onDelete: SetNull)
   recommendationCycles                  CourseRecommendationCycle[]
   courseRecommendationConceptSnapshots  CourseRecommendationConceptSnapshot[]
+  questionFavorites                     StudentQuestionFavorite[]
+  learningConversations                 StudentLearningConversation[]
   selfReflections                       StudentSelfReflection[]
   qualityReports                        CourseQualityReport[]
   courseSurveys                         CourseSurvey[]
@@ -2136,6 +2147,7 @@ model Classroom {
   qualityReports             CourseQualityReport[]
   courseSurveys              CourseSurvey[]
   recommendationCycles       CourseRecommendationCycle[]
+  teachingProgressRevisions  CourseTeachingProgressRevision[]
 
   @@index([teacherId, status])
   @@index([courseId, status])
@@ -2348,6 +2360,9 @@ model KnowledgePoint {
 }
 
 model Question {
+  categoryCourseId  String?
+  categoryCourse    Course?            @relation("QuestionCategoryCourse", fields: [categoryCourseId], references: [id], onDelete: Restrict)
+  isAssignmentOnly  Boolean            @default(false)
   id                String             @id @default(cuid())
   creatorId         String
   title             String
@@ -2367,6 +2382,7 @@ model Question {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
+  studentFavorites                  StudentQuestionFavorite[]
   creator                           User                                  @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
   options                           QuestionOption[]
   knowledgePointLinks               QuestionKnowledgePoint[]
@@ -2385,6 +2401,7 @@ model Question {
   recommendationProgrammingAttempts ProgrammingAttempt[]                  @relation("RecommendationProgrammingQuestion")
   aiQuestionMappingCandidates       AIQuestionMappingCandidate[]
 
+  @@index([categoryCourseId, status, deletedAt])
   @@index([creatorId, status, deletedAt, createdAt])
   @@index([visibility, status, deletedAt, type, difficulty])
   @@index([type, difficulty])
@@ -2570,6 +2587,8 @@ model QuestionKnowledgePoint {
 }
 
 model Assignment {
+  submissionTask    Json?
+  allowAttachments  Boolean          @default(false)
   id                String           @id @default(cuid())
   classroomId       String
   teacherId         String
@@ -2599,23 +2618,24 @@ model Assignment {
 }
 
 model AssignmentQuestion {
-  id                        String       @id @default(cuid())
+  submissionAttachments     SubmissionAttachment[]
+  id                        String                 @id @default(cuid())
   assignmentId              String
   questionId                String
   sortOrder                 Int
-  points                    Decimal      @db.Decimal(8, 2)
+  points                    Decimal                @db.Decimal(8, 2)
   titleSnapshot             String
-  contentSnapshot           String       @db.Text
+  contentSnapshot           String                 @db.Text
   typeSnapshot              QuestionType
   difficultySnapshot        Int
-  explanationSnapshot       String       @db.Text
+  explanationSnapshot       String                 @db.Text
   correctBooleanSnapshot    Boolean?
-  referenceAnswerSnapshot   String?      @db.Text
-  acceptableAnswersSnapshot String[]     @default([])
-  isCaseSensitiveSnapshot   Boolean      @default(false)
+  referenceAnswerSnapshot   String?                @db.Text
+  acceptableAnswersSnapshot String[]               @default([])
+  isCaseSensitiveSnapshot   Boolean                @default(false)
   gradingConfigSnapshot     Json?
-  createdAt                 DateTime     @default(now())
-  updatedAt                 DateTime     @updatedAt
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
 
   assignment                Assignment                           @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   sourceQuestion            Question                             @relation(fields: [questionId], references: [id], onDelete: Restrict)
@@ -2808,25 +2828,26 @@ model AssignmentQuestionConceptSnapshot {
 }
 
 model Submission {
-  id             String           @id @default(cuid())
+  attachments    SubmissionAttachment[]
+  id             String                 @id @default(cuid())
   assignmentId   String
   studentId      String
-  attemptNumber  Int              @default(1)
-  idempotencyKey String           @unique
-  status         SubmissionStatus @default(IN_PROGRESS)
-  startedAt      DateTime         @default(now())
+  attemptNumber  Int                    @default(1)
+  idempotencyKey String                 @unique
+  status         SubmissionStatus       @default(IN_PROGRESS)
+  startedAt      DateTime               @default(now())
   submittedAt    DateTime?
   gradedAt       DateTime?
   publishedAt    DateTime?
   withdrawnAt    DateTime?
-  score          Decimal?         @db.Decimal(10, 2)
-  maxScore       Decimal?         @db.Decimal(10, 2)
-  percentage     Decimal?         @db.Decimal(5, 2)
-  feedback       String?          @db.Text
-  saveVersion    Int              @default(0)
+  score          Decimal?               @db.Decimal(10, 2)
+  maxScore       Decimal?               @db.Decimal(10, 2)
+  percentage     Decimal?               @db.Decimal(5, 2)
+  feedback       String?                @db.Text
+  saveVersion    Int                    @default(0)
   lastSavedAt    DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   assignment             Assignment                     @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   student                User                           @relation("SubmissionStudent", fields: [studentId], references: [id], onDelete: Restrict)
@@ -3156,15 +3177,17 @@ model StudentCourseConceptMasteryEntry {
 }
 
 model CourseTeachingProgressRevision {
-  id               String   @id @default(cuid())
+  classroomId      String?
+  classroom        Classroom? @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  id               String     @id @default(cuid())
   courseId         String
   graphVersionId   String
   createdById      String
   revisionNumber   Int
-  inputFingerprint String   @db.Char(64)
-  note             String?  @db.VarChar(500)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  inputFingerprint String     @db.Char(64)
+  note             String?    @db.VarChar(500)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   course               Course                          @relation("CourseTeachingProgress", fields: [courseId], references: [id], onDelete: Restrict)
   currentForCourse     Course?                         @relation("CurrentCourseTeachingProgress")
@@ -3174,6 +3197,7 @@ model CourseTeachingProgressRevision {
   recommendationCycles CourseRecommendationCycle[]
 
   @@unique([courseId, revisionNumber])
+  @@index([classroomId, revisionNumber])
   @@index([courseId, createdAt])
   @@index([courseId, inputFingerprint])
   @@index([graphVersionId])
@@ -3234,7 +3258,7 @@ model CourseRecommendationCycle {
   graphVersionId             String
   profileSnapshotId          String?
   masteryRevisionId          String?
-  teachingProgressRevisionId String
+  teachingProgressRevisionId String?
   policyRevisionId           String
   cycleKey                   String    @unique @db.VarChar(191)
   inputFingerprint           String    @db.Char(64)
@@ -3250,7 +3274,7 @@ model CourseRecommendationCycle {
   graphVersion     PublishedKnowledgeGraphVersion       @relation(fields: [graphVersionId], references: [id], onDelete: Restrict)
   profileSnapshot  LearnerProfileSnapshot?              @relation(fields: [profileSnapshotId], references: [id], onDelete: Restrict)
   masteryRevision  StudentCourseConceptMasteryRevision? @relation(fields: [masteryRevisionId], references: [id], onDelete: Restrict)
-  teachingProgress CourseTeachingProgressRevision       @relation(fields: [teachingProgressRevisionId], references: [id], onDelete: Restrict)
+  teachingProgress CourseTeachingProgressRevision?      @relation(fields: [teachingProgressRevisionId], references: [id], onDelete: Restrict)
   policyRevision   CourseRecommendationPolicyRevision   @relation(fields: [policyRevisionId], references: [id], onDelete: Restrict)
   recommendations  PersonalizedRecommendation[]
 
@@ -3528,4 +3552,66 @@ model AITutoringRecord {
   @@index([studentId, questionId, createdAt])
   @@index([status, createdAt])
   @@index([knowledgePointId, createdAt])
+}
+
+model StudentLearningConversation {
+  id             String    @id @default(cuid())
+  studentId      String
+  courseId       String
+  /// COURSE（直接问答）、CHAPTER 或 KNOWLEDGE_POINT；SQL CHECK 约束保持同步。
+  topicKind      String    @db.VarChar(30)
+  topicId        String
+  topicName      String    @db.VarChar(300)
+  title          String    @db.VarChar(120)
+  firstRequestId String    @unique
+  turns          Json
+  revision       Int       @default(0)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  student        User      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  course         Course    @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@index([studentId, courseId, deletedAt, updatedAt], map: "StudentLearningConversation_studentId_courseId_deletedAt_upd_id")
+}
+
+model StudentQuestionFavorite {
+  id                 String       @id @default(cuid())
+  studentId          String
+  questionId         String
+  courseId           String?
+  sourceKind         String       @db.VarChar(30)
+  sourceId           String
+  titleSnapshot      String       @db.Text
+  typeSnapshot       QuestionType
+  courseNameSnapshot String?
+  knowledgePoints    Json
+  note               String       @default("") @db.Text
+  revision           Int          @default(0)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  student            User         @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  question           Question     @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  course             Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, questionId])
+  @@index([studentId, courseId, createdAt], map: "StudentQuestionFavorite_student_course_created_idx")
+}
+
+model SubmissionAttachment {
+  id                   String             @id @default(cuid())
+  submissionId         String
+  assignmentQuestionId String
+  originalName         String             @db.VarChar(200)
+  mimeType             String             @db.VarChar(100)
+  sizeBytes            Int
+  storageKey           String             @unique
+  sha256               String             @db.Char(64)
+  deletedAt            DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  submission           Submission         @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  assignmentQuestion   AssignmentQuestion @relation(fields: [assignmentQuestionId], references: [id], onDelete: Restrict)
+
+  @@index([submissionId, assignmentQuestionId, deletedAt])
 }

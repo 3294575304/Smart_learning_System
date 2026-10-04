@@ -1,16 +1,16 @@
 import { NotificationPriority, NotificationType } from "@prisma/client";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireAuthenticatedPageUser } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { notificationIdSchema } from "@/services/notifications/schemas";
-import {
-  getUserNotification,
-  markNotificationRead,
-} from "@/services/notifications/service";
+import { getUserNotification } from "@/services/notifications/service";
 import { resolveNotificationDestination } from "@/components/notifications/presenters";
+
+import { NotificationLink } from "@/components/notifications/notification-link";
+import { NotificationReadStatus } from "@/components/notifications/notification-read-status";
 
 interface NotificationPageProps {
   params: Promise<{ notificationId: string }>;
@@ -49,21 +49,21 @@ export default async function NotificationDetailPage({
   if (!parsedId.success) notFound();
 
   try {
-    let notification = await getUserNotification(user.id, parsedId.data);
-    if (!notification.readAt) {
-      const readResult = await markNotificationRead(user.id, notification.id);
-      notification = { ...notification, readAt: readResult.readAt };
-    }
+    const notification = await getUserNotification(user.id, parsedId.data);
 
-    const destination = resolveNotificationDestination(
-      notification.type,
-      notification.actionUrl,
-    );
+    const expired =
+      notification.expiresAt !== null && notification.expiresAt <= new Date();
+    const destination = expired
+      ? null
+      : resolveNotificationDestination(
+          notification.type,
+          notification.actionUrl,
+        );
 
     return (
       <section className="mx-auto max-w-3xl space-y-5">
         <Link
-          className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 transition hover:text-gray-950"
+          className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-50"
           href="/notifications"
         >
           <ArrowLeft aria-hidden="true" className="size-4" />
@@ -83,7 +83,10 @@ export default async function NotificationDetailPage({
             <time className="text-gray-500">
               {formatTime(notification.createdAt)}
             </time>
-            <span className="ml-auto font-medium text-gray-600">已读</span>
+            <NotificationReadStatus
+              id={notification.id}
+              alreadyRead={!!notification.readAt}
+            />
           </div>
 
           <h1 className="mt-5 text-xl font-semibold text-gray-950">
@@ -94,15 +97,14 @@ export default async function NotificationDetailPage({
           </p>
         </article>
 
+        {expired && (
+          <p className="rounded-lg border bg-amber-50 p-4 text-sm text-amber-800">
+            该通知已过期，内容仅供回顾。请从课程或作业列表查看最新状态。
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           {destination && destination !== "/notifications" ? (
-            <Link
-              className="inline-flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
-              href={destination}
-            >
-              打开相关内容
-              <ExternalLink aria-hidden="true" className="size-4" />
-            </Link>
+            <NotificationLink href={destination} label="打开相关内容" />
           ) : null}
           <Link
             className="inline-flex items-center rounded-md border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"

@@ -25,6 +25,8 @@ const source: QualityReportSourceSnapshot = {
     majorClass: "一班",
     college: "学院",
     major: "专业",
+    teachingMethodDetails: "",
+    scoringCriteria: "",
   },
   classroom: { id: null, name: "一班" },
   sourceType: QualityReportSourceType.PLATFORM,
@@ -69,7 +71,7 @@ test("报告 AI 只接收去标识化聚合并接受严格结构文字", async (
         outcomeDetails: [],
         studentEvaluation: "学生评价",
         courseSummary:
-          "本班学生总评成绩整体较好。后续教学应在巩固课程基础知识的同时，结合具体作答情况安排综合任务与分层辅导，使学生能够及时发现学习中的问题，并通过订正和练习逐步提高独立完成任务的能力。",
+          "1. 教学内容与授课方式对课程目标的支撑需结合课堂资料核实。2. 考核方式与教学大纲的一致性、目标对应关系及评分标准待补充确认。3. 当前缺少课程目标达成数据，不作达成结论。4. 学生评价问卷未提供，暂不能进行客观达成与学生自评比较。",
         improvementMeasures:
           "1. 结合具体作答情况整理典型错误，安排集中讲评，并让学生独立完成订正。2. 围绕课程学习要求设计递进练习，为基础不同的学生提供相应的练习材料。3. 增加答疑与反馈机会，帮助学生解决独立练习时遇到的问题。",
       };
@@ -98,6 +100,26 @@ test("报告 AI 连续三次输出无效时保留确定性基础报告", async (
   assert.equal(result.fallbackUsed, true);
   assert.equal(result.errorCode, "AI_NARRATIVE_INVALID");
   assert.deepEqual(result.output, baseline);
+});
+
+test("课程总结遗漏四项主题时重试并安全降级，不因字数足够接受空泛总结", async () => {
+  let attempts = 0;
+  const result = await executeQualityReportNarrative(
+    provider(() => {
+      attempts += 1;
+      return {
+        ...baseline,
+        courseSummary:
+          "本班学生整体成绩较好。后续教学应巩固基础知识并安排综合任务与分层辅导，使学生能够及时发现学习中的问题，通过订正和练习逐步提高独立完成任务的能力，并继续开展针对性练习。",
+      };
+    }),
+    source,
+    statistics,
+    baseline,
+  );
+  assert.equal(attempts, 3);
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.output.courseSummary, baseline.courseSummary);
 });
 
 test(
@@ -275,7 +297,11 @@ test("小样本问卷不发送细分数据，也不接受模型编造的学生�
     draft,
   );
   assert.equal(result.fallbackUsed, false);
-  assert.doesNotMatch(inputText, /不应发送|教学内容/u);
+  assert.doesNotMatch(inputText, /不应发送/u);
+  assert.deepEqual(
+    (JSON.parse(inputText) as QualityReportAIInput).survey?.dimensions,
+    [],
+  );
   assert.equal(
     result.output.studentEvaluation,
     "问卷反馈较少，暂不作总体评价。",

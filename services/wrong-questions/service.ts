@@ -1,3 +1,4 @@
+import { reviewChapterConcepts } from "@/services/review/chapters";
 import {
   GradingStatus,
   MembershipStatus,
@@ -13,6 +14,7 @@ import {
 } from "@/services/assignments/answer-presentation";
 import { gradeAnswer } from "@/services/assignments/grading";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { getStudentCourseContext } from "@/services/courses/student-access";
 import { WrongQuestionOperationError } from "@/services/wrong-questions/errors";
 import {
   type WrongQuestionListQuery,
@@ -58,12 +60,17 @@ const wrongQuestionInclude = Prisma.validator<Prisma.WrongQuestionInclude>()({
             select: {
               id: true,
               name: true,
+              courseId: true,
+              course: { select: { id: true, name: true } },
             },
           },
         },
       },
       knowledgePointSnapshots: {
         orderBy: [{ nameSnapshot: "asc" }, { knowledgePointId: "asc" }],
+      },
+      conceptSnapshots: {
+        select: { conceptId: true, resolvedNode: { select: { name: true } } },
       },
       optionSnapshots: {
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
@@ -76,6 +83,12 @@ const wrongQuestionInclude = Prisma.validator<Prisma.WrongQuestionInclude>()({
         select: {
           id: true,
           studentId: true,
+          courseCycle: {
+            select: {
+              courseId: true,
+              course: { select: { id: true, name: true } },
+            },
+          },
           conceptSnapshots: {
             orderBy: [{ bindingType: "asc" }, { createdAt: "asc" }],
             select: {
@@ -95,6 +108,7 @@ const wrongQuestionInclude = Prisma.validator<Prisma.WrongQuestionInclude>()({
             select: {
               id: true,
               name: true,
+              code: true,
             },
           },
         },
@@ -204,17 +218,6 @@ function filteredWhere(
             },
           },
         },
-        {
-          recommendationAnswer: {
-            is: {
-              recommendation: {
-                conceptSnapshots: {
-                  some: { conceptId: query.knowledgePointId },
-                },
-              },
-            },
-          },
-        },
       ],
     });
   }
@@ -231,6 +234,29 @@ function filteredWhere(
     });
   }
 
+  if (query.courseId) {
+    const courseId = query.courseId === "LEGACY" ? null : query.courseId;
+    filters.push({
+      OR: [
+        {
+          assignmentQuestion: {
+            is: { assignment: { classroom: { courseId } } },
+          },
+        },
+        {
+          recommendationAnswer: {
+            is: {
+              recommendation:
+                courseId === null
+                  ? { courseCycleId: null }
+                  : { courseCycle: { is: { courseId } } },
+            },
+          },
+        },
+      ],
+    });
+  }
+
   if (query.knowledgePointId) {
     filters.push({
       OR: [
@@ -239,6 +265,24 @@ function filteredWhere(
             is: {
               knowledgePointSnapshots: {
                 some: { knowledgePointId: query.knowledgePointId },
+              },
+            },
+          },
+        },
+        {
+          assignmentQuestion: {
+            is: {
+              conceptSnapshots: { some: { conceptId: query.knowledgePointId } },
+            },
+          },
+        },
+        {
+          recommendationAnswer: {
+            is: {
+              recommendation: {
+                conceptSnapshots: {
+                  some: { conceptId: query.knowledgePointId },
+                },
               },
             },
           },
@@ -359,6 +403,15 @@ function formatRecommendationCorrectAnswer(
 function assignmentKnowledgePoints(
   record: WrongQuestionRecord,
 ): WrongQuestionKnowledgePoint[] {
+  const formal =
+    record.assignmentQuestion?.conceptSnapshots.filter(
+      (snapshot) => snapshot.resolvedNode,
+    ) ?? [];
+  if (formal.length)
+    return formal.map((snapshot) => ({
+      id: snapshot.conceptId,
+      name: snapshot.resolvedNode?.name ?? "历史知识点",
+    }));
   return (
     record.assignmentQuestion?.knowledgePointSnapshots.map((item) => ({
       id: item.knowledgePointId,
@@ -379,10 +432,12 @@ function recommendationKnowledgePoints(
     }));
   }
   return (
-    record.sourceQuestion?.knowledgePointLinks.map((item) => ({
-      id: item.knowledgePoint.id,
-      name: item.knowledgePoint.name,
-    })) ?? []
+    record.sourceQuestion?.knowledgePointLinks
+      .filter((item) => item.knowledgePoint.code !== "PY-PROGRAMMING")
+      .map((item) => ({
+        id: item.knowledgePoint.id,
+        name: item.knowledgePoint.name,
+      })) ?? []
   );
 }
 
@@ -410,6 +465,7 @@ function listItemFromRecord(
       sourceLabel: question.assignment.title,
       sourceRecordId: record.studentAnswer.submission.id,
       classroom: question.assignment.classroom,
+      course: question.assignment.classroom.course,
     };
   }
 
@@ -435,6 +491,8 @@ function listItemFromRecord(
       sourceLabel: "推荐练习",
       sourceRecordId: record.recommendationAnswer.recommendation.id,
       classroom: null,
+      course:
+        record.recommendationAnswer.recommendation.courseCycle?.course ?? null,
     };
   }
 
@@ -490,24 +548,59 @@ async function loadOwnedVisibleWrongQuestion(
   return record;
 }
 
-function filterOptionsFromRecords(records: WrongQuestionRecord[]) {
+function recordCourse(record: WrongQuestionRecord) {
+  return (
+    record.assignmentQuestion?.assignment.classroom.course ??
+    record.recommendationAnswer?.recommendation.courseCycle?.course ??
+    null
+  );
+}
+
+function filterOptionsFromRecords(
+  records: WrongQuestionRecord[],
+  courseId?: string,
+  enrolledCourses: Array<{ id: string; name: string }> = [],
+) {
   const classroomMap = new Map<string, string>();
   const knowledgePointMap = new Map<string, string>();
+  const courseMap = new Map<string, string>(
+    enrolledCourses.map((course) => [course.id, course.name]),
+  );
+  for (const record of records) {
+    const course = recordCourse(record);
+    courseMap.set(
+      course?.id ?? "LEGACY",
+      course?.name ?? "历史错题（未归属课程）",
+    );
+  }
 
   for (const record of records) {
+    const course = recordCourse(record);
+    if (courseId && (course?.id ?? "LEGACY") !== courseId) continue;
     if (record.assignmentQuestion) {
       const classroom = record.assignmentQuestion.assignment.classroom;
       classroomMap.set(classroom.id, classroom.name);
       for (const item of assignmentKnowledgePoints(record)) {
-        knowledgePointMap.set(item.id, item.name);
+        if (
+          !courseMap.has(item.id) &&
+          ![...courseMap.values()].includes(item.name)
+        )
+          knowledgePointMap.set(item.id, item.name);
       }
     }
     for (const item of recommendationKnowledgePoints(record)) {
-      knowledgePointMap.set(item.id, item.name);
+      if (
+        !courseMap.has(item.id) &&
+        ![...courseMap.values()].includes(item.name)
+      )
+        knowledgePointMap.set(item.id, item.name);
     }
   }
 
   return {
+    courses: [...courseMap.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "zh-CN")),
     classrooms: [...classroomMap.entries()]
       .map(([id, name]) => ({ id, name }))
       .sort((left, right) => left.name.localeCompare(right.name, "zh-CN")),
@@ -524,41 +617,108 @@ export async function listWrongQuestions(
 ): Promise<WrongQuestionListResult> {
   const query = wrongQuestionListQuerySchema.parse(rawQuery);
   const visibleWhere = baseVisibleWhere(studentId);
+  const courseWhere = filteredWhere(
+    studentId,
+    { courseId: query.courseId, page: 1, pageSize: query.pageSize },
+    now,
+  );
+  if (query.courseId && query.courseId !== "LEGACY") {
+    // 自己已公开的历史练习记录仍可按课程筛选；新练习另行校验有效成员身份。
+    const ownsHistory = await prisma.wrongQuestion.count({
+      where: courseWhere,
+    });
+    if (!ownsHistory) await getStudentCourseContext(studentId, query.courseId);
+  }
   const where = filteredWhere(studentId, query, now);
+  let chapterConceptIds: string[] | undefined;
+  if (query.chapterId) {
+    const conceptIds = await reviewChapterConcepts(
+      studentId,
+      query.courseId,
+      query.chapterId,
+    );
+    chapterConceptIds = conceptIds;
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      {
+        OR: [
+          {
+            assignmentQuestion: {
+              is: {
+                conceptSnapshots: { some: { conceptId: { in: conceptIds } } },
+              },
+            },
+          },
+          {
+            recommendationAnswer: {
+              is: {
+                recommendation: {
+                  conceptSnapshots: { some: { conceptId: { in: conceptIds } } },
+                },
+              },
+            },
+          },
+        ],
+      },
+    ];
+  }
 
-  const [records, total, stateCounts, optionRecords] = await Promise.all([
-    prisma.wrongQuestion.findMany({
-      where,
-      include: wrongQuestionInclude,
-      orderBy: [{ lastWrongAt: "desc" }, { id: "desc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-    }),
-    prisma.wrongQuestion.count({ where }),
-    prisma.wrongQuestion.groupBy({
-      by: ["isResolved"],
-      where: visibleWhere,
-      _count: { _all: true },
-    }),
-    prisma.wrongQuestion.findMany({
-      where: visibleWhere,
-      include: wrongQuestionInclude,
-      orderBy: [{ id: "asc" }],
-    }),
-  ]);
+  const [records, total, stateCounts, optionRecords, enrolledCourses] =
+    await Promise.all([
+      prisma.wrongQuestion.findMany({
+        where,
+        include: wrongQuestionInclude,
+        orderBy: [{ lastWrongAt: "desc" }, { id: "desc" }],
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+      prisma.wrongQuestion.count({ where }),
+      prisma.wrongQuestion.groupBy({
+        by: ["isResolved"],
+        where: courseWhere,
+        _count: { _all: true },
+      }),
+      prisma.wrongQuestion.findMany({
+        where: visibleWhere,
+        include: wrongQuestionInclude,
+        orderBy: [{ id: "asc" }],
+      }),
+      prisma.course.findMany({
+        where: {
+          classrooms: {
+            some: {
+              memberships: {
+                some: { studentId, status: MembershipStatus.ACTIVE },
+              },
+            },
+          },
+        },
+        select: { id: true, name: true },
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+      }),
+    ]);
 
   const mastered =
     stateCounts.find((item) => item.isResolved)?._count._all ?? 0;
   const unmastered =
     stateCounts.find((item) => !item.isResolved)?._count._all ?? 0;
 
+  const options = filterOptionsFromRecords(
+    optionRecords,
+    query.courseId,
+    enrolledCourses,
+  );
+  if (chapterConceptIds)
+    options.knowledgePoints = options.knowledgePoints.filter((point) =>
+      chapterConceptIds.includes(point.id),
+    );
   return {
     summary: {
       total: mastered + unmastered,
       mastered,
       unmastered,
     },
-    filterOptions: filterOptionsFromRecords(optionRecords),
+    filterOptions: options,
     items: records.map(listItemFromRecord),
     pagination: {
       page: query.page,
@@ -736,4 +896,204 @@ export async function practiceWrongQuestion(
       result.gradingStatus === GradingStatus.AUTO_GRADED &&
       result.isCorrect === true,
   };
+}
+
+export async function getReviewWrongStates(
+  studentId: string,
+  questionIds: string[],
+) {
+  const records = await prisma.wrongQuestion.findMany({
+    where: {
+      ...baseVisibleWhere(studentId),
+      OR: [
+        { questionId: { in: questionIds } },
+        { assignmentQuestion: { is: { questionId: { in: questionIds } } } },
+      ],
+    },
+    select: {
+      id: true,
+      questionId: true,
+      isResolved: true,
+      assignmentQuestion: { select: { questionId: true } },
+    },
+    orderBy: { lastWrongAt: "desc" },
+  });
+  const result = new Map<string, { id: string; isMastered: boolean }>();
+  for (const row of records) {
+    const id = row.assignmentQuestion?.questionId ?? row.questionId;
+    if (!id) continue;
+    const previous = result.get(id);
+    if (!previous || (previous.isMastered && !row.isResolved))
+      result.set(id, { id: row.id, isMastered: row.isResolved });
+  }
+  return result;
+}
+
+/** 汇总全部可见记录，分页、搜索和掌握筛选不改变课程分析口径。 */
+export async function summarizeWrongCourses(
+  studentId: string,
+  selectedCourseId?: string,
+) {
+  const records = await prisma.wrongQuestion.findMany({
+    where: baseVisibleWhere(studentId),
+    select: {
+      id: true,
+      questionId: true,
+      isResolved: true,
+      assignmentQuestion: {
+        select: {
+          assignment: {
+            select: {
+              classroom: {
+                select: { course: { select: { id: true, name: true } } },
+              },
+            },
+          },
+          conceptSnapshots: {
+            select: {
+              conceptId: true,
+              resolvedNode: { select: { name: true } },
+            },
+          },
+        },
+      },
+      recommendationAnswer: {
+        select: {
+          recommendation: {
+            select: {
+              courseCycle: {
+                select: { course: { select: { id: true, name: true } } },
+              },
+              conceptSnapshots: {
+                select: {
+                  conceptId: true,
+                  resolvedNode: { select: { name: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  const groups = new Map<
+    string,
+    { courseId: string; name: string; records: typeof records }
+  >();
+  for (const record of records) {
+    const course =
+      record.assignmentQuestion?.assignment.classroom.course ??
+      record.recommendationAnswer?.recommendation.courseCycle?.course;
+    if (!course || (selectedCourseId && selectedCourseId !== course.id))
+      continue;
+    const group = groups.get(course.id) ?? {
+      courseId: course.id,
+      name: course.name,
+      records: [],
+    };
+    group.records.push(record);
+    groups.set(course.id, group);
+  }
+  return Promise.all(
+    [...groups.values()].map(async (group) => {
+      const chapters = await import("@/services/review/chapters").then(
+        (module) => module.listReviewChapters(studentId, group.courseId),
+      );
+      const classrooms = await prisma.classroom.findMany({
+        where: {
+          courseId: group.courseId,
+          memberships: { some: { studentId, status: "ACTIVE" } },
+        },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      });
+      const unique = new Map<string, typeof records>();
+      for (const record of group.records) {
+        const key = record.questionId ?? record.id;
+        unique.set(key, [...(unique.get(key) ?? []), record]);
+      }
+      const pending = [...unique.values()].filter((items) =>
+        items.some((item) => !item.isResolved),
+      );
+      const knowledgePointCounts = new Map<
+        string,
+        { id: string; name: string; questionIds: Set<string> }
+      >();
+      for (const items of pending) {
+        const questionId = items[0]?.questionId ?? items[0]?.id;
+        for (const item of items) {
+          const snapshots =
+            item.assignmentQuestion?.conceptSnapshots ??
+            item.recommendationAnswer?.recommendation.conceptSnapshots ??
+            [];
+          for (const snapshot of snapshots) {
+            if (
+              !chapters.some((chapter) =>
+                chapter.conceptIds.includes(snapshot.conceptId),
+              )
+            )
+              continue;
+            const entry = knowledgePointCounts.get(snapshot.conceptId) ?? {
+              id: snapshot.conceptId,
+              name: snapshot.resolvedNode?.name ?? "课程知识点",
+              questionIds: new Set<string>(),
+            };
+            if (questionId) entry.questionIds.add(questionId);
+            knowledgePointCounts.set(snapshot.conceptId, entry);
+          }
+        }
+      }
+      const knowledgePoints = [...knowledgePointCounts.values()]
+        .map(({ questionIds, ...point }) => ({
+          ...point,
+          count: questionIds.size,
+        }))
+        .sort(
+          (left, right) =>
+            right.count - left.count ||
+            left.name.localeCompare(right.name, "zh-CN"),
+        );
+      const topics = chapters
+        .map((chapter) => ({
+          id: chapter.id,
+          name: chapter.name,
+          count: pending.filter((items) =>
+            items.some((item) => {
+              const snapshots =
+                item.assignmentQuestion?.conceptSnapshots ??
+                item.recommendationAnswer?.recommendation.conceptSnapshots ??
+                [];
+              return snapshots.some((point) =>
+                chapter.conceptIds.includes(point.conceptId),
+              );
+            }),
+          ).length,
+        }))
+        .filter((chapter) => chapter.count > 0);
+      const mapped = pending.filter((items) =>
+        items.some((item) => {
+          const snapshots =
+            item.assignmentQuestion?.conceptSnapshots ??
+            item.recommendationAnswer?.recommendation.conceptSnapshots ??
+            [];
+          return snapshots.some((point) =>
+            chapters.some((chapter) =>
+              chapter.conceptIds.includes(point.conceptId),
+            ),
+          );
+        }),
+      ).length;
+      return {
+        courseId: group.courseId,
+        name: group.name,
+        total: unique.size,
+        pending: pending.length,
+        canPractice: chapters.length > 0,
+        unmapped: pending.length - mapped,
+        classrooms,
+        knowledgePoints,
+        topics,
+      };
+    }),
+  );
 }

@@ -1,3 +1,4 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -13,33 +14,67 @@ const stateLabels: Record<string, string> = {
   CONCLUSIVE: "可形成结论",
 };
 
-type Props = { params: Promise<{ courseId: string }> };
+type Props = {
+  params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ classroomId?: string; page?: string }>;
+};
 
-export default async function TeacherCourseProfilesPage({ params }: Props) {
+export default async function TeacherCourseProfilesPage({
+  params,
+  searchParams,
+}: Props) {
   const teacher = await requirePageRole(Role.TEACHER);
   const path = studentProfilePathSchema.safeParse(await params);
   if (!path.success) notFound();
+  const query = await searchParams;
   try {
     const result = await listTeacherCourseLearnerProfiles(
       teacher.id,
       path.data.courseId,
+      {
+        classroomId: query.classroomId,
+        page: /^\d+$/.test(query.page ?? "") ? Number(query.page) : 1,
+      },
     );
     return (
       <section className="space-y-6">
         <header>
-          <Link
-            className="text-muted-foreground text-sm underline"
-            href={`/teacher/courses/${path.data.courseId}`}
-          >
+          <TeacherBackLink href={`/teacher/courses/${path.data.courseId}`}>
             返回课程
-          </Link>
+          </TeacherBackLink>
           <h1 className="mt-3 text-2xl font-semibold">
             {result.course.name} · 班级画像概览
           </h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            摘要由确定性规则生成；证据不足的学生不会输出过度确定结论。
+            按班级查看在读学生；知识掌握度是本课程的学习画像，证据不足时明确提示。
           </p>
         </header>
+        <form
+          className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4"
+          method="get"
+        >
+          <label className="text-sm">
+            班级范围
+            <select
+              name="classroomId"
+              defaultValue={query.classroomId ?? ""}
+              className="ml-3 rounded-lg border p-2"
+            >
+              <option value="">全部班级</option>
+              {result.classrooms.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white">
+            查看画像
+          </button>
+          <span className="text-sm text-slate-500">
+            共 {result.pagination.total} 名学生
+          </span>
+        </form>
         {result.items.length === 0 ? (
           <div className="text-muted-foreground rounded-xl border border-dashed p-10 text-center">
             当前课程没有在读学生。
@@ -70,16 +105,37 @@ export default async function TeacherCourseProfilesPage({ params }: Props) {
                   {item.conclusiveAverageMastery ?? "—"}% · 快照 #
                   {item.revisionNumber}
                 </p>
-                <Link
+                <a
                   className="mt-4 inline-flex rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white"
                   href={`/teacher/courses/${path.data.courseId}/students/${item.student.id}/profile`}
                 >
                   查看证据详情
-                </Link>
+                </a>
               </article>
             ))}
           </div>
         )}
+        <nav className="flex items-center justify-between text-sm">
+          <span>
+            第 {result.pagination.page} / {result.pagination.totalPages} 页
+          </span>
+          <div className="flex gap-4">
+            {result.pagination.page > 1 && (
+              <Link
+                href={`?page=${result.pagination.page - 1}&classroomId=${query.classroomId ?? ""}`}
+              >
+                上一页
+              </Link>
+            )}
+            {result.pagination.page < result.pagination.totalPages && (
+              <Link
+                href={`?page=${result.pagination.page + 1}&classroomId=${query.classroomId ?? ""}`}
+              >
+                下一页
+              </Link>
+            )}
+          </div>
+        </nav>
       </section>
     );
   } catch (error) {

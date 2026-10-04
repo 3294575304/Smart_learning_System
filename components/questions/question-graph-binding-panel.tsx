@@ -62,11 +62,17 @@ function sourceSummary(value: unknown): string {
 export function QuestionGraphBindingPanel({
   questionId,
   courses,
+  initialCourseId,
 }: {
   questionId: string;
   courses: Course[];
+  initialCourseId?: string;
 }) {
-  const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
+  const [courseId, setCourseId] = useState(
+    courses.find((course) => course.id === initialCourseId)?.id ??
+      courses[0]?.id ??
+      "",
+  );
   const [keyword, setKeyword] = useState("");
   const [nodes, setNodes] = useState<Node[]>([]);
   const [graphVersionId, setGraphVersionId] = useState<string | null>(null);

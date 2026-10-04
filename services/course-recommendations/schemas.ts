@@ -13,10 +13,10 @@ const supportedTypes = [
 export const courseTeachingProgressSchema = z
   .object({
     graphVersionId: idSchema,
+    classroomId: idSchema.optional(),
     expectedRevision: z.number().int().min(0),
     conceptIds: z
       .array(idSchema)
-      .min(1, "请至少选择一个已授知识点")
       .max(500)
       .transform((ids) => [...new Set(ids)]),
     note: z.string().trim().max(500).optional(),
@@ -26,6 +26,11 @@ export const courseTeachingProgressSchema = z
 export const courseRecommendationGenerationSchema = z
   .object({
     classroomId: idSchema,
+    chapterIds: z.array(idSchema).max(50).optional(),
+    mode: z.enum(["PRACTICE", "TEST"]).optional(),
+    template: z
+      .enum(["CHOICE20", "TRUE_FALSE10", "PYTHON5", "MIXED_TEST50"])
+      .optional(),
     conceptIds: z
       .array(idSchema)
       .max(100)
@@ -36,10 +41,37 @@ export const courseRecommendationGenerationSchema = z
       .max(supportedTypes.length)
       .default([])
       .transform((types) => [...new Set(types)]),
-    count: z.number().int().min(1).max(20).default(10),
+    practiceCount: z.number().int().min(1).max(50).optional(),
+    count: z.number().int().min(1).max(50).default(10),
     difficulty: z.number().int().min(1).max(5).default(3),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.practiceCount !== undefined &&
+      (value.mode === "TEST" || value.template === "MIXED_TEST50")
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["practiceCount"],
+        message: "测试题量固定，不接受自定义练习题量",
+      });
+    }
+    if (value.mode === "TEST" && value.template !== "MIXED_TEST50") {
+      context.addIssue({
+        code: "custom",
+        path: ["template"],
+        message: "测试模式必须使用 50 题综合测试模板",
+      });
+    }
+    if (value.mode === "PRACTICE" && value.template === "MIXED_TEST50") {
+      context.addIssue({
+        code: "custom",
+        path: ["template"],
+        message: "综合测试模板只能用于测试模式",
+      });
+    }
+  });
 
 export const courseRecommendationPathSchema = z
   .object({ courseId: idSchema })

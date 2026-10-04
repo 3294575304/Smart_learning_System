@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { orderedCourseConceptOptions } from "@/services/questions/course-concept-options";
 import {
   AuthorizationError,
   ResourceNotFoundError,
@@ -145,6 +146,7 @@ function persistenceFields(input: QuestionUpsertData) {
     difficulty: input.difficulty,
     visibility: input.visibility,
     status: QuestionStatus.ACTIVE,
+    isAssignmentOnly: false,
     explanation: input.explanation,
     tags: input.tags,
     correctBoolean: null as boolean | null,
@@ -220,7 +222,8 @@ async function findQuestionRecord(
     where: {
       id: questionId,
       deletedAt: null,
-      status: QuestionStatus.ACTIVE,
+      status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
+      isAssignmentOnly: false,
     },
     include: questionInclude,
   });
@@ -253,13 +256,176 @@ export async function listKnowledgePointOptions(): Promise<
   });
 }
 
+export async function listTeacherQuestionCourseOptions(teacherId: string) {
+  const courses = await prisma.course.findMany({
+    where: {
+      teacherId,
+      status: { not: "ARCHIVED" },
+    },
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+    select: {
+      id: true,
+      templateId: true,
+      name: true,
+      courseNo: true,
+      term: true,
+      classrooms: { orderBy: { name: "asc" }, select: { name: true } },
+      currentPublishedKnowledgeGraphVersion: {
+        select: {
+          nodes: {
+            where: { nodeType: { in: ["CHAPTER", "KNOWLEDGE_POINT"] } },
+            orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+            select: {
+              id: true,
+              conceptId: true,
+              code: true,
+              name: true,
+              nodeType: true,
+              sortOrder: true,
+            },
+          },
+          edges: {
+            where: { relationType: "CONTAINS" },
+            select: { fromNodeId: true, toNodeId: true },
+          },
+        },
+      },
+    },
+  });
+  const groups = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      courseNo: string;
+      term: string;
+      classrooms: string[];
+      concepts: Map<
+        string,
+        ReturnType<typeof orderedCourseConceptOptions>[number]
+      >;
+    }
+  >();
+  for (const course of courses) {
+    const key = [
+      course.templateId,
+      course.courseNo,
+      course.name,
+      course.term,
+    ].join("\u0000");
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        id: course.id,
+        name: course.name,
+        courseNo: course.courseNo,
+        term: course.term,
+        classrooms: [],
+        concepts: new Map(),
+      };
+      groups.set(key, group);
+    }
+    group.classrooms.push(
+      ...course.classrooms.map((classroom) => classroom.name),
+    );
+    const graph = course.currentPublishedKnowledgeGraphVersion;
+    for (const concept of graph
+      ? orderedCourseConceptOptions(graph.nodes, graph.edges)
+      : []) {
+      const conceptKey = concept.code;
+      if (!group.concepts.has(conceptKey))
+        group.concepts.set(conceptKey, {
+          conceptId: `CODE:${concept.code}`,
+          code: concept.code,
+          name: concept.name,
+          chapterName: concept.chapterName,
+          chapterOrder: concept.chapterOrder,
+          sortOrder: concept.sortOrder,
+        });
+    }
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((group) => ({
+    ...group,
+    classrooms: [...group.classrooms],
+    concepts: [...group.concepts.values()].sort(
+      (a, b) =>
+        a.chapterOrder - b.chapterOrder ||
+        a.sortOrder - b.sortOrder ||
+        a.code.localeCompare(b.code, "zh-CN", { numeric: true }),
+    ),
+  }));
+}
+
 export async function listTeacherQuestions(
   teacherId: string,
   query: QuestionListQuery,
 ): Promise<QuestionListResult> {
+  let courseGraphConceptIds: string[] | undefined;
+  let courseIds: string[] = [];
+  if (query.courseId) {
+    const selectedCourse = await prisma.course.findFirst({
+      where: {
+        id: query.courseId,
+        teacherId,
+        status: { not: "ARCHIVED" },
+      },
+      select: { templateId: true, courseNo: true, name: true, term: true },
+    });
+    if (!selectedCourse)
+      throw new ResourceNotFoundError("课程不存在或无权访问");
+    const courseGroup = await prisma.course.findMany({
+      where: {
+        teacherId,
+        templateId: selectedCourse.templateId,
+        courseNo: selectedCourse.courseNo,
+        name: selectedCourse.name,
+        term: selectedCourse.term,
+        status: { not: "ARCHIVED" },
+      },
+      select: {
+        id: true,
+        currentPublishedKnowledgeGraphVersion: {
+          select: {
+            nodes: {
+              where: { nodeType: "KNOWLEDGE_POINT" },
+              select: { conceptId: true, code: true },
+            },
+          },
+        },
+      },
+    });
+    courseIds = courseGroup.map((item) => item.id);
+    const concepts = courseGroup.flatMap(
+      (item) => item.currentPublishedKnowledgeGraphVersion?.nodes ?? [],
+    );
+    courseGraphConceptIds = concepts.map((node) => node.conceptId);
+    if (query.courseConceptId?.startsWith("CODE:")) {
+      const code = query.courseConceptId.slice("CODE:".length);
+      const selectedConceptIds = concepts
+        .filter((concept) => concept.code === code)
+        .map((concept) => concept.conceptId);
+      if (!selectedConceptIds.length)
+        throw new ResourceNotFoundError("课程知识点不存在");
+      courseGraphConceptIds = selectedConceptIds;
+    } else if (
+      query.courseConceptId &&
+      !courseGraphConceptIds.includes(query.courseConceptId)
+    ) {
+      throw new ResourceNotFoundError("课程知识点不存在");
+    } else if (query.courseConceptId) {
+      courseGraphConceptIds = [query.courseConceptId];
+    }
+  } else if (query.courseConceptId) {
+    throw new ResourceNotFoundError("请选择课程后再筛选课程知识点");
+  }
   const where: Prisma.QuestionWhereInput = {
     deletedAt: null,
-    status: QuestionStatus.ACTIVE,
+    status:
+      query.scope === "OWNED"
+        ? { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] }
+        : QuestionStatus.ACTIVE,
+    isAssignmentOnly: false,
     ...(query.scope === "OWNED"
       ? { creatorId: teacherId }
       : { visibility: QuestionVisibility.PUBLIC }),
@@ -281,6 +447,29 @@ export async function listTeacherQuestions(
           },
         }
       : {}),
+    ...(query.courseId
+      ? {
+          AND: [
+            {
+              OR: [
+                ...(!query.courseConceptId
+                  ? [{ categoryCourseId: { in: courseIds } }]
+                  : []),
+                {
+                  graphBindings: {
+                    some: {
+                      courseId: { in: courseIds },
+                      ...(query.courseConceptId
+                        ? { conceptId: { in: courseGraphConceptIds } }
+                        : {}),
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        }
+      : {}),
   };
   const [total, records] = await prisma.$transaction([
     prisma.question.count({ where }),
@@ -293,8 +482,51 @@ export async function listTeacherQuestions(
     }),
   ]);
 
+  const courseBindings = query.courseId
+    ? await prisma.questionKnowledgeGraphBinding.findMany({
+        where: {
+          courseId: { in: courseIds },
+          ...(query.courseConceptId
+            ? { conceptId: { in: courseGraphConceptIds } }
+            : {}),
+          questionId: { in: records.map((question) => question.id) },
+        },
+        select: {
+          questionId: true,
+          conceptId: true,
+          sourceNode: { select: { code: true, name: true } },
+        },
+      })
+    : [];
+  const conceptsByQuestion = new Map<string, typeof courseBindings>();
+  for (const binding of courseBindings) {
+    const current = conceptsByQuestion.get(binding.questionId) ?? [];
+    current.push(binding);
+    conceptsByQuestion.set(binding.questionId, current);
+  }
+
   return {
-    items: records.map((question) => listItemFromRecord(teacherId, question)),
+    items: records.map((question) => ({
+      ...listItemFromRecord(teacherId, question),
+      ...(query.courseId
+        ? {
+            courseGraphConcepts: [
+              ...new Map(
+                (conceptsByQuestion.get(question.id) ?? []).map(
+                  ({ sourceNode }) => [
+                    `${sourceNode.code}\u0000${sourceNode.name}`,
+                    {
+                      id: `CODE:${sourceNode.code}`,
+                      code: sourceNode.code,
+                      name: sourceNode.name,
+                    },
+                  ],
+                ),
+              ).values(),
+            ],
+          }
+        : {}),
+    })),
     pagination: {
       page: query.page,
       pageSize: query.pageSize,
@@ -312,7 +544,8 @@ export async function getTeacherQuestion(
   if (
     !question ||
     (question.creatorId !== teacherId &&
-      question.visibility !== QuestionVisibility.PUBLIC)
+      (question.visibility !== QuestionVisibility.PUBLIC ||
+        question.status !== QuestionStatus.ACTIVE))
   ) {
     throw new ResourceNotFoundError("题目不存在");
   }
@@ -345,6 +578,36 @@ export async function createQuestion(
   return getTeacherQuestion(teacherId, questionId);
 }
 
+export async function createQuestionsInBulk(
+  teacherId: string,
+  questions: QuestionUpsertData[],
+): Promise<string[]> {
+  for (const question of questions)
+    assertTeacherQuestionIsPrivate(question.visibility);
+  return prisma.$transaction(async (transaction) => {
+    const ids: string[] = [];
+    for (const input of questions) {
+      await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
+      const created = await transaction.question.create({
+        data: {
+          creatorId: teacherId,
+          ...persistenceFields(input),
+          options: { create: optionCreateData(input) },
+          knowledgePointLinks: {
+            create: input.knowledgePointIds.map((knowledgePointId) => ({
+              knowledgePointId,
+              weight: 1,
+            })),
+          },
+        },
+        select: { id: true },
+      });
+      ids.push(created.id);
+    }
+    return ids;
+  });
+}
+
 export async function updateQuestion(
   teacherId: string,
   questionId: string,
@@ -363,6 +626,10 @@ export async function updateQuestion(
       where: { id: questionId },
       data: {
         ...persistenceFields(input),
+        ...(ownedQuestion.status === QuestionStatus.DRAFT &&
+        input.type === QuestionType.PYTHON_PROGRAMMING
+          ? { status: QuestionStatus.DRAFT }
+          : {}),
         options: { create: optionCreateData(input) },
         knowledgePointLinks: {
           create: input.knowledgePointIds.map((knowledgePointId) => ({
@@ -418,6 +685,7 @@ export async function copyQuestion(
         difficulty: source.difficulty,
         visibility: QuestionVisibility.PRIVATE,
         status: QuestionStatus.ACTIVE,
+        isAssignmentOnly: false,
         explanation: source.explanation,
         tags: source.tags,
         correctBoolean: source.correctBoolean,

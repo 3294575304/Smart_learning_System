@@ -9,7 +9,11 @@ export function StudentGradeTabs({
   activeView: StudentGradeView;
 }) {
   const tabs: Array<{ href: string; id: StudentGradeView; label: string }> = [
-    { href: "/student/results", id: "assignments", label: "作业成绩" },
+    {
+      href: "/student/assignments?view=records",
+      id: "assignments",
+      label: "作业与成绩",
+    },
     {
       href: "/student/results?view=course",
       id: "course",

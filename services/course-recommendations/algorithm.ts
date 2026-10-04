@@ -29,6 +29,8 @@ export interface CourseRecommendationCandidateInput<TQuestion> {
   prerequisiteGap?: boolean;
   recentErrorMatch?: boolean;
   teacherPriority?: boolean;
+  ownedByCourseTeacher?: boolean;
+  coreImportance?: boolean;
 }
 
 export interface ScoredCourseRecommendation<TQuestion> {
@@ -68,7 +70,9 @@ export function rankCourseRecommendationCandidates<TQuestion>(input: {
         Math.abs(candidate.question.difficulty - input.requestedDifficulty) /
           Math.max(1, input.policy.difficultyTolerance + 1);
       const score = Math.round(
-        weakness * (input.policy.weaknessWeight / 100) +
+        (candidate.ownedByCourseTeacher ? 10_000 : 0) +
+          (candidate.coreImportance ? 20 : 0) +
+          weakness * (input.policy.weaknessWeight / 100) +
           (candidate.prerequisiteGap ? 100 : 0) *
             ((input.policy.prerequisiteWeight ?? 0) / 100) +
           difficultyFit * input.policy.difficultyWeight +
@@ -82,6 +86,8 @@ export function rankCourseRecommendationCandidates<TQuestion>(input: {
         ...(candidate.prerequisiteGap ? ["PREREQUISITE_GAP"] : []),
         ...(candidate.recentErrorMatch ? ["RECENT_ERROR_MATCH"] : []),
         ...(candidate.teacherPriority ? ["TEACHER_PRIORITY"] : []),
+        ...(candidate.ownedByCourseTeacher ? ["COURSE_TEACHER_QUESTION"] : []),
+        ...(candidate.coreImportance ? ["CORE_CONCEPT"] : []),
       ];
       return {
         question: candidate.question,
@@ -103,8 +109,8 @@ export function rankCourseRecommendationCandidates<TQuestion>(input: {
               ...supplementalCodes,
             ],
         reason: diagnostic
-          ? `“${primary.conceptName}”当前证据不足，本题用于补充诊断证据；难度与所选范围匹配。${candidate.prerequisiteGap ? "同时优先补足先修缺口。" : ""}${candidate.teacherPriority ? "该题属于教师重点。" : ""}`
-          : `“${primary.conceptName}”当前掌握度 ${masteryScore ?? 0}%，本题用于针对性巩固；难度与所选范围匹配。${candidate.recentErrorMatch ? "近期同知识点错误提高了本题优先级。" : ""}${candidate.teacherPriority ? "该题属于教师重点。" : ""}`,
+          ? `“${primary.conceptName}”当前证据不足，本题用于补充诊断证据；难度与所选范围匹配。${candidate.coreImportance ? "该知识点属于课程核心内容，优先纳入。" : ""}${candidate.ownedByCourseTeacher ? "优先选用本课程授课教师的题目。" : ""}${candidate.prerequisiteGap ? "同时优先补足先修缺口。" : ""}${candidate.teacherPriority ? "该题属于教师重点。" : ""}`
+          : `“${primary.conceptName}”当前掌握度 ${masteryScore ?? 0}%，本题用于针对性巩固；难度与所选范围匹配。${candidate.coreImportance ? "该知识点属于课程核心内容，优先纳入。" : ""}${candidate.ownedByCourseTeacher ? "优先选用本课程授课教师的题目。" : ""}${candidate.recentErrorMatch ? "近期同知识点错误提高了本题优先级。" : ""}${candidate.teacherPriority ? "该题属于教师重点。" : ""}`,
       };
     })
     .filter(

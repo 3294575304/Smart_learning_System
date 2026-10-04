@@ -123,7 +123,11 @@ export class MockAIProvider implements AIProvider {
       mappings: input.questions.map((question) => ({
         questionId: question.id,
         candidates: localQuestionConceptCandidates(
-          { title: question.title, content: question.content, tags: [] },
+          {
+            title: question.title,
+            content: question.content,
+            tags: question.tags,
+          },
           input.concepts.map((concept) => ({
             id: concept.id,
             conceptId: concept.id,

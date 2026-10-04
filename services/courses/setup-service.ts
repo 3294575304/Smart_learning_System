@@ -22,7 +22,10 @@ export async function getTeacherCourseSetupProgress(
             select: { studentId: true },
           },
           studentIdentityAssignments: {
-            where: { studentIdentity: { status: "PENDING" } },
+            where: {
+              withdrawnAt: null,
+              studentIdentity: { status: "PENDING" },
+            },
             select: { studentIdentityId: true },
           },
         },

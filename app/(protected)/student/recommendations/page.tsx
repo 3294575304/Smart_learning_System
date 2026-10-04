@@ -1,21 +1,14 @@
+import { redirect } from "next/navigation";
 import { ClassroomStatus, Role } from "@prisma/client";
-import { ArrowDown } from "lucide-react";
-import Link from "next/link";
-
+import { PracticeCenterTabs } from "@/components/recommendations/practice-center-tabs";
 import { GenerateRecommendationsForm } from "@/components/recommendations/generate-recommendations-form";
-import { RecommendationCard } from "@/components/recommendations/recommendation-card";
-import { RecommendationEmptyState } from "@/components/recommendations/recommendation-empty-state";
-import { RecommendationFilters } from "@/components/recommendations/recommendation-filters";
-import {
-  formatRecommendationTime,
-  parseRecommendationFilter,
-} from "@/components/recommendations/recommendation-presenters";
-import { StartRecommendationButton } from "@/components/recommendations/start-recommendation-button";
+import { PracticeSetCenter } from "@/components/recommendations/practice-set-center";
+import { listPracticeSets } from "@/services/practice-sets/service";
 import { CoursePracticeCenter } from "@/components/recommendations/course-practice-center";
+import { LearningAssistantPanel } from "@/components/recommendations/learning-assistant-panel";
 import { SelfReflectionPanel } from "@/components/recommendations/self-reflection-panel";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { listStudentClassrooms } from "@/services/classrooms/service";
-import { listRecommendations } from "@/services/recommendations/service";
 import { listStudentPracticeCourses } from "@/services/course-recommendations/service";
 import { listSelfReflections } from "@/services/self-reflections/service";
 
@@ -24,7 +17,13 @@ interface Props {
     cursor?: string | string[];
     status?: string | string[];
     courseId?: string | string[];
+    classroomId?: string | string[];
     conceptId?: string | string[];
+    chapterId?: string | string[];
+    difficulty?: string | string[];
+    template?: string | string[];
+    mode?: string | string[];
+    view?: string | string[];
   }>;
 }
 
@@ -37,141 +36,135 @@ export default async function StudentRecommendationsPage({
 }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const query = await searchParams;
-  const status = parseRecommendationFilter(query.status);
-  const cursor = firstQueryValue(query.cursor);
+  if (firstQueryValue(query.view) === "favorites") {
+    const params = new URLSearchParams({ view: "favorites" });
+    const courseId = firstQueryValue(query.courseId);
+    if (courseId) params.set("courseId", courseId);
+    redirect(`/student/wrong-questions?${params}`);
+  }
+  const initialClassroomId = firstQueryValue(query.classroomId);
   const initialCourseId = firstQueryValue(query.courseId);
   const initialConceptId = firstQueryValue(query.conceptId);
+  const initialChapterId = firstQueryValue(query.chapterId);
+  const initialChapterIds = Array.isArray(query.chapterId)
+    ? query.chapterId
+    : [];
+  const rawDifficulty = Number(firstQueryValue(query.difficulty));
+  const initialDifficulty =
+    Number.isInteger(rawDifficulty) && rawDifficulty >= 1 && rawDifficulty <= 5
+      ? rawDifficulty
+      : 3;
+  const template = firstQueryValue(query.template);
+  const initialTemplate =
+    template === "TRUE_FALSE10" || template === "PYTHON5"
+      ? template
+      : "CHOICE20";
+  const initialMode =
+    firstQueryValue(query.mode) === "TEST" ? "TEST" : "PRACTICE";
+  const activeView =
+    firstQueryValue(query.view) === "generate"
+      ? "generate"
+      : firstQueryValue(query.view) === "assistant"
+        ? "assistant"
+        : "recommended";
   const [result, classrooms, practiceCourses] = await Promise.all([
-    listRecommendations(student, {
-      ...(status ? { status } : {}),
-      ...(cursor ? { cursor } : {}),
-      limit: 12,
-    }),
+    listPracticeSets(student, {}),
     listStudentClassrooms(student.id),
     listStudentPracticeCourses(student.id),
   ]);
-  const reflectionCourse = practiceCourses[0]?.courseId ?? null;
+  const reflectionOption =
+    practiceCourses.find(
+      (item) =>
+        (!initialCourseId || item.courseId === initialCourseId) &&
+        (!initialClassroomId || item.classroomId === initialClassroomId),
+    ) ?? practiceCourses[0];
+  const reflectionCourse = reflectionOption?.courseId ?? null;
   const reflections = reflectionCourse
     ? await listSelfReflections(student.id, reflectionCourse)
     : [];
   const activeClassrooms = classrooms
     .filter((classroom) => classroom.status === ClassroomStatus.ACTIVE)
     .map((classroom) => ({ id: classroom.id, name: classroom.name }));
-  const latestGeneratedAt = result.items[0]?.createdAt;
-  const nextQuery = new URLSearchParams();
-  if (status) nextQuery.set("status", status);
-  if (result.pagination.nextCursor) {
-    nextQuery.set("cursor", result.pagination.nextCursor);
-  }
 
   return (
-    <section className="min-w-0 space-y-6">
-      <header className="min-w-0">
+    <section className="mx-auto max-w-[1440px] min-w-0 space-y-5">
+      <header className="min-w-0 rounded-2xl border border-sky-100 bg-white/80 px-5 py-5 sm:px-6">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">练习中心</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
-            按课程与知识点自主练习，或根据近期答题情况完成推荐练习。
+            按课程生成与完成练习，或与 AI 梳理学习疑问。
           </p>
-          {latestGeneratedAt ? (
-            <p className="mt-1 text-xs text-gray-500">
-              当前列表最近推荐于 {formatRecommendationTime(latestGeneratedAt)}
-            </p>
-          ) : null}
         </div>
       </header>
 
-      <section
-        aria-labelledby="recommendation-results-heading"
-        className="space-y-4"
-      >
-        <header>
-          <h2 className="font-semibold" id="recommendation-results-heading">
-            推荐练习
-          </h2>
-          <p className="mt-1 text-sm text-gray-500">
-            查看系统根据近期学习情况整理的练习，并按状态筛选。
-          </p>
-        </header>
-        <RecommendationFilters activeStatus={status} />
-
-        {result.items.length === 0 ? (
-          <RecommendationEmptyState
-            kind={
-              status || cursor
-                ? "filtered"
-                : activeClassrooms.length === 0
-                  ? "insufficient"
-                  : "none"
+      <PracticeCenterTabs
+        initialView={activeView}
+        assistant={
+          <LearningAssistantPanel
+            key={`${initialCourseId}:${initialConceptId}`}
+            courses={practiceCourses}
+            initialCourseId={initialCourseId}
+            initialConceptId={initialConceptId}
+            reflectionHistory={
+              reflectionOption ? (
+                <SelfReflectionPanel
+                  historyOnly
+                  classroomId={reflectionOption.classroomId}
+                  courseId={reflectionOption.courseId}
+                  initialReflections={reflections}
+                />
+              ) : undefined
             }
           />
-        ) : (
-          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-            {result.items.map((item) => (
-              <RecommendationCard
-                action={
-                  <StartRecommendationButton
-                    recommendationId={item.id}
-                    status={item.status}
-                  />
-                }
-                item={item}
-                key={item.id}
-              />
-            ))}
-          </div>
-        )}
-
-        {result.pagination.nextCursor ? (
-          <div className="flex justify-center">
-            <Link
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
-              href={`/student/recommendations?${nextQuery.toString()}`}
-            >
-              查看更多推荐
-              <ArrowDown aria-hidden="true" className="size-4" />
-            </Link>
-          </div>
-        ) : null}
-      </section>
-
-      <section
-        aria-labelledby="generate-practice-heading"
-        className="space-y-4"
-      >
-        <header>
-          <h2 className="font-semibold" id="generate-practice-heading">
-            生成练习
-          </h2>
-          <p className="mt-1 text-sm text-gray-500">
-            先查看上方已有练习；需要新的练习时，可以按近期答题情况获取推荐，或按课程知识点自主选择。
-          </p>
-        </header>
-        <div className="rounded-xl border bg-white p-5">
-          <h3 className="font-medium">根据近期答题生成推荐</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            系统结合班级课程范围和近期答题情况，为你挑选待练题目。
-          </p>
-          <div className="mt-4">
-            <GenerateRecommendationsForm
-              classrooms={activeClassrooms}
-              studentId={student.id}
+        }
+        practice={
+          <PracticeSetCenter
+            key={JSON.stringify(result)}
+            initialResult={result}
+          />
+        }
+        generation={
+          <section
+            aria-labelledby="generate-practice-heading"
+            className="space-y-4"
+          >
+            <header>
+              <h2 className="font-semibold" id="generate-practice-heading">
+                生成练习
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                选择课程和练习范围，确认条件后开始。也可以根据近期答题获取推荐。
+              </p>
+            </header>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="font-medium">根据近期答题生成推荐</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                系统结合班级课程范围和近期答题情况，为你挑选待练题目。
+              </p>
+              <div className="mt-4">
+                <GenerateRecommendationsForm
+                  key={initialClassroomId}
+                  initialClassroomId={initialClassroomId}
+                  classrooms={activeClassrooms}
+                  studentId={student.id}
+                />
+              </div>
+            </div>
+            <CoursePracticeCenter
+              key={`${initialClassroomId}:${initialCourseId}:${initialConceptId}:${JSON.stringify(initialChapterIds)}:${initialChapterId}:${initialMode}:${initialDifficulty}:${initialTemplate}`}
+              courses={practiceCourses}
+              initialClassroomId={initialClassroomId}
+              initialChapterId={initialChapterId}
+              initialChapterIds={initialChapterIds}
+              initialDifficulty={initialDifficulty}
+              initialTemplate={initialTemplate}
+              initialMode={initialMode}
+              initialConceptId={initialConceptId}
+              initialCourseId={initialCourseId}
             />
-          </div>
-        </div>
-        <CoursePracticeCenter
-          courses={practiceCourses}
-          initialConceptId={initialConceptId}
-          initialCourseId={initialCourseId}
-        />
-      </section>
-
-      {reflectionCourse ? (
-        <SelfReflectionPanel
-          classroomId={practiceCourses[0]!.classroomId}
-          courseId={reflectionCourse}
-          initialReflections={reflections}
-        />
-      ) : null}
+          </section>
+        }
+      />
     </section>
   );
 }

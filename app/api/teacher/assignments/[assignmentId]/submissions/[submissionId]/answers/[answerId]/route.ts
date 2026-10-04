@@ -1,3 +1,4 @@
+import { auditRequestContext } from "@/services/audit/request-context";
 import { Role } from "@prisma/client";
 
 import { apiError, apiSuccess } from "@/lib/api-response";
@@ -46,6 +47,7 @@ export async function PATCH(request: Request, context: Context) {
         submissionId.data,
         answerId.data,
         input.data,
+        auditRequestContext(request),
       ),
     );
   } catch (error: unknown) {

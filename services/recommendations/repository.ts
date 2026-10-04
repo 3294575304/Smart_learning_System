@@ -214,6 +214,7 @@ export async function buildRecommendationRequest(
   const candidateQuestions = await prisma.question.findMany({
     where: {
       status: QuestionStatus.ACTIVE,
+      isAssignmentOnly: false,
       deletedAt: null,
       type: { in: AUTO_GRADABLE_QUESTION_TYPES },
       OR: [
@@ -486,6 +487,7 @@ export async function loadEligibleRecommendationCandidates(
           : {}),
       },
       status: QuestionStatus.ACTIVE,
+      isAssignmentOnly: false,
       deletedAt: null,
       type: { in: allowedTypes },
       difficulty: { gte: minimumDifficulty, lte: maximumDifficulty },
@@ -725,6 +727,7 @@ export async function startPendingRecommendation(input: {
       OR: [{ expiresAt: null }, { expiresAt: { gt: input.now } }],
       question: {
         status: QuestionStatus.ACTIVE,
+        isAssignmentOnly: false,
         deletedAt: null,
       },
     },

@@ -1,54 +1,54 @@
+import { getStudentClassroomContext } from "@/services/courses/student-access";
 import { Role } from "@prisma/client";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { KnowledgeGraphPublishedView } from "@/components/courses/knowledge-graph-published-view";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
-import { listStudentPracticeCourses } from "@/services/course-recommendations/service";
 import { getStudentPublishedKnowledgeGraph } from "@/services/knowledge-graph/service";
 import { getStudentLearnerProfile } from "@/services/learner-profiles/service";
 
 export default async function StudentCourseKnowledgeGraphPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const student = await requirePageRole(Role.STUDENT);
   const parsed = courseIdSchema.safeParse((await params).courseId);
   if (!parsed.success) notFound();
 
+  const query = await searchParams;
+  if (query.classroomId !== undefined && typeof query.classroomId !== "string")
+    notFound();
+  const classroomId = query.classroomId;
   let result;
   let profile;
-  let practiceCourses;
   try {
-    [result, profile, practiceCourses] = await Promise.all([
+    if (classroomId)
+      await getStudentClassroomContext(student.id, classroomId, parsed.data);
+    [result, profile] = await Promise.all([
       getStudentPublishedKnowledgeGraph(student.id, parsed.data),
       getStudentLearnerProfile(student.id, parsed.data),
-      listStudentPracticeCourses(student.id),
     ]);
   } catch (error) {
     if (error instanceof ResourceNotFoundError) notFound();
     throw error;
   }
-  const practiceConceptIds = new Set(
-    practiceCourses
-      .filter((course) => course.courseId === parsed.data)
-      .flatMap((course) => course.concepts.map((concept) => concept.id)),
-  );
-
   return (
     <section className="space-y-6">
       <PageHeader
         actions={
           <Link
             className="inline-flex items-center gap-2 rounded-md border bg-white px-4 py-2 text-sm"
-            href="/student/analytics"
+            href={`/student/courses/${parsed.data}/learning-center${classroomId ? `?classroomId=${encodeURIComponent(classroomId)}` : ""}`}
           >
             <ArrowLeft aria-hidden="true" className="size-4" />
-            返回学习分析
+            返回课程学习中心
           </Link>
         }
         description={
@@ -60,6 +60,7 @@ export default async function StudentCourseKnowledgeGraphPage({
       />
       {result.published ? (
         <KnowledgeGraphPublishedView
+          classroomId={classroomId}
           courseId={result.course.id}
           graph={result.published.structure}
           mastery={result.published.concepts.map((concept) => {
@@ -74,7 +75,6 @@ export default async function StudentCourseKnowledgeGraphPage({
               confidence: item?.confidence ?? 0,
               masteryScore: item?.masteryScore ?? null,
               evidenceUpdatedAt: item?.evidenceUpdatedAt?.toISOString() ?? null,
-              practiceAvailable: practiceConceptIds.has(concept.conceptId),
             };
           })}
         />

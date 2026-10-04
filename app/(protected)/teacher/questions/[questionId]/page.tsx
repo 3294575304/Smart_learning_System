@@ -1,8 +1,10 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { QuestionActions } from "@/components/questions/question-actions";
+import { QuestionGraphBindingPanel } from "@/components/questions/question-graph-binding-panel";
+import { listTeacherBindingCourses } from "@/services/question-graph-bindings/service";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
@@ -11,10 +13,12 @@ import { getTeacherQuestion } from "@/services/questions/service";
 
 interface QuestionDetailPageProps {
   params: Promise<{ questionId: string }>;
+  searchParams: Promise<{ courseId?: string }>;
 }
 
 export default async function QuestionDetailPage({
   params,
+  searchParams,
 }: QuestionDetailPageProps) {
   const teacher = await requirePageRole(Role.TEACHER);
   const parsedId = questionIdSchema.safeParse((await params).questionId);
@@ -30,16 +34,13 @@ export default async function QuestionDetailPage({
     question.answer.kind === "CHOICE"
       ? new Set(question.answer.correctOptionLabels)
       : new Set<string>();
+  const courses = await listTeacherBindingCourses(teacher.id);
+  const initialCourseId = (await searchParams).courseId;
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link
-            className="text-sm text-gray-500 hover:underline"
-            href="/teacher/questions"
-          >
-            ← 返回题库
-          </Link>
+          <TeacherBackLink href="/teacher/questions">返回题库</TeacherBackLink>
           <h1 className="mt-2 text-2xl font-semibold">{question.title}</h1>
           <p className="mt-2 text-sm text-gray-500">
             {QUESTION_TYPE_LABELS[question.type]} · 难度 {question.difficulty} ·{" "}
@@ -56,7 +57,7 @@ export default async function QuestionDetailPage({
       </div>
       {!question.canEdit ? (
         <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-800">
-          这是公共题目，只能查看或复制，不能直接修改。
+          公共题目的内容由题库维护者管理；你可以直接维护它在自己课程中的知识点关联。需要修改题干时，可复制到我的题库。
         </div>
       ) : null}
       {question.assignmentReferenceCount > 0 ? (
@@ -140,6 +141,11 @@ export default async function QuestionDetailPage({
           </div>
         </div>
       </div>
+      <QuestionGraphBindingPanel
+        courses={courses}
+        initialCourseId={initialCourseId}
+        questionId={question.id}
+      />
     </section>
   );
 }

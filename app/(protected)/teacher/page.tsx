@@ -37,7 +37,7 @@ export default async function TeacherPage() {
   const dashboard = await getTeacherDashboard(teacher.id);
 
   return (
-    <section className="space-y-7">
+    <section className="teacher-dashboard space-y-4">
       <PageHeader
         actions={
           <>
@@ -57,26 +57,73 @@ export default async function TeacherPage() {
           </>
         }
         description="集中查看班级、作业和近期学习表现，快速进入日常教学任务。"
-        eyebrow="Teacher dashboard"
         title={`${teacher.displayName}，欢迎回来`}
       />
+
+      <section
+        aria-labelledby="teacher-next-actions"
+        className="rounded-xl border border-sky-100 bg-white p-4 shadow-sm"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="teacher-next-actions" className="font-semibold">
+              今日待办
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              先处理需要教师操作的事项；趋势和常用入口在下方。
+            </p>
+          </div>
+          {dashboard.metrics.pendingReviewCount > 0 ? (
+            <Link
+              href="/teacher/results?status=PENDING_REVIEW"
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
+            >
+              待批改 {dashboard.metrics.pendingReviewCount} 份
+              <ArrowRight className="size-4" />
+            </Link>
+          ) : (
+            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-sm text-emerald-800">
+              暂无待批改提交
+            </span>
+          )}
+        </div>
+        {dashboard.upcomingAssignments.length ? (
+          <div className="mt-4 grid gap-2 border-t pt-3 sm:grid-cols-2 xl:grid-cols-4">
+            {dashboard.upcomingAssignments.map((assignment) => (
+              <Link
+                className="min-w-0 rounded-lg border border-slate-200 px-3 py-2.5 hover:border-sky-200 hover:bg-sky-50/60"
+                href={`/teacher/assignments/${assignment.id}/results`}
+                key={assignment.id}
+              >
+                <p className="truncate text-sm font-medium">{assignment.title}</p>
+                <p className="mt-1 truncate text-xs text-slate-500">
+                  {assignment.classroomName} · {assignment.dueAt.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 截止
+                </p>
+              </Link>
+            ))}
+          </div>
+        ) : null}
+      </section>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           hint="包含开放与已关闭班级"
           icon={School}
+          href="/teacher/classrooms"
           label="班级数量"
           value={dashboard.metrics.classroomCount}
         />
         <StatCard
           hint="不包含已归档题目"
           icon={BookOpenCheck}
+          href="/teacher/questions"
           label="我的题目"
           value={dashboard.metrics.questionCount}
         />
         <StatCard
           hint="当前处于发布状态"
           icon={ClipboardList}
+          href="/teacher/assignments?status=PUBLISHED"
           label="已发布作业"
           value={dashboard.metrics.publishedAssignmentCount}
         />
@@ -87,13 +134,14 @@ export default async function TeacherPage() {
               : `学生平均正确率 ${dashboard.metrics.averageAccuracy}%`
           }
           icon={ClipboardCheck}
+          href="/teacher/results"
           label="待处理提交"
           value={dashboard.metrics.pendingReviewCount}
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
-        <section className="bg-card rounded-xl border p-5 sm:p-6">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
+        <section className="bg-card min-w-0 rounded-xl border p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">近期成绩趋势</h2>
@@ -102,7 +150,7 @@ export default async function TeacherPage() {
               </p>
             </div>
             <Link
-              className="text-sm font-medium hover:underline"
+              className="inline-flex items-center rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 transition hover:bg-sky-100"
               href="/teacher/results"
             >
               查看统计
@@ -114,7 +162,7 @@ export default async function TeacherPage() {
           />
         </section>
 
-        <section className="bg-card rounded-xl border p-5 sm:p-6">
+        <section className="bg-card min-w-0 rounded-xl border p-4">
           <h2 className="font-semibold">常见薄弱知识点</h2>
           <p className="text-muted-foreground mt-1 text-xs">
             按近期已判定答案的正确率排序
@@ -149,12 +197,12 @@ export default async function TeacherPage() {
         </section>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <section className="bg-card rounded-xl border p-5 sm:p-6">
+      <div className="grid gap-4 xl:grid-cols-2">
+        <section className="bg-card min-w-0 rounded-xl border p-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold">最近作业</h2>
             <Link
-              className="text-sm font-medium hover:underline"
+              className="inline-flex items-center rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 transition hover:bg-sky-100"
               href="/teacher/assignments"
             >
               全部作业
@@ -212,11 +260,11 @@ export default async function TeacherPage() {
           )}
         </section>
 
-        <section className="bg-card rounded-xl border p-5 sm:p-6">
+        <section className="bg-card min-w-0 rounded-xl border p-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold">最近活跃班级</h2>
             <Link
-              className="text-sm font-medium hover:underline"
+              className="inline-flex items-center rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 transition hover:bg-sky-100"
               href="/teacher/classrooms"
             >
               班级管理
@@ -243,7 +291,7 @@ export default async function TeacherPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {dashboard.activeClassrooms.map((classroom) => (
                 <Link
-                  className="rounded-lg border p-4 transition-colors hover:bg-sky-50/70"
+                  className="min-w-0 rounded-lg border p-4 transition-colors hover:bg-sky-50/70"
                   href={`/teacher/classrooms/${classroom.id}`}
                   key={classroom.id}
                 >

@@ -2363,7 +2363,7 @@ async function applyExecutableImportRow(
           classroomId: batch.classroomId!,
           sourceBatchId: batch.id,
         },
-        update: {},
+        update: { withdrawnAt: null },
       }),
   );
   await importDatabaseOperation(

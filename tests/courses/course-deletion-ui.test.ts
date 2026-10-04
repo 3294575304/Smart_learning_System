@@ -44,6 +44,7 @@ test("课程卡片的详情链接与直接删除按钮使用独立交互区域",
   assert.match(markup, /href="\/teacher\/courses\/course-delete-ui"/u);
   const links = [...markup.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gu)];
   assert.equal(links.length, 2);
+  assert.doesNotMatch(markup, /管理教学班/u);
   assert.equal(
     links.every((link) => !link[1]?.includes("<button")),
     true,

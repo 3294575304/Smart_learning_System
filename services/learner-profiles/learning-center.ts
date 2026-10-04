@@ -4,13 +4,20 @@ import {
   LearnerProfileEvidenceState,
   LearningEventType,
   RecommendationStatus,
+  SubmissionStatus,
+  QuestionStatus,
+  QuestionVisibility,
   StudentSelfReflectionStatus,
 } from "@prisma/client";
+
+import { buildScoreTrend } from "./score-trend";
 
 import { prisma } from "@/lib/prisma";
 import { listStudentPracticeCourses } from "@/services/course-recommendations/service";
 import { getStudentPublishedKnowledgeGraph } from "@/services/knowledge-graph/service";
 import { getStudentLearnerProfile } from "@/services/learner-profiles/service";
+
+import { getStudentClassroomContext } from "@/services/courses/student-access";
 
 type ConceptStatus =
   "MASTERED" | "DEVELOPING" | "NEEDS_SUPPORT" | "INSUFFICIENT" | "NO_EVIDENCE";
@@ -64,66 +71,149 @@ const learningPriority: Record<ConceptStatus, number> = {
 export async function getStudentCourseLearningCenter(
   studentId: string,
   courseId: string,
+  classroomId?: string,
 ) {
+  const classroom = classroomId
+    ? await getStudentClassroomContext(studentId, classroomId, courseId)
+    : null;
   const [graphResult, profile, practiceCourses] = await Promise.all([
     getStudentPublishedKnowledgeGraph(studentId, courseId),
     getStudentLearnerProfile(studentId, courseId),
     listStudentPracticeCourses(studentId),
   ]);
-  const [events, recommendations, profileHistory, confirmedReflections] =
-    await Promise.all([
-      prisma.learningEvent.findMany({
+  const [
+    events,
+    recommendations,
+    profileHistory,
+    confirmedReflections,
+    submissions,
+    practiceGroups,
+  ] = await Promise.all([
+    prisma.learningEvent.findMany({
+      where: {
+        studentId,
+        courseId,
+        supersededBy: null,
+        eventType: {
+          in: [
+            LearningEventType.ASSESSMENT_GRADED,
+            LearningEventType.RECOMMENDATION_PRACTICE_GRADED,
+          ],
+        },
+      },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      take: 40,
+      select: {
+        id: true,
+        occurredAt: true,
+        eventType: true,
+        concepts: { select: { score: true, maxScore: true } },
+      },
+    }),
+    prisma.personalizedRecommendation.findMany({
+      where: {
+        studentId,
+        courseCycle: {
+          is: { courseId, ...(classroomId ? { classroomId } : {}) },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 100,
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        completedAt: true,
+        wasCorrect: true,
+      },
+    }),
+    prisma.learnerProfileSnapshot.findMany({
+      where: { studentId, courseId },
+      orderBy: { revisionNumber: "desc" },
+      take: 8,
+      select: {
+        revisionNumber: true,
+        createdAt: true,
+        objectiveMasteryDimension: true,
+      },
+    }),
+    prisma.studentSelfReflection.count({
+      where: {
+        studentId,
+        courseId,
+        status: StudentSelfReflectionStatus.CONFIRMED,
+        deletedAt: null,
+      },
+    }),
+    prisma.submission.findMany({
+      where: {
+        studentId,
+        status: SubmissionStatus.PUBLISHED,
+        assignment: {
+          classroom: { courseId },
+          ...(classroomId ? { classroomId } : {}),
+        },
+        score: { not: null },
+        maxScore: { gt: 0 },
+      },
+      orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+      take: 8,
+      select: {
+        id: true,
+        submittedAt: true,
+        score: true,
+        maxScore: true,
+        percentage: true,
+        assignment: {
+          select: { title: true, classroom: { select: { name: true } } },
+        },
+      },
+    }),
+    (async () => {
+      const latestGroups = await prisma.personalizedRecommendation.groupBy({
+        by: ["courseCycleId"],
         where: {
           studentId,
-          courseId,
-          supersededBy: null,
-          eventType: {
-            in: [
-              LearningEventType.ASSESSMENT_GRADED,
-              LearningEventType.RECOMMENDATION_PRACTICE_GRADED,
-            ],
+          courseCycle: {
+            is: {
+              courseId,
+              ...(classroomId ? { classroomId } : {}),
+              recommendations: {
+                some: {},
+                every: {
+                  status: RecommendationStatus.COMPLETED,
+                  score: { not: null },
+                  maxScore: { gt: 0 },
+                  completedAt: { not: null },
+                },
+              },
+            },
           },
         },
-        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-        take: 40,
-        select: {
-          id: true,
-          occurredAt: true,
-          eventType: true,
-          concepts: { select: { score: true, maxScore: true } },
-        },
-      }),
-      prisma.personalizedRecommendation.findMany({
-        where: { studentId, courseCycle: { is: { courseId } } },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 100,
-        select: {
-          id: true,
-          status: true,
-          createdAt: true,
-          completedAt: true,
-          wasCorrect: true,
-        },
-      }),
-      prisma.learnerProfileSnapshot.findMany({
-        where: { studentId, courseId },
-        orderBy: { revisionNumber: "desc" },
+        _max: { completedAt: true },
+        orderBy: { _max: { completedAt: "desc" } },
         take: 8,
-        select: {
-          revisionNumber: true,
-          createdAt: true,
-          objectiveMasteryDimension: true,
-        },
-      }),
-      prisma.studentSelfReflection.count({
+      });
+      return prisma.courseRecommendationCycle.findMany({
         where: {
           studentId,
           courseId,
-          status: StudentSelfReflectionStatus.CONFIRMED,
-          deletedAt: null,
+          id: {
+            in: latestGroups.flatMap((group) =>
+              group.courseCycleId ? [group.courseCycleId] : [],
+            ),
+          },
         },
-      }),
-    ]);
+        select: {
+          id: true,
+          classroom: { select: { name: true } },
+          recommendations: {
+            select: { completedAt: true, score: true, maxScore: true },
+          },
+        },
+      });
+    })(),
+  ]);
 
   const published = graphResult.published;
   const structure = published?.structure ?? null;
@@ -136,10 +226,42 @@ export async function getStudentCourseLearningCenter(
       concept.conceptId,
     ]) ?? [],
   );
+  const enrolledClassrooms = practiceCourses.filter(
+    (course) =>
+      course.courseId === courseId &&
+      (!classroomId || course.classroomId === classroomId),
+  );
+  const [classProgress, courseProgress] = await Promise.all([
+    prisma.courseTeachingProgressRevision.findMany({
+      where: {
+        courseId,
+        classroomId: {
+          in: enrolledClassrooms.map((course) => course.classroomId),
+        },
+      },
+      orderBy: { revisionNumber: "desc" },
+      select: { classroomId: true, concepts: { select: { conceptId: true } } },
+    }),
+    prisma.course.findUnique({
+      where: { id: courseId },
+      select: {
+        currentTeachingProgressRevision: {
+          select: { concepts: { select: { conceptId: true } } },
+        },
+      },
+    }),
+  ]);
+  // Teaching progress follows the selected enrollment; mastery remains course-level.
   const taughtConceptIds = new Set(
-    practiceCourses
-      .filter((course) => course.courseId === courseId)
-      .flatMap((course) => course.concepts.map((concept) => concept.id)),
+    enrolledClassrooms.flatMap((course) =>
+      (
+        classProgress.find(
+          (revision) => revision.classroomId === course.classroomId,
+        )?.concepts ??
+        courseProgress?.currentTeachingProgressRevision?.concepts ??
+        []
+      ).map((concept) => concept.conceptId),
+    ),
   );
   const knowledgePoints =
     structure?.nodes
@@ -168,7 +290,84 @@ export async function getStudentCourseLearningCenter(
       status: conceptStatus(concept),
     };
   });
-  const pointByKey = new Map(pointViews.map((point) => [point.key, point]));
+  const conceptIds = pointViews.flatMap((point) =>
+    point.conceptId ? [point.conceptId] : [],
+  );
+  const courseTeacher = published
+    ? await prisma.course.findUnique({
+        where: { id: courseId },
+        select: { teacherId: true },
+      })
+    : null;
+  const boundQuestions =
+    published && courseTeacher && conceptIds.length
+      ? await prisma.question.findMany({
+          where: {
+            status: QuestionStatus.ACTIVE,
+            deletedAt: null,
+            AND: [
+              {
+                OR: [
+                  { creatorId: courseTeacher.teacherId },
+                  { visibility: QuestionVisibility.PUBLIC },
+                ],
+              },
+              {
+                graphBindings: {
+                  some: { courseId, conceptId: { in: conceptIds } },
+                },
+              },
+            ],
+          },
+          orderBy: [{ creatorId: "asc" }, { title: "asc" }, { id: "asc" }],
+          take: 1000,
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            difficulty: true,
+            creatorId: true,
+            graphBindings: {
+              where: { courseId, conceptId: { in: conceptIds } },
+              select: { conceptId: true, bindingType: true },
+            },
+          },
+        })
+      : [];
+  const questionsByConceptId = new Map<
+    string,
+    Array<{
+      id: string;
+      title: string;
+      type: (typeof boundQuestions)[number]["type"];
+      difficulty: number;
+      bindingType: (typeof boundQuestions)[number]["graphBindings"][number]["bindingType"];
+      fromCourseTeacher: boolean;
+    }>
+  >();
+  for (const question of boundQuestions) {
+    for (const binding of question.graphBindings) {
+      const related = questionsByConceptId.get(binding.conceptId) ?? [];
+      related.push({
+        id: question.id,
+        title: question.title,
+        type: question.type,
+        difficulty: question.difficulty,
+        bindingType: binding.bindingType,
+        fromCourseTeacher: question.creatorId === courseTeacher?.teacherId,
+      });
+      questionsByConceptId.set(binding.conceptId, related);
+    }
+  }
+  const pointViewsWithQuestions = pointViews.map((point) => ({
+    ...point,
+    relatedQuestions: point.conceptId
+      ? (questionsByConceptId.get(point.conceptId) ?? [])
+      : [],
+  }));
+  const pointByKey = new Map(
+    pointViewsWithQuestions.map((point) => [point.key, point]),
+  );
   const pointOrderByKey = new Map(
     pointViews.map((point, index) => [point.key, index]),
   );
@@ -226,37 +425,49 @@ export async function getStudentCourseLearningCenter(
         ).toFixed(1),
       )
     : null;
-  const scoreEvents = events
-    .map((event) => {
-      const scored = event.concepts.filter(
-        (concept) => concept.score !== null && concept.maxScore !== null,
-      );
-      const score = scored.reduce(
-        (sum, concept) => sum + (concept.score?.toNumber() ?? 0),
+  const scoreEvents = buildScoreTrend([
+    ...submissions.flatMap((submission) =>
+      submission.submittedAt
+        ? [
+            {
+              id: submission.id,
+              occurredAt: submission.submittedAt,
+              title: `${submission.assignment.title} · ${submission.assignment.classroom.name}`,
+              source: "正式作业" as const,
+              score: submission.score?.toNumber() ?? null,
+              maxScore: submission.maxScore?.toNumber() ?? null,
+              percentage: submission.percentage?.toNumber() ?? null,
+            },
+          ]
+        : [],
+    ),
+    ...practiceGroups.map((group) => ({
+      id: group.id,
+      occurredAt: new Date(
+        Math.max(
+          ...group.recommendations.map(
+            (item) => item.completedAt?.getTime() ?? 0,
+          ),
+        ),
+      ),
+      title: `${group.classroom.name} · ${group.recommendations.length} 道题`,
+      source: "整组练习" as const,
+      score: group.recommendations.reduce(
+        (sum, item) => sum + (item.score?.toNumber() ?? 0),
         0,
-      );
-      const maxScore = scored.reduce(
-        (sum, concept) => sum + (concept.maxScore?.toNumber() ?? 0),
+      ),
+      maxScore: group.recommendations.reduce(
+        (sum, item) => sum + (item.maxScore?.toNumber() ?? 0),
         0,
-      );
-      return maxScore > 0
-        ? {
-            id: event.id,
-            occurredAt: event.occurredAt,
-            value: Math.round((score / maxScore) * 100),
-            source:
-              event.eventType === LearningEventType.ASSESSMENT_GRADED
-                ? "正式作业"
-                : "推荐练习",
-          }
-        : null;
-    })
-    .filter((event): event is NonNullable<typeof event> => Boolean(event));
+      ),
+    })),
+  ]);
   const recentAccuracy = scoreEvents.length
-    ? Math.round(
-        scoreEvents.reduce((sum, event) => sum + event.value, 0) /
-          scoreEvents.length,
-      )
+    ? Math.trunc(
+        (scoreEvents.reduce((sum, event) => sum + event.value, 0) /
+          scoreEvents.length) *
+          100,
+      ) / 100
     : null;
   const completedRecommendations = recommendations.filter(
     (item) => item.status === RecommendationStatus.COMPLETED,
@@ -320,6 +531,7 @@ export async function getStudentCourseLearningCenter(
 
   return {
     course: graphResult.course,
+    classroom,
     graphVersion: published?.versionNumber ?? null,
     profileRevision: profile.revisionNumber,
     generatedAt: profile.generatedAt,
@@ -392,7 +604,7 @@ export async function getStudentCourseLearningCenter(
         key: "recent-score-rate",
         label: "近期得分率",
         value: recentAccuracy,
-        detail: `${scoreEvents.length} 次有效评分事件`,
+        detail: `${scoreEvents.length} 组已完成评分（各组等权）`,
       },
       {
         key: "recommendation-completion",
@@ -419,19 +631,16 @@ export async function getStudentCourseLearningCenter(
           ? null
           : {
               label: shortDate(snapshot.createdAt),
-              value: Math.round(value),
-              detail: `画像修订 #${snapshot.revisionNumber}`,
+              value,
+              detail: `课程汇总 · 画像修订 #${snapshot.revisionNumber} · ${snapshot.createdAt.toLocaleString("zh-CN")} · 证据充足 ${dimensionNumber(snapshot.objectiveMasteryDimension, "conclusiveConceptCount") ?? "—"}/${dimensionNumber(snapshot.objectiveMasteryDimension, "conceptCount") ?? "—"} 个知识点`,
             };
       })
       .filter((point): point is NonNullable<typeof point> => Boolean(point)),
-    accuracyTrend: [...scoreEvents]
-      .reverse()
-      .slice(-8)
-      .map((event) => ({
-        label: shortDate(event.occurredAt),
-        value: event.value,
-        detail: `${event.source} · ${event.occurredAt.toLocaleString("zh-CN")}`,
-      })),
+    accuracyTrend: scoreEvents.map((event) => ({
+      label: shortDate(event.occurredAt),
+      value: event.value,
+      detail: event.detail,
+    })),
     recentActivity: events.slice(0, 8).map((event) => ({
       id: event.id,
       occurredAt: event.occurredAt,

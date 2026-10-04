@@ -1,10 +1,11 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
+import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import {
   GradingStatus,
   QuestionType,
   Role,
   SubmissionStatus,
 } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CompleteGradingButton } from "@/components/assignment-results/complete-grading-button";
@@ -41,7 +42,8 @@ export default async function SubmissionGradingPage({ params }: Props) {
     );
     const pendingManualCount = submission.answers.filter(
       (answer) =>
-        answer.type === QuestionType.SHORT_ANSWER &&
+        (answer.type === QuestionType.SHORT_ANSWER ||
+          answer.type === QuestionType.PYTHON_PROGRAMMING) &&
         answer.gradingStatus === GradingStatus.MANUAL_REVIEW_REQUIRED,
     ).length;
     const pendingProgrammingCount = submission.answers.filter(
@@ -52,12 +54,11 @@ export default async function SubmissionGradingPage({ params }: Props) {
     return (
       <section className="space-y-6">
         <header>
-          <Link
-            className="text-muted-foreground text-sm underline"
+          <TeacherBackLink
             href={`/teacher/assignments/${assignmentId.data}/submissions`}
           >
             返回提交列表
-          </Link>
+          </TeacherBackLink>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="text-2xl font-semibold">提交批改详情</h1>
@@ -92,7 +93,8 @@ export default async function SubmissionGradingPage({ params }: Props) {
           </div>
         ) : (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            仍有 {pendingManualCount} 道主观题待评分、{pendingProgrammingCount}{" "}
+            仍有 {pendingManualCount} 道题待人工评分或复核、
+            {pendingProgrammingCount}{" "}
             道编程题待完成判题。全部单题完成后，再完成整份批改。
           </div>
         )}
@@ -108,7 +110,12 @@ export default async function SubmissionGradingPage({ params }: Props) {
               const isProgramming =
                 answer.type === QuestionType.PYTHON_PROGRAMMING;
               const canEdit =
-                isManual &&
+                (isManual ||
+                  (isProgramming &&
+                    answer.programmingAttempt?.status === "SUCCEEDED" &&
+                    (answer.gradingStatus ===
+                      GradingStatus.MANUAL_REVIEW_REQUIRED ||
+                      answer.gradingStatus === GradingStatus.GRADED))) &&
                 submission.status === SubmissionStatus.PENDING_REVIEW;
               return (
                 <article
@@ -128,9 +135,15 @@ export default async function SubmissionGradingPage({ params }: Props) {
                       <p className="font-medium">
                         {isManual
                           ? `${answer.manualScore ?? "待批"} / ${answer.maxScore}`
-                          : isProgramming && answer.automaticScore === null
-                            ? `判题中 / ${answer.maxScore}`
-                            : `${answer.automaticScore ?? 0} / ${answer.maxScore}`}
+                          : isProgramming &&
+                              answer.gradingStatus ===
+                                GradingStatus.MANUAL_REVIEW_REQUIRED
+                            ? `待复核 / ${answer.maxScore}`
+                            : isProgramming && answer.manualScore !== null
+                              ? `${answer.manualScore} / ${answer.maxScore}`
+                              : isProgramming && answer.automaticScore === null
+                                ? `判题中 / ${answer.maxScore}`
+                                : `${answer.automaticScore ?? 0} / ${answer.maxScore}`}
                       </p>
                       <p className="text-muted-foreground mt-1">
                         {gradingStatusLabels[answer.gradingStatus]}
@@ -144,6 +157,12 @@ export default async function SubmissionGradingPage({ params }: Props) {
                         {answer.studentAnswer}
                       </dd>
                     </div>
+                    {answer.type === "SHORT_ANSWER" && (
+                      <SubmissionAttachments
+                        submissionId={submission.id}
+                        questionId={answer.assignmentQuestionId}
+                      />
+                    )}
                     <div className="rounded-md bg-sky-50/70 p-3">
                       <dt className="text-muted-foreground">
                         正确答案 / 参考答案
@@ -159,6 +178,21 @@ export default async function SubmissionGradingPage({ params }: Props) {
                       {answer.isCorrect ? "回答正确" : "回答错误"}
                     </p>
                   ) : null}
+                  {isProgramming &&
+                  answer.gradingStatus ===
+                    GradingStatus.MANUAL_REVIEW_REQUIRED ? (
+                    <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+                      运行错误待复核：自动用例得分 {answer.automaticScore ?? 0}{" "}
+                      / {answer.maxScore}，尚未定分。
+                      请结合下方评分要点与学生代码酌情给分，并填写具体依据。空白或无关代码不应获得过程分。
+                    </p>
+                  ) : null}
+                  {isProgramming && answer.manualScore !== null ? (
+                    <p className="mt-3 text-sm">
+                      自动用例得分：{answer.automaticScore}；教师复核最终得分：
+                      {answer.manualScore}
+                    </p>
+                  ) : null}
                   {isProgramming ? (
                     <ProgrammingAttemptActions
                       attempt={answer.programmingAttempt}
@@ -169,7 +203,10 @@ export default async function SubmissionGradingPage({ params }: Props) {
                       answerId={answer.id}
                       assignmentId={assignmentId.data}
                       initialFeedback={answer.teacherFeedback ?? ""}
-                      initialScore={answer.manualScore}
+                      initialScore={
+                        answer.manualScore ??
+                        (isProgramming ? answer.automaticScore : null)
+                      }
                       maxScore={answer.maxScore}
                       submissionId={submissionId.data}
                     />

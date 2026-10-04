@@ -52,3 +52,20 @@ test("其他通知继续使用各自的原始目标地址", () => {
     null,
   );
 });
+
+test("历史通知也不能导航到外部或不安全地址", () => {
+  for (const path of [
+    "https://example.com",
+    "//example.com",
+    "/\\example.com",
+    "/student/\nassignments",
+  ]) {
+    assert.equal(
+      resolveNotificationDestination(
+        NotificationType.SYSTEM_ANNOUNCEMENT,
+        path,
+      ),
+      null,
+    );
+  }
+});

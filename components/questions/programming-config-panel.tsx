@@ -3,6 +3,7 @@
 import { ProgrammingTestVisibility } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { programmingCasesForSave } from "@/services/programming-questions/edit-payload";
 import { requestQuestionApi } from "@/components/questions/request-api";
 
 interface TestCaseDraft {
@@ -58,7 +59,7 @@ export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [revision, setRevision] = useState<number | null>(null);
-  const [standardCode, setStandardCode] = useState("print(input())\n");
+  const [standardCode, setStandardCode] = useState("");
   const [starterCode, setStarterCode] = useState("# 在这里编写代码\n");
   const [totalPoints, setTotalPoints] = useState(10);
   const [limits, setLimits] = useState({
@@ -132,11 +133,7 @@ export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
         starterCode,
         totalPoints,
         limits,
-        testCases: testCases.map((item, index) => ({
-          ...item,
-          points: Number(item.points),
-          sortOrder: index + 1,
-        })),
+        testCases: programmingCasesForSave(testCases),
       }),
     });
     setSaving(false);
@@ -151,7 +148,10 @@ export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
   return (
     <section className="space-y-5 rounded-xl border bg-white p-6">
       <div>
-        <h2 className="text-lg font-semibold">Python 判题配置</h2>
+        <h2 className="text-lg font-semibold">编程题判题配置</h2>
+        <p className="mt-2 text-sm text-gray-600">
+          执行语言：Python（当前自动判题支持的语言）
+        </p>
         <p className="text-muted-foreground mt-1 text-sm">
           {revision === null ? "尚无配置修订" : `当前修订 ${revision}`}
           。历史作业继续引用发布时冻结的修订。

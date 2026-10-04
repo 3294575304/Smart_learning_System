@@ -62,9 +62,14 @@ export async function claimStudentAccount(
         },
       );
 
+      await transaction.$queryRaw`SELECT "id" FROM "StudentIdentity" WHERE "studentNo" = ${input.studentNo} FOR UPDATE`;
       const identity = await transaction.studentIdentity.findUnique({
         where: { studentNo: input.studentNo },
-        include: { assignments: { select: { classroomId: true } } },
+        include: {
+          assignments: {
+            select: { classroomId: true, withdrawnAt: true },
+          },
+        },
       });
 
       if (
@@ -132,6 +137,9 @@ export async function claimStudentAccount(
       }
 
       for (const assignment of identity.assignments) {
+        const membershipStatus = assignment.withdrawnAt
+          ? MembershipStatus.REMOVED
+          : MembershipStatus.ACTIVE;
         await transaction.classMembership.upsert({
           where: {
             classroomId_studentId: {
@@ -142,11 +150,13 @@ export async function claimStudentAccount(
           create: {
             classroomId: assignment.classroomId,
             studentId: user.id,
+            status: membershipStatus,
+            endedAt: assignment.withdrawnAt,
           },
           update: {
-            status: MembershipStatus.ACTIVE,
+            status: membershipStatus,
             joinedAt: new Date(),
-            endedAt: null,
+            endedAt: assignment.withdrawnAt,
           },
         });
       }

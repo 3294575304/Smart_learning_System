@@ -46,6 +46,8 @@ test("真实 DOCX 保留模板字体与私有字段边界，图表比例和坐�
       majorClass: "示例班",
       college: "示例学院",
       major: "示例专业",
+      teachingMethodDetails: "",
+      scoringCriteria: "",
     },
     classroom: { id: null, name: "示例班" },
     sourceType: QualityReportSourceType.UPLOAD,

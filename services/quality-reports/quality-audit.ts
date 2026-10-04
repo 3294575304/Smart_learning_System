@@ -6,7 +6,7 @@ import {
   type QualityReportSourceSnapshot,
 } from "@/services/quality-reports/schemas";
 
-export const QUALITY_REPORT_AUDIT_RULE_VERSION = "quality-report-audit-v2";
+export const QUALITY_REPORT_AUDIT_RULE_VERSION = "quality-report-audit-v3";
 
 type AuditIssue = QualityReportAudit["issues"][number];
 
@@ -154,6 +154,32 @@ export function auditQualityReportDraft(
     (sum, component) => sum + component.weight,
     0,
   );
+  const syllabusAssessments = source.syllabus?.assessments;
+  if (
+    syllabusAssessments &&
+    (source.syllabus?.assessmentCount !== syllabusAssessments.length ||
+      Math.abs(
+        syllabusAssessments.reduce((sum, item) => sum + item.weight, 0) - 1,
+      ) > 0.0001 ||
+      syllabusAssessments.length !== source.components.length ||
+      syllabusAssessments.some(
+        (assessment) =>
+          !source.components.some(
+            (component) =>
+              normalized(component.name) === normalized(assessment.name) &&
+              Math.abs(component.weight - assessment.weight) < 0.0001,
+          ),
+      ))
+  )
+    add(
+      "ASSESSMENT_SYLLABUS_MISMATCH",
+      "ERROR",
+      "ASSESSMENT",
+      "成绩构成与正式教学大纲不一致",
+      "报告文字使用正式大纲的名称和权重，但成绩来源中的考核项目或权重不同，不能直接作为一致口径的正式报告。",
+      "核对正式考核方案和成绩来源，使其与已发布教学大纲一致，再重新生成报告。",
+      ["syllabus.assessments", "components"],
+    );
   if (Math.abs(weightTotal - 1) > 0.0001) {
     add(
       "ASSESSMENT_WEIGHT_TOTAL_INVALID",

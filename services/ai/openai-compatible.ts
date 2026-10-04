@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { LearningAssistantInput } from "@/services/learning-assistant/schemas";
+import { LEARNING_ASSISTANT_PROMPT } from "@/services/learning-assistant/ai";
 
 import { buildStudentAnalysisMessages } from "@/services/ai/prompt";
 import {
@@ -185,7 +187,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         [
           {
             role: "system",
-            content: `你只负责生成题目到课程 Concept 的候选映射。只返回严格 JSON：{"mappings":[{"questionId":"...","candidates":[{"conceptId":"...","confidence":0到1,"reason":"..."}]}]}。每题最多 3 个候选；不得编造输入之外的 ID；不得输出答案、测试用例或声称候选已确认。${repair}`,
+            content: `你只负责生成题目到课程 Concept 的候选映射。题目已有 tags 是教师维护的检索标签，可以作为匹配线索，但不要把它们改写或当成已确认的知识点。只返回严格 JSON：{"mappings":[{"questionId":"...","candidates":[{"conceptId":"...","confidence":0到1,"reason":"..."}]}]}。每题最多 3 个候选；不得编造输入之外的 ID；不得输出答案、测试用例或声称候选已确认。${repair}`,
           },
           {
             role: "user",
@@ -193,6 +195,29 @@ export class OpenAICompatibleProvider implements AIProvider {
           },
         ],
         options.signal,
+      )
+    ).content;
+  }
+
+  async answerCourseLearningQuestion(
+    input: LearningAssistantInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    return (
+      await this.completeJson(
+        [
+          {
+            role: "system",
+            content:
+              LEARNING_ASSISTANT_PROMPT +
+              (options.validationError
+                ? "\n请修复上次不符合 Schema 的输出。"
+                : ""),
+          },
+          { role: "user", content: JSON.stringify(input) },
+        ],
+        options.signal,
+        3000,
       )
     ).content;
   }

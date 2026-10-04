@@ -23,6 +23,8 @@ const source: QualityReportSourceSnapshot = {
     majorClass: "一班",
     college: "学院",
     major: "专业",
+    teachingMethodDetails: "",
+    scoringCriteria: "",
   },
   classroom: { id: "cm0000000000000000000001", name: "一班" },
   sourceType: QualityReportSourceType.UPLOAD,
@@ -59,7 +61,7 @@ const source: QualityReportSourceSnapshot = {
   sourceReference: {},
 };
 
-test("成绩构成使用模板名称和紧凑格式，保留实际权重与自定义考核项", () => {
+test("成绩构成保留正式大纲考核名称和实际权重，不替换为固定平台文案", () => {
   assert.equal(
     buildGradeComposition([
       { name: "平时表现", weight: 0.1 },
@@ -68,14 +70,14 @@ test("成绩构成使用模板名称和紧凑格式，保留实际权重与自�
       { name: "课程实验", weight: 0.2 },
       { name: "期末考试", weight: 0.6 },
     ]),
-    "在线学习10%+在线作业5%+期中机考5%+头歌在线编程（含实验）20%+期末60%",
+    "平时表现 10% + 课程作业 5% + 期中考试 5% + 课程实验 20% + 期末考试 60%",
   );
   assert.equal(
     buildGradeComposition([
       { name: "项目展示", weight: 0.375 },
       { name: "期末考试", weight: 0.625 },
     ]),
-    "项目展示37.5%+期末62.5%",
+    "项目展示 37.5% + 期末考试 62.5%",
   );
 });
 
@@ -84,7 +86,7 @@ test("降级报告不含统计处理套话，单项考核不强行比较强弱",
     source,
     calculateQualityReportStatistics(source),
   );
-  assert.equal(narrative.gradeComposition, "期末100%");
+  assert.equal(narrative.gradeComposition, "期末考试 100%");
   assert.doesNotMatch(JSON.stringify(narrative), REPORT_PROCESS_LANGUAGE);
   assert.doesNotMatch(narrative.gradeAnalysis, /最高|最低|相对薄弱/u);
   assert.equal(narrative.studentEvaluation, "学生评价待补充。");
@@ -231,4 +233,60 @@ test("按模板 A/B 口径计算目标统计并关联归一化学生自评", () 
   assert.equal(outcome?.minimum, 0.6);
   assert.equal(outcome?.maximum, 0.8);
   assert.equal(outcome?.surveyNormalized, 0.9);
+});
+
+test("课程总结覆盖四项教学反思，缺少依据时不宣称一致或有效", () => {
+  const narrative = buildDeterministicNarrative(
+    source,
+    calculateQualityReportStatistics(source),
+  );
+  assert.equal(narrative.courseSummary.split("\n").length, 4);
+  for (const heading of [
+    "教学内容与授课方式",
+    "考核与评分标准",
+    "课程目标达成",
+    "达成情况与学生评价比较",
+  ]) {
+    assert.ok(narrative.courseSummary.includes(heading));
+  }
+  assert.match(narrative.courseSummary, /不能确认考核一致性/);
+  assert.match(narrative.courseSummary, /尚无可对应课程目标的学生评价/);
+  assert.ok(narrative.courseSummary.length <= 700);
+});
+
+test("课程总结按正式大纲核对考核项目和权重", () => {
+  const withSyllabus: QualityReportSourceSnapshot = {
+    ...source,
+    syllabus: {
+      publishedStructureId: "cm0000000000000000000004",
+      versionNumber: 1,
+      courseName: "Python",
+      courseCategory: null,
+      courseNature: null,
+      credits: null,
+      teachingCollege: null,
+      applicableMajors: null,
+      objectiveCount: 0,
+      assessmentCount: 1,
+      assessments: [{ code: "final", name: "期末考试", weight: 1 }],
+      teachingContent: ["基本语法", "程序设计"],
+    },
+  };
+  const matching = buildDeterministicNarrative(
+    withSyllabus,
+    calculateQualityReportStatistics(withSyllabus),
+  );
+  assert.match(matching.courseSummary, /考核项目及权重与正式大纲一致/);
+  assert.match(matching.courseSummary, /基本语法、程序设计/);
+  const different = {
+    ...withSyllabus,
+    components: [{ code: "final", name: "期末考试", weight: 0.6 }],
+  };
+  assert.match(
+    buildDeterministicNarrative(
+      different,
+      calculateQualityReportStatistics(different),
+    ).courseSummary,
+    /与正式大纲存在差异/,
+  );
 });

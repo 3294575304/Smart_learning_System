@@ -55,3 +55,12 @@ test("teacher results overview query validates classroom pagination", () => {
     false,
   );
 });
+
+test("all classrooms selection preserves pagination", () => {
+  const parsed = teacherResultsOverviewQuerySchema.parse({
+    classroomId: "",
+    page: "2",
+  });
+  assert.equal(parsed.classroomId, undefined);
+  assert.equal(parsed.page, 2);
+});

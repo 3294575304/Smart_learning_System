@@ -93,6 +93,7 @@ export async function createTeacherCourseGradebook(
   courseId: string,
   classroomId: string,
   context: AuditRequestContext,
+  expectedSchemeId?: string,
 ) {
   return prisma.$transaction(
     async (transaction) => {
@@ -109,8 +110,18 @@ export async function createTeacherCourseGradebook(
           "PUBLISHED_ASSESSMENT_SCHEME_REQUIRED",
         );
       }
+      if (
+        expectedSchemeId &&
+        expectedSchemeId !== course.currentPublishedAssessmentSchemeId
+      ) {
+        throw new GradebookOperationError(
+          "考核方案已更新，请刷新列表后再建立台账。",
+          409,
+          "ASSESSMENT_SCHEME_CHANGED",
+        );
+      }
       const classroom = await transaction.classroom.findFirst({
-        where: { id: classroomId, teacherId, courseId },
+        where: { id: classroomId, teacherId, courseId, status: "ACTIVE" },
         select: { id: true, name: true },
       });
       if (!classroom) throw new ResourceNotFoundError("班级不存在。");
@@ -483,6 +494,7 @@ export async function syncTeacherPlatformAssignmentGrades(
           id: assignmentId,
           classroomId: gradebook.classroomId,
           teacherId,
+          status: { not: "DRAFT" },
         },
         select: { id: true, title: true, totalPoints: true },
       });
@@ -984,6 +996,69 @@ export async function listTeacherCourseGradebooks(
   });
 }
 
+export async function getTeacherGradebookOverview(
+  teacherId: string,
+  courseId: string,
+) {
+  const course = await ownedCourseOrThrow(teacherId, courseId);
+  const [classrooms, gradebooks, currentScheme] = await Promise.all([
+    prisma.classroom.findMany({
+      where: { courseId, teacherId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        _count: {
+          select: {
+            memberships: { where: { status: MembershipStatus.ACTIVE } },
+          },
+        },
+      },
+    }),
+    prisma.courseGradebook.findMany({
+      where: { courseId, classroom: { teacherId } },
+      select: {
+        id: true,
+        classroom: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            _count: {
+              select: {
+                memberships: { where: { status: MembershipStatus.ACTIVE } },
+              },
+            },
+          },
+        },
+        scheme: { select: { id: true, versionNumber: true } },
+        currentPublication: {
+          select: { versionNumber: true, publishedAt: true },
+        },
+      },
+    }),
+    course.currentPublishedAssessmentSchemeId
+      ? prisma.publishedAssessmentScheme.findUnique({
+          where: { id: course.currentPublishedAssessmentSchemeId },
+          select: { id: true, versionNumber: true },
+        })
+      : null,
+  ]);
+  return {
+    currentScheme,
+    classrooms: classrooms.map(({ _count, ...classroom }) => ({
+      ...classroom,
+      studentCount: _count.memberships,
+    })),
+    gradebooks: gradebooks.map(
+      ({ classroom: { _count, ...classroom }, ...gradebook }) => ({
+        ...gradebook,
+        classroom: { ...classroom, studentCount: _count.memberships },
+      }),
+    ),
+  };
+}
+
 export async function getStudentPublishedCourseGrades(
   studentId: string,
   courseId: string,
@@ -1081,4 +1156,50 @@ export async function listStudentPublishedCourseGradeResults(
       },
     ];
   });
+}
+
+export async function listStudentCourseEvaluationContexts(studentId: string) {
+  const memberships = await prisma.classMembership.findMany({
+    where: {
+      studentId,
+      status: MembershipStatus.ACTIVE,
+      classroom: { courseId: { not: null } },
+    },
+    select: {
+      classroom: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          course: {
+            select: {
+              id: true,
+              name: true,
+              term: true,
+              status: true,
+              courseNo: true,
+              teacher: {
+                select: { profile: { select: { displayName: true } } },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { classroom: { name: "asc" } },
+  });
+  return memberships.flatMap(({ classroom }) =>
+    classroom.course
+      ? [
+          {
+            course: classroom.course,
+            classroom: {
+              id: classroom.id,
+              name: classroom.name,
+              status: classroom.status,
+            },
+          },
+        ]
+      : [],
+  );
 }

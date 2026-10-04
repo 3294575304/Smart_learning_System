@@ -33,6 +33,13 @@ export interface TeacherDashboardData {
     dueAt: Date | null;
     submissionCount: number;
   }>;
+  upcomingAssignments: Array<{
+    id: string;
+    title: string;
+    classroomName: string;
+    dueAt: Date;
+    submissionCount: number;
+  }>;
   activeClassrooms: Array<{
     id: string;
     name: string;
@@ -60,6 +67,7 @@ function percentage(part: number, total: number): number | null {
 export async function getTeacherDashboard(
   teacherId: string,
 ): Promise<TeacherDashboardData> {
+  const now = new Date();
   const evaluatedAnswerWhere: Prisma.StudentAnswerWhereInput = {
     submission: { assignment: { teacherId } },
     isCorrect: { not: null },
@@ -73,14 +81,16 @@ export async function getTeacherDashboard(
     evaluatedAnswerCount,
     correctAnswerCount,
     recentAssignments,
+    upcomingAssignments,
     activeClassrooms,
     recentSubmissions,
     knowledgePointAnswers,
   ] = await Promise.all([
-    prisma.classroom.count({ where: { teacherId } }),
+    prisma.classroom.count({ where: { teacherId, status: "ACTIVE" } }),
     prisma.question.count({
       where: {
         creatorId: teacherId,
+        isAssignmentOnly: false,
         deletedAt: null,
         status: { not: QuestionStatus.ARCHIVED },
       },
@@ -108,12 +118,30 @@ export async function getTeacherDashboard(
         status: true,
         dueAt: true,
         classroom: { select: { name: true } },
-        _count: {
-          select: {
-            submissions: {
-              where: { status: { in: COMPLETED_SUBMISSION_STATUSES } },
-            },
-          },
+        submissions: {
+          where: { status: { in: COMPLETED_SUBMISSION_STATUSES } },
+          distinct: ["studentId"],
+          select: { studentId: true },
+        },
+      },
+    }),
+    prisma.assignment.findMany({
+      where: {
+        teacherId,
+        status: AssignmentStatus.PUBLISHED,
+        dueAt: { gte: now },
+      },
+      orderBy: [{ dueAt: "asc" }, { id: "asc" }],
+      take: 4,
+      select: {
+        id: true,
+        title: true,
+        dueAt: true,
+        classroom: { select: { name: true } },
+        submissions: {
+          where: { status: { in: COMPLETED_SUBMISSION_STATUSES } },
+          distinct: ["studentId"],
+          select: { studentId: true },
         },
       },
     }),
@@ -218,8 +246,21 @@ export async function getTeacherDashboard(
       status: assignment.status,
       classroomName: assignment.classroom.name,
       dueAt: assignment.dueAt,
-      submissionCount: assignment._count.submissions,
+      submissionCount: assignment.submissions.length,
     })),
+    upcomingAssignments: upcomingAssignments.flatMap((assignment) =>
+      assignment.dueAt
+        ? [
+            {
+              id: assignment.id,
+              title: assignment.title,
+              classroomName: assignment.classroom.name,
+              dueAt: assignment.dueAt,
+              submissionCount: assignment.submissions.length,
+            },
+          ]
+        : [],
+    ),
     activeClassrooms: activeClassrooms.map((classroom) => ({
       id: classroom.id,
       name: classroom.name,

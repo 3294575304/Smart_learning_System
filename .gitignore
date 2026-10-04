@@ -53,3 +53,6 @@ prisma/*.db-journal
 /tmp
 .workbuddy/memory/
 /docs
+/outputs/
+start-all.ps1
+stop-all.ps1

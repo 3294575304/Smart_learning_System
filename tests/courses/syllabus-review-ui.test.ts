@@ -60,6 +60,14 @@ test("教学大纲使用独立工作区并从课程详情提供入口", async ()
   assert.match(page, /requirePageRole\(Role\.TEACHER\)/u);
   assert.match(page, /getTeacherCourse\(teacher\.id, courseId\.data\)/u);
   assert.match(page, /ResourceNotFoundError/u);
-  assert.match(courseDetail, /进入教学大纲工作区/u);
-  assert.match(courseDetail, /\/syllabus/u);
+  assert.match(courseDetail, /CourseWorkspaceNavigation/u);
+  const navigation = await readFile(
+    new URL(
+      "../../components/courses/course-workspace-navigation.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(navigation, /教学大纲/u);
+  assert.match(navigation, /path: "syllabus"/u);
 });

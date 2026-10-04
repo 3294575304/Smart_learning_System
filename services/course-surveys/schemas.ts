@@ -120,7 +120,10 @@ export const updateCourseSurveySchema = z
   });
 
 export const publishCourseSurveySchema = z
-  .object({ expectedVersion: z.number().int().positive() })
+  .object({
+    expectedVersion: z.number().int().positive(),
+    openImmediately: z.boolean().default(false),
+  })
   .strict();
 
 export const courseSurveyListQuerySchema = z

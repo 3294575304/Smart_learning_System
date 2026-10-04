@@ -3,15 +3,14 @@
 import { NotificationPriority, NotificationType } from "@prisma/client";
 import {
   Bell,
-  ArrowRight,
   Check,
   CheckCheck,
   ChevronLeft,
   ChevronRight,
   LoaderCircle,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { NotificationLink } from "@/components/notifications/notification-link";
 
 import { NOTIFICATIONS_CHANGED_EVENT } from "@/components/notifications/notification-indicator";
 import { requestNotificationApi } from "@/components/notifications/request-api";
@@ -51,7 +50,7 @@ export function NotificationCenter({
 }: {
   initialResult: NotificationListResult;
 }) {
-  const router = useRouter();
+  const requestVersion = useRef(0);
   const [result, setResult] = useState(initialResult);
   const [filters, setFilters] = useState<Filters>({
     status: "",
@@ -59,11 +58,16 @@ export function NotificationCenter({
     priority: "",
   });
   const [loading, setLoading] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
   const [pendingReadId, setPendingReadId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function load(page: number, nextFilters = filters) {
+  const load = useCallback(async function load(
+    page: number,
+    nextFilters: Filters,
+  ) {
+    const version = ++requestVersion.current;
     setLoading(true);
     setError(null);
     const params = new URLSearchParams({ page: String(page), pageSize: "20" });
@@ -74,13 +78,22 @@ export function NotificationCenter({
       `/api/notifications?${params.toString()}`,
       { cache: "no-store" },
     );
+    if (version !== requestVersion.current) return;
     setLoading(false);
     if (!response.success) {
       setError(response.error);
       return;
     }
+    if (page > 1 && response.data.items.length === 0) {
+      await load(Math.max(1, response.data.pagination.totalPages), nextFilters);
+      return;
+    }
     setResult(response.data);
-  }
+  }, []);
+
+  useEffect(() => {
+    void load(1, { status: "", type: "", priority: "" });
+  }, [load]);
 
   function applyFilter<Key extends keyof Filters>(
     key: Key,
@@ -91,24 +104,6 @@ export function NotificationCenter({
     void load(1, nextFilters);
   }
 
-  async function openNotification(notificationId: string, isUnread: boolean) {
-    setError(null);
-    if (isUnread) {
-      setLoading(true);
-      const response = await requestNotificationApi<{ readAt: Date }>(
-        `/api/notifications/${encodeURIComponent(notificationId)}/read`,
-        { method: "PATCH" },
-      );
-      setLoading(false);
-      if (!response.success) {
-        setError(response.error);
-        return;
-      }
-      window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
-    }
-    router.push(`/notifications/${encodeURIComponent(notificationId)}`);
-  }
-
   async function markOneRead(notificationId: string) {
     setError(null);
     setPendingReadId(notificationId);
@@ -116,8 +111,8 @@ export function NotificationCenter({
       `/api/notifications/${encodeURIComponent(notificationId)}/read`,
       { method: "PATCH" },
     );
-    setPendingReadId(null);
     if (!response.success) {
+      setPendingReadId(null);
       setError(response.error);
       return;
     }
@@ -129,27 +124,30 @@ export function NotificationCenter({
       ),
     }));
     window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
-    if (filters.status === "UNREAD") {
-      await load(result.pagination.page);
-    }
+    setMessage("已标记为已读。");
+    if (filters.status === "UNREAD")
+      await load(result.pagination.page, filters);
+    setPendingReadId(null);
   }
 
   async function markAllRead() {
-    setLoading(true);
+    if (markingAll || pendingReadId) return;
+    setMarkingAll(true);
     setError(null);
     setMessage(null);
     const response = await requestNotificationApi<{ updatedCount: number }>(
       "/api/notifications/read-all",
       { method: "POST" },
     );
-    setLoading(false);
     if (!response.success) {
+      setMarkingAll(false);
       setError(response.error);
       return;
     }
     setMessage(`已将 ${response.data.updatedCount} 条通知标记为已读。`);
     window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
-    await load(1);
+    await load(1, filters);
+    setMarkingAll(false);
   }
 
   return (
@@ -158,34 +156,47 @@ export function NotificationCenter({
         <div>
           <h1 className="text-2xl font-semibold">通知中心</h1>
           <p className="mt-1 text-sm text-gray-600">
-            查看作业、学情分析、推荐练习和系统公告的真实业务通知。
+            集中查看学习提醒与系统消息，打开通知即可了解详情。
           </p>
         </div>
         <button
           className="inline-flex items-center justify-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-          disabled={loading}
+          disabled={loading || markingAll || pendingReadId !== null}
           onClick={() => void markAllRead()}
           type="button"
         >
-          <CheckCheck className="h-4 w-4" />
-          全部标记为已读
+          {markingAll ? (
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+          ) : (
+            <CheckCheck className="h-4 w-4" />
+          )}
+          {markingAll ? "正在标记…" : "全部标记为已读"}
         </button>
       </header>
 
       <div className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-3">
+        <div className="flex items-center gap-1" aria-label="已读状态">
+          {(
+            [
+              { value: "", label: "全部" },
+              { value: "UNREAD", label: "未读" },
+              { value: "READ", label: "已读" },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              disabled={markingAll || pendingReadId !== null}
+              aria-pressed={filters.status === item.value}
+              className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${filters.status === item.value ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-sky-50"}`}
+              onClick={() => applyFilter("status", item.value)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         <select
-          aria-label="已读状态"
-          className="rounded-md border bg-white px-3 py-2 text-sm"
-          onChange={(event) =>
-            applyFilter("status", event.target.value as Filters["status"])
-          }
-          value={filters.status}
-        >
-          <option value="">全部状态</option>
-          <option value="UNREAD">只看未读</option>
-          <option value="READ">只看已读</option>
-        </select>
-        <select
+          disabled={markingAll || pendingReadId !== null}
           aria-label="通知类型"
           className="rounded-md border bg-white px-3 py-2 text-sm"
           onChange={(event) =>
@@ -201,6 +212,7 @@ export function NotificationCenter({
           ))}
         </select>
         <select
+          disabled={markingAll || pendingReadId !== null}
           aria-label="通知优先级"
           className="rounded-md border bg-white px-3 py-2 text-sm"
           onChange={(event) =>
@@ -223,6 +235,12 @@ export function NotificationCenter({
           role="alert"
         >
           {error}
+          <button
+            className="ml-3 underline"
+            onClick={() => void load(result.pagination.page, filters)}
+          >
+            重新加载
+          </button>
         </div>
       ) : null}
       {message ? (
@@ -234,28 +252,50 @@ export function NotificationCenter({
         </div>
       ) : null}
 
-      {result.items.length === 0 ? (
+      <div className="flex items-center justify-between text-sm text-slate-500">
+        <span role="status">
+          {loading
+            ? "正在更新通知…"
+            : `共 ${result.pagination.total} 条通知 · 按时间倒序`}
+        </span>
+        {(filters.status || filters.type || filters.priority) && (
+          <button
+            disabled={loading || markingAll || pendingReadId !== null}
+            className="text-sky-700 hover:underline disabled:opacity-50"
+            onClick={() => {
+              const reset: Filters = { status: "", type: "", priority: "" };
+              setFilters(reset);
+              void load(1, reset);
+            }}
+          >
+            重置筛选
+          </button>
+        )}
+      </div>
+      {loading ? (
+        <div
+          role="status"
+          className="flex items-center justify-center gap-2 rounded-xl border bg-white p-12 text-slate-500"
+        >
+          <LoaderCircle className="size-5 animate-spin" />
+          正在加载…
+        </div>
+      ) : result.items.length === 0 ? (
         <div className="rounded-xl border bg-white px-6 py-14 text-center">
           <Bell className="mx-auto h-9 w-9 text-gray-400" />
           <h2 className="mt-3 font-semibold">暂无通知</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            当前筛选条件下没有真实业务通知。
-          </p>
+          <p className="mt-1 text-sm text-gray-500">试试切换状态或重置筛选。</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="divide-y overflow-hidden rounded-xl border bg-white">
           {result.items.map((item) => {
             const unread = item.readAt === null;
             return (
               <article
-                className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center ${unread ? "border-l-4 border-l-blue-600 bg-blue-50/40" : "bg-white"}`}
+                className={`flex flex-col gap-3 p-5 sm:flex-row sm:items-center ${unread ? "border-l-4 border-l-blue-600 bg-blue-50/40" : "bg-white"}`}
                 key={item.id}
               >
-                <button
-                  className="min-w-0 flex-1 rounded-md text-left focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
-                  onClick={() => void openNotification(item.id, unread)}
-                  type="button"
-                >
+                <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
                       <span className="rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-700">
@@ -283,34 +323,36 @@ export function NotificationCenter({
                   <h2 className="mt-2 font-semibold text-gray-950">
                     {item.title}
                   </h2>
-                  <p className="mt-1 text-sm leading-6 whitespace-pre-wrap text-gray-600">
+                  <p className="mt-1 line-clamp-2 text-sm leading-6 whitespace-pre-wrap text-gray-600">
                     {item.content}
                   </p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-700">
-                    查看通知详情
-                    <ArrowRight aria-hidden="true" className="size-4" />
-                  </span>
-                </button>
-                {unread ? (
-                  <button
-                    aria-label={`将“${item.title}”标记为已读`}
-                    className="inline-flex shrink-0 items-center justify-center gap-1.5 self-end rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-wait disabled:opacity-50 sm:self-center"
-                    disabled={loading || pendingReadId !== null}
-                    onClick={() => void markOneRead(item.id)}
-                    title="只标记此通知为已读"
-                    type="button"
-                  >
-                    {pendingReadId === item.id ? (
-                      <LoaderCircle
-                        aria-hidden="true"
-                        className="size-4 animate-spin"
-                      />
-                    ) : (
-                      <Check aria-hidden="true" className="size-4" />
-                    )}
-                    标记已读
-                  </button>
-                ) : null}
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <NotificationLink
+                    href={`/notifications/${encodeURIComponent(item.id)}`}
+                    label="查看详情"
+                  />
+                  {unread ? (
+                    <button
+                      aria-label={`将“${item.title}”标记为已读`}
+                      className="inline-flex shrink-0 items-center justify-center gap-1.5 self-end rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-wait disabled:opacity-50 sm:self-center"
+                      disabled={loading || markingAll || pendingReadId !== null}
+                      onClick={() => void markOneRead(item.id)}
+                      title="只标记此通知为已读"
+                      type="button"
+                    >
+                      {pendingReadId === item.id ? (
+                        <LoaderCircle
+                          aria-hidden="true"
+                          className="size-4 animate-spin"
+                        />
+                      ) : (
+                        <Check aria-hidden="true" className="size-4" />
+                      )}
+                      标记已读
+                    </button>
+                  ) : null}
+                </div>
               </article>
             );
           })}
@@ -330,8 +372,13 @@ export function NotificationCenter({
             <button
               aria-label="上一页"
               className="rounded-md border bg-white p-2 disabled:opacity-40"
-              disabled={loading || result.pagination.page <= 1}
-              onClick={() => void load(result.pagination.page - 1)}
+              disabled={
+                loading ||
+                markingAll ||
+                pendingReadId !== null ||
+                result.pagination.page <= 1
+              }
+              onClick={() => void load(result.pagination.page - 1, filters)}
               type="button"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -341,9 +388,11 @@ export function NotificationCenter({
               className="rounded-md border bg-white p-2 disabled:opacity-40"
               disabled={
                 loading ||
+                markingAll ||
+                pendingReadId !== null ||
                 result.pagination.page >= result.pagination.totalPages
               }
-              onClick={() => void load(result.pagination.page + 1)}
+              onClick={() => void load(result.pagination.page + 1, filters)}
               type="button"
             >
               <ChevronRight className="h-4 w-4" />

@@ -1,3 +1,5 @@
+import { courseSurveyAvailability } from "./availability";
+import { getStudentClassroomContext } from "@/services/courses/student-access";
 import "server-only";
 
 import {
@@ -309,6 +311,7 @@ export async function publishCourseSurvey(
   surveyId: string,
   expectedVersion: number,
   context: AuditRequestContext,
+  openImmediately = false,
 ) {
   return prisma.$transaction(async (transaction) => {
     const survey = await transaction.courseSurvey.findFirst({
@@ -352,6 +355,7 @@ export async function publishCourseSurvey(
       throw new CourseSurveyOperationError("问卷至少需要一道五级量表题。", 409);
     }
     const publishedAt = new Date();
+    const opensAt = openImmediately ? publishedAt : survey.opensAt;
     const updated = await transaction.courseSurvey.updateMany({
       where: {
         id: surveyId,
@@ -361,6 +365,7 @@ export async function publishCourseSurvey(
       data: {
         status: CourseSurveyStatus.PUBLISHED,
         publishedAt,
+        opensAt,
         version: { increment: 1 },
       },
     });
@@ -375,9 +380,9 @@ export async function publishCourseSurvey(
         recipientId: studentId,
         type: NotificationType.COURSE_SURVEY_PUBLISHED,
         title: "结课问卷已发布",
-        content: `${survey.teacher.profile?.displayName ?? "任课教师"}发布了《${survey.title}》。问卷不计入成绩，请在截止时间前完成。`,
+        content: `${survey.teacher.profile?.displayName ?? "任课教师"}发布了《${survey.title}》。${opensAt > publishedAt ? `将于 ${opensAt.toLocaleString("zh-CN")} 开放；` : "现已开放；"}问卷不计入成绩，请在截止时间前完成。`,
         priority: NotificationPriority.NORMAL,
-        actionUrl: "/student/surveys",
+        actionUrl: `/student/surveys/${survey.id}`,
         sourceType: NotificationSourceType.COURSE_SURVEY,
         sourceId: survey.id,
         deduplicationKey: `course-survey-published:${survey.id}`,
@@ -394,12 +399,15 @@ export async function publishCourseSurvey(
       beforeData: {
         status: CourseSurveyStatus.DRAFT,
         version: expectedVersion,
+        opensAt: survey.opensAt.toISOString(),
       },
       afterData: {
         status: CourseSurveyStatus.PUBLISHED,
         version: expectedVersion + 1,
         recipientCount: survey.classroom.memberships.length,
         mode: survey.mode,
+        opensAt: opensAt.toISOString(),
+        openImmediately,
       },
       context,
     });
@@ -481,13 +489,17 @@ async function studentSurvey(studentId: string, surveyId: string) {
 export async function listStudentCourseSurveys(
   studentId: string,
   courseId?: string,
+  classroomId?: string,
 ) {
+  if (classroomId)
+    await getStudentClassroomContext(studentId, classroomId, courseId);
   if (courseId) await getStudentCourseContext(studentId, courseId);
   const now = new Date();
   const surveys = await prisma.courseSurvey.findMany({
     where: {
+      ...(classroomId ? { classroomId } : {}),
       OR: [
-        { status: CourseSurveyStatus.PUBLISHED, dueAt: { gt: now } },
+        { status: CourseSurveyStatus.PUBLISHED },
         {
           status: CourseSurveyStatus.CLOSED,
           participations: { some: { studentId } },
@@ -507,15 +519,20 @@ export async function listStudentCourseSurveys(
     },
     orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }],
   });
-  return surveys.map((survey) => ({
-    ...survey,
-    isOpen:
-      survey.status === CourseSurveyStatus.PUBLISHED &&
-      survey.opensAt <= now &&
-      survey.dueAt > now,
-    submittedAt: survey.participations[0]?.submittedAt ?? null,
-    participations: undefined,
-  }));
+  return surveys.map((survey) => {
+    const submittedAt = survey.participations[0]?.submittedAt ?? null;
+    const availability = courseSurveyAvailability(
+      { ...survey, submittedAt },
+      now,
+    );
+    return {
+      ...survey,
+      availability,
+      isOpen: availability === "OPEN",
+      submittedAt,
+      participations: undefined,
+    };
+  });
 }
 
 export async function getStudentCourseSurvey(
@@ -523,21 +540,15 @@ export async function getStudentCourseSurvey(
   surveyId: string,
 ) {
   const survey = await studentSurvey(studentId, surveyId);
-  const now = new Date();
-  if (survey.participations[0]) {
-    return {
-      ...survey,
-      submittedAt: survey.participations[0].submittedAt,
-      participations: undefined,
-    };
-  }
-  if (survey.opensAt > now)
-    throw new CourseSurveyOperationError("问卷尚未开放。", 409);
-  if (survey.dueAt <= now)
-    throw new CourseSurveyOperationError("问卷已截止。", 409);
+  const submittedAt = survey.participations[0]?.submittedAt ?? null;
+  const availability = courseSurveyAvailability({ ...survey, submittedAt });
   return {
     ...survey,
-    submittedAt: null,
+    availability,
+    isOpen: availability === "OPEN",
+    submittedAt,
+    questionCount: survey.questions.length,
+    questions: availability === "OPEN" ? survey.questions : [],
     participations: undefined,
   };
 }

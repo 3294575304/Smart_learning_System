@@ -12,6 +12,7 @@ export function KnowledgeGraphDirectory({
   selectedKey,
   counts,
   showQuestionCounts = true,
+  compact = false,
   onSelect,
 }: {
   graph: KnowledgeGraphStructure;
@@ -19,6 +20,7 @@ export function KnowledgeGraphDirectory({
   selectedKey: string | null;
   counts: Map<string, number>;
   showQuestionCounts?: boolean;
+  compact?: boolean;
   onSelect: (key: string) => void;
 }) {
   const courseNode = graph.nodes.find((node) => node.type === "COURSE");
@@ -67,9 +69,17 @@ export function KnowledgeGraphDirectory({
     >
       <h4 className="font-medium">节点目录</h4>
       <p className="mt-1 text-xs leading-5 text-gray-500">
-        点击中文名称定位，查看知识点与关联题目。
+        {showQuestionCounts
+          ? "点击中文名称定位，查看知识点与关联题目。"
+          : "按章节查找，点击查看详情与练习。"}
       </p>
-      <div className="mt-3 max-h-72 overflow-y-auto lg:max-h-[700px]">
+      <div
+        className={
+          compact
+            ? "mt-3 max-h-64 overflow-y-auto md:max-h-[580px]"
+            : "mt-3 max-h-72 overflow-y-auto lg:max-h-[700px]"
+        }
+      >
         <div
           className="rounded border border-l-4 bg-white p-2"
           style={{ borderLeftColor: "#334155" }}

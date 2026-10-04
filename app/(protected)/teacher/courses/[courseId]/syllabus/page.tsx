@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CourseSyllabusCard } from "@/components/courses/course-syllabus-card";
@@ -30,12 +30,9 @@ export default async function CourseSyllabusPage({
     <section className="space-y-6">
       <PageHeader
         actions={
-          <Link
-            className="rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-sky-50/70"
-            href={`/teacher/courses/${courseId.data}`}
-          >
+          <TeacherBackLink href={`/teacher/courses/${courseId.data}`}>
             返回课程
-          </Link>
+          </TeacherBackLink>
         }
         description="上传文本型 PDF，查看解析进度，并对照原文审核课程信息、目标、教学内容和目标—考核方式占比后发布正式版本。"
         title={`${course.name} · 教学大纲解析与审核`}

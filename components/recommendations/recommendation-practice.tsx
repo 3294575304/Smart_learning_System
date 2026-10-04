@@ -1,9 +1,12 @@
 "use client";
 
+import { FavoriteButton } from "@/components/question-favorites/favorite-button";
+import { requestApi } from "@/components/courses/request-api";
+import { recommendationDetailApiPath } from "@/lib/api/recommendations";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { QuestionType, RecommendationStatus } from "@prisma/client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -31,6 +34,12 @@ import type {
 
 interface Props {
   recommendation: RecommendationDetailView;
+  embedded?: boolean;
+  onCompleted?: (id: string) => void;
+  onDraftChange?: (id: string, answer: QuestionAnswerState) => void;
+  initialAnswer?: QuestionAnswerState;
+  batchBusy?: boolean;
+  onSubmissionStateChange?: (id: string, pending: boolean) => void;
 }
 
 const clientPracticeFormSchema = z.object({
@@ -42,7 +51,7 @@ const clientPracticeFormSchema = z.object({
     z.object({ kind: z.literal("BOOLEAN"), value: z.boolean() }),
     z.object({
       kind: z.literal("TEXT"),
-      value: z.string().refine((text) => text.trim().length > 0, "请输入答案"),
+      value: z.string().max(10000, "答案不能超过 10000 个字符"),
     }),
   ]),
 });
@@ -151,7 +160,15 @@ function PracticeResult({
   );
 }
 
-export function RecommendationPractice({ recommendation }: Props) {
+export function RecommendationPractice({
+  recommendation,
+  embedded,
+  onCompleted,
+  onDraftChange,
+  initialAnswer,
+  batchBusy,
+  onSubmissionStateChange,
+}: Props) {
   const question = {
     id: recommendation.questionId,
     type: recommendation.type,
@@ -165,7 +182,11 @@ export function RecommendationPractice({ recommendation }: Props) {
   const [programmingAttemptId, setProgrammingAttemptId] = useState(
     recommendation.programmingAttempt?.id ?? null,
   );
-  const [code, setCode] = useState(recommendation.starterCode ?? "");
+  const [code, setCode] = useState(
+    initialAnswer?.kind === "CODE"
+      ? initialAnswer.value
+      : (recommendation.starterCode ?? ""),
+  );
   const [programmingPending, setProgrammingPending] = useState(false);
   const form = useForm<
     z.input<typeof clientPracticeFormSchema>,
@@ -174,7 +195,40 @@ export function RecommendationPractice({ recommendation }: Props) {
   >({
     resolver: zodResolver(clientPracticeFormSchema),
     mode: "onChange",
+    defaultValues:
+      !initialAnswer &&
+      (recommendation.type === "FILL_BLANK" ||
+        recommendation.type === "SHORT_ANSWER")
+        ? { answer: { kind: "TEXT", value: "" } }
+        : initialAnswer &&
+            initialAnswer.kind !== "CODE" &&
+            !(initialAnswer.kind === "BOOLEAN" && initialAnswer.value === null)
+          ? { answer: initialAnswer as ClientPracticeFormData["answer"] }
+          : undefined,
   });
+  useEffect(() => {
+    if (
+      recommendation.type === "PYTHON_PROGRAMMING" &&
+      !initialAnswer &&
+      recommendation.starterCode
+    ) {
+      onDraftChange?.(recommendation.id, {
+        kind: "CODE",
+        value: recommendation.starterCode,
+      });
+    }
+  }, [
+    recommendation.id,
+    recommendation.type,
+    recommendation.starterCode,
+    initialAnswer,
+    onDraftChange,
+  ]);
+  const submitting = form.formState.isSubmitting || programmingPending;
+  useEffect(() => {
+    onSubmissionStateChange?.(recommendation.id, submitting);
+    return () => onSubmissionStateChange?.(recommendation.id, false);
+  }, [onSubmissionStateChange, recommendation.id, submitting]);
   const watchedAnswer =
     form.watch("answer") ??
     (recommendation.type === QuestionType.SINGLE_CHOICE ||
@@ -187,7 +241,7 @@ export function RecommendationPractice({ recommendation }: Props) {
   async function submit(input: ClientPracticeFormData) {
     if (
       !window.confirm(
-        "确认提交推荐练习？提交后将立即判分并更新知识掌握度，答案不可修改。",
+        "确认提交当前题目？空白文字答案记 0 分。提交后更新学习记录，答案不可修改。",
       )
     ) {
       return;
@@ -210,6 +264,7 @@ export function RecommendationPractice({ recommendation }: Props) {
       return;
     }
     setResult(response.data);
+    onCompleted?.(recommendation.id);
   }
 
   async function submitProgramming() {
@@ -229,20 +284,28 @@ export function RecommendationPractice({ recommendation }: Props) {
   }
 
   return (
-    <section className="min-w-0 space-y-6">
-      <header className="min-w-0">
-        <Link
-          className="text-sm text-gray-500 hover:underline"
-          href={`/student/recommendations/${recommendation.id}`}
-        >
-          ← 返回推荐详情
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold break-words">推荐练习</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          作答结果由服务端判分，并同步更新错题与知识掌握度。
-        </p>
-      </header>
+    <section className="min-w-0 space-y-6" aria-busy={batchBusy}>
+      {!embedded && (
+        <header className="min-w-0">
+          <Link
+            className="text-sm text-gray-500 hover:underline"
+            href={`/student/recommendations/${recommendation.id}`}
+          >
+            ← 返回推荐详情
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold break-words">推荐练习</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            作答结果由服务端判分，并同步更新错题与知识掌握度。
+          </p>
+        </header>
+      )}
 
+      <div className="flex justify-end">
+        <FavoriteButton
+          questionId={recommendation.questionId}
+          source={{ kind: "RECOMMENDATION", id: recommendation.id }}
+        />
+      </div>
       {result ? (
         <PracticeResult result={result} />
       ) : recommendation.status === RecommendationStatus.COMPLETED ? (
@@ -263,7 +326,13 @@ export function RecommendationPractice({ recommendation }: Props) {
               aria-label="Python 代码"
               className="mt-4 min-h-80 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900"
               disabled={programmingPending || Boolean(programmingAttemptId)}
-              onChange={(event) => setCode(event.target.value)}
+              onChange={(event) => {
+                setCode(event.target.value);
+                onDraftChange?.(recommendation.id, {
+                  kind: "CODE",
+                  value: event.target.value,
+                });
+              }}
               value={code}
             />
           </article>
@@ -276,6 +345,20 @@ export function RecommendationPractice({ recommendation }: Props) {
             <ProgrammingAttemptStatus
               assignmentQuestionId={recommendation.questionId}
               attemptId={programmingAttemptId}
+              onComplete={() => {
+                void requestApi<RecommendationDetailView>(
+                  recommendationDetailApiPath(recommendation.id),
+                  { method: "GET" },
+                ).then((response) => {
+                  if (
+                    response.success &&
+                    response.data.status === "COMPLETED"
+                  ) {
+                    setResult(response.data.practiceResult);
+                    onCompleted?.(recommendation.id);
+                  }
+                });
+              }}
             />
           ) : (
             <button
@@ -292,10 +375,7 @@ export function RecommendationPractice({ recommendation }: Props) {
           </p>
         </div>
       ) : (
-        <form
-          className="space-y-5"
-          onSubmit={form.handleSubmit((input) => void submit(input))}
-        >
+        <form className="space-y-5" onSubmit={form.handleSubmit(submit)}>
           <article className="min-w-0 rounded-xl border bg-white p-4 sm:p-6">
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
@@ -318,6 +398,7 @@ export function RecommendationPractice({ recommendation }: Props) {
               answer={watchedAnswer}
               disabled={form.formState.isSubmitting}
               onChange={(answer) => {
+                onDraftChange?.(recommendation.id, answer);
                 if (answer.kind === "BOOLEAN") {
                   if (answer.value === null) return;
                   form.setValue(
@@ -352,7 +433,7 @@ export function RecommendationPractice({ recommendation }: Props) {
             disabled={form.formState.isSubmitting}
             type="submit"
           >
-            {form.formState.isSubmitting ? "正在提交并判分…" : "提交练习"}
+            {form.formState.isSubmitting ? "正在提交并判分…" : "提交当前题"}
           </button>
         </form>
       )}

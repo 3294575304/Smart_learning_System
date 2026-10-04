@@ -31,9 +31,10 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    ".data/course-grade-breakdown-preview/build-final/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".data/course-grade-breakdown-preview/build-final/types/**/*.ts"
+    ".data/next-production/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

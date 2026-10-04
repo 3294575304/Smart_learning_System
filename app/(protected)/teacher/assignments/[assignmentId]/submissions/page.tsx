@@ -1,3 +1,4 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role, SubmissionStatus } from "@prisma/client";
 import { ClipboardCheck, Eye } from "lucide-react";
 import Link from "next/link";
@@ -76,12 +77,9 @@ export default async function TeacherSubmissionsPage({
       <section className="space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Link
-              className="text-muted-foreground text-sm underline"
-              href="/teacher/assignments"
-            >
+            <TeacherBackLink href="/teacher/assignments">
               返回作业管理
-            </Link>
+            </TeacherBackLink>
             <h1 className="mt-3 text-2xl font-semibold">批改提交</h1>
             <p className="text-muted-foreground mt-2 text-sm">
               {result.assignment.title} · {result.assignment.classroomName} ·

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Role } from "@prisma/client";
 import {
@@ -11,10 +11,14 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  NavigationMemory,
+  NavigationMemoryProvider,
+} from "@/components/dashboard/navigation-memory";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
 import { buildBreadcrumbs } from "@/components/dashboard/breadcrumbs";
@@ -49,7 +53,18 @@ function displayUserName(user: AuthenticatedUser): string {
 }
 
 function Breadcrumbs({ pathname }: { pathname: string }) {
-  const crumbs = buildBreadcrumbs(pathname);
+  const searchParams = useSearchParams();
+  const classroomId = searchParams.get("classroomId");
+  const crumbs = buildBreadcrumbs(pathname).map((crumb) =>
+    classroomId &&
+    crumb.href.startsWith("/student/courses/") &&
+    crumb.href.endsWith("/learning-center")
+      ? {
+          ...crumb,
+          href: `${crumb.href}?classroomId=${encodeURIComponent(classroomId)}`,
+        }
+      : crumb,
+  );
 
   return (
     <nav aria-label="面包屑" className="min-w-0 overflow-hidden">
@@ -58,7 +73,10 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
           <li className="flex min-w-0 items-center gap-1" key={crumb.href}>
             {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0" /> : null}
             {crumb.linkable ? (
-              <Link className="truncate hover:text-gray-900" href={crumb.href}>
+              <Link
+                className="truncate rounded px-1 py-0.5 font-medium text-sky-700 underline-offset-4 transition hover:bg-sky-100 hover:underline focus-visible:outline-2 focus-visible:outline-sky-600"
+                href={crumb.href}
+              >
                 {crumb.label}
               </Link>
             ) : (
@@ -316,7 +334,9 @@ export function DashboardShell({
               <p className="truncate text-sm font-semibold">
                 {currentPageTitle}
               </p>
-              <Breadcrumbs pathname={pathname} />
+              <Suspense fallback={null}>
+                <Breadcrumbs pathname={pathname} />
+              </Suspense>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <NotificationIndicator />
@@ -388,7 +408,14 @@ export function DashboardShell({
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main
+          id="dashboard-main"
+          data-workspace-role={user.role}
+          className={cn(
+            "mx-auto w-full min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8",
+            user.role === Role.STUDENT ? "max-w-[1440px]" : "max-w-7xl",
+          )}
+        >
           {platformAnnouncement ? (
             <div
               className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -397,7 +424,12 @@ export function DashboardShell({
               {platformAnnouncement}
             </div>
           ) : null}
-          {children}
+          <NavigationMemoryProvider userId={user.id}>
+            <Suspense fallback={null}>
+              <NavigationMemory userId={user.id} />
+            </Suspense>
+            {children}
+          </NavigationMemoryProvider>
         </main>
       </div>
 

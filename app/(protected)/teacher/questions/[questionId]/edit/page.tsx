@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { QuestionType, Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { QuestionForm } from "@/components/questions/question-form";
@@ -34,12 +34,9 @@ export default async function EditQuestionPage({
     return (
       <section className="space-y-6">
         <div>
-          <Link
-            className="text-sm text-gray-500 hover:underline"
-            href={`/teacher/questions/${question.id}`}
-          >
-            ← 返回题目详情
-          </Link>
+          <TeacherBackLink href={`/teacher/questions/${question.id}`}>
+            返回题目详情
+          </TeacherBackLink>
           <h1 className="mt-2 text-2xl font-semibold">编辑题目</h1>
           {question.assignmentReferenceCount > 0 ? (
             <p className="mt-2 text-sm text-amber-700">
@@ -47,13 +44,20 @@ export default async function EditQuestionPage({
             </p>
           ) : null}
         </div>
+        {question.type === "PYTHON_PROGRAMMING" ? (
+          <p className="rounded-lg border border-sky-100 bg-sky-50 p-4 text-sm text-sky-900">
+            编程题保留自动判题：测试用例分别计分，运行失败可由教师复核部分得分。参考代码、公开样例和隐藏用例保存为版本化配置；评分要点用于复核依据。
+          </p>
+        ) : null}
         <QuestionForm
           knowledgePoints={knowledgePoints}
           mode="edit"
           question={question}
         />
         {question.type === QuestionType.PYTHON_PROGRAMMING ? (
-          <ProgrammingConfigPanel questionId={question.id} />
+          <section id="programming-config" className="scroll-mt-24">
+            <ProgrammingConfigPanel questionId={question.id} />
+          </section>
         ) : null}
         <QuestionGraphBindingPanel courses={courses} questionId={question.id} />
       </section>

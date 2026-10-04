@@ -1,3 +1,4 @@
+import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -61,10 +62,16 @@ export default async function StudentWrongQuestionDetailPage({
                 {detail.lastWrongAt.toLocaleString("zh-CN")}
               </p>
             </div>
-            <MasteryToggleButton
-              initialIsMastered={detail.isMastered}
-              wrongQuestionId={detail.id}
-            />
+            <div className="flex items-center gap-2">
+              <FavoriteButton
+                questionId={detail.questionId}
+                source={{ kind: "WRONG_QUESTION", id: detail.id }}
+              />
+              <MasteryToggleButton
+                initialIsMastered={detail.isMastered}
+                wrongQuestionId={detail.id}
+              />
+            </div>
           </div>
         </header>
 

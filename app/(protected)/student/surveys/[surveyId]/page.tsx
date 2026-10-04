@@ -1,9 +1,10 @@
+import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import { Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StudentSurveyForm } from "@/components/course-surveys/student-survey-form";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseSurveyIdSchema } from "@/services/course-surveys/schemas";
@@ -40,6 +41,27 @@ export default async function StudentSurveyPage({
               提交时间：{survey.submittedAt.toLocaleString("zh-CN")}
               。回答不能再次修改。
             </p>
+          </div>
+        ) : !survey.isOpen ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+            <h2 className="font-semibold text-amber-900">
+              {survey.availability === "SCHEDULED"
+                ? "问卷已发布，等待开放"
+                : survey.availability === "CLOSED"
+                  ? "问卷已关闭"
+                  : "问卷已截止"}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-amber-900">
+              {survey.availability === "SCHEDULED"
+                ? `将于 ${survey.opensAt.toLocaleString("zh-CN")} 开放，到时可在本页填写，也会出现在学习任务中。`
+                : "当前不能继续提交，请联系任课教师了解后续安排。"}
+            </p>
+            <p className="mt-2 text-sm text-amber-800">
+              共 {survey.questionCount} 题 · 本问卷不计入课程成绩。
+            </p>
+            {survey.availability === "SCHEDULED" ? (
+              <SurveyAvailabilityRefresh at={survey.opensAt.toISOString()} />
+            ) : null}
           </div>
         ) : (
           <>

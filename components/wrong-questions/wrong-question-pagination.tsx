@@ -9,8 +9,10 @@ function pageHref(query: WrongQuestionListQuery, page: number): string {
   });
   if (query.keyword) params.set("keyword", query.keyword);
   if (query.classroomId) params.set("classroomId", query.classroomId);
+  if (query.courseId) params.set("courseId", query.courseId);
   if (query.knowledgePointId)
     params.set("knowledgePointId", query.knowledgePointId);
+  if (query.chapterId) params.set("chapterId", query.chapterId);
   if (query.type) params.set("type", query.type);
   if (query.isMastered !== undefined)
     params.set("isMastered", String(query.isMastered));

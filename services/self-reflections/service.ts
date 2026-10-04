@@ -20,6 +20,7 @@ import {
   selfReflectionAIInputSchema,
   updateSelfReflectionSchema,
 } from "@/services/self-reflections/schemas";
+import { learningRequestRestriction } from "@/services/learning-assistant/policy";
 import { getSystemConfig } from "@/services/system-config/service";
 
 export const SELF_REFLECTION_PROMPT_VERSION = "student-self-reflection-v1";
@@ -94,6 +95,9 @@ export async function createSelfReflection(
 ) {
   const input = createSelfReflectionSchema.parse(rawInput);
   const course = await reflectionCourse(studentId, courseId);
+  const restriction = learningRequestRestriction(input.text);
+  if (restriction)
+    throw new RecommendationOperationError(restriction.answer, 422);
   const concepts = (
     course.currentPublishedKnowledgeGraphVersion?.nodes ?? []
   ).map((node) => ({ id: node.conceptId, code: node.code, name: node.name }));

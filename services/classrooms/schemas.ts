@@ -47,3 +47,7 @@ export type UpdateClassroomInput = z.input<typeof updateClassroomSchema>;
 export type DissolveClassroomInput = z.input<typeof dissolveClassroomSchema>;
 export type DissolveClassroomData = z.output<typeof dissolveClassroomSchema>;
 export type JoinClassroomInput = z.input<typeof joinClassroomSchema>;
+
+export const classroomStudentPageSchema = z.object({
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+});

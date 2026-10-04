@@ -1,15 +1,9 @@
 import { AIInsightType, Role } from "@prisma/client";
-import {
-  ArrowRight,
-  BookOpen,
-  BrainCircuit,
-  GitBranch,
-  UserRound,
-} from "lucide-react";
+import { ArrowRight, BookOpen, BrainCircuit } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
 import { TrendChart } from "@/components/dashboard/trend-chart";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { getStudentLearningOverview } from "@/services/dashboard/student-dashboard";
@@ -57,55 +51,32 @@ export default async function StudentAnalyticsPage() {
           </div>
         </div>
         {profileCourses.length ? (
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 divide-y divide-slate-100">
             {profileCourses.map((course) => (
-              <article
-                className="overflow-hidden rounded-xl border border-sky-100 bg-white shadow-sm shadow-sky-100/70"
+              <Link
                 key={course.id}
+                href={`/student/courses/${course.id}/learning-center`}
+                className="flex min-w-0 items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-sky-50"
               >
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">
-                        {course.courseNo ?? "课程"}
-                      </p>
-                      <h3 className="mt-1 truncate font-semibold text-slate-950">
-                        {course.name}
-                      </h3>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-sky-100/70 px-3 py-1 text-xs text-slate-500">
-                      {course.term}
-                    </span>
-                  </div>
-                  <Link
-                    className="mt-5 flex items-center justify-between rounded-lg bg-sky-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:outline-none"
-                    href={`/student/courses/${course.id}/learning-center`}
-                  >
-                    进入课程学习中心
-                    <ArrowRight aria-hidden="true" className="size-4" />
-                  </Link>
-                </div>
-                <div className="grid grid-cols-2 border-t bg-sky-50/70">
-                  <Link
-                    className="flex items-center gap-2 border-r px-4 py-3 text-sm text-slate-600 transition hover:bg-sky-100/70 hover:text-slate-950"
-                    href={`/student/courses/${course.id}/profile`}
-                  >
-                    <UserRound aria-hidden="true" className="size-4" />
-                    我的课程画像
-                  </Link>
-                  <Link
-                    className="flex items-center gap-2 px-4 py-3 text-sm text-slate-600 transition hover:bg-sky-100/70 hover:text-slate-950"
-                    href={`/student/courses/${course.id}/knowledge-graph`}
-                  >
-                    <GitBranch aria-hidden="true" className="size-4" />
-                    课程知识图谱
-                  </Link>
-                </div>
-              </article>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium break-words">
+                    {course.name}
+                  </span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {course.term} · 查看课程学习状态
+                  </span>
+                </span>
+                <ArrowRight
+                  className="size-4 shrink-0 text-sky-700"
+                  aria-hidden="true"
+                />
+              </Link>
             ))}
           </div>
         ) : (
-          <p className="text-muted-foreground mt-4 text-sm">暂无已关联课程。</p>
+          <p className="mt-4 text-sm text-slate-500">
+            暂无已关联课程，可从“我的课程”查看入班方式。
+          </p>
         )}
       </section>
 
@@ -122,7 +93,7 @@ export default async function StudentAnalyticsPage() {
             <div>
               <h2 className="font-semibold">AI 学习总结</h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                展示最近一次已成功生成的分析
+                最近一次生成时的历史分析，不随当前答题自动更新
               </p>
             </div>
             {overview.latestAnalysis ? (
@@ -133,6 +104,9 @@ export default async function StudentAnalyticsPage() {
           </div>
           {overview.latestAnalysis ? (
             <div className="mt-5">
+              <p className="mb-3 rounded-lg border border-sky-100 bg-sky-50 p-3 text-xs leading-6 text-slate-700">
+                该总结和综合得分反映生成时的样本。当前知识点统计可能使用不同时间和课程范围；查看掌握状态时请结合下方最新证据，避免直接比较两个分数。
+              </p>
               <p className="text-sm leading-7">
                 {overview.latestAnalysis.summary ?? "本次分析未提供文字总结。"}
               </p>
@@ -167,7 +141,10 @@ export default async function StudentAnalyticsPage() {
       </div>
 
       <section className="bg-card rounded-xl border p-5 sm:p-6">
-        <h2 className="font-semibold">知识点掌握度</h2>
+        <h2 className="font-semibold">历史题目学习表现</h2>
+        <p className="mt-1 text-xs leading-5 text-slate-500">
+          以下为旧题目记录的参考统计。课程知识点的掌握状态，请进入上方课程学习中心查看。
+        </p>
         {overview.masteries.length === 0 ? (
           <div className="mt-4">
             <EmptyState
@@ -191,18 +168,36 @@ export default async function StudentAnalyticsPage() {
                     </p>
                   </div>
                   <span className="text-lg font-semibold">
-                    {mastery.masteryScore}%
+                    {
+                      {
+                        NOT_STARTED: "尚未评估",
+                        BEGINNER: "需加强",
+                        DEVELOPING: "巩固中",
+                        PROFICIENT: "熟练",
+                        MASTERED: "掌握良好",
+                      }[mastery.level]
+                    }
                   </span>
                 </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-sky-100/70">
                   <div
                     className="h-full rounded-full bg-sky-600"
-                    style={{ width: `${mastery.masteryScore}%` }}
+                    style={{
+                      width: `${Math.min(100, Math.max(0, mastery.masteryScore))}%`,
+                    }}
                   />
                 </div>
                 <p className="text-muted-foreground mt-2 text-xs">
                   已答 {mastery.answeredCount} 题 · 正确 {mastery.correctCount}{" "}
-                  题 · 趋势 {mastery.trend}
+                  题 ·{" "}
+                  {
+                    {
+                      UNKNOWN: "趋势待评估",
+                      UP: "近期进步",
+                      STABLE: "表现稳定",
+                      DOWN: "建议巩固",
+                    }[mastery.trend]
+                  }
                 </p>
               </article>
             ))}
@@ -225,7 +220,8 @@ export default async function StudentAnalyticsPage() {
                 <p className="text-muted-foreground mt-2 text-sm leading-6">
                   {insight.detail}
                 </p>
-                {insight.recommendedAction ? (
+                {insight.recommendedAction &&
+                insight.recommendedAction !== insight.detail ? (
                   <p className="mt-3 rounded-md bg-sky-50/70 p-3 text-sm">
                     {insight.recommendedAction}
                   </p>

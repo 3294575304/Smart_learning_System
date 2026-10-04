@@ -283,19 +283,46 @@ export function buildDeterministicNarrative(
           }`,
   }));
   const studentEvaluation = buildStudentEvaluation(source);
+  const assessments = source.syllabus?.assessments;
+  const assessmentMatches =
+    assessments?.length === source.components.length &&
+    assessments.every((assessment) =>
+      source.components.some(
+        (component) =>
+          component.code === assessment.code &&
+          component.name === assessment.name &&
+          Math.abs(component.weight - assessment.weight) < 0.000001,
+      ),
+    );
+  const mapped =
+    source.outcomes.length > 0 &&
+    source.outcomes.every(
+      (outcome) => (outcome.componentAllocations?.length ?? 0) > 0,
+    );
+  const comparable =
+    source.survey && !source.survey.isSuppressed
+      ? stats.outcomes.filter(
+          (item) =>
+            item.attainmentIndex !== null && item.surveyNormalized !== null,
+        )
+      : [];
+  const comparison = comparable.length
+    ? comparable
+        .map(
+          (item) =>
+            `${label(item)}客观达成度${item.attainmentIndex?.toFixed(2)}、学生自评${item.surveyNormalized?.toFixed(2)}`,
+        )
+        .join("；") +
+      "。自评反映学生的学习感受，应结合目标要求与具体作答解释差异，不能直接视为客观掌握水平。"
+    : source.survey?.isSuppressed
+      ? "问卷反馈较少，暂不开展目标达成与学生评价的比较。"
+      : "尚无可对应课程目标的学生评价，需补充后比较学习表现与学生感受。";
   const summary = [
-    stats.mean === null
-      ? ""
-      : hasDifference
-        ? `分项考核表现存在差异，“${weakest.name}”相关内容需要在后续教学中进一步巩固。`
-        : "后续教学需结合学生的具体作答情况，继续做好课程内容的巩固与应用训练。",
-    evaluated.length ? outcomeAnalysis : "",
-    source.survey &&
-    !source.survey.isSuppressed &&
-    source.survey.overallMean !== null
-      ? (studentEvaluation.split("\n").at(-1) ?? "")
-      : "",
-  ].filter(Boolean);
+    `教学内容与授课方式：${source.syllabus?.teachingContent?.length ? `正式大纲涵盖${source.syllabus.teachingContent.slice(0, 3).join("、")}等内容。` : "需结合正式大纲核对教学内容对课程目标的覆盖。"}${evaluated.length ? "目标评价可用于判断整体学习要求的落实情况；" : "当前目标达成资料尚不完整；"}实际授课方式及其支撑效果仍需教师结合教学实施情况核实。`,
+    `考核与评分标准：${assessments?.length ? (assessmentMatches ? "当前考核项目及权重与正式大纲一致。" : "当前考核项目或权重与正式大纲存在差异，需核对后说明。") : "尚缺正式大纲考核信息，不能确认考核一致性。"}${mapped ? "已配置考核项目与课程目标的对应关系。" : "考核与课程目标的对应关系需进一步核实。"}评分标准是否明确、合理，需教师结合实际评分细则与执行情况确认。`,
+    `课程目标达成：${outcomeAnalysis}${hasDifference ? `“${weakest.name}”环节表现相对薄弱，宜结合目标要求检查相关学习困难。` : "后续应结合目标对应的作答情况开展巩固与反馈。"}`,
+    `达成情况与学生评价比较：${comparison}`,
+  ];
   const measures =
     stats.mean === null && !evaluated.length
       ? []
@@ -310,7 +337,9 @@ export function buildDeterministicNarrative(
         ];
   return normalizeQualityReportNarrative(
     {
-      gradeComposition: buildGradeComposition(source.components),
+      gradeComposition: buildGradeComposition(
+        source.syllabus?.assessments ?? source.components,
+      ),
       gradeAnalysis,
       outcomeAnalysis,
       outcomeDetails,

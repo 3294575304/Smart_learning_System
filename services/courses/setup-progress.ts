@@ -245,6 +245,7 @@ export function buildCourseSetupProgress(input: CourseSetupInput) {
     percentage: Math.round((completedCount / steps.length) * 100),
     nextStep,
     archived: input.status === "ARCHIVED",
+    activeStudentCount: input.activeStudentCount,
   };
 }
 

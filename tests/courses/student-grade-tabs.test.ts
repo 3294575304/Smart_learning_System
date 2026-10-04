@@ -8,8 +8,13 @@ import { StudentGradeTabs } from "../../components/grades/student-grade-tabs";
 
 test("成绩切换用清晰链接并且当前成绩类型唯一标记", () => {
   for (const [activeView, href, activeLabel, inactiveLabel] of [
-    ["assignments", "/student/results", "作业成绩", "课程总评"],
-    ["course", "/student/results?view=course", "课程总评", "作业成绩"],
+    [
+      "assignments",
+      "/student/assignments?view=records",
+      "作业与成绩",
+      "课程总评",
+    ],
+    ["course", "/student/results?view=course", "课程总评", "作业与成绩"],
   ] as const) {
     const markup = renderToStaticMarkup(
       React.createElement(StudentGradeTabs, { activeView }),

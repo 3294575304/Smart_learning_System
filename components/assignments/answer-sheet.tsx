@@ -1,9 +1,11 @@
 "use client";
 
+import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { QuestionType, SubmissionStatus } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 import { ProgrammingQuestionInput } from "@/components/assignments/programming-question-input";
 import {
@@ -45,6 +47,7 @@ interface Props {
   submission: {
     id: string;
     assignmentTitle: string;
+    allowAttachments?: boolean;
     attemptNumber: number;
     status: SubmissionStatus;
     version: number;
@@ -135,6 +138,7 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
   );
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [attachmentPending, setAttachmentPending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const versionRef = useRef(submission.version);
@@ -268,6 +272,7 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
   }, [answers, autosaveDelayMs, persist, persistLocalDraft, timingTracker]);
 
   async function submit() {
+    if (attachmentPending) return;
     if (!window.confirm("确认提交作业？提交后本次答案将不能修改。")) return;
     setSubmitting(true);
     const saved = await persist(latestAnswersRef.current);
@@ -334,11 +339,15 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
           ) : null}
           <button
             className="rounded-md bg-sky-600 px-4 py-2 text-white disabled:opacity-50"
-            disabled={submitting || saveState === "saving"}
+            disabled={submitting || attachmentPending || saveState === "saving"}
             onClick={submit}
             type="button"
           >
-            {submitting ? "提交中…" : "提交作业"}
+            {attachmentPending
+              ? "附件上传中…"
+              : submitting
+                ? "提交中…"
+                : "提交作业"}
           </button>
         </div>
       </div>
@@ -382,9 +391,14 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
                       {QUESTION_TYPE_LABELS[question.type]}
                     </p>
                   </div>
-                  <span className="text-sm text-gray-500">
-                    {question.points} 分
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <FavoriteButton
+                      source={{ kind: "ASSIGNMENT", id: question.id }}
+                    />
+                    <span className="text-sm text-gray-500">
+                      {question.points} 分
+                    </span>
+                  </div>
                 </div>
                 <p className="mt-4 text-sm whitespace-pre-wrap">
                   {question.content}
@@ -414,6 +428,17 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
                     question={question}
                   />
                 ) : null}
+                {submission.allowAttachments &&
+                  question.type === QuestionType.SHORT_ANSWER && (
+                    <SubmissionAttachments
+                      submissionId={submission.id}
+                      questionId={question.id}
+                      onPendingChange={setAttachmentPending}
+                      editable={
+                        submission.status === SubmissionStatus.IN_PROGRESS
+                      }
+                    />
+                  )}
               </article>
             );
           })()

@@ -93,10 +93,7 @@ export const recommendationPracticeAnswerSchema = z.discriminatedUnion("kind", [
     .object({
       ...recommendationPracticeAnswerBase,
       kind: z.literal("TEXT"),
-      value: z
-        .string()
-        .max(10000, "答案不能超过 10000 个字符")
-        .refine((text) => text.trim().length > 0, "请输入答案"),
+      value: z.string().max(10000, "答案不能超过 10000 个字符"),
     })
     .strict(),
 ]);

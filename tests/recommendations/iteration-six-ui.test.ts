@@ -12,5 +12,5 @@ test("自主练习页面展示结构化条件确认和自述客观隔离提示",
   assert.match(practice, /教学进度/u);
   assert.match(reflection, /自述与客观掌握度分开保存/u);
   assert.match(reflection, /删除/u);
-  assert.match(progress, /乐观并发/u);
+  assert.match(progress, /expectedRevision/u);
 });

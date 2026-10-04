@@ -1,4 +1,5 @@
 import "server-only";
+import { buildEditorCourseOptions } from "@/services/assignments/editor-course-options";
 
 import {
   AssignmentStatus,
@@ -99,6 +100,9 @@ function teacherView(
     classroom: assignment.classroom,
     totalPoints: assignment.totalPoints.toNumber(),
     allowResubmission: assignment.allowResubmission,
+    allowAttachments: assignment.allowAttachments,
+    submissionTask:
+      assignment.submissionTask as TeacherAssignmentView["submissionTask"],
     publishedAt: assignment.publishedAt,
     dueAt: assignment.dueAt,
     questions: assignment.questions.map((question) => ({
@@ -118,6 +122,7 @@ async function assertAssignmentResources(
   transaction: Prisma.TransactionClient,
   teacherId: string,
   input: AssignmentUpsertData,
+  assignmentId?: string,
 ) {
   const classroom = await transaction.classroom.findUnique({
     where: { id: input.classroomId },
@@ -127,7 +132,20 @@ async function assertAssignmentResources(
 
   const questionIds = input.questions.map((item) => item.questionId);
   const questions = await transaction.question.findMany({
-    where: { id: { in: questionIds } },
+    where: {
+      id: { in: questionIds },
+      OR: [
+        { isAssignmentOnly: false },
+        ...(assignmentId
+          ? [
+              {
+                isAssignmentOnly: true,
+                assignmentQuestions: { some: { assignmentId } },
+              },
+            ]
+          : []),
+      ],
+    },
     include: {
       options: { orderBy: { sortOrder: "asc" } },
       knowledgePointLinks: {
@@ -150,10 +168,58 @@ async function replaceQuestionSnapshots(
   teacherId: string,
   input: AssignmentUpsertData,
 ): Promise<Prisma.Decimal> {
+  if (input.submissionTask) {
+    const task = input.submissionTask;
+    const existing = await transaction.assignmentQuestion.findFirst({
+      where: { assignmentId, sourceQuestion: { isAssignmentOnly: true } },
+      select: { questionId: true },
+    });
+    const data = {
+      creatorId: teacherId,
+      title: input.title,
+      content: task.prompt,
+      type: QuestionType.SHORT_ANSWER,
+      difficulty: 1,
+      visibility: QuestionVisibility.PRIVATE,
+      status: QuestionStatus.ACTIVE,
+      explanation: "",
+      referenceAnswer: task.referenceAnswer,
+      isAssignmentOnly: true,
+    };
+    const source = existing
+      ? await transaction.question.update({
+          where: { id: existing.questionId },
+          data,
+        })
+      : await transaction.question.create({ data });
+    input = {
+      ...input,
+      questions: [{ questionId: source.id, sortOrder: 1, points: task.points }],
+    };
+    // A new private task is authorized by its creator before its first snapshot exists.
+    if (!existing)
+      await transaction.assignmentQuestion.create({
+        data: {
+          assignmentId,
+          questionId: source.id,
+          sortOrder: 1,
+          points: task.points,
+          titleSnapshot: source.title,
+          contentSnapshot: source.content,
+          typeSnapshot: source.type,
+          difficultySnapshot: 1,
+          explanationSnapshot: "",
+          referenceAnswerSnapshot: source.referenceAnswer,
+          acceptableAnswersSnapshot: [],
+          isCaseSensitiveSnapshot: false,
+        },
+      });
+  }
   const questions = await assertAssignmentResources(
     transaction,
     teacherId,
     input,
+    assignmentId,
   );
   await transaction.assignmentQuestion.deleteMany({
     where: { assignmentId },
@@ -212,15 +278,16 @@ async function replaceQuestionSnapshots(
 }
 
 export async function getTeacherAssignmentEditorOptions(teacherId: string) {
-  const [classrooms, questions] = await Promise.all([
+  const [classrooms, questions, courses] = await Promise.all([
     prisma.classroom.findMany({
       where: { teacherId, status: "ACTIVE" },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, courseId: true },
     }),
     prisma.question.findMany({
       where: {
         status: QuestionStatus.ACTIVE,
+        isAssignmentOnly: false,
         deletedAt: null,
         OR: [
           { creatorId: teacherId },
@@ -228,19 +295,61 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
         ],
       },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      take: 500,
       select: {
         id: true,
         title: true,
+        content: true,
         type: true,
         difficulty: true,
         visibility: true,
         creatorId: true,
+        graphBindings: {
+          where: { course: { teacherId } },
+          select: { courseId: true, conceptId: true },
+        },
+      },
+    }),
+    prisma.course.findMany({
+      where: { teacherId, status: { not: "ARCHIVED" } },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      select: {
+        id: true,
+        templateId: true,
+        name: true,
+        term: true,
+        courseNo: true,
+        currentPublishedKnowledgeGraphVersion: {
+          select: {
+            nodes: {
+              orderBy: { sortOrder: "asc" },
+              select: {
+                id: true,
+                conceptId: true,
+                code: true,
+                name: true,
+                nodeType: true,
+                sortOrder: true,
+              },
+            },
+            edges: {
+              where: { relationType: "CONTAINS" },
+              select: { fromNodeId: true, toNodeId: true },
+            },
+          },
+        },
       },
     }),
   ]);
   return {
     classrooms,
+    courses: buildEditorCourseOptions(
+      courses,
+      new Set(
+        questions.flatMap((question) =>
+          question.graphBindings.map((binding) => binding.courseId),
+        ),
+      ),
+    ),
     questions: questions.map((question) => ({
       ...question,
       isOwned: question.creatorId === teacherId,
@@ -254,7 +363,9 @@ export async function listTeacherAssignments(
 ) {
   const where: Prisma.AssignmentWhereInput = {
     teacherId,
-    ...(query.status ? { status: query.status } : {}),
+    ...(query.status
+      ? { status: query.status }
+      : { status: { not: AssignmentStatus.ARCHIVED } }),
     ...(query.classroomId ? { classroomId: query.classroomId } : {}),
     ...(query.keyword
       ? { title: { contains: query.keyword, mode: "insensitive" } }
@@ -314,6 +425,8 @@ export async function createDraftAssignment(
         title: input.title,
         description: input.description || null,
         allowResubmission: input.allowResubmission,
+        allowAttachments: input.allowAttachments ?? false,
+        submissionTask: input.submissionTask ?? Prisma.DbNull,
         publishedAt: input.publishedAt,
         dueAt: input.dueAt,
       },
@@ -358,6 +471,8 @@ export async function updateDraftAssignment(
         title: input.title,
         description: input.description || null,
         allowResubmission: input.allowResubmission,
+        allowAttachments: input.allowAttachments ?? false,
+        submissionTask: input.submissionTask ?? Prisma.DbNull,
         publishedAt: input.publishedAt,
         dueAt: input.dueAt,
         totalPoints,
@@ -471,36 +586,71 @@ export async function publishAssignment(
 export async function listStudentAssignments(
   studentId: string,
   courseId?: string,
+  classroomId?: string,
 ): Promise<StudentAssignmentListItem[]> {
   if (courseId) await getStudentCourseContext(studentId, courseId);
   const now = new Date();
   const assignments = await prisma.assignment.findMany({
     where: {
-      status: AssignmentStatus.PUBLISHED,
+      status: { in: [AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED] },
       publishedAt: { lte: now },
-      classroom: {
-        ...(courseId ? { courseId } : {}),
-        memberships: {
-          some: { studentId, status: MembershipStatus.ACTIVE },
+      ...(courseId ? { classroom: { courseId } } : {}),
+      ...(classroomId ? { classroomId } : {}),
+      OR: [
+        {
+          status: AssignmentStatus.PUBLISHED,
+          classroom: {
+            status: "ACTIVE",
+            memberships: {
+              some: { studentId, status: MembershipStatus.ACTIVE },
+            },
+          },
         },
-      },
+        {
+          submissions: {
+            some: {
+              studentId,
+              status: {
+                in: [
+                  SubmissionStatus.SUBMITTED,
+                  SubmissionStatus.PENDING_REVIEW,
+                  SubmissionStatus.GRADED,
+                  SubmissionStatus.PUBLISHED,
+                ],
+              },
+            },
+          },
+        },
+      ],
     },
     include: {
-      classroom: { select: { name: true } },
+      classroom: {
+        select: {
+          name: true,
+          status: true,
+          memberships: { where: { studentId }, select: { status: true } },
+        },
+      },
       _count: { select: { questions: true } },
       submissions: {
         where: { studentId, status: { not: SubmissionStatus.WITHDRAWN } },
         orderBy: { attemptNumber: "desc" },
-        select: { id: true, status: true, attemptNumber: true },
+        select: { id: true, status: true, attemptNumber: true, score: true },
       },
     },
     orderBy: [{ dueAt: "asc" }, { publishedAt: "desc" }],
   });
   return assignments.flatMap((assignment) => {
     if (!assignment.publishedAt || !assignment.dueAt) return [];
-    const inProgress = assignment.submissions.find(
-      (submission) => submission.status === SubmissionStatus.IN_PROGRESS,
-    );
+    const historyOnly =
+      assignment.status === AssignmentStatus.CLOSED ||
+      assignment.classroom.status !== "ACTIVE" ||
+      assignment.classroom.memberships[0]?.status !== MembershipStatus.ACTIVE;
+    const inProgress = historyOnly
+      ? undefined
+      : assignment.submissions.find(
+          (submission) => submission.status === SubmissionStatus.IN_PROGRESS,
+        );
     const latest = assignment.submissions.find(
       (submission) => submission.status !== SubmissionStatus.IN_PROGRESS,
     );
@@ -520,6 +670,12 @@ export async function listStudentAssignments(
         ).length,
         inProgressSubmissionId: inProgress?.id ?? null,
         latestSubmissionId: latest?.id ?? null,
+        historyOnly,
+        latestSubmissionStatus: latest?.status ?? null,
+        latestPublishedScore:
+          latest?.status === SubmissionStatus.PUBLISHED
+            ? decimalNumber(latest.score)
+            : null,
       },
     ];
   });
@@ -733,6 +889,7 @@ export async function getStudentSubmissionDraft(
     id: submission.id,
     assignmentId: submission.assignmentId,
     assignmentTitle: submission.assignment.title,
+    allowAttachments: submission.assignment.allowAttachments,
     attemptNumber: submission.attemptNumber,
     status: submission.status,
     version: submission.saveVersion,
@@ -1136,20 +1293,20 @@ export async function getStudentSubmissionResult(
   submissionId: string,
 ): Promise<SubmissionResultView> {
   const submission = await prisma.submission.findFirst({
-    where: { id: submissionId, studentId },
-    include: {
-      assignment: {
-        include: {
-          classroom: {
-            select: {
-              memberships: {
-                where: { studentId },
-                select: { status: true },
-              },
-            },
-          },
-        },
+    where: {
+      id: submissionId,
+      studentId,
+      status: {
+        in: [
+          SubmissionStatus.SUBMITTED,
+          SubmissionStatus.PENDING_REVIEW,
+          SubmissionStatus.GRADED,
+          SubmissionStatus.PUBLISHED,
+        ],
       },
+    },
+    include: {
+      assignment: { select: { title: true } },
       answers: {
         orderBy: { assignmentQuestion: { sortOrder: "asc" } },
         include: {
@@ -1188,9 +1345,8 @@ export async function getStudentSubmissionResult(
     },
   });
   if (!submission) throw new ResourceNotFoundError("提交结果不存在");
-  assertActiveMembership(
-    submission.assignment.classroom.memberships[0] ?? null,
-  );
+  // Ownership is established in the query. Leaving a class does not erase personal submitted history.
+  // This read path does not grant access to current assignments or allow new work.
   if (submission.status === SubmissionStatus.IN_PROGRESS) {
     throw new AssignmentOperationError("作业尚未提交", 409);
   }

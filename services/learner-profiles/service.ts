@@ -1,4 +1,6 @@
+import { groupKnowledgeChapters } from "@/services/knowledge-graph/chapter-groups";
 import "server-only";
+import { runAssignmentSerializable } from "@/services/assignments/transactions";
 
 import {
   AttendanceSessionStatus,
@@ -276,10 +278,10 @@ export async function ensureLearnerProfileSnapshot(
 }
 
 async function ensureSnapshot(studentId: string, courseId: string) {
-  return prisma.$transaction(
+  return runAssignmentSerializable(
     (transaction) =>
       ensureLearnerProfileSnapshot(transaction, studentId, courseId),
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    "画像正在更新，请稍后重试",
   );
 }
 
@@ -301,7 +303,21 @@ async function snapshotView(
       graphVersion: {
         select: {
           versionNumber: true,
-          nodes: { select: { conceptId: true, code: true, name: true } },
+          nodes: {
+            orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+            select: {
+              id: true,
+              conceptId: true,
+              code: true,
+              name: true,
+              nodeType: true,
+              sortOrder: true,
+            },
+          },
+          edges: {
+            where: { relationType: "CONTAINS" },
+            select: { fromNodeId: true, toNodeId: true },
+          },
         },
       },
       concepts: {
@@ -314,6 +330,64 @@ async function snapshotView(
   );
   const traceByConcept = new Map(
     mastery.concepts.map((concept) => [concept.conceptId, concept]),
+  );
+  const references = mastery.concepts.flatMap(
+    (concept) => concept.historicalEvidence.latestReferences,
+  );
+  const [assignments, assignmentQuestions, practiceQuestions] =
+    await Promise.all([
+      prisma.assignment.findMany({
+        where: {
+          id: {
+            in: references
+              .filter((r) => r.sourceType === "ASSIGNMENT")
+              .flatMap((r) => (r.assignmentId ? [r.assignmentId] : [])),
+          },
+          classroom: { courseId: snapshot.course.id },
+        },
+        select: { id: true, title: true },
+      }),
+      prisma.assignmentQuestion.findMany({
+        where: {
+          id: {
+            in: references
+              .filter((r) => r.sourceType === "ASSIGNMENT")
+              .flatMap((r) =>
+                r.assignmentQuestionId ? [r.assignmentQuestionId] : [],
+              ),
+          },
+          assignment: { classroom: { courseId: snapshot.course.id } },
+        },
+        select: { id: true, titleSnapshot: true },
+      }),
+      prisma.question.findMany({
+        where: {
+          id: {
+            in: references
+              .filter((r) => r.sourceType === "RECOMMENDATION_PRACTICE")
+              .flatMap((r) =>
+                r.assignmentQuestionId ? [r.assignmentQuestionId] : [],
+              ),
+          },
+        },
+        select: { id: true, title: true },
+      }),
+    ]);
+  const assignmentNames = new Map(
+    assignments.map((row) => [row.id, row.title]),
+  );
+  const questionNames = new Map([
+    ...assignmentQuestions.map((row) => [row.id, row.titleSnapshot] as const),
+    ...practiceQuestions.map((row) => [row.id, row.title] as const),
+  ]);
+  const nodes = [...(snapshot.graphVersion?.nodes ?? [])].sort(
+    (a, b) =>
+      a.sortOrder - b.sortOrder ||
+      a.code.localeCompare(b.code, "zh-CN", { numeric: true }),
+  );
+  const chapters = groupKnowledgeChapters(
+    nodes,
+    snapshot.graphVersion?.edges ?? [],
   );
   return {
     id: snapshot.id,
@@ -346,33 +420,72 @@ async function snapshotView(
       objectiveMastery: snapshot.objectiveMasteryDimension,
     },
     summary: snapshot.summary,
-    concepts: snapshot.concepts.map((entry) => {
-      const node = nodeByConcept.get(entry.conceptId);
-      const trace = traceByConcept.get(entry.conceptId);
-      return {
-        conceptId: entry.conceptId,
-        code:
-          node?.code ??
-          trace?.currentResolution.currentNode?.code ??
-          trace?.stableKey ??
-          "—",
-        name:
-          node?.name ??
-          trace?.currentResolution.currentNode?.name ??
-          trace?.stableKey ??
-          "历史概念",
-        evidenceState: entry.evidenceState,
-        evidenceCount: entry.evidenceCount,
-        confidence: entry.confidence.toNumber(),
-        masteryScore: entry.masteryScore?.toNumber() ?? null,
-        evidenceUpdatedAt: entry.evidenceUpdatedAt,
-        historicalEvidence: trace?.historicalEvidence ?? {
-          sourceGroups: [],
-          latestReferences: [],
-          truncated: false,
-        },
-      };
-    }),
+    chapters: [
+      ...chapters.map((chapter) => ({
+        id: chapter.id,
+        name: chapter.name,
+        conceptIds: chapter.nodes.map((node) => node.conceptId),
+      })),
+      ...(snapshot.concepts.some((entry) => !nodeByConcept.has(entry.conceptId))
+        ? [
+            {
+              id: "historical",
+              name: "历史知识点",
+              conceptIds: snapshot.concepts
+                .filter((entry) => !nodeByConcept.has(entry.conceptId))
+                .map((entry) => entry.conceptId),
+            },
+          ]
+        : []),
+    ],
+    concepts: snapshot.concepts
+      .filter((entry) => {
+        const node = nodeByConcept.get(entry.conceptId);
+        return !node || node.nodeType === "KNOWLEDGE_POINT";
+      })
+      .map((entry) => {
+        const node = nodeByConcept.get(entry.conceptId);
+        const trace = traceByConcept.get(entry.conceptId);
+        return {
+          conceptId: entry.conceptId,
+          code:
+            node?.code ??
+            trace?.currentResolution.currentNode?.code ??
+            trace?.stableKey ??
+            "—",
+          name:
+            node?.name ??
+            trace?.currentResolution.currentNode?.name ??
+            "历史知识点（名称待确认）",
+          evidenceState: entry.evidenceState,
+          evidenceCount: entry.evidenceCount,
+          confidence: entry.confidence.toNumber(),
+          masteryScore: entry.masteryScore?.toNumber() ?? null,
+          evidenceUpdatedAt: entry.evidenceUpdatedAt,
+          historicalEvidence: trace
+            ? {
+                ...trace.historicalEvidence,
+                latestReferences: trace.historicalEvidence.latestReferences.map(
+                  (item) => ({
+                    ...item,
+                    assignmentName:
+                      item.sourceType === "RECOMMENDATION_PRACTICE"
+                        ? "推荐练习"
+                        : (assignmentNames.get(item.assignmentId ?? "") ??
+                          "历史作业"),
+                    questionName:
+                      questionNames.get(item.assignmentQuestionId ?? "") ??
+                      "历史题目",
+                  }),
+                ),
+              }
+            : {
+                sourceGroups: [],
+                latestReferences: [],
+                truncated: false,
+              },
+        };
+      }),
   };
 }
 
@@ -404,12 +517,28 @@ export async function getTeacherStudentLearnerProfile(
 export async function listTeacherCourseLearnerProfiles(
   teacherId: string,
   courseId: string,
+  options: { classroomId?: string; page?: number } = {},
 ) {
   const course = await assertTeacherAccess(teacherId, courseId);
+  const classrooms = await prisma.classroom.findMany({
+    where: { courseId, teacherId, status: "ACTIVE" },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  if (
+    options.classroomId &&
+    !classrooms.some((item) => item.id === options.classroomId)
+  )
+    throw new ResourceNotFoundError("课程或班级不存在");
   const memberships = await prisma.classMembership.findMany({
     where: {
       status: MembershipStatus.ACTIVE,
-      classroom: { courseId },
+      classroom: {
+        courseId,
+        teacherId,
+        status: "ACTIVE",
+        ...(options.classroomId ? { id: options.classroomId } : {}),
+      },
     },
     orderBy: [
       { student: { profile: { displayName: "asc" } } },
@@ -428,14 +557,26 @@ export async function listTeacherCourseLearnerProfiles(
   const unique = [
     ...new Map(memberships.map((item) => [item.studentId, item])).values(),
   ];
+  const pageSize = 12;
+  const totalPages = Math.max(1, Math.ceil(unique.length / pageSize));
+  const page = Math.min(totalPages, Math.max(1, options.page ?? 1));
   const items = [];
-  for (const membership of unique) {
-    const profile = await getTeacherStudentLearnerProfile(
-      teacherId,
-      courseId,
-      membership.studentId,
-    );
-    const objective = profile.dimensions.objectiveMastery as {
+  for (const membership of unique.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  )) {
+    const snapshotId = await ensureSnapshot(membership.studentId, courseId);
+    const profile = await prisma.learnerProfileSnapshot.findUniqueOrThrow({
+      where: { id: snapshotId },
+      select: {
+        id: true,
+        revisionNumber: true,
+        createdAt: true,
+        summary: true,
+        objectiveMasteryDimension: true,
+      },
+    });
+    const objective = profile.objectiveMasteryDimension as {
       evidenceState: string;
       conclusiveAverageMastery: number | null;
       conclusiveConceptCount: number;
@@ -449,14 +590,19 @@ export async function listTeacherCourseLearnerProfiles(
       },
       snapshotId: profile.id,
       revisionNumber: profile.revisionNumber,
-      generatedAt: profile.generatedAt,
+      generatedAt: profile.createdAt,
       summary: profile.summary,
       evidenceState: objective.evidenceState,
       conclusiveAverageMastery: objective.conclusiveAverageMastery,
       conclusiveConceptCount: objective.conclusiveConceptCount,
     });
   }
-  return { course, items };
+  return {
+    course,
+    items,
+    classrooms,
+    pagination: { page, pageSize, total: unique.length, totalPages },
+  };
 }
 
 export async function listStudentLearnerProfileCourses(studentId: string) {

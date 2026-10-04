@@ -86,10 +86,16 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
     {
       label: "练习巩固",
       items: [
-        { href: "/student/recommendations", label: "练习中心", icon: Sparkles },
+        {
+          href: "/student/recommendations",
+          label: "练习中心",
+          icon: Sparkles,
+          relatedPaths: ["/student/practice"],
+        },
         {
           href: "/student/wrong-questions",
-          label: "错题本",
+          label: "复习中心",
+          relatedPaths: ["/student/question-favorites"],
           icon: NotebookPen,
         },
       ],
@@ -98,10 +104,10 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
       label: "学习反馈",
       items: [
         {
-          href: "/student/results",
-          label: "我的成绩",
+          href: "/student/course-grades",
+          label: "课程总评",
           icon: BarChart3,
-          relatedPaths: ["/student/course-grades"],
+          relatedPaths: ["/student/results"],
         },
         { href: "/student/analytics", label: "学习分析", icon: BrainCircuit },
       ],
@@ -156,7 +162,11 @@ const STUDENT_SEGMENT_LABELS: Readonly<Record<string, string>> = {
     ),
   ),
   "course-grades": "课程正式成绩",
+  "question-favorites": "我的收藏",
+  submissions: "我的作答",
+  practice: "练习",
   assignments: "我的作业",
+  results: "课程总评",
   attendance: "签到与出勤",
   surveys: "课程问卷",
   tasks: "学习任务",
@@ -184,6 +194,9 @@ export function isNavigationItemActive(
   pathname: string,
   item: NavigationItem,
 ): boolean {
+  if (pathname.startsWith("/student/submissions/")) {
+    return item.href === "/student/tasks";
+  }
   return [item.href, ...(item.relatedPaths ?? [])].some((href) =>
     isCurrentPath(pathname, href),
   );

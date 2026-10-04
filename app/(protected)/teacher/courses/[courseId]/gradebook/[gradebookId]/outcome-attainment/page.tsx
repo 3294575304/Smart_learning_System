@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OutcomeAttainmentWorkspace } from "@/components/courses/outcome-attainment-workspace";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -22,12 +22,11 @@ export default async function Page({
         title="课程目标达成度"
         description="从正式教学大纲目标和映射下钻到考核项目及学生成绩证据。"
         actions={
-          <Link
-            className="rounded-md border bg-white px-4 py-2 text-sm"
+          <TeacherBackLink
             href={`/teacher/courses/${courseId.data}/gradebook/${gradebookId.data}`}
           >
             返回成绩台账
-          </Link>
+          </TeacherBackLink>
         }
       />
       <OutcomeAttainmentWorkspace gradebookId={gradebookId.data} />

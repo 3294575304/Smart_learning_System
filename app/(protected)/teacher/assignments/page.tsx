@@ -105,7 +105,7 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
         title="作业管理"
       />
 
-      <form className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 xl:grid-cols-[minmax(20rem,2fr)_repeat(3,minmax(9rem,1fr))_auto] xl:items-end">
+      <form className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1.3fr)_repeat(3,minmax(8rem,1fr))_auto] xl:items-end">
         <label className="space-y-1 sm:col-span-2 xl:col-span-1">
           <span className="text-xs font-medium">搜索</span>
           <input

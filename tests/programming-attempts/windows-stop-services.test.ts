@@ -9,13 +9,14 @@ const repoRoot = fileURLToPath(new URL("../../", import.meta.url)).replace(
   "",
 );
 
-function runStopScript(failToStop = false) {
+function runStopScript(failToStop = false, retainExitedHandle = false) {
   const script = String.raw`
 $ErrorActionPreference = 'Stop'
 $repo = '${repoRoot.replaceAll("'", "''")}'
 $global:stopped = @()
 $global:tasks = @()
 $global:failToStop = ${failToStop ? "$true" : "$false"}
+$global:retainExitedHandle = ${retainExitedHandle ? "$true" : "$false"}
 $global:fixtures = @(
   @{ ProcessId = 101; Name = 'node.exe'; CommandLine = 'node "' + $repo + '\node_modules\next\dist\bin\next" start -H ::1 -p 3000' },
   @{ ProcessId = 102; Name = 'node.exe'; CommandLine = 'node "' + $repo + '\node_modules\.bin\\..\next\dist\bin\next" dev --turbopack --port 3001' },
@@ -38,7 +39,8 @@ function Start-Sleep { param($Milliseconds) }
 function Get-CimInstance { param($ClassName) $global:fixtures }
 function Get-Process {
   [CmdletBinding()]param($Id)
-  if ($Id -notin $global:stopped) { [pscustomobject]@{ Id = $Id } }
+  if ($Id -notin $global:stopped) { [pscustomobject]@{ Id = $Id; HasExited = $false } }
+  elseif ($global:retainExitedHandle) { [pscustomobject]@{ Id = $Id; HasExited = $true } }
 }
 function Stop-Process {
   [CmdletBinding()]param($Id, [switch]$Force)
@@ -110,3 +112,13 @@ test("startup releases Prisma users before generation, migration and build", asy
     stop >= 0 && generate > stop && migrate > generate && build > migrate,
   );
 });
+
+test(
+  "Windows stop accepts exited process handles while still rejecting live processes",
+  { skip: process.platform !== "win32" },
+  () => {
+    const result = runStopScript(false, true);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /MANUAL_SERVICES_STOPPED=1/u);
+  },
+);

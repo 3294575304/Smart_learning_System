@@ -1,4 +1,6 @@
 import { Role } from "@prisma/client";
+import { FileUp } from "lucide-react";
+import Link from "next/link";
 import { QuestionGovernanceFilters } from "@/components/admin/question-governance-filters";
 import { QuestionGovernanceList } from "@/components/admin/question-governance-list";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -12,7 +14,7 @@ import {
   listAdminQuestions,
 } from "@/services/admin/questions/service";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { listKnowledgePointOptions } from "@/services/questions/service";
+import { listQuestionImportCourses } from "@/services/question-import/courses";
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -35,6 +37,7 @@ function pageHref(query: AdminQuestionListQuery, page: number): string {
     "keyword",
     "type",
     "knowledgePointId",
+    "courseId",
     "creatorId",
     "visibility",
     "status",
@@ -53,20 +56,29 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
   const query = parsed.success
     ? parsed.data
     : adminQuestionListQuerySchema.parse({});
-  const [questions, creators, knowledgePoints] = await Promise.all([
+  const [questions, creators, courses] = await Promise.all([
     listAdminQuestions(query),
     listAdminQuestionCreators(),
-    listKnowledgePointOptions(),
+    listQuestionImportCourses(),
   ]);
   return (
     <section className="space-y-6">
       <PageHeader
+        actions={
+          <Link
+            className="inline-flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
+            href="/admin/questions/import"
+          >
+            <FileUp aria-hidden="true" className="h-4 w-4" />
+            批量导入题库
+          </Link>
+        }
         description="治理公共题目、识别历史教师来源，并确保状态变更可审计。"
         title="公共题库管理"
       />
       <QuestionGovernanceFilters
         creators={creators}
-        knowledgePoints={knowledgePoints}
+        courses={courses}
         query={query}
       />
       <div className="flex justify-between text-sm text-gray-500">

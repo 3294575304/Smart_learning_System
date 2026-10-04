@@ -1,3 +1,8 @@
+import {
+  ANALYSIS_LABELS,
+  analysisKnowledgePointIds,
+  presentAnalysisText,
+} from "@/services/ai/presentation";
 import "server-only";
 
 import {
@@ -55,7 +60,7 @@ function riskLevelFor(output: StudentAnalysisOutput): RiskLevel {
 }
 
 function summaryFor(output: StudentAnalysisOutput): string {
-  return `总体水平：${output.overallLevel}；已掌握 ${output.masteredKnowledgePoints.length} 个知识点，薄弱 ${output.weakKnowledgePoints.length} 个知识点；推荐难度 ${output.recommendedDifficulty}。`;
+  return `总体水平：${ANALYSIS_LABELS[output.overallLevel] ?? "待评估"}；已掌握 ${output.masteredKnowledgePoints.length} 个知识点，薄弱 ${output.weakKnowledgePoints.length} 个知识点；推荐难度 ${output.recommendedDifficulty}。`;
 }
 
 function insightRows(
@@ -84,7 +89,7 @@ function insightRows(
     ...output.errorPatterns.map((item) => ({
       analysisId,
       type: AIInsightType.RISK,
-      title: `错误模式：${item.type}`,
+      title: `错误模式：${ANALYSIS_LABELS[item.type] ?? "暂未确定"}`,
       detail: item.evidence,
       priority: 1,
     })),
@@ -257,6 +262,29 @@ export async function createStudentAnalysis(
       },
     });
     const rows = insightRows(analysis.id, execution.output);
+    const referenceIds = [
+      ...new Set([
+        ...rows.flatMap((row) =>
+          row.knowledgePointId ? [row.knowledgePointId] : [],
+        ),
+        ...analysisKnowledgePointIds(
+          rows.flatMap((row) => [row.detail, row.recommendedAction ?? null]),
+        ),
+      ]),
+    ];
+    const points = await transaction.knowledgePoint.findMany({
+      where: { id: { in: referenceIds } },
+      select: { id: true, name: true },
+    });
+    const names = new Map(points.map((point) => [point.id, point.name]));
+    for (const row of rows) {
+      row.detail = presentAnalysisText(row.detail, names);
+      if (row.recommendedAction)
+        row.recommendedAction = presentAnalysisText(
+          row.recommendedAction,
+          names,
+        );
+    }
     if (rows.length > 0) {
       await transaction.aIAnalysisInsight.createMany({ data: rows });
     }

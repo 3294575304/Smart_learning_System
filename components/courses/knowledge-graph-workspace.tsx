@@ -221,8 +221,13 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
   }, [dirty]);
   const { nodes, edges } = useMemo(
     () =>
-      filterKnowledgeGraph(graph, { query, nodeType, edgeType, chapterKey }),
-    [graph, query, nodeType, edgeType, chapterKey],
+      filterKnowledgeGraph(graph, {
+        query,
+        nodeType,
+        edgeType,
+        chapterKey,
+      }),
+    [graph, query, chapterKey, nodeType, edgeType],
   );
   const selectedNode = useMemo(
     () => graph?.nodes.find((node) => node.key === selectedKey) ?? null,
@@ -492,8 +497,6 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     (key: string) => {
       if (!nodes.some((node) => node.key === key)) {
         setQuery("");
-        setNodeType("ALL");
-        setEdgeType("ALL");
         setChapterKey("ALL");
       }
       setSelectedKey(key);
@@ -660,9 +663,15 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                   }}
                 />
               </label>
+            </div>
+          </div>
+          <details className="mt-3 rounded-lg border p-3 text-sm">
+            <summary className="cursor-pointer text-slate-600">
+              更多筛选 · 节点与关系
+            </summary>
+            <div className="mt-3 flex flex-wrap gap-3">
               <select
                 aria-label="筛选节点类型"
-                className="rounded-md border px-3 py-2 text-sm"
                 value={nodeType}
                 onChange={(event) => {
                   setNodeType(
@@ -670,8 +679,9 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                   );
                   setSelectedKey(null);
                 }}
+                className="rounded-md border p-2"
               >
-                <option value="ALL">全部节点</option>
+                <option value="ALL">全部节点类型</option>
                 {Object.entries(nodeTypeLabel).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
@@ -680,16 +690,15 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
               </select>
               <select
                 aria-label="筛选关系类型"
-                className="rounded-md border px-3 py-2 text-sm"
                 value={edgeType}
-                onChange={(event) => {
+                onChange={(event) =>
                   setEdgeType(
                     event.target.value as "ALL" | keyof typeof edgeTypeLabel,
-                  );
-                  setSelectedKey(null);
-                }}
+                  )
+                }
+                className="rounded-md border p-2"
               >
-                <option value="ALL">全部关系</option>
+                <option value="ALL">全部关系类型</option>
                 {Object.entries(edgeTypeLabel).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
@@ -697,7 +706,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                 ))}
               </select>
             </div>
-          </div>
+          </details>
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
             <div className="grid min-w-0 gap-3 lg:grid-cols-[180px_minmax(0,1fr)]">
               <KnowledgeGraphDirectory
@@ -941,47 +950,45 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
               </button>
             </div>
             <div className="mt-4 max-h-80 space-y-2 overflow-auto">
-              {graph.edges
-                .filter((edge) => edgeType === "ALL" || edge.type === edgeType)
-                .map((edge) => (
-                  <div
-                    className="grid items-center gap-2 rounded bg-sky-50/60 p-3 text-sm md:grid-cols-[90px_1fr_1fr_1fr_auto]"
-                    key={edge.key}
+              {graph.edges.map((edge) => (
+                <div
+                  className="grid items-center gap-2 rounded bg-sky-50/60 p-3 text-sm md:grid-cols-[90px_1fr_1fr_1fr_auto]"
+                  key={edge.key}
+                >
+                  <span>{edgeTypeLabel[edge.type]}</span>
+                  <span className="truncate">
+                    {graph.nodes.find((node) => node.key === edge.from)?.name ??
+                      edge.from}
+                  </span>
+                  <span className="truncate">
+                    {graph.nodes.find((node) => node.key === edge.to)?.name ??
+                      edge.to}
+                  </span>
+                  <input
+                    aria-label="关系说明"
+                    className="rounded border bg-white px-2 py-1"
+                    placeholder="补充关系说明"
+                    value={edge.description ?? ""}
+                    onChange={(event) =>
+                      updateEdgeDescription(edge.key, event.target.value)
+                    }
+                  />
+                  <button
+                    aria-label="移除关系"
+                    className="rounded border p-1.5 text-red-600 disabled:opacity-30"
+                    disabled={edge.type === "CONTAINS"}
+                    onClick={() => removeEdge(edge.key)}
+                    title={
+                      edge.type === "CONTAINS"
+                        ? "包含关系用于维持图谱层级，不能直接移除"
+                        : "移除关系"
+                    }
+                    type="button"
                   >
-                    <span>{edgeTypeLabel[edge.type]}</span>
-                    <span className="truncate">
-                      {graph.nodes.find((node) => node.key === edge.from)
-                        ?.name ?? edge.from}
-                    </span>
-                    <span className="truncate">
-                      {graph.nodes.find((node) => node.key === edge.to)?.name ??
-                        edge.to}
-                    </span>
-                    <input
-                      aria-label="关系说明"
-                      className="rounded border bg-white px-2 py-1"
-                      placeholder="补充关系说明"
-                      value={edge.description ?? ""}
-                      onChange={(event) =>
-                        updateEdgeDescription(edge.key, event.target.value)
-                      }
-                    />
-                    <button
-                      aria-label="移除关系"
-                      className="rounded border p-1.5 text-red-600 disabled:opacity-30"
-                      disabled={edge.type === "CONTAINS"}
-                      onClick={() => removeEdge(edge.key)}
-                      title={
-                        edge.type === "CONTAINS"
-                          ? "包含关系用于维持图谱层级，不能直接移除"
-                          : "移除关系"
-                      }
-                      type="button"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
             </div>
           </details>
           {pendingDiff ? (
