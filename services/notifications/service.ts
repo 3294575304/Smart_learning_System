@@ -87,6 +87,15 @@ export async function getUnreadNotificationCount(
   return Math.max(0, await countUnreadNotifications(recipientId, now));
 }
 
+export async function getUserNotification(
+  recipientId: string,
+  notificationId: string,
+) {
+  const notification = await findOwnedNotification(recipientId, notificationId);
+  if (!notification) throw new ResourceNotFoundError("通知不存在");
+  return notification;
+}
+
 export async function markNotificationRead(
   recipientId: string,
   notificationId: string,

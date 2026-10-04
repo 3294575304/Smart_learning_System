@@ -203,7 +203,7 @@ function EditCourseTemplateForm({
 
   return (
     <form className="space-y-4" onSubmit={onSubmit} noValidate>
-      <div className="rounded-lg border bg-gray-50 p-3 text-sm">
+      <div className="rounded-lg border bg-sky-50/70 p-3 text-sm">
         <p className="font-medium">模板编码：{code}</p>
         <p className="text-muted-foreground mt-1">
           {isBuiltin ? "内置模板" : "自定义模板"} ·{" "}

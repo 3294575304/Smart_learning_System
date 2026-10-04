@@ -1,3 +1,5 @@
+"use client";
+
 import { Role, UserStatus } from "@prisma/client";
 import Link from "next/link";
 
@@ -18,12 +20,19 @@ export function UserFilters({ query }: { query: AdminUserListQuery }) {
         defaultValue={query.keyword}
         maxLength={100}
         name="keyword"
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
         placeholder="搜索姓名或邮箱"
       />
       <select
         className="rounded-md border bg-white px-3 py-2 text-sm"
         defaultValue={query.role ?? ""}
         name="role"
+        onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
         <option value="">全部角色</option>
         {Object.values(Role).map((role) => (
@@ -36,6 +45,7 @@ export function UserFilters({ query }: { query: AdminUserListQuery }) {
         className="rounded-md border bg-white px-3 py-2 text-sm"
         defaultValue={query.status ?? ""}
         name="status"
+        onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
         <option value="">全部状态</option>
         {Object.values(UserStatus).map((status) => (
@@ -45,12 +55,6 @@ export function UserFilters({ query }: { query: AdminUserListQuery }) {
         ))}
       </select>
       <div className="flex gap-2">
-        <button
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-          type="submit"
-        >
-          筛选
-        </button>
         <Link
           className="rounded-md border px-4 py-2 text-sm"
           href="/admin/users"

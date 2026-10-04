@@ -14,6 +14,7 @@ import {
 } from "@/services/auth/policy";
 import { QuestionOperationError } from "@/services/questions/errors";
 import {
+  canTeacherCopyQuestion,
   assertTeacherCanEditQuestion,
   assertTeacherQuestionIsPrivate,
 } from "@/services/questions/policy";
@@ -43,6 +44,7 @@ const questionInclude = {
   knowledgePointLinks: {
     orderBy: { knowledgePoint: { name: "asc" as const } },
     select: {
+      weight: true,
       knowledgePoint: { select: { id: true, code: true, name: true } },
     },
   },
@@ -112,7 +114,7 @@ function listItemFromRecord(
     assignmentReferenceCount: question._count.assignmentQuestions,
     canEdit: isOwner && question.visibility === QuestionVisibility.PRIVATE,
     canDelete: isOwner && question.visibility === QuestionVisibility.PRIVATE,
-    canCopy: true,
+    canCopy: canTeacherCopyQuestion(teacherId, question),
     createdAt: question.createdAt,
     updatedAt: question.updatedAt,
   };
@@ -378,15 +380,35 @@ export async function copyQuestion(
   teacherId: string,
   sourceQuestionId: string,
 ): Promise<QuestionDetail> {
-  const source = await findQuestionRecord(sourceQuestionId);
-  if (
-    !source ||
-    (source.creatorId !== teacherId &&
-      source.visibility !== QuestionVisibility.PUBLIC)
-  ) {
-    throw new ResourceNotFoundError("题目不存在");
-  }
   const copiedId = await prisma.$transaction(async (transaction) => {
+    const source = await transaction.question.findFirst({
+      where: {
+        id: sourceQuestionId,
+        deletedAt: null,
+        status: QuestionStatus.ACTIVE,
+      },
+      include: questionInclude,
+    });
+    if (!source || !canTeacherCopyQuestion(teacherId, source)) {
+      throw new ResourceNotFoundError("题目不存在");
+    }
+
+    const programmingConfig =
+      source.type === QuestionType.PYTHON_PROGRAMMING
+        ? await transaction.programmingQuestionConfigRevision.findFirst({
+            where: { questionId: source.id },
+            orderBy: [{ revisionNumber: "desc" }, { id: "desc" }],
+            include: {
+              testCases: {
+                orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+              },
+            },
+          })
+        : null;
+    if (source.type === QuestionType.PYTHON_PROGRAMMING && !programmingConfig) {
+      throw new QuestionOperationError("公共编程题缺少判题配置，暂时无法复制");
+    }
+
     const copy = await transaction.question.create({
       data: {
         creatorId: teacherId,
@@ -415,11 +437,44 @@ export async function copyQuestion(
           })),
         },
         knowledgePointLinks: {
-          create: source.knowledgePointLinks.map(({ knowledgePoint }) => ({
-            knowledgePointId: knowledgePoint.id,
-            weight: 1,
-          })),
+          create: source.knowledgePointLinks.map(
+            ({ knowledgePoint, weight }) => ({
+              knowledgePointId: knowledgePoint.id,
+              weight,
+            }),
+          ),
         },
+        ...(programmingConfig
+          ? {
+              programmingConfigRevisions: {
+                create: {
+                  revisionNumber: 1,
+                  standardCode: programmingConfig.standardCode,
+                  starterCode: programmingConfig.starterCode,
+                  totalPoints: programmingConfig.totalPoints,
+                  cpuTimeMs: programmingConfig.cpuTimeMs,
+                  wallTimeMs: programmingConfig.wallTimeMs,
+                  memoryBytes: programmingConfig.memoryBytes,
+                  outputBytes: programmingConfig.outputBytes,
+                  processCount: programmingConfig.processCount,
+                  testCasesHash: programmingConfig.testCasesHash,
+                  configurationHash: programmingConfig.configurationHash,
+                  executorRuleVersion: programmingConfig.executorRuleVersion,
+                  createdById: teacherId,
+                  testCases: {
+                    create: programmingConfig.testCases.map((testCase) => ({
+                      visibility: testCase.visibility,
+                      name: testCase.name,
+                      stdin: testCase.stdin,
+                      expectedOutput: testCase.expectedOutput,
+                      points: testCase.points,
+                      sortOrder: testCase.sortOrder,
+                    })),
+                  },
+                },
+              },
+            }
+          : {}),
       },
       select: { id: true },
     });

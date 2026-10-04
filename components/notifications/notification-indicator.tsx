@@ -56,7 +56,7 @@ export function NotificationIndicator() {
   return (
     <Link
       aria-label={count > 0 ? `通知中心，${count} 条未读通知` : "通知中心"}
-      className="relative rounded-md border bg-white p-2 text-gray-600 hover:bg-gray-50 hover:text-gray-950"
+      className="relative rounded-md border bg-white p-2 text-gray-600 hover:bg-sky-50/70 hover:text-sky-900"
       href="/notifications"
     >
       <Bell className="h-5 w-5" />

@@ -16,7 +16,7 @@ export function QuestionList({ items }: { items: QuestionListItem[] }) {
     <div className="space-y-3">
       {items.map((question) => (
         <article className="rounded-xl border bg-white p-5" key={question.id}>
-          <div className="flex flex-col justify-between gap-4 md:flex-row">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
                 <span>{QUESTION_TYPE_LABELS[question.type]}</span>
@@ -64,6 +64,7 @@ export function QuestionList({ items }: { items: QuestionListItem[] }) {
             </div>
             <QuestionActions
               compact
+              canCopy={question.canCopy}
               canDelete={question.canDelete}
               canEdit={question.canEdit}
               questionId={question.id}

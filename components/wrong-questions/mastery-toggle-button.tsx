@@ -46,7 +46,7 @@ export function MasteryToggleButton({
       <button
         className={
           isMastered
-            ? "rounded-md border px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            ? "rounded-md border px-3 py-2 text-sm font-medium hover:bg-sky-50/70 disabled:opacity-50"
             : "rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
         }
         disabled={isSubmitting}

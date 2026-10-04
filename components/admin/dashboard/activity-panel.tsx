@@ -87,7 +87,7 @@ export function ActivityPanel({
               <li key={item.id}>
                 {item.href ? (
                   <Link
-                    className="block rounded-lg hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2"
+                    className="block rounded-lg hover:bg-sky-50/70 focus-visible:outline-2 focus-visible:outline-offset-2"
                     href={item.href}
                   >
                     {content}

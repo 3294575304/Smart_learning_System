@@ -71,7 +71,7 @@ export default async function TeacherCourseProfilesPage({ params }: Props) {
                   {item.revisionNumber}
                 </p>
                 <Link
-                  className="mt-4 inline-flex rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white"
+                  className="mt-4 inline-flex rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white"
                   href={`/teacher/courses/${path.data.courseId}/students/${item.student.id}/profile`}
                 >
                   查看证据详情

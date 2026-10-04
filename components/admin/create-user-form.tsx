@@ -99,7 +99,7 @@ export function CreateUserForm() {
           />
         </Field>
       </div>
-      <p className="text-muted-foreground rounded-md bg-gray-50 p-3 text-sm">
+      <p className="text-muted-foreground rounded-md bg-sky-50/70 p-3 text-sm">
         系统目前没有邀请邮件或密码重置能力。初始密码会立即进行哈希存储，创建后不会再次显示，请通过安全渠道交付。
       </p>
       {serverError ? (

@@ -98,7 +98,7 @@ export default async function RecommendationDetailPage({ params }: Props) {
             <ul className="mt-2 flex min-w-0 flex-wrap gap-2">
               {recommendation.knowledgePoints.map((knowledgePoint) => (
                 <li
-                  className="max-w-full rounded-md bg-gray-100 px-2 py-1 text-xs break-words"
+                  className="max-w-full rounded-md bg-sky-100/70 px-2 py-1 text-xs break-words"
                   key={knowledgePoint.id}
                 >
                   {knowledgePoint.name}
@@ -121,7 +121,7 @@ export default async function RecommendationDetailPage({ params }: Props) {
 
         {recommendation.status === RecommendationStatus.COMPLETED ? (
           <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-md bg-black px-4 text-sm font-medium text-white"
+            className="inline-flex min-h-10 items-center justify-center rounded-md bg-sky-600 px-4 text-sm font-medium text-white"
             href={recommendationPracticePath(recommendation.id)}
           >
             查看练习结果
@@ -132,7 +132,7 @@ export default async function RecommendationDetailPage({ params }: Props) {
             status={recommendation.status}
           />
         ) : (
-          <p className="rounded-lg bg-gray-100 p-4 text-sm text-gray-600">
+          <p className="rounded-lg bg-sky-100/70 p-4 text-sm text-gray-600">
             当前推荐状态不能开始或继续练习。
           </p>
         )}

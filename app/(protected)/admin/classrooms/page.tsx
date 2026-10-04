@@ -1,9 +1,9 @@
 import { Role } from "@prisma/client";
-import Link from "next/link";
 
 import { ClassroomGovernanceFilters } from "@/components/admin/classroom-governance-filters";
 import { ClassroomGovernanceList } from "@/components/admin/classroom-governance-list";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { PageIndex } from "@/components/dashboard/page-index";
 import {
   adminClassroomListQuerySchema,
   type AdminClassroomListQuery,
@@ -58,24 +58,12 @@ export default async function AdminClassroomsPage({ searchParams }: PageProps) {
       </div>
       <ClassroomGovernanceList classrooms={classrooms.items} />
       {classrooms.pagination.totalPages > 1 ? (
-        <nav className="flex justify-center gap-3">
-          {query.page > 1 ? (
-            <Link
-              className="rounded-md border px-3 py-2"
-              href={pageHref(query, query.page - 1)}
-            >
-              上一页
-            </Link>
-          ) : null}
-          {query.page < classrooms.pagination.totalPages ? (
-            <Link
-              className="rounded-md border px-3 py-2"
-              href={pageHref(query, query.page + 1)}
-            >
-              下一页
-            </Link>
-          ) : null}
-        </nav>
+        <PageIndex
+          ariaLabel="班级分页"
+          hrefForPage={(page) => pageHref(query, page)}
+          page={classrooms.pagination.page}
+          totalPages={classrooms.pagination.totalPages}
+        />
       ) : null}
     </section>
   );

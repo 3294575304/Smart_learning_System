@@ -164,9 +164,12 @@ function listItemFromRecord(
     content: record.question.content,
     type: record.question.type,
     difficulty: record.question.difficulty,
-    knowledgePoints: record.question.knowledgePointLinks.map(
-      (link) => link.knowledgePoint,
-    ),
+    knowledgePoints: record.conceptSnapshots.length
+      ? record.conceptSnapshots.map((snapshot) => ({
+          id: snapshot.conceptId,
+          name: snapshot.resolvedNode.name,
+        }))
+      : record.question.knowledgePointLinks.map((link) => link.knowledgePoint),
     reason: record.reason,
     status: record.status,
     createdAt: record.createdAt.toISOString(),

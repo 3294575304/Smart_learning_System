@@ -180,7 +180,7 @@ export function SurveyListWorkspace({
           </p>
         ) : null}
         <button
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           disabled={busy || classrooms.length === 0}
           type="submit"
         >
@@ -200,13 +200,13 @@ export function SurveyListWorkspace({
               const summary = survey.summaryRevisions[0];
               return (
                 <Link
-                  className="rounded-xl border bg-white p-5 transition-colors hover:bg-gray-50"
+                  className="rounded-xl border bg-white p-5 transition-colors hover:bg-sky-50/70"
                   href={`/teacher/courses/${courseId}/surveys/${survey.id}`}
                   key={survey.id}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <h3 className="font-semibold">{survey.title}</h3>
-                    <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs">
+                    <span className="rounded-full bg-sky-100/70 px-2.5 py-1 text-xs">
                       {STATUS_LABELS[survey.status]}
                     </span>
                   </div>

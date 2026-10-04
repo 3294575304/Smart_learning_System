@@ -1,12 +1,21 @@
 import { Role, SubmissionStatus } from "@prisma/client";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, Eye } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { PageIndex } from "@/components/dashboard/page-index";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { CourseGradeBreakdown } from "@/components/grades/course-grade-breakdown";
+import { StudentGradeTabs } from "@/components/grades/student-grade-tabs";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { studentResultsQuerySchema } from "@/services/assignments/schemas";
 import { listStudentResults } from "@/services/dashboard/student-dashboard";
+import { listStudentPublishedCourseGradeResults } from "@/services/gradebook/service";
+
+type StudentCourseGradeRows = Awaited<
+  ReturnType<typeof listStudentPublishedCourseGradeResults>
+>;
+type StudentAssignmentResults = Awaited<ReturnType<typeof listStudentResults>>;
 
 const STATUS_LABELS: Record<SubmissionStatus, string> = {
   IN_PROGRESS: "作答中",
@@ -24,6 +33,11 @@ interface Props {
 export default async function StudentResultsPage({ searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
+  const activeView = raw.view === "course" ? "course" : "assignments";
+  const courseRows =
+    activeView === "course"
+      ? await listStudentPublishedCourseGradeResults(student.id)
+      : null;
   const parsed = studentResultsQuerySchema.safeParse({
     page: typeof raw.page === "string" ? raw.page : undefined,
     pageSize: typeof raw.pageSize === "string" ? raw.pageSize : undefined,
@@ -31,26 +45,101 @@ export default async function StudentResultsPage({ searchParams }: Props) {
   const query = parsed.success
     ? parsed.data
     : studentResultsQuerySchema.parse({});
-  const results = await listStudentResults(student.id, query);
+  const results =
+    activeView === "assignments"
+      ? await listStudentResults(student.id, query)
+      : null;
 
   return (
     <section className="space-y-6">
       <PageHeader
-        description="查看历次作业提交、成绩和正确率，进入详情可查看批改结果与学情分析。"
+        description={
+          activeView === "course"
+            ? "查看教师已发布的课程总评、各项占比和当前成绩。"
+            : "查看历次作业提交、成绩和正确率，进入详情可查看批改结果与学习分析。"
+        }
         title="我的成绩"
       />
-      <div className="rounded-xl border bg-white p-4 text-sm">
-        需要查看课程总评与特殊状态？
-        <Link
-          className="ml-2 font-medium underline"
-          href="/student/course-grades"
-        >
-          查看课程正式成绩
-        </Link>
-        <Link className="ml-4 font-medium underline" href="/student/attendance">
-          查看我的出勤
-        </Link>
-      </div>
+      <StudentGradeTabs activeView={activeView} />
+      {activeView === "course" && courseRows ? (
+        <StudentCourseGrades rows={courseRows} />
+      ) : null}
+      {activeView === "assignments" && results ? (
+        <StudentAssignmentResults query={query} results={results} />
+      ) : null}
+    </section>
+  );
+}
+
+const COURSE_STATUS_LABELS: Record<string, string> = {
+  SCORED: "数值成绩",
+  NOT_ENTERED: "尚未录入",
+  ABSENT: "缺考",
+  DEFERRED: "缓考",
+  LEAVE: "请假",
+  EXEMPT: "免修/不参与",
+  CHEATING: "作弊",
+  OTHER: "其他",
+};
+
+function StudentCourseGrades({ rows }: { rows: StudentCourseGradeRows }) {
+  return (
+    <section className="space-y-5" aria-label="课程总评">
+      <h2 className="text-lg font-semibold">课程正式总评</h2>
+      {rows.length === 0 ? (
+        <div className="rounded-xl border bg-white p-8 text-center">
+          <h3 className="font-semibold">暂无已发布课程成绩</h3>
+          <p className="mt-2 text-sm text-gray-500">
+            教师发布正式课程总评后会显示在这里。
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {rows.map((row) => (
+            <article
+              className="rounded-xl border bg-white p-5"
+              key={row.gradebookId}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold">{row.course.name}</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {row.course.term} · {row.classroom.name} · 方案版本{" "}
+                    {row.scheme.versionNumber}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-semibold">
+                    {row.result.effectiveStatus === "SCORED"
+                      ? row.result.effectiveScore?.toFixed(2)
+                      : COURSE_STATUS_LABELS[row.result.effectiveStatus]}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    正式版本 {row.publication.versionNumber}
+                  </p>
+                </div>
+              </div>
+              <CourseGradeBreakdown
+                components={row.result.componentResultsJson}
+                snapshot={row.result.inputSnapshotJson}
+              />
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StudentAssignmentResults({
+  query,
+  results,
+}: {
+  query: ReturnType<typeof studentResultsQuerySchema.parse>;
+  results: StudentAssignmentResults;
+}) {
+  return (
+    <section className="space-y-5" aria-label="作业成绩">
       {results.items.length === 0 ? (
         <EmptyState
           action={
@@ -107,9 +196,12 @@ export default async function StudentResultsPage({ searchParams }: Props) {
                   </td>
                   <td className="px-5 py-4">
                     <Link
-                      className="font-medium underline"
+                      aria-label={`查看${result.assignmentTitle}成绩详情`}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
                       href={`/student/submissions/${result.id}/result`}
+                      title="查看成绩详情"
                     >
+                      <Eye aria-hidden="true" className="size-4" />
                       查看详情
                     </Link>
                   </td>
@@ -120,27 +212,15 @@ export default async function StudentResultsPage({ searchParams }: Props) {
         </div>
       )}
       {results.pagination.totalPages > 1 ? (
-        <nav aria-label="成绩分页" className="flex justify-center gap-3">
-          {query.page > 1 ? (
-            <Link
-              className="rounded-md border bg-white px-3 py-2 text-sm"
-              href={`/student/results?page=${query.page - 1}&pageSize=${query.pageSize}`}
-            >
-              上一页
-            </Link>
-          ) : null}
-          <span className="px-2 py-2 text-sm text-gray-500">
-            第 {query.page} / {results.pagination.totalPages} 页
-          </span>
-          {query.page < results.pagination.totalPages ? (
-            <Link
-              className="rounded-md border bg-white px-3 py-2 text-sm"
-              href={`/student/results?page=${query.page + 1}&pageSize=${query.pageSize}`}
-            >
-              下一页
-            </Link>
-          ) : null}
-        </nav>
+        <PageIndex
+          ariaLabel="成绩分页"
+          hrefForPage={(page) =>
+            `/student/results?page=${page}&pageSize=${query.pageSize}`
+          }
+          page={results.pagination.page}
+          summary={`第 ${results.pagination.page} / ${results.pagination.totalPages} 页`}
+          totalPages={results.pagination.totalPages}
+        />
       ) : null}
     </section>
   );

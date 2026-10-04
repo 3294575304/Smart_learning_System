@@ -1,19 +1,60 @@
 import { Role } from "@prisma/client";
-import { ClipboardCheck } from "lucide-react";
+import { ArrowRight, ClipboardCheck } from "lucide-react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { listStudentCourseSurveys } from "@/services/course-surveys/service";
+import { ResourceNotFoundError } from "@/services/auth/policy";
+import { courseIdSchema } from "@/services/courses/schemas";
+import { getStudentCourseContext } from "@/services/courses/student-access";
 
-export default async function StudentSurveysPage() {
+export default async function StudentSurveysPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const student = await requirePageRole(Role.STUDENT);
-  const surveys = await listStudentCourseSurveys(student.id);
+  const raw = await searchParams;
+  const rawCourseId = Array.isArray(raw.courseId)
+    ? raw.courseId[0]
+    : raw.courseId;
+  const parsedCourseId =
+    rawCourseId !== undefined ? courseIdSchema.safeParse(rawCourseId) : null;
+  if (parsedCourseId && !parsedCourseId.success) notFound();
+  let course: Awaited<ReturnType<typeof getStudentCourseContext>> | null = null;
+  if (parsedCourseId?.success) {
+    try {
+      course = await getStudentCourseContext(student.id, parsedCourseId.data);
+    } catch (error) {
+      if (error instanceof ResourceNotFoundError) notFound();
+      throw error;
+    }
+  }
+  const surveys = await listStudentCourseSurveys(student.id, course?.id);
   return (
     <section className="space-y-6">
       <PageHeader
-        description="完成临近结课的课程目标自评和教学质量反馈。所有问卷均不计入课程成绩。"
+        actions={
+          <Link
+            className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+            href={
+              course
+                ? `/student/courses/${course.id}/learning-center`
+                : "/student/tasks"
+            }
+          >
+            {course ? "返回课程学习中心" : "返回学习任务"}
+          </Link>
+        }
+        description={
+          course
+            ? `查看「${course.name}」已发布的课程问卷。问卷不计入课程成绩。`
+            : "查看各门课程已发布的课程目标自评和教学质量反馈。所有问卷均不计入课程成绩。"
+        }
+        eyebrow={course?.name}
         title="课程问卷"
       />
       {surveys.length === 0 ? (
@@ -50,13 +91,14 @@ export default async function StudentSurveysPage() {
                 {survey._count.questions} 题 · 截止{" "}
                 {survey.dueAt.toLocaleString("zh-CN")}
               </p>
-              <p className="mt-4 text-sm font-medium">
+              <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-700">
                 {survey.submittedAt
                   ? "查看完成状态"
                   : survey.isOpen
                     ? "开始填写"
                     : "查看详情"}
-              </p>
+                <ArrowRight aria-hidden="true" className="size-4" />
+              </span>
             </Link>
           ))}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { UserStatus } from "@prisma/client";
+import { Ban, Check, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -56,15 +57,20 @@ export function UserStatusAction({
       title={isSelf ? "不能禁用当前登录的管理员账号" : undefined}
     >
       <button
-        className={
-          disabling
-            ? "text-sm text-red-600 disabled:text-gray-400"
-            : "text-sm text-green-700 disabled:text-gray-400"
-        }
+        aria-label={`${disabling ? "禁用" : "启用"}用户 ${displayName}`}
+        className={`inline-flex items-center gap-1.5 rounded-md border bg-white px-2.5 py-2 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm ${disabling ? "border-red-200 text-red-700 hover:bg-red-50" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"}`}
         disabled={pending || isSelf}
         onClick={changeStatus}
+        title={isSelf ? "不能禁用当前登录的管理员账号" : undefined}
         type="button"
       >
+        {pending ? (
+          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+        ) : disabling ? (
+          <Ban aria-hidden="true" className="size-4" />
+        ) : (
+          <Check aria-hidden="true" className="size-4" />
+        )}
         {pending ? "处理中…" : disabling ? "禁用" : "启用"}
       </button>
     </span>

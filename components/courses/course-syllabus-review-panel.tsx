@@ -267,7 +267,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
             AI 解析结果需由教师审核并显式发布，发布不会生成知识图谱。
           </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm">
+        <span className="rounded-full bg-sky-100/70 px-3 py-1 text-sm">
           {isCurrentReviewPublished ? "已发布" : statusLabel}
         </span>
       </div>
@@ -281,7 +281,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
         <div className="mt-4 rounded-lg border border-dashed p-4 text-sm">
           <p>当前教学大纲尚未解析。</p>
           <button
-            className="mt-3 rounded-md bg-gray-900 px-3 py-2 text-white disabled:opacity-60"
+            className="mt-3 rounded-md bg-sky-600 px-3 py-2 text-white disabled:opacity-60"
             disabled={parsing}
             onClick={() => void parse()}
             type="button"
@@ -498,7 +498,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
             <div className="mt-3 space-y-3">
               {structure.objectives.map((objective, index) => (
                 <div
-                  className="rounded-md bg-slate-50 p-3"
+                  className="rounded-md bg-sky-50/60 p-3"
                   key={`${objective.code}-${index}`}
                 >
                   <div className="mb-2 flex justify-end">
@@ -552,7 +552,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
             <div className="mt-3 space-y-4">
               {structure.chapters.map((chapter, chapterIndex) => (
                 <div
-                  className="rounded-md bg-slate-50 p-3"
+                  className="rounded-md bg-sky-50/60 p-3"
                   key={`${chapter.code}-${chapterIndex}`}
                 >
                   <div className="mb-2 flex justify-end">
@@ -690,7 +690,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
               <div className="mt-3 space-y-2">
                 {structure.practiceItems.map((item, index) => (
                   <div
-                    className="grid gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-[120px_1fr_100px_1fr_auto]"
+                    className="grid gap-2 rounded-md bg-sky-50/60 p-3 sm:grid-cols-[120px_1fr_100px_1fr_auto]"
                     key={item.code + "-" + index}
                   >
                     <input
@@ -760,7 +760,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
             <div className="mt-3 space-y-2">
               {structure.assessments.map((assessment, index) => (
                 <div
-                  className="grid gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-[120px_1fr_120px_100px_auto]"
+                  className="grid gap-2 rounded-md bg-sky-50/60 p-3 sm:grid-cols-[120px_1fr_120px_100px_auto]"
                   key={`${assessment.code}-${index}`}
                 >
                   <input
@@ -819,11 +819,11 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
             {structure.objectives.length && structure.assessments.length ? (
               <div className="mt-5 overflow-x-auto rounded-md border">
                 <table className="min-w-full border-collapse text-sm">
-                  <caption className="bg-slate-50 px-3 py-2 text-left font-medium">
+                  <caption className="bg-sky-50/60 px-3 py-2 text-left font-medium">
                     课程目标在各考核方式中占比（%）
                   </caption>
                   <thead>
-                    <tr className="border-t bg-slate-50">
+                    <tr className="border-t bg-sky-50/60">
                       <th className="min-w-44 border-r px-3 py-2 text-left">
                         课程目标
                       </th>
@@ -895,7 +895,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                         })}
                       </tr>
                     ))}
-                    <tr className="border-t bg-slate-50 font-medium">
+                    <tr className="border-t bg-sky-50/60 font-medium">
                       <th className="border-r px-3 py-2 text-left">列合计</th>
                       {structure.assessments.map((assessment) => {
                         const total = structure.objectives.reduce(
@@ -934,7 +934,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
               <ul className="mt-3 space-y-2 text-sm">
                 {structure.materials.map((item) => (
                   <li
-                    className="flex justify-between gap-3 rounded bg-slate-50 p-3"
+                    className="flex justify-between gap-3 rounded bg-sky-50/60 p-3"
                     key={item.code}
                   >
                     <span>
@@ -978,7 +978,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
               {saving ? "保存中..." : "保存审核稿"}
             </button>
             <button
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               disabled={publishing || saving || dirty || !state?.review}
               onClick={() => void publish()}
               type="button"

@@ -1,4 +1,5 @@
 import { Role, SubmissionStatus } from "@prisma/client";
+import { Eye } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -358,7 +359,8 @@ export default async function AssignmentResultsPage({
                         </td>
                         <td className="py-3">
                           <Link
-                            className="underline"
+                            aria-label={`查看 ${student.displayName} 的作答`}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
                             href={studentDetailHref(
                               results.assignment.id,
                               student.studentId,
@@ -366,7 +368,9 @@ export default async function AssignmentResultsPage({
                               results.students.page,
                               results.students.pageSize,
                             )}
+                            title="查看作答"
                           >
+                            <Eye aria-hidden="true" className="size-4" />
                             查看作答
                           </Link>
                         </td>

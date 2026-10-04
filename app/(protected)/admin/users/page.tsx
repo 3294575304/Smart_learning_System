@@ -5,6 +5,7 @@ import Link from "next/link";
 import { UserFilters } from "@/components/admin/user-filters";
 import { UserList } from "@/components/admin/user-list";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { PageIndex } from "@/components/dashboard/page-index";
 import {
   adminUserListQuerySchema,
   type AdminUserListQuery,
@@ -54,7 +55,7 @@ export default async function AdminUsersPage({
       <PageHeader
         actions={
           <Link
-            className="flex items-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+            className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
             href="/admin/users/new"
           >
             <Plus className="h-4 w-4" />
@@ -74,24 +75,12 @@ export default async function AdminUsersPage({
       </div>
       <UserList currentAdminId={admin.id} users={users.items} />
       {users.pagination.totalPages > 1 ? (
-        <nav className="flex justify-center gap-3">
-          {query.page > 1 ? (
-            <Link
-              className="rounded-md border px-3 py-2"
-              href={pageHref(query, query.page - 1)}
-            >
-              上一页
-            </Link>
-          ) : null}
-          {query.page < users.pagination.totalPages ? (
-            <Link
-              className="rounded-md border px-3 py-2"
-              href={pageHref(query, query.page + 1)}
-            >
-              下一页
-            </Link>
-          ) : null}
-        </nav>
+        <PageIndex
+          ariaLabel="用户分页"
+          hrefForPage={(page) => pageHref(query, page)}
+          page={users.pagination.page}
+          totalPages={users.pagination.totalPages}
+        />
       ) : null}
     </section>
   );

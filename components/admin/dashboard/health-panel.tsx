@@ -31,7 +31,7 @@ function statusClass(status: SystemHealthStatus): string {
   if (status === "DEGRADED")
     return "bg-amber-50 text-amber-800 border-amber-200";
   if (status === "UNAVAILABLE") return "bg-red-50 text-red-800 border-red-200";
-  return "bg-gray-50 text-gray-700 border-gray-200";
+  return "bg-sky-50/70 text-gray-700 border-sky-100";
 }
 
 function StatusBadge({ status }: { status: SystemHealthStatus }) {

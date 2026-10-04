@@ -90,6 +90,11 @@ export interface SubmissionResultView {
     correctAnswer: string;
     explanation: string;
     teacherFeedback: string | null;
+    knowledgePoints: Array<{
+      id: string;
+      code: string;
+      name: string;
+    }>;
   }>;
 }
 

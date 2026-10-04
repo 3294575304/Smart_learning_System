@@ -23,6 +23,8 @@ npx prisma migrate deploy
 powershell -ExecutionPolicy Bypass -File deploy/windows-local/install-local-deployment.ps1
 ```
 
+首次运行前，请准备当前 Windows 用户 SSH 目录中的私钥和已核验的远程主机指纹文件。脚本默认使用 `$HOME\.ssh\codex_sandbox_known_hosts_20260808`；如果文件位置不同，请显式传入 `-KnownHostsPath`。不要创建空文件或直接使用未经核验的 `ssh-keyscan` 输出。
+
 仅在已经确认独立生产构建完整、只需重启或更新任务设置时，才可传入 `-SkipBuild`。
 
 任务分别为 `Zhixue-SSH-Tunnel`、`Zhixue-Next`、`Zhixue-Judge-Worker` 和 `Zhixue-Background-Worker`。它们不注册登录、定时或失败重启触发器，只在运行启动脚本时启动；停止后不会自行恢复。任务通过 `IgnoreNew` 保持单实例。运行时配置保存在被 Git 忽略的 `.data/local-deployment/service-config.json`，安装脚本会为该文件单独关闭 ACL 继承，仅允许当前用户和 SYSTEM 读取；日志保存在同目录的 `logs` 下。脚本不会输出远程执行器密钥或后台任务密钥。

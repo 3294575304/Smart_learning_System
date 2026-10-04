@@ -193,7 +193,7 @@ export function BatchMappingPanel({
           </p>
         )}
         <button
-          className="mt-4 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="mt-4 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           disabled={pending !== null || batch !== null || !questions.length}
           onClick={() => void generate()}
           type="button"
@@ -245,7 +245,7 @@ export function BatchMappingPanel({
                     const selected = selectedCandidates[candidate.id];
                     return (
                       <div
-                        className="flex flex-wrap items-center gap-3 rounded bg-slate-50 p-3 text-sm"
+                        className="flex flex-wrap items-center gap-3 rounded bg-sky-50/60 p-3 text-sm"
                         key={candidate.id}
                       >
                         <input

@@ -62,7 +62,7 @@ export function RosterImportMappingForm({
   return (
     <form className="space-y-5" noValidate onSubmit={handleSubmit(onSubmit)}>
       <div className="overflow-hidden rounded-lg border">
-        <div className="hidden grid-cols-[minmax(170px,0.8fr)_minmax(240px,1.2fr)_120px] gap-4 bg-gray-50 px-4 py-3 text-xs font-medium text-gray-600 md:grid">
+        <div className="hidden grid-cols-[minmax(170px,0.8fr)_minmax(240px,1.2fr)_120px] gap-4 bg-sky-50/70 px-4 py-3 text-xs font-medium text-gray-600 md:grid">
           <span>平台字段</span>
           <span>源文件列</span>
           <span>识别状态</span>
@@ -139,7 +139,7 @@ export function RosterImportMappingForm({
                         : "人工调整"}
                     </span>
                   ) : (
-                    <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600">
+                    <span className="rounded-full bg-sky-100/70 px-2.5 py-1 text-xs text-gray-600">
                       未映射
                     </span>
                   )}
@@ -156,7 +156,7 @@ export function RosterImportMappingForm({
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-sky-50/70 disabled:opacity-60"
           disabled={isSubmitting}
           onClick={onBack}
           type="button"
@@ -165,7 +165,7 @@ export function RosterImportMappingForm({
           返回上传
         </button>
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
           disabled={isSubmitting}
           type="submit"
         >

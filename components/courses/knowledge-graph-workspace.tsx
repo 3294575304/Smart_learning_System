@@ -9,7 +9,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { KnowledgeGraphDirectory } from "@/components/courses/knowledge-graph-directory";
+import { KnowledgePointQuestionPanel } from "@/components/courses/knowledge-point-question-panel";
+import type { GraphQuestionCoverage } from "@/services/question-graph-bindings/types";
 import { KnowledgeGraphCanvas } from "@/components/courses/knowledge-graph-canvas";
+import { filterKnowledgeGraph } from "@/components/courses/knowledge-graph-filter";
 import { requestApi } from "@/components/courses/request-api";
 import {
   presentKnowledgeGraphGeneration,
@@ -116,6 +120,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [query, setQuery] = useState("");
+  const [chapterKey, setChapterKey] = useState("ALL");
   const [nodeType, setNodeType] = useState<"ALL" | keyof typeof nodeTypeLabel>(
     "ALL",
   );
@@ -131,6 +136,32 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<GraphQuestionCoverage | null>(null);
+  const [coverageError, setCoverageError] = useState<string | null>(null);
+  const [coverageLoading, setCoverageLoading] = useState(true);
+  const [coverageRefresh, setCoverageRefresh] = useState(0);
+  const refreshCoverage = useCallback(
+    () => setCoverageRefresh((value) => value + 1),
+    [],
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    setCoverageLoading(true);
+    setCoverageError(null);
+    void requestApi<GraphQuestionCoverage>(
+      `/api/teacher/courses/${courseId}/knowledge-graph/question-coverage`,
+      { signal: controller.signal },
+    ).then((result) => {
+      if (controller.signal.aborted) return;
+      setCoverageLoading(false);
+      if (result.success) setCoverage(result.data);
+      else {
+        setCoverage(null);
+        setCoverageError(result.error);
+      }
+    });
+    return () => controller.abort();
+  }, [courseId, state?.published.current?.id, coverageRefresh]);
   const load = useCallback(
     async (preserveNotice = false) => {
       setLoading(true);
@@ -188,28 +219,46 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
   }, [dirty]);
-  const nodes = useMemo(
+  const { nodes, edges } = useMemo(
     () =>
-      graph?.nodes.filter(
-        (node) =>
-          (nodeType === "ALL" || node.type === nodeType) &&
-          (node.code + " " + node.name)
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-      ) ?? [],
-    [graph, nodeType, query],
-  );
-  const edges = useMemo(
-    () =>
-      graph?.edges.filter(
-        (edge) => edgeType === "ALL" || edge.type === edgeType,
-      ) ?? [],
-    [edgeType, graph],
+      filterKnowledgeGraph(graph, { query, nodeType, edgeType, chapterKey }),
+    [graph, query, nodeType, edgeType, chapterKey],
   );
   const selectedNode = useMemo(
     () => graph?.nodes.find((node) => node.key === selectedKey) ?? null,
     [graph, selectedKey],
   );
+  const pointByConceptKey = useMemo(
+    () =>
+      new Map(coverage?.points.map((point) => [point.conceptKey, point]) ?? []),
+    [coverage],
+  );
+  const questionCountByPoint = useMemo(
+    () =>
+      new Map(
+        (graph?.nodes ?? []).flatMap((node) => {
+          const point = pointByConceptKey.get(node.conceptKey);
+          return point ? [[node.key, point.questionCount] as const] : [];
+        }),
+      ),
+    [graph?.nodes, pointByConceptKey],
+  );
+  const chapters = useMemo(
+    () =>
+      (graph?.nodes ?? [])
+        .filter((node) => node.type === "CHAPTER")
+        .sort(
+          (a, b) =>
+            a.sortOrder - b.sortOrder ||
+            a.code.localeCompare(b.code, "zh-CN", { numeric: true }),
+        ),
+    [graph?.nodes],
+  );
+  const selectedPoint = selectedNode
+    ? pointByConceptKey.get(selectedNode.conceptKey)
+    : undefined;
+  const uncoveredPoints =
+    coverage?.points.filter((point) => point.questionCount === 0) ?? [];
   const pendingDiff = useMemo(
     () =>
       graph && state?.published.current
@@ -439,6 +488,18 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     setDirty(true);
     setNotice(null);
   }
+  const handleSelectNode = useCallback(
+    (key: string) => {
+      if (!nodes.some((node) => node.key === key)) {
+        setQuery("");
+        setNodeType("ALL");
+        setEdgeType("ALL");
+        setChapterKey("ALL");
+      }
+      setSelectedKey(key);
+    },
+    [nodes],
+  );
   return (
     <section className="space-y-5" aria-live="polite">
       <div className="rounded-xl border bg-white p-5">
@@ -446,11 +507,11 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
           <div>
             <h2 className="font-semibold">正式大纲驱动的课程知识图谱</h2>
             <p className="mt-1 text-sm text-gray-500">
-              大纲节点与先修关系确定性转换；AI 仅建议 RELATED 关系。
+              按章节浏览中文知识点，查看教学重点、来源与关联题目。
             </p>
           </div>
           <button
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
             disabled={
               busy ||
               !state?.sourceSyllabusStructureId ||
@@ -487,34 +548,128 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
           正在读取图谱状态...
         </p>
       ) : null}
+      {coverageLoading ? (
+        <p className="text-sm text-gray-500">正在读取正式图谱的题库覆盖情况…</p>
+      ) : null}
+      {coverageError ? (
+        <p
+          role="alert"
+          className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          {coverageError}{" "}
+          <button type="button" className="underline" onClick={refreshCoverage}>
+            重试题库统计
+          </button>
+        </p>
+      ) : null}
+      {coverage?.graphVersionId ? (
+        <div className="rounded-xl border bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">正式图谱题库覆盖</h3>
+            <span className="text-sm text-gray-500">
+              v{coverage.versionNumber} ·{" "}
+              {coverage.points.length - uncoveredPoints.length} /{" "}
+              {coverage.points.length} 个知识点已有题目
+            </span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-sky-100/70">
+            <div
+              className="h-full bg-emerald-500"
+              style={{
+                width: `${coverage.points.length ? ((coverage.points.length - uncoveredPoints.length) / coverage.points.length) * 100 : 0}%`,
+              }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            统计您可管理的题目。草稿、已停用题目仍可维护关联，是否用于作业和推荐由原有规则控制。
+          </p>
+          {uncoveredPoints.length ? (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm text-amber-800">
+                待补充题目的知识点（{uncoveredPoints.length}）
+              </summary>
+              <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-auto">
+                {uncoveredPoints.map((point) => {
+                  const node = graph?.nodes.find(
+                    (item) => item.conceptKey === point.conceptKey,
+                  );
+                  return (
+                    <button
+                      key={point.conceptId}
+                      type="button"
+                      disabled={!node}
+                      className="rounded border px-2 py-1 text-xs text-sky-800 disabled:text-gray-400"
+                      title={
+                        node
+                          ? "定位知识点并关联题目"
+                          : "当前审核稿未包含该正式知识点"
+                      }
+                      onClick={() => {
+                        if (node) handleSelectNode(node.key);
+                      }}
+                    >
+                      {point.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </details>
+          ) : null}
+        </div>
+      ) : !coverageLoading && !coverageError ? (
+        <p className="rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+          图谱审核发布后，即可为知识点关联题目并查看题库覆盖情况。
+        </p>
+      ) : null}
       {graph ? (
         <div className="rounded-xl border bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="font-semibold">图谱审核</h3>
               <p className="text-sm text-gray-500">
-                {graph.nodes.length} 个节点 · {graph.edges.length} 条关系
+                当前显示 {nodes.length} 个节点 · {edges.length} 条关系（共{" "}
+                {graph.nodes.length} 个节点 · {graph.edges.length} 条关系）
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <select
+                aria-label="按章节筛选"
+                className="max-w-64 rounded-md border px-3 py-2 text-sm"
+                value={chapterKey}
+                onChange={(event) => {
+                  setChapterKey(event.target.value);
+                  setSelectedKey(null);
+                }}
+              >
+                <option value="ALL">全部章节</option>
+                {chapters.map((chapter) => (
+                  <option key={chapter.key} value={chapter.key}>
+                    {chapter.name}
+                  </option>
+                ))}
+              </select>
               <label className="flex items-center gap-2 rounded-md border px-3 py-2">
                 <Search className="h-4 w-4" />
                 <input
                   className="outline-none"
                   placeholder="搜索编码或名称"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setSelectedKey(null);
+                  }}
                 />
               </label>
               <select
                 aria-label="筛选节点类型"
                 className="rounded-md border px-3 py-2 text-sm"
                 value={nodeType}
-                onChange={(event) =>
+                onChange={(event) => {
                   setNodeType(
                     event.target.value as "ALL" | keyof typeof nodeTypeLabel,
-                  )
-                }
+                  );
+                  setSelectedKey(null);
+                }}
               >
                 <option value="ALL">全部节点</option>
                 {Object.entries(nodeTypeLabel).map(([value, label]) => (
@@ -527,11 +682,12 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                 aria-label="筛选关系类型"
                 className="rounded-md border px-3 py-2 text-sm"
                 value={edgeType}
-                onChange={(event) =>
+                onChange={(event) => {
                   setEdgeType(
                     event.target.value as "ALL" | keyof typeof edgeTypeLabel,
-                  )
-                }
+                  );
+                  setSelectedKey(null);
+                }}
               >
                 <option value="ALL">全部关系</option>
                 {Object.entries(edgeTypeLabel).map(([value, label]) => (
@@ -543,13 +699,24 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
             </div>
           </div>
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-            <KnowledgeGraphCanvas
-              edges={edges}
-              nodes={nodes}
-              onSelect={setSelectedKey}
-              selectedKey={selectedKey}
-            />
-            <aside className="rounded-lg border p-4">
+            <div className="grid min-w-0 gap-3 lg:grid-cols-[180px_minmax(0,1fr)]">
+              <KnowledgeGraphDirectory
+                graph={graph}
+                nodes={nodes}
+                selectedKey={selectedKey}
+                counts={questionCountByPoint}
+                onSelect={handleSelectNode}
+              />
+              <KnowledgeGraphCanvas
+                structure={graph}
+                edges={edges}
+                nodes={nodes}
+                onSelect={handleSelectNode}
+                questionCountByPoint={questionCountByPoint}
+                selectedKey={selectedKey}
+              />
+            </div>
+            <aside className="min-w-0 rounded-lg border p-4">
               <h4 className="font-medium">节点详情与审核</h4>
               {selectedNode ? (
                 <div className="mt-3 space-y-3 text-sm">
@@ -557,7 +724,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                     <label className="space-y-1">
                       <span className="text-xs text-gray-500">节点编码</span>
                       <input
-                        className="w-full rounded border bg-slate-50 px-2 py-1.5"
+                        className="w-full rounded border bg-sky-50/60 px-2 py-1.5"
                         readOnly
                         value={selectedNode.code}
                       />
@@ -565,7 +732,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                     <label className="space-y-1">
                       <span className="text-xs text-gray-500">节点类型</span>
                       <input
-                        className="w-full rounded border bg-slate-50 px-2 py-1.5"
+                        className="w-full rounded border bg-sky-50/60 px-2 py-1.5"
                         readOnly
                         value={nodeTypeLabel[selectedNode.type]}
                       />
@@ -647,7 +814,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                       </div>
                     </>
                   ) : null}
-                  <div className="rounded bg-slate-50 p-3 text-xs text-gray-600">
+                  <div className="rounded bg-sky-50/60 p-3 text-xs text-gray-600">
                     <p>来源：{sourceLabel[selectedNode.sourceType]}</p>
                     <p className="mt-1">
                       原文：
@@ -660,6 +827,43 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                       {selectedNode.objectiveMappings.join("、") || "无"}
                     </p>
                   </div>
+                  {selectedNode.type === "KNOWLEDGE_POINT" ? (
+                    coverageLoading && !coverage ? (
+                      <p className="mt-4 text-sm text-gray-500">
+                        正在核对正式知识点…
+                      </p>
+                    ) : coverageError ? (
+                      <p role="alert" className="mt-4 text-sm text-red-700">
+                        {coverageError}{" "}
+                        <button
+                          type="button"
+                          className="underline"
+                          onClick={refreshCoverage}
+                        >
+                          重新读取
+                        </button>
+                      </p>
+                    ) : selectedPoint && coverage?.graphVersionId ? (
+                      <>
+                        <p className="mt-4 rounded bg-sky-50 p-2 text-xs leading-5 text-sky-800">
+                          题目关联使用正式图谱 v{coverage.versionNumber} 的“
+                          {selectedPoint.name}
+                          ”。审核稿中的名称或结构修改须发布后才生效。
+                        </p>
+                        <KnowledgePointQuestionPanel
+                          key={`${coverage.graphVersionId}:${selectedPoint.conceptId}`}
+                          courseId={courseId}
+                          graphVersionId={coverage.graphVersionId}
+                          point={selectedPoint}
+                          onChanged={refreshCoverage}
+                        />
+                      </>
+                    ) : (
+                      <p className="mt-4 rounded border border-dashed p-3 text-sm text-gray-500">
+                        该知识点尚未进入当前正式图谱，请先保存审核稿并发布，再关联题目。
+                      </p>
+                    )
+                  ) : null}
                 </div>
               ) : (
                 <p className="mt-3 text-sm text-gray-500">
@@ -741,7 +945,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                 .filter((edge) => edgeType === "ALL" || edge.type === edgeType)
                 .map((edge) => (
                   <div
-                    className="grid items-center gap-2 rounded bg-slate-50 p-3 text-sm md:grid-cols-[90px_1fr_1fr_1fr_auto]"
+                    className="grid items-center gap-2 rounded bg-sky-50/60 p-3 text-sm md:grid-cols-[90px_1fr_1fr_1fr_auto]"
                     key={edge.key}
                   >
                     <span>{edgeTypeLabel[edge.type]}</span>
@@ -800,7 +1004,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
               保存审核稿
             </button>
             <button
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
               disabled={busy || dirty || !state?.review}
               onClick={() => void publish()}
             >

@@ -1,9 +1,11 @@
 import { Role } from "@prisma/client";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, Eye } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { PageIndex } from "@/components/dashboard/page-index";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { AutoSubmitSelect } from "@/components/filters/auto-submit-select";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
   teacherResultsOverviewQuerySchema,
@@ -59,7 +61,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
       <form className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4">
         <label className="min-w-56 flex-1 space-y-1">
           <span className="text-xs font-medium">班级</span>
-          <select
+          <AutoSubmitSelect
             className="w-full rounded-md border px-3 py-2 text-sm"
             defaultValue={query.classroomId ?? ""}
             name="classroomId"
@@ -70,15 +72,9 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                 {classroom.name}
               </option>
             ))}
-          </select>
+          </AutoSubmitSelect>
         </label>
         <input name="pageSize" type="hidden" value={query.pageSize} />
-        <button
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-          type="submit"
-        >
-          筛选
-        </button>
         <Link
           className="rounded-md border px-4 py-2 text-sm"
           href="/teacher/results"
@@ -149,9 +145,12 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                   </td>
                   <td className="px-5 py-4">
                     <Link
-                      className="font-medium underline"
+                      aria-label={`查看${item.title}成绩详情`}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-sky-200 bg-white px-2.5 py-2 text-xs font-medium text-sky-700 transition hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none sm:text-sm"
                       href={`/teacher/assignments/${item.id}/results`}
+                      title="查看成绩详情"
                     >
+                      <Eye aria-hidden="true" className="size-4" />
                       查看详情
                     </Link>
                   </td>
@@ -163,27 +162,12 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
       )}
 
       {results.pagination.totalPages > 1 ? (
-        <nav aria-label="成绩统计分页" className="flex justify-center gap-3">
-          {query.page > 1 ? (
-            <Link
-              className="rounded-md border bg-white px-3 py-2 text-sm"
-              href={pageHref(query, query.page - 1)}
-            >
-              上一页
-            </Link>
-          ) : null}
-          <span className="px-2 py-2 text-sm text-gray-500">
-            第 {query.page} / {results.pagination.totalPages} 页
-          </span>
-          {query.page < results.pagination.totalPages ? (
-            <Link
-              className="rounded-md border bg-white px-3 py-2 text-sm"
-              href={pageHref(query, query.page + 1)}
-            >
-              下一页
-            </Link>
-          ) : null}
-        </nav>
+        <PageIndex
+          ariaLabel="成绩统计分页"
+          hrefForPage={(page) => pageHref(query, page)}
+          page={results.pagination.page}
+          totalPages={results.pagination.totalPages}
+        />
       ) : null}
     </section>
   );

@@ -117,7 +117,7 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
           </p>
         </div>
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-md border bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-2 rounded-md border bg-white px-3 py-2 text-sm font-medium hover:bg-sky-50/70 disabled:opacity-60"
           disabled={isLoading || isUploading}
           onClick={() => fileInputRef.current?.click()}
           type="button"
@@ -195,7 +195,7 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
               </div>
             </div>
             <a
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
               href={`/api/teacher/courses/${courseId}/syllabus/download`}
             >
               <Download className="h-4 w-4" />
@@ -207,7 +207,7 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
         <div className="mt-4 rounded-lg border border-dashed p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-100/70 text-gray-500">
                 <FileText className="h-5 w-5" />
               </div>
               <div>
@@ -218,7 +218,7 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
               </div>
             </div>
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
               disabled={isUploading}
               onClick={() => fileInputRef.current?.click()}
               type="button"

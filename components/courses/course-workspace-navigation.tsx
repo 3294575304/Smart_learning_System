@@ -9,6 +9,7 @@ import {
   FileText,
   GitBranch,
   ListChecks,
+  MessageSquareText,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -76,10 +77,16 @@ const WORKSPACE_GROUPS = [
     title: "评价分析",
     items: [
       {
+        title: "课程分析中心",
+        description: "汇总教学进度、学情证据与结课状态",
+        path: "analytics",
+        icon: BarChart3,
+      },
+      {
         title: "结课问卷",
         description: "发布自评问卷，汇总教学反馈",
         path: "surveys",
-        icon: BarChart3,
+        icon: MessageSquareText,
       },
       {
         title: "教学质量分析",
@@ -105,9 +112,9 @@ export function CourseWorkspaceNavigation({ courseId }: { courseId: string }) {
               <Link
                 key={path}
                 href={`/teacher/courses/${courseId}/${path}`}
-                className="group flex min-w-0 items-center gap-3 rounded-lg border border-transparent bg-slate-50/80 p-3 transition-colors hover:border-blue-100 hover:bg-blue-50/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                className="group flex min-w-0 items-center gap-3 rounded-lg border border-transparent bg-sky-50/80 p-3 transition-colors hover:border-sky-100 hover:bg-sky-50/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
               >
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 transition-colors group-hover:border-blue-100 group-hover:text-blue-600">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 transition-colors group-hover:border-sky-100 group-hover:text-blue-600">
                   <Icon aria-hidden="true" className="size-5" />
                 </span>
                 <div className="min-w-0 flex-1">

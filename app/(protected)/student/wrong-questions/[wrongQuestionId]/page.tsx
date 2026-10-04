@@ -40,7 +40,7 @@ export default async function StudentWrongQuestionDetailPage({
           <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-gray-100 px-2.5 py-1">
+                <span className="rounded-full bg-sky-100/70 px-2.5 py-1">
                   {QUESTION_TYPE_LABELS[detail.type]}
                 </span>
                 <span

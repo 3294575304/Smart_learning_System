@@ -1,4 +1,4 @@
-import { BookOpenCheck } from "lucide-react";
+import { BookOpenCheck, Eye } from "lucide-react";
 import Link from "next/link";
 
 import { QuestionGovernanceAction } from "@/components/admin/question-governance-action";
@@ -66,11 +66,14 @@ export function QuestionGovernanceList({
                 </p>
               </td>
               <td className="px-4 py-3">
-                <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Link
-                    className="block text-sm underline underline-offset-4"
+                    aria-label={`查看题目 ${question.title}`}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
                     href={`/admin/questions/${question.id}`}
+                    title="查看题目详情"
                   >
+                    <Eye aria-hidden="true" className="size-4" />
                     查看详情
                   </Link>
                   <QuestionGovernanceAction question={question} />

@@ -110,7 +110,7 @@ export function RegisterForm() {
         </p>
       ) : null}
       <button
-        className="bg-primary text-primary-foreground w-full rounded-md px-4 py-2 font-medium disabled:opacity-60"
+        className="bg-primary text-primary-foreground w-full rounded-md px-4 py-2 font-medium shadow-sm shadow-sky-200 transition hover:bg-sky-700 disabled:opacity-60"
         disabled={isPending}
         type="submit"
       >
@@ -118,7 +118,7 @@ export function RegisterForm() {
       </button>
       <p className="text-muted-foreground text-center text-sm">
         已有账号？{" "}
-        <Link className="text-foreground underline" href="/login">
+        <Link className="font-medium text-sky-700 underline" href="/login">
           返回登录
         </Link>
       </p>
@@ -151,7 +151,7 @@ function FormField({
       <input
         {...registration}
         autoComplete={autoComplete}
-        className="border-input focus:ring-ring mt-2 w-full rounded-md border px-3 py-2 outline-none focus:ring-2"
+        className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2"
         id={id}
         type={type}
       />

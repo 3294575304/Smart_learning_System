@@ -31,7 +31,7 @@ export default async function CourseSyllabusPage({
       <PageHeader
         actions={
           <Link
-            className="rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            className="rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-sky-50/70"
             href={`/teacher/courses/${courseId.data}`}
           >
             返回课程

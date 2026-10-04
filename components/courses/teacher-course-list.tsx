@@ -27,9 +27,9 @@ const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
 };
 
 const COURSE_STATUS_STYLES: Record<CourseStatus, string> = {
-  DRAFT: "bg-gray-100 text-gray-700",
+  DRAFT: "bg-sky-100/70 text-gray-700",
   ACTIVE: "bg-emerald-50 text-emerald-700",
-  ARCHIVED: "bg-slate-100 text-slate-600",
+  ARCHIVED: "bg-sky-100/70 text-slate-600",
 };
 
 function CourseDeleteAction({
@@ -91,7 +91,7 @@ function CourseDeleteAction({
         <div
           aria-labelledby={`delete-course-title-${course.id}`}
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-sky-950/25 p-4 backdrop-blur-[1px]"
           role="alertdialog"
         >
           <div className="w-full max-w-md rounded-xl border bg-white p-6 shadow-xl">
@@ -109,7 +109,7 @@ function CourseDeleteAction({
               </div>
               <button
                 aria-label="关闭删除确认框"
-                className="rounded-md p-1 text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md p-1 text-gray-500 hover:bg-sky-100/70 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={isDeleting}
                 onClick={closeDialog}
                 type="button"
@@ -118,7 +118,7 @@ function CourseDeleteAction({
               </button>
             </div>
 
-            <div className="mt-5 rounded-lg border bg-gray-50 p-4 text-sm">
+            <div className="mt-5 rounded-lg border bg-sky-50/70 p-4 text-sm">
               <p className="font-medium">{course.name}</p>
               <p className="text-muted-foreground mt-1">
                 课程号：{course.courseNo}
@@ -140,7 +140,7 @@ function CourseDeleteAction({
 
             <div className="mt-6 flex justify-end gap-3">
               <button
-                className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-sky-50/70 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={isDeleting}
                 onClick={closeDialog}
                 type="button"
@@ -244,7 +244,7 @@ export function TeacherCourseList({
                 className="block rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
                 href={`/teacher/courses/${course.id}`}
               >
-                <div className="mt-5 grid grid-cols-2 gap-4 rounded-lg bg-slate-50/80 p-4 text-sm">
+                <div className="mt-5 grid grid-cols-2 gap-4 rounded-lg bg-sky-50/80 p-4 text-sm">
                   <div>
                     <p className="text-muted-foreground text-xs">课程号</p>
                     <p className="mt-1 font-medium break-all">

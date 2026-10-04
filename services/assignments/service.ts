@@ -47,6 +47,7 @@ import { freezeAssignmentProgrammingConfigs } from "@/services/programming-quest
 import { createFormalProgrammingAttempt } from "@/services/programming-attempts/service";
 import { appendAssessmentLearningEventsAndProjectEvidence } from "@/services/learning-events/assessment";
 import { notifyAssignmentPublished } from "@/services/notifications/events/assignment";
+import { getStudentCourseContext } from "@/services/courses/student-access";
 
 const teacherAssignmentInclude = {
   classroom: { select: { id: true, name: true } },
@@ -469,13 +470,16 @@ export async function publishAssignment(
 
 export async function listStudentAssignments(
   studentId: string,
+  courseId?: string,
 ): Promise<StudentAssignmentListItem[]> {
+  if (courseId) await getStudentCourseContext(studentId, courseId);
   const now = new Date();
   const assignments = await prisma.assignment.findMany({
     where: {
       status: AssignmentStatus.PUBLISHED,
       publishedAt: { lte: now },
       classroom: {
+        ...(courseId ? { courseId } : {}),
         memberships: {
           some: { studentId, status: MembershipStatus.ACTIVE },
         },
@@ -1169,6 +1173,14 @@ export async function getStudentSubmissionResult(
           assignmentQuestion: {
             include: {
               optionSnapshots: { orderBy: { sortOrder: "asc" } },
+              knowledgePointSnapshots: {
+                orderBy: [{ nameSnapshot: "asc" }, { knowledgePointId: "asc" }],
+                select: {
+                  knowledgePointId: true,
+                  codeSnapshot: true,
+                  nameSnapshot: true,
+                },
+              },
             },
           },
         },
@@ -1220,6 +1232,14 @@ export async function getStudentSubmissionResult(
           correctAnswer: formatCorrectAnswer(answer.assignmentQuestion),
           explanation: answer.assignmentQuestion.explanationSnapshot,
           teacherFeedback: answer.teacherFeedback,
+          knowledgePoints:
+            answer.assignmentQuestion.knowledgePointSnapshots.map(
+              (knowledgePoint) => ({
+                id: knowledgePoint.knowledgePointId,
+                code: knowledgePoint.codeSnapshot,
+                name: knowledgePoint.nameSnapshot,
+              }),
+            ),
         }))
       : [],
   };

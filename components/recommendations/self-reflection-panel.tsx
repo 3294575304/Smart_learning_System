@@ -166,7 +166,7 @@ export function SelfReflectionPanel({
             </p>
             {record.status !== "CONFIRMED" ? (
               <button
-                className="mt-3 rounded-md bg-black px-3 py-2 text-xs text-white"
+                className="mt-3 rounded-md bg-sky-600 px-3 py-2 text-xs text-white"
                 onClick={() => void confirm(record)}
                 type="button"
               >

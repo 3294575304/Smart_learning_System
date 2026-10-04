@@ -33,7 +33,7 @@ export async function notifyAssignmentPublished(
       type: NotificationType.ASSIGNMENT_PUBLISHED,
       ...content,
       priority: NotificationPriority.NORMAL,
-      actionUrl: `/student/assignments/${input.assignmentId}`,
+      actionUrl: "/student/assignments",
       sourceType: NotificationSourceType.ASSIGNMENT,
       sourceId: input.assignmentId,
       deduplicationKey: notificationDeduplication.assignmentPublished(
@@ -59,7 +59,7 @@ export async function notifyAssignmentsDueSoon(
       type: NotificationType.ASSIGNMENT_DUE_SOON,
       ...assignmentDueSoonTemplate(input),
       priority: NotificationPriority.IMPORTANT,
-      actionUrl: `/student/assignments/${input.assignmentId}`,
+      actionUrl: "/student/assignments",
       sourceType: NotificationSourceType.ASSIGNMENT,
       sourceId: input.assignmentId,
       deduplicationKey: notificationDeduplication.assignmentDueSoon(

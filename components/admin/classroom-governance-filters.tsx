@@ -1,3 +1,5 @@
+"use client";
+
 import { ClassroomStatus } from "@prisma/client";
 import Link from "next/link";
 
@@ -18,12 +20,19 @@ export function ClassroomGovernanceFilters({
         defaultValue={query.keyword}
         maxLength={100}
         name="keyword"
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
         placeholder="搜索班级名称、教师姓名或邮箱"
       />
       <select
         className="rounded-md border bg-white px-3 py-2 text-sm"
         defaultValue={query.status ?? ""}
         name="status"
+        onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
         <option value="">全部状态</option>
         <option value={ClassroomStatus.ACTIVE}>开启</option>
@@ -31,12 +40,6 @@ export function ClassroomGovernanceFilters({
         <option value={ClassroomStatus.ARCHIVED}>归档</option>
       </select>
       <div className="flex gap-2">
-        <button
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white"
-          type="submit"
-        >
-          筛选
-        </button>
         <Link
           className="rounded-md border px-4 py-2 text-sm"
           href="/admin/classrooms"

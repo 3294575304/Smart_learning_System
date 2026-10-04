@@ -114,7 +114,7 @@ export function TrendPanel({
       {(["7d", "30d", "90d"] as const).map((item) => (
         <button
           aria-pressed={range === item}
-          className={`rounded-md px-3 py-1 text-xs font-medium ${range === item ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"}`}
+          className={`rounded-md px-3 py-1 text-xs font-medium ${range === item ? "bg-sky-600 text-white" : "text-gray-600 hover:bg-sky-100/70"}`}
           key={item}
           onClick={() => onRangeChange(item)}
           type="button"

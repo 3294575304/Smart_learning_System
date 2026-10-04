@@ -113,7 +113,7 @@ export function QuestionAnswerInput({
     return (
       <textarea
         aria-label="Python 代码"
-        className="mt-4 min-h-72 w-full rounded-md border bg-slate-950 p-4 font-mono text-sm text-slate-100 disabled:opacity-60"
+        className="mt-4 min-h-72 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900 disabled:opacity-60"
         disabled={disabled}
         onChange={(event) =>
           onChange({ kind: "CODE", value: event.target.value })

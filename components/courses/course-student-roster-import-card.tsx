@@ -34,7 +34,7 @@ export function CourseStudentRosterImportCard({
           </p>
         </div>
         <Link
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors hover:bg-sky-50/70 focus-visible:outline-2 focus-visible:outline-offset-2"
           href={`/teacher/courses/${courseId}/students/import`}
         >
           名单管理
@@ -43,14 +43,14 @@ export function CourseStudentRosterImportCard({
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg bg-gray-50 p-3">
+        <div className="rounded-lg bg-sky-50/70 p-3">
           <p className="flex items-center gap-2 text-xs text-gray-600">
             <FileSpreadsheet className="h-4 w-4" />
             文件版本
           </p>
           <p className="mt-2 text-sm font-medium">保留每次上传历史</p>
         </div>
-        <div className="rounded-lg bg-gray-50 p-3">
+        <div className="rounded-lg bg-sky-50/70 p-3">
           <p className="flex items-center gap-2 text-xs text-gray-600">
             <UsersRound className="h-4 w-4" />
             当前范围
@@ -59,7 +59,7 @@ export function CourseStudentRosterImportCard({
             {linkedClassrooms.length} 个班级 · {studentCount} 名学生
           </p>
         </div>
-        <div className="rounded-lg bg-gray-50 p-3">
+        <div className="rounded-lg bg-sky-50/70 p-3">
           <p className="flex items-center gap-2 text-xs text-gray-600">
             <ShieldCheck className="h-4 w-4" />
             安全注册

@@ -92,7 +92,7 @@ export function ProgrammingAttemptActions({ attempt }: Props) {
   }
 
   return (
-    <div className="mt-4 space-y-3 rounded-md border bg-slate-50 p-3 text-sm">
+    <div className="mt-4 space-y-3 rounded-md border bg-sky-50/60 p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p>
           第 {attempt.revisionNumber} 次判题 ·{" "}

@@ -223,7 +223,7 @@ export function GradebookWorkspace({
           </button>
           <button
             disabled={busy}
-            className="rounded-md bg-gray-900 px-3 py-2 text-sm text-white"
+            className="rounded-md bg-sky-600 px-3 py-2 text-sm text-white"
             onClick={() =>
               void action(`/api/teacher/gradebooks/${gradebookId}/publish`)
             }
@@ -366,7 +366,7 @@ export function GradebookWorkspace({
           </button>
         </div>
         {preview ? (
-          <div className="mt-4 rounded-lg bg-gray-50 p-4 text-sm">
+          <div className="mt-4 rounded-lg bg-sky-50/70 p-4 text-sm">
             <p>
               有效 {preview.validRows} 行，错误 {preview.invalidRows} 行。
             </p>
@@ -381,7 +381,7 @@ export function GradebookWorkspace({
               ))}
             <button
               disabled={busy || preview.invalidRows > 0}
-              className="mt-3 rounded-md bg-gray-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+              className="mt-3 rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
               onClick={() =>
                 void action(`/api/teacher/grade-imports/${preview.id}/execute`)
               }

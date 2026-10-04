@@ -1,3 +1,5 @@
+"use client";
+
 import { AuditAction } from "@prisma/client";
 import Link from "next/link";
 
@@ -19,12 +21,19 @@ export function AuditLogFilters({ query }: { query: AuditLogListQuery }) {
         defaultValue={query.keyword}
         maxLength={100}
         name="keyword"
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
         placeholder="搜索摘要或操作人"
       />
       <select
         className="rounded-md border bg-white px-3 py-2 text-sm"
         defaultValue={query.action ?? ""}
         name="action"
+        onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
         <option value="">全部操作</option>
         {Object.values(AuditAction).map((action) => (
@@ -38,6 +47,7 @@ export function AuditLogFilters({ query }: { query: AuditLogListQuery }) {
         className="rounded-md border px-3 py-2 text-sm"
         defaultValue={dateValue(query.from)}
         name="from"
+        onChange={(event) => event.currentTarget.form?.requestSubmit()}
         type="date"
       />
       <input
@@ -45,15 +55,10 @@ export function AuditLogFilters({ query }: { query: AuditLogListQuery }) {
         className="rounded-md border px-3 py-2 text-sm"
         defaultValue={dateValue(query.to)}
         name="to"
+        onChange={(event) => event.currentTarget.form?.requestSubmit()}
         type="date"
       />
       <div className="flex gap-2">
-        <button
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-          type="submit"
-        >
-          筛选
-        </button>
         <Link
           className="rounded-md border px-4 py-2 text-sm"
           href="/admin/audit-logs"

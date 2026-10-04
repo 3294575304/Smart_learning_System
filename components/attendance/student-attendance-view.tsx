@@ -31,10 +31,12 @@ export function StudentAttendanceView({
   initialRecords,
   rate,
   denominator,
+  courseId,
 }: {
   initialRecords: RecordView[];
   rate: string | null;
   denominator: number;
+  courseId?: string;
 }) {
   const [records, setRecords] = useState(initialRecords);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,10 @@ export function StudentAttendanceView({
       setError(payload.error ?? "签到失败。");
       return;
     }
-    const list = await fetch("/api/student/attendance");
+    const attendanceUrl = courseId
+      ? `/api/student/attendance?courseId=${encodeURIComponent(courseId)}`
+      : "/api/student/attendance";
+    const list = await fetch(attendanceUrl);
     const data = (await list.json()) as { data?: { records: RecordView[] } };
     if (data.data) setRecords(data.data.records);
   }
@@ -93,7 +98,7 @@ export function StudentAttendanceView({
                 {record.session.status === "OPEN" &&
                 record.currentStatus === "PENDING" ? (
                   <button
-                    className="mt-2 rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white"
+                    className="mt-2 rounded-md bg-sky-600 px-3 py-1.5 text-sm text-white"
                     onClick={() => void sign(record.session.id)}
                   >
                     立即签到

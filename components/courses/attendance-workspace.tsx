@@ -172,7 +172,7 @@ export function AttendanceWorkspace({
           />
           <button
             disabled={busy}
-            className="rounded-md bg-gray-900 px-3 py-2 text-sm text-white"
+            className="rounded-md bg-sky-600 px-3 py-2 text-sm text-white"
           >
             创建（前10分钟开放）
           </button>

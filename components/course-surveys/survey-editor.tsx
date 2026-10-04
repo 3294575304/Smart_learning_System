@@ -143,7 +143,7 @@ export function SurveyEditor({
               问卷明确不计入成绩；匿名模式下回答记录不保存学生标识。
             </p>
           </div>
-          <span className="rounded-full bg-gray-100 px-3 py-1 text-sm">
+          <span className="rounded-full bg-sky-100/70 px-3 py-1 text-sm">
             {survey.status === "DRAFT"
               ? "草稿"
               : survey.status === "PUBLISHED"
@@ -155,7 +155,7 @@ export function SurveyEditor({
           <label className="space-y-1 text-sm md:col-span-2">
             <span>名称</span>
             <input
-              className="w-full rounded-md border px-3 py-2 disabled:bg-gray-50"
+              className="w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
               disabled={!editable}
               value={survey.title}
               onChange={(event) =>
@@ -166,7 +166,7 @@ export function SurveyEditor({
           <label className="space-y-1 text-sm md:col-span-2">
             <span>说明</span>
             <textarea
-              className="min-h-20 w-full rounded-md border px-3 py-2 disabled:bg-gray-50"
+              className="min-h-20 w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
               disabled={!editable}
               value={survey.description ?? ""}
               onChange={(event) =>
@@ -177,7 +177,7 @@ export function SurveyEditor({
           <label className="space-y-1 text-sm">
             <span>模式</span>
             <select
-              className="w-full rounded-md border px-3 py-2 disabled:bg-gray-50"
+              className="w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
               disabled={!editable}
               value={survey.mode}
               onChange={(event) =>
@@ -197,7 +197,7 @@ export function SurveyEditor({
           <label className="space-y-1 text-sm">
             <span>开放时间</span>
             <input
-              className="w-full rounded-md border px-3 py-2 disabled:bg-gray-50"
+              className="w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
               disabled={!editable}
               type="datetime-local"
               value={localInput(survey.opensAt)}
@@ -209,7 +209,7 @@ export function SurveyEditor({
           <label className="space-y-1 text-sm">
             <span>截止时间</span>
             <input
-              className="w-full rounded-md border px-3 py-2 disabled:bg-gray-50"
+              className="w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
               disabled={!editable}
               type="datetime-local"
               value={localInput(survey.dueAt)}
@@ -271,7 +271,7 @@ export function SurveyEditor({
               ) : null}
             </div>
             <textarea
-              className="min-h-20 w-full rounded-md border px-3 py-2 disabled:bg-gray-50"
+              className="min-h-20 w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
               disabled={!editable}
               value={question.prompt}
               onChange={(event) =>
@@ -359,7 +359,7 @@ export function SurveyEditor({
               {busy === "save" ? "保存中…" : "保存草稿"}
             </button>
             <button
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
               disabled={busy !== null}
               onClick={() => {
                 if (
@@ -449,7 +449,7 @@ export function SurveyEditor({
               <div className="grid gap-3 md:grid-cols-2">
                 {statistics?.outcomes?.map((item) => (
                   <div
-                    className="rounded-md bg-gray-50 p-3 text-sm"
+                    className="rounded-md bg-sky-50/70 p-3 text-sm"
                     key={item.code}
                   >
                     <strong>
@@ -461,7 +461,7 @@ export function SurveyEditor({
                   </div>
                 ))}
               </div>
-              <p className="rounded-md bg-gray-50 p-3 text-sm">
+              <p className="rounded-md bg-sky-50/70 p-3 text-sm">
                 {themes?.narrative}
               </p>
             </>

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { PageIndex } from "@/components/dashboard/page-index";
 
 interface ResultsPaginationProps {
   assignmentId: string;
@@ -30,39 +30,16 @@ export function ResultsPagination({
   if (totalPages <= 1) return null;
 
   return (
-    <nav
-      className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4"
-      aria-label="学生成绩分页"
-    >
-      <p className="text-muted-foreground text-sm">
-        共 {total} 名学生，第 {page} / {totalPages} 页
-      </p>
-      <div className="flex items-center gap-2">
-        {page > 1 ? (
-          <Link
-            className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
-            href={pageHref(assignmentId, page - 1, pageSize)}
-          >
-            上一页
-          </Link>
-        ) : (
-          <span className="text-muted-foreground rounded-md border px-3 py-1.5 text-sm opacity-50">
-            上一页
-          </span>
-        )}
-        {page < totalPages ? (
-          <Link
-            className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
-            href={pageHref(assignmentId, page + 1, pageSize)}
-          >
-            下一页
-          </Link>
-        ) : (
-          <span className="text-muted-foreground rounded-md border px-3 py-1.5 text-sm opacity-50">
-            下一页
-          </span>
-        )}
-      </div>
-    </nav>
+    <div className="mt-5 border-t pt-4">
+      <PageIndex
+        ariaLabel="学生成绩分页"
+        hrefForPage={(targetPage) =>
+          pageHref(assignmentId, targetPage, pageSize)
+        }
+        page={page}
+        summary={`共 ${total} 名学生，第 ${page} / ${totalPages} 页`}
+        totalPages={totalPages}
+      />
+    </div>
   );
 }

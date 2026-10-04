@@ -55,7 +55,7 @@ export default async function StudentWrongQuestionsPage({
     <section className="space-y-6">
       <PageHeader
         description="集中复习作业和推荐练习中的错题，查看解析并维护自己的掌握状态。"
-        title="我的错题本"
+        title="错题本"
       />
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard

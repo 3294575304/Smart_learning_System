@@ -79,6 +79,13 @@ const recommendationViewSelect =
         backgroundJob: { select: { progress: true } },
       },
     },
+    conceptSnapshots: {
+      orderBy: [{ bindingType: "asc" }, { createdAt: "asc" }],
+      select: {
+        conceptId: true,
+        resolvedNode: { select: { name: true } },
+      },
+    },
     question: {
       select: {
         id: true,

@@ -100,7 +100,7 @@ export function EditUserForm({
         <Field label="角色" message={errors.role?.message}>
           <select
             {...register("role")}
-            className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2 disabled:bg-gray-100"
+            className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2 disabled:bg-sky-100/70"
             disabled={isSelf && user.role === Role.ADMIN}
           >
             {Object.values(Role).map((role) => (
@@ -113,7 +113,7 @@ export function EditUserForm({
         <Field label="状态" message={errors.status?.message}>
           <select
             {...register("status")}
-            className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2 disabled:bg-gray-100"
+            className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2 disabled:bg-sky-100/70"
             disabled={isSelf}
           >
             {Object.values(UserStatus).map((status) => (
@@ -125,7 +125,7 @@ export function EditUserForm({
         </Field>
       </div>
       {isSelf ? (
-        <p className="text-muted-foreground rounded-md bg-gray-50 p-3 text-sm">
+        <p className="text-muted-foreground rounded-md bg-sky-50/70 p-3 text-sm">
           为防止管理员锁定自己，当前账号不能被禁用，也不能降低管理员角色。
         </p>
       ) : null}

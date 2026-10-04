@@ -7,9 +7,14 @@ export interface TrendPoint {
 interface TrendChartProps {
   points: TrendPoint[];
   emptyMessage: string;
+  ariaLabel?: string;
 }
 
-export function TrendChart({ points, emptyMessage }: TrendChartProps) {
+export function TrendChart({
+  points,
+  emptyMessage,
+  ariaLabel = "近期成绩趋势",
+}: TrendChartProps) {
   if (points.length === 0) {
     return (
       <div className="text-muted-foreground flex min-h-48 items-center justify-center rounded-lg border border-dashed text-sm">
@@ -22,7 +27,7 @@ export function TrendChart({ points, emptyMessage }: TrendChartProps) {
     <div
       className="flex min-h-52 items-end gap-2 overflow-x-auto pt-8"
       role="img"
-      aria-label="近期成绩趋势"
+      aria-label={ariaLabel}
     >
       {points.map((point, index) => (
         <div
@@ -30,9 +35,9 @@ export function TrendChart({ points, emptyMessage }: TrendChartProps) {
           key={`${point.label}-${index}`}
         >
           <span className="mb-2 text-xs font-medium">{point.value}%</span>
-          <div className="flex h-32 w-10 items-end rounded-md bg-gray-100 px-1 sm:w-12">
+          <div className="flex h-32 w-10 items-end rounded-md bg-sky-100/70 px-1 sm:w-12">
             <div
-              className="w-full rounded-sm bg-gray-800 transition-[height]"
+              className="w-full rounded-sm bg-sky-600 transition-[height]"
               style={{ height: `${Math.max(4, Math.min(100, point.value))}%` }}
               title={point.detail ?? `${point.label}：${point.value}%`}
             />

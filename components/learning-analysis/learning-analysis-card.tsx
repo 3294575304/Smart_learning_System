@@ -11,8 +11,10 @@ import type {
   LearningAnalysis,
   LearningAnalysisMetadata,
 } from "@/components/learning-analysis/learning-analysis-types";
+import type { KnowledgePointLabels } from "@/components/learning-analysis/knowledge-point-labels";
 
 interface Props {
+  knowledgePointLabels: KnowledgePointLabels;
   submissionId: string;
 }
 
@@ -27,7 +29,10 @@ type ViewState =
     }
   | { status: "failed"; message: string };
 
-export function LearningAnalysisCard({ submissionId }: Props) {
+export function LearningAnalysisCard({
+  knowledgePointLabels,
+  submissionId,
+}: Props) {
   const [state, setState] = useState<ViewState>({ status: "loading" });
   const runIdRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -91,6 +96,7 @@ export function LearningAnalysisCard({ submissionId }: Props) {
   return (
     <LearningAnalysisContent
       analysis={state.analysis}
+      knowledgePointLabels={knowledgePointLabels}
       metadata={state.metadata}
     />
   );

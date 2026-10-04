@@ -12,6 +12,16 @@ export function canTeacherViewQuestion(
   );
 }
 
+export function canTeacherCopyQuestion(
+  teacherId: string,
+  question: { creatorId: string; visibility: QuestionVisibility },
+): boolean {
+  return (
+    question.creatorId !== teacherId &&
+    question.visibility === QuestionVisibility.PUBLIC
+  );
+}
+
 export function assertTeacherOwnsQuestion(
   teacherId: string,
   question: { creatorId: string },

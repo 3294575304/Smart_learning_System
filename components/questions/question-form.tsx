@@ -450,7 +450,7 @@ export function QuestionForm({
       ) : null}
       <div className="flex gap-3">
         <button
-          className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+          className="rounded-md bg-sky-600 px-4 py-2 text-white disabled:opacity-50"
           disabled={form.formState.isSubmitting}
           type="submit"
         >

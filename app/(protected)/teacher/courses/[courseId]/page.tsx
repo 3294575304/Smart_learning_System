@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CourseClassroomManager } from "@/components/courses/course-classroom-manager";
+import { CourseSetupChecklist } from "@/components/courses/course-setup-checklist";
 import { CourseWorkspaceNavigation } from "@/components/courses/course-workspace-navigation";
 import { CourseForm } from "@/components/courses/course-form";
 import { CourseStudentRosterImportCard } from "@/components/courses/course-student-roster-import-card";
@@ -13,6 +14,7 @@ import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
 import { getTeacherCourse } from "@/services/courses/service";
+import { getTeacherCourseSetupProgress } from "@/services/courses/setup-service";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
@@ -25,9 +27,9 @@ const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
 };
 
 const COURSE_STATUS_STYLES: Record<CourseStatus, string> = {
-  DRAFT: "bg-gray-100 text-gray-700",
+  DRAFT: "bg-sky-100/70 text-gray-700",
   ACTIVE: "bg-emerald-50 text-emerald-700",
-  ARCHIVED: "bg-slate-100 text-slate-600",
+  ARCHIVED: "bg-sky-100/70 text-slate-600",
 };
 
 export default async function TeacherCourseDetailPage({ params }: PageProps) {
@@ -39,8 +41,12 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
   }
 
   let course;
+  let setupProgress;
   try {
-    course = await getTeacherCourse(teacher.id, parsedId.data);
+    [course, setupProgress] = await Promise.all([
+      getTeacherCourse(teacher.id, parsedId.data),
+      getTeacherCourseSetupProgress(teacher.id, parsedId.data),
+    ]);
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) {
       notFound();
@@ -53,7 +59,7 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
       <PageHeader
         actions={
           <Link
-            className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium transition-colors hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium transition-colors hover:bg-sky-50/70 focus-visible:outline-2 focus-visible:outline-offset-2"
             href="/teacher/courses"
           >
             <ArrowLeft aria-hidden="true" className="size-4" />
@@ -63,6 +69,8 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
         description={`${course.courseNo} · ${course.term}`}
         title={course.name}
       />
+
+      <CourseSetupChecklist progress={setupProgress} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
@@ -94,7 +102,10 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
             linkedClassrooms={course.linkedClassrooms}
           />
 
-          <div className="bg-card rounded-xl border p-5">
+          <div
+            className="bg-card scroll-mt-20 rounded-xl border p-5"
+            id="course-basics"
+          >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="font-semibold">课程概览</h2>
@@ -158,11 +169,13 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
           </details>
         </section>
 
-        <CourseClassroomManager
-          classrooms={course.classrooms}
-          courseId={course.id}
-          linkedClassrooms={course.linkedClassrooms}
-        />
+        <div className="min-w-0 scroll-mt-20" id="course-classrooms">
+          <CourseClassroomManager
+            classrooms={course.classrooms}
+            courseId={course.id}
+            linkedClassrooms={course.linkedClassrooms}
+          />
+        </div>
       </div>
     </section>
   );
