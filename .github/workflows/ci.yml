@@ -49,14 +49,17 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
-      - name: Unit tests
-        run: npm test
       - name: Check PostgreSQL health
         run: pg_isready -h 127.0.0.1 -p 5432 -U postgres -d smart_learning_test
       - name: Create build database
         run: psql "postgresql://postgres:postgres@127.0.0.1:5432/postgres" -c "CREATE DATABASE smart_learning_build"
       - name: Apply Prisma migrations to build database
         run: npx prisma migrate deploy
+      # npm test also includes service tests that use the seeded DATABASE_URL.
+      - name: Seed CI database
+        run: npm run prisma:seed
+      - name: Unit and service tests
+        run: npm test
       - name: Database integration tests
         run: npm run test:integration
       - name: Build
