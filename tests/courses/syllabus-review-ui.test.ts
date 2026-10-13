@@ -68,6 +68,13 @@ test("教学大纲使用独立工作区并从课程详情提供入口", async ()
     ),
     "utf8",
   );
-  assert.match(navigation, /教学大纲/u);
+  assert.match(
+    courseDetail,
+    /<CourseWorkspaceNavigation courseId=\{course\.id\}/u,
+  );
+  assert.match(navigation, /title: "教学大纲"/u);
   assert.match(navigation, /path: "syllabus"/u);
+  assert.ok(
+    navigation.includes("href={`/teacher/courses/${courseId}/${path}`}"),
+  );
 });

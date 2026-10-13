@@ -66,6 +66,40 @@ const createdCourseFileIds: string[] = [];
 const createdStudentImportBatchIds: string[] = [];
 const createdImportUserIds: string[] = [];
 const uploadRoot = mkdtempSync(join(tmpdir(), "zhixue-http-syllabus-"));
+const workerSecret = randomBytes(32).toString("hex");
+const workerWakeUrl = "http://127.0.0.1:3112/wake";
+const environment = {
+  ...process.env,
+  LOCAL_UPLOAD_ROOT: uploadRoot,
+  AI_PROVIDER: "mock",
+  BACKGROUND_JOB_WORKER_SECRET: workerSecret,
+  BACKGROUND_LONG_TASK_WORKER_WAKE_PORT: "3112",
+  BACKGROUND_LONG_TASK_WORKER_WAKE_URL: workerWakeUrl,
+  BACKGROUND_LONG_TASK_WORKER_POLL_INTERVAL_MS: "100",
+};
+const workerOutput: string[] = [];
+const worker = spawn(
+  process.execPath,
+  [
+    "--conditions=react-server",
+    "--import",
+    "tsx",
+    "services/background-worker/main.ts",
+  ],
+  {
+    cwd: process.cwd(),
+    env: environment,
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  },
+);
+worker.stdout.on("data", (chunk: Buffer) =>
+  workerOutput.push(chunk.toString()),
+);
+worker.stderr.on("data", (chunk: Buffer) =>
+  workerOutput.push(chunk.toString()),
+);
+worker.on("error", (error) => workerOutput.push(error.message));
 
 const server = spawn(
   process.execPath,
@@ -79,7 +113,7 @@ const server = spawn(
   ],
   {
     cwd: process.cwd(),
-    env: { ...process.env, LOCAL_UPLOAD_ROOT: uploadRoot },
+    env: environment,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   },
@@ -103,6 +137,37 @@ async function waitForServer(): Promise<void> {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
   }
   throw new Error(`Test server did not start:\n${serverOutput.join("")}`);
+}
+
+async function waitForWorker(): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (worker.exitCode !== null || worker.signalCode !== null) break;
+    try {
+      const response = await fetch(workerWakeUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${workerSecret}` },
+        signal: AbortSignal.timeout(1_000),
+      });
+      if (response.status === 204) return;
+    } catch {
+      // Wait for the independent worker to open its wake endpoint.
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+  throw new Error(`Test worker did not start:\n${workerOutput.join("")}`);
+}
+
+async function stopProcess(child: typeof server): Promise<void> {
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null)
+    return;
+  const exited = once(child, "exit");
+  child.kill();
+  const timeout = setTimeout(() => child.kill("SIGKILL"), 5_000);
+  try {
+    await exited;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function sessionCookie(userId: string): Promise<string> {
@@ -165,6 +230,7 @@ async function main(): Promise<void> {
 
   try {
     await waitForServer();
+    await waitForWorker();
     const [admin, teacher, teacherTwo, student] = await Promise.all([
       prisma.user.findUniqueOrThrow({ where: { email: "admin@example.com" } }),
       prisma.user.findUniqueOrThrow({
@@ -430,25 +496,40 @@ async function main(): Promise<void> {
       teacherCookie,
       "POST",
     );
-    assert.equal(parseResponse.status, 201, await parseResponse.clone().text());
+    assert.equal(parseResponse.status, 202, await parseResponse.clone().text());
     const parsedSyllabus = (await parseResponse.json()) as ApiSuccess<{
       reused: boolean;
       draft: {
         status: string;
         isCurrentSyllabusVersion: boolean;
-        result: {
-          courseInfo: unknown;
-          objectives: unknown[];
-          chapters: unknown[];
-          assessments: unknown[];
-          warnings: string[];
-        };
       };
     }>;
     assert.equal(parsedSyllabus.data.reused, false);
-    assert.equal(parsedSyllabus.data.draft.status, "SUCCEEDED");
+    assert.equal(parsedSyllabus.data.draft.status, "PENDING");
     assert.equal(parsedSyllabus.data.draft.isCurrentSyllabusVersion, true);
-    assert.ok(parsedSyllabus.data.draft.result.courseInfo);
+    let parseCompleted = false;
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      const response = await requestJson(syllabusParsePath, teacherCookie);
+      assert.equal(response.status, 200, await response.clone().text());
+      const state = (await response.json()) as ApiSuccess<{
+        current: { status: string; result: { courseInfo: unknown } | null };
+      }>;
+      assert.notEqual(
+        state.data.current.status,
+        "FAILED",
+        JSON.stringify(state),
+      );
+      if (state.data.current.status === "SUCCEEDED") {
+        assert.ok(state.data.current.result?.courseInfo);
+        parseCompleted = true;
+        break;
+      }
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+    }
+    assert.ok(
+      parseCompleted,
+      `Syllabus worker timed out:\n${workerOutput.join("")}`,
+    );
     assert.equal(
       (await requestJson(syllabusParsePath, teacherCookie, "POST")).status,
       200,
@@ -588,10 +669,15 @@ async function main(): Promise<void> {
       published: { current: { id: string } | null; history: unknown[] };
     }>;
     let graphState: GraphStateResponse | null = null;
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (let attempt = 0; attempt < 300; attempt += 1) {
       const graphQuery = await requestJson(graphPath, teacherCookie);
       assert.equal(graphQuery.status, 200, await graphQuery.clone().text());
       graphState = (await graphQuery.json()) as GraphStateResponse;
+      assert.notEqual(
+        graphState.data.draft?.status,
+        "FAILED",
+        JSON.stringify(graphState),
+      );
       if (graphState.data.draft?.status === "SUCCEEDED") break;
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
     }
@@ -1714,6 +1800,8 @@ async function main(): Promise<void> {
       "Course HTTP integration checks passed: template governance, teacher template visibility, course creation and history-preserving direct deletion, file upload versioning, protected downloads, roster preview and execution, concurrent and cross-batch idempotency, pending identity registration, legacy credential endpoint isolation, ownership isolation, classroom linking, unlinking, and invalid input handling.",
     );
   } finally {
+    // Stop consumers before deleting fixtures or their private upload directory.
+    await Promise.all([stopProcess(worker), stopProcess(server)]);
     if (createdAssignmentIds.length > 0) {
       await prisma.assignment.deleteMany({
         where: { id: { in: createdAssignmentIds } },
@@ -1870,11 +1958,6 @@ async function main(): Promise<void> {
       });
     }
     await prisma.$disconnect();
-    server.kill();
-    await Promise.race([
-      once(server, "exit"),
-      new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000)),
-    ]);
     rmSync(uploadRoot, { recursive: true, force: true });
   }
 }
