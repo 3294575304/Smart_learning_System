@@ -96,6 +96,10 @@ export const teacherSubmissionListQuerySchema = z
 export const assignmentListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
+  courseId: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().cuid("课程 ID 格式无效").optional(),
+  ),
   status: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.nativeEnum(AssignmentStatus).optional(),

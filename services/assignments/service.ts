@@ -361,8 +361,25 @@ export async function listTeacherAssignments(
   teacherId: string,
   query: AssignmentListQuery,
 ) {
+  if (query.courseId) {
+    const course = await prisma.course.findFirst({
+      where: { id: query.courseId, teacherId },
+      select: { id: true },
+    });
+    if (!course) throw new ResourceNotFoundError("课程或班级不存在");
+    if (query.classroomId) {
+      const classroom = await prisma.classroom.findFirst({
+        where: { id: query.classroomId, teacherId, courseId: query.courseId },
+        select: { id: true },
+      });
+      if (!classroom) throw new ResourceNotFoundError("课程或班级不存在");
+    }
+  }
   const where: Prisma.AssignmentWhereInput = {
     teacherId,
+    ...(query.courseId
+      ? { classroom: { courseId: query.courseId, teacherId } }
+      : {}),
     ...(query.status
       ? { status: query.status }
       : { status: { not: AssignmentStatus.ARCHIVED } }),
