@@ -821,7 +821,8 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
                   教学实施事实（独立输入）
                 </h4>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  请按本学期真实情况填写。留空时报告会提示教师核实；AI 不会仅凭成绩推测授课方式或评分细则。
+                  请按本学期真实情况填写。留空时报告会提示教师核实；AI
+                  不会仅凭成绩推测授课方式或评分细则。
                 </p>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <label className="text-sm">
@@ -833,7 +834,10 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
                       onChange={(event) =>
                         setMetadata((current) =>
                           current
-                            ? { ...current, teachingMethodDetails: event.target.value }
+                            ? {
+                                ...current,
+                                teachingMethodDetails: event.target.value,
+                              }
                             : current,
                         )
                       }
@@ -850,7 +854,10 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
                       onChange={(event) =>
                         setMetadata((current) =>
                           current
-                            ? { ...current, scoringCriteria: event.target.value }
+                            ? {
+                                ...current,
+                                scoringCriteria: event.target.value,
+                              }
                             : current,
                         )
                       }
