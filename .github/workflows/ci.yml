@@ -43,6 +43,11 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install quality report dependencies
+        run: python -m pip install -r services/quality-reports/requirements.txt
       - name: Check formatting
         run: npm run format:check
       - name: Lint

@@ -41,10 +41,12 @@ test("模板映射拒绝未知位置、重复位置、漏选占位符及全部�
 test("真实 DOCX 跨文本片段、页眉、空白表格填充及压缩包安全验证", async () => {
   const python =
     process.env.QUALITY_REPORT_PYTHON ||
-    path.join(
-      process.env.USERPROFILE ?? "",
-      ".cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe",
-    );
+    (process.platform === "win32"
+      ? path.join(
+          process.env.USERPROFILE ?? "",
+          ".cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe",
+        )
+      : "python");
   const result = await promisify(execFile)(
     python,
     ["tests/quality-reports/test-custom-template.py"],
