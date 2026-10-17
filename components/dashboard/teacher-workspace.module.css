@@ -1,0 +1,72 @@
+.card {
+  border-color: #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 3%);
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1e293b;
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.heading::before {
+  content: "";
+  flex: 0 0 3px;
+  height: 14px;
+  border-radius: 4px;
+  background: #0d9488;
+}
+
+.toolbar {
+  border-color: #cfe5e2;
+  border-radius: 16px;
+  background: linear-gradient(110deg, #f0fdfa, #fff 50%);
+  box-shadow: 0 2px 8px rgb(15 23 42 / 3%);
+}
+
+.scrollArea {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+  overscroll-behavior: contain;
+}
+
+.shortcut {
+  border-color: #e8edf3;
+  background: #fff;
+  border-radius: 12px;
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.shortcut:hover {
+  border-color: #99d4cc;
+  background: #f4fbf9;
+  box-shadow: 0 3px 10px rgb(13 148 136 / 7%);
+}
+
+.metric {
+  border-color: #edf1f5;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #f8fafc, #fff);
+  transition:
+    border-color 150ms,
+    background-color 150ms;
+}
+
+.metric:hover {
+  border-color: #a7d9d2;
+  background: #f0fdfa;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shortcut,
+  .metric {
+    transition: none;
+  }
+}

@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { LearnerProfileDetail } from "@/components/learner-profiles/profile-detail";
@@ -23,12 +23,11 @@ export default async function TeacherStudentProfilePage({ params }: Props) {
     return (
       <section className="space-y-6">
         <header>
-          <Link
-            className="text-muted-foreground text-sm underline"
+          <TeacherBackLink
             href={`/teacher/courses/${path.data.courseId}/profiles`}
           >
             返回班级画像
-          </Link>
+          </TeacherBackLink>
           <h1 className="mt-3 text-2xl font-semibold">
             {profile.student.displayName} · 课程画像
           </h1>

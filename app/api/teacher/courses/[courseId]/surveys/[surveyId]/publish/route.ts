@@ -31,6 +31,7 @@ export async function POST(request: Request, context: Context) {
         surveyId.data,
         body.data.expectedVersion,
         auditRequestContext(request),
+        body.data.openImmediately,
       ),
     );
   } catch (error) {

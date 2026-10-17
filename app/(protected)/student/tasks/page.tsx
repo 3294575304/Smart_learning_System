@@ -1,30 +1,33 @@
+import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
+import { studentAssignmentState } from "@/services/student-experience/task-policy";
 import { Role } from "@prisma/client";
 import { CalendarCheck, ClipboardCheck, ClipboardList } from "lucide-react";
 import Link from "next/link";
 
-import { PageHeader } from "@/components/dashboard/page-header";
-import { getStudentAttendance } from "@/services/attendance/service";
+import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
+import { getStudentHomeTasks } from "@/services/dashboard/student-home-tasks";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { listStudentAssignments } from "@/services/assignments/service";
-import { listStudentCourseSurveys } from "@/services/course-surveys/service";
 
 export default async function StudentTasksPage() {
   const student = await requirePageRole(Role.STUDENT);
-  const [assignments, attendance, surveys] = await Promise.all([
+  const [
+    assignments,
+    {
+      attendance: attendanceItems,
+      surveys: surveyItems,
+      scheduledSurveys,
+      nextSurveyChangeAt,
+    },
+  ] = await Promise.all([
     listStudentAssignments(student.id),
-    getStudentAttendance(student.id),
-    listStudentCourseSurveys(student.id),
+    getStudentHomeTasks(student.id),
   ]);
   const now = new Date();
-  const assignmentItems = assignments.filter(
-    (assignment) => assignment.dueAt > now && !assignment.latestSubmissionId,
-  );
-  const attendanceItems = attendance.records.filter(
-    (record) =>
-      record.session.status === "OPEN" && record.currentStatus === "PENDING",
-  );
-  const surveyItems = surveys.filter(
-    (survey) => survey.isOpen && !survey.submittedAt,
+  const assignmentItems = assignments.filter((assignment) =>
+    ["PENDING", "IN_PROGRESS"].includes(
+      studentAssignmentState(assignment, now),
+    ),
   );
   const pendingAssignments = assignmentItems.length;
   const pendingAttendance = attendanceItems.length;
@@ -58,7 +61,7 @@ export default async function StudentTasksPage() {
           id: record.id,
           title: record.session.title,
           detail: `${record.session.course.name} · ${record.session.classroom.name} · ${record.session.startsAt.toLocaleString("zh-CN")}`,
-          href: `/student/attendance?courseId=${encodeURIComponent(record.session.course.id)}`,
+          href: `/student/attendance?courseId=${encodeURIComponent(record.session.course.id)}&classroomId=${encodeURIComponent(record.session.classroom.id)}`,
         })),
       detail: "集中处理课堂签到，并查看各门课程的出勤记录。",
       action: "查看出勤",
@@ -68,13 +71,15 @@ export default async function StudentTasksPage() {
       href: "/student/surveys",
       label: "课程问卷",
       count: pendingSurveys,
-      items: surveyItems.slice(0, 3).map((survey) => ({
-        id: survey.id,
-        title: survey.title,
-        detail: `${survey.course.name} · 截止 ${survey.dueAt.toLocaleString("zh-CN")}`,
-        href: `/student/surveys/${encodeURIComponent(survey.id)}`,
-      })),
-      detail: "填写已开放的课程自评问卷；问卷不计入课程成绩。",
+      items: [...surveyItems, ...scheduledSurveys]
+        .slice(0, 3)
+        .map((survey) => ({
+          id: survey.id,
+          title: survey.title,
+          detail: `${survey.course.name} · ${survey.availability === "SCHEDULED" ? `待开放：${survey.opensAt.toLocaleString("zh-CN")}` : `截止 ${survey.dueAt.toLocaleString("zh-CN")}`}`,
+          href: `/student/surveys/${encodeURIComponent(survey.id)}`,
+        })),
+      detail: `填写已开放的课程自评问卷；问卷不计入课程成绩。${scheduledSurveys.length ? `另有 ${scheduledSurveys.length} 份待开放问卷。` : ""}`,
       action: "查看问卷",
       icon: ClipboardCheck,
     },
@@ -82,7 +87,8 @@ export default async function StudentTasksPage() {
   const totalPending = pendingAssignments + pendingAttendance + pendingSurveys;
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-4">
+      <SurveyAvailabilityRefresh at={nextSurveyChangeAt?.toISOString()} />
       <PageHeader
         description="把各门课程需要处理的作业、签到和问卷放在一起，查看进度后再进入对应课程。"
         title="学习任务"

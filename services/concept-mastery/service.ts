@@ -551,6 +551,7 @@ async function masteryView(studentId: string, courseId: string) {
                 row.recommendationPracticeAnswerId,
               questionId: row.questionId,
               sourceGraphVersionId: row.sourceGraphVersionId,
+              sourceGraphVersionNumber: row.sourceGraphVersionNumber,
               sourceNodeId: row.sourceNodeId,
               bindingType: row.bindingType,
               score: row.score!.toNumber(),

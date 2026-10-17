@@ -71,6 +71,10 @@ export async function listTeacherResultsOverview(
           select: {
             id: true,
             name: true,
+            memberships: {
+              where: { status: MembershipStatus.ACTIVE },
+              select: { studentId: true },
+            },
             _count: {
               select: {
                 memberships: { where: { status: MembershipStatus.ACTIVE } },
@@ -103,7 +107,13 @@ export async function listTeacherResultsOverview(
           latestByStudent.set(submission.studentId, submission);
         }
       }
-      const latest = [...latestByStudent.values()];
+      const activeStudentIds = new Set(
+        assignment.classroom.memberships.map((member) => member.studentId),
+      );
+      const allLatest = [...latestByStudent.values()];
+      const latest = allLatest.filter((submission) =>
+        activeStudentIds.has(submission.studentId),
+      );
       const finalized = latest.filter(
         (submission) =>
           submission.status === SubmissionStatus.GRADED ||
@@ -128,6 +138,7 @@ export async function listTeacherResultsOverview(
         dueAt: assignment.dueAt,
         studentCount: assignment.classroom._count.memberships,
         submittedCount: latest.length,
+        historicalSubmittedCount: allLatest.length - latest.length,
         pendingReviewCount: latest.filter(
           (submission) => submission.status === SubmissionStatus.PENDING_REVIEW,
         ).length,

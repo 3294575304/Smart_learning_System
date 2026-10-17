@@ -7,7 +7,7 @@ test("课程学习中心提供当前课程的作业、签到和问卷入口", as
     "app/(protected)/student/courses/[courseId]/learning-center/page.tsx",
     "utf8",
   );
-  assert.match(page, /aria-label="本课程任务入口"/u);
+  assert.match(page, /aria-label="本班任务入口"/u);
   assert.match(page, /hrefBase="\/student\/assignments"/u);
   assert.match(page, /hrefBase="\/student\/attendance"/u);
   assert.match(page, /hrefBase="\/student\/surveys"/u);
@@ -17,8 +17,7 @@ test("课程学习中心提供当前课程的作业、签到和问卷入口", as
 test("任务中心按待完成作业、开放签到和待填问卷汇总", async () => {
   const page = await readFile("app/(protected)/student/tasks/page.tsx", "utf8");
   assert.match(page, /listStudentAssignments\(student\.id\)/u);
-  assert.match(page, /getStudentAttendance\(student\.id\)/u);
-  assert.match(page, /listStudentCourseSurveys\(student\.id\)/u);
+  assert.match(page, /getStudentHomeTasks\(student\.id\)/u);
   assert.match(page, /pendingAssignments/u);
   assert.match(page, /pendingAttendance/u);
   assert.match(page, /pendingSurveys/u);
@@ -38,7 +37,7 @@ test("课程筛选进入服务层并先校验学生课程归属", async () => {
   ]);
   assert.match(assignments, /listStudentAssignments\([\s\S]*?courseId\?/u);
   assert.match(assignments, /getStudentCourseContext\(studentId, courseId\)/u);
-  assert.match(assignments, /\.\.\.\(courseId \? \{ courseId \} : \{\}\)/u);
+
   assert.match(attendance, /getStudentAttendance\([\s\S]*?courseId\?/u);
   assert.match(
     attendance,

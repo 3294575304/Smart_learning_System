@@ -335,7 +335,8 @@ export async function startRecommendation(
   }
   if (
     !isAutoGradableQuestionType(current.question.type) &&
-    current.question.type !== "PYTHON_PROGRAMMING"
+    current.question.type !== "PYTHON_PROGRAMMING" &&
+    current.question.type !== "SHORT_ANSWER"
   ) {
     throw new RecommendationOperationError("当前题型暂不支持推荐练习", 409);
   }

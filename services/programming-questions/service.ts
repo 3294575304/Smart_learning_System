@@ -95,14 +95,18 @@ async function requireOwnedProgrammingQuestion(
   questionId: string,
 ) {
   const question = await transaction.question.findFirst({
-    where: { id: questionId, deletedAt: null, status: QuestionStatus.ACTIVE },
+    where: {
+      id: questionId,
+      deletedAt: null,
+      status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
+    },
     select: { id: true, creatorId: true, type: true },
   });
   if (!question || question.creatorId !== teacherId) {
     throw new ResourceNotFoundError("题目不存在");
   }
   if (question.type !== QuestionType.PYTHON_PROGRAMMING) {
-    throw new QuestionOperationError("只有 Python 编程题可以维护判题配置");
+    throw new QuestionOperationError("只有编程题可以维护判题配置");
   }
   return question;
 }
@@ -116,7 +120,7 @@ export async function getLatestProgrammingConfig(
       id: questionId,
       creatorId: teacherId,
       deletedAt: null,
-      status: QuestionStatus.ACTIVE,
+      status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
       type: QuestionType.PYTHON_PROGRAMMING,
     },
     select: { id: true },
@@ -130,7 +134,8 @@ export async function getLatestProgrammingConfig(
   return revision ? teacherRevisionDto(revision) : null;
 }
 
-export async function createProgrammingConfigRevision(
+export async function createProgrammingConfigInTransaction(
+  transaction: Prisma.TransactionClient,
   teacherId: string,
   questionId: string,
   rawInput: ProgrammingConfigRevisionInput,
@@ -138,74 +143,94 @@ export async function createProgrammingConfigRevision(
 ) {
   const input = programmingConfigRevisionInputSchema.parse(rawInput);
   const fingerprints = programmingConfigFingerprints(input);
+  await requireOwnedProgrammingQuestion(transaction, teacherId, questionId);
+  const existing =
+    await transaction.programmingQuestionConfigRevision.findUnique({
+      where: {
+        questionId_configurationHash: {
+          questionId,
+          configurationHash: fingerprints.configurationHash,
+        },
+      },
+      include: revisionInclude,
+    });
+  if (existing) {
+    await transaction.question.update({
+      where: { id: questionId },
+      data: { status: QuestionStatus.ACTIVE },
+    });
+    return existing;
+  }
+  const latest = await transaction.programmingQuestionConfigRevision.findFirst({
+    where: { questionId },
+    orderBy: { revisionNumber: "desc" },
+    select: { revisionNumber: true },
+  });
+  const created = await transaction.programmingQuestionConfigRevision.create({
+    data: {
+      questionId,
+      revisionNumber: (latest?.revisionNumber ?? 0) + 1,
+      standardCode: input.standardCode,
+      starterCode: input.starterCode,
+      totalPoints: input.totalPoints,
+      ...input.limits,
+      ...fingerprints,
+      executorRuleVersion: PROGRAMMING_JUDGE_RULE_VERSION,
+      createdById: teacherId,
+      testCases: {
+        create: [...input.testCases]
+          .sort((left, right) => left.sortOrder - right.sortOrder)
+          .map((testCase) => ({ ...testCase })),
+      },
+    },
+    include: revisionInclude,
+  });
+  await transaction.question.update({
+    where: { id: questionId },
+    data: { status: QuestionStatus.ACTIVE },
+  });
+  await writeGovernanceAuditLog(transaction, {
+    actorId: teacherId,
+    action: AuditAction.PROGRAMMING_CONFIG_REVISION_CREATED,
+    targetType: AuditTargetType.QUESTION,
+    targetId: questionId,
+    summary: `创建 Python 判题配置修订 ${created.revisionNumber}`,
+    beforeData: null,
+    afterData: {
+      revisionNumber: created.revisionNumber,
+      configurationHash: created.configurationHash,
+      testCasesHash: created.testCasesHash,
+      publicCaseCount: created.testCases.filter(
+        (item) => item.visibility === ProgrammingTestVisibility.PUBLIC,
+      ).length,
+      hiddenCaseCount: created.testCases.filter(
+        (item) => item.visibility === ProgrammingTestVisibility.HIDDEN,
+      ).length,
+      executorRuleVersion: created.executorRuleVersion,
+    },
+    context,
+  });
+  return created;
+}
+
+export async function createProgrammingConfigRevision(
+  teacherId: string,
+  questionId: string,
+  rawInput: ProgrammingConfigRevisionInput,
+  context: AuditRequestContext,
+) {
+  const input = programmingConfigRevisionInputSchema.parse(rawInput);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const record = await prisma.$transaction(
         async (transaction) => {
-          await requireOwnedProgrammingQuestion(
+          return createProgrammingConfigInTransaction(
             transaction,
             teacherId,
             questionId,
-          );
-          const existing =
-            await transaction.programmingQuestionConfigRevision.findUnique({
-              where: {
-                questionId_configurationHash: {
-                  questionId,
-                  configurationHash: fingerprints.configurationHash,
-                },
-              },
-              include: revisionInclude,
-            });
-          if (existing) return existing;
-          const latest =
-            await transaction.programmingQuestionConfigRevision.findFirst({
-              where: { questionId },
-              orderBy: { revisionNumber: "desc" },
-              select: { revisionNumber: true },
-            });
-          const created =
-            await transaction.programmingQuestionConfigRevision.create({
-              data: {
-                questionId,
-                revisionNumber: (latest?.revisionNumber ?? 0) + 1,
-                standardCode: input.standardCode,
-                starterCode: input.starterCode,
-                totalPoints: input.totalPoints,
-                ...input.limits,
-                ...fingerprints,
-                executorRuleVersion: PROGRAMMING_JUDGE_RULE_VERSION,
-                createdById: teacherId,
-                testCases: {
-                  create: [...input.testCases]
-                    .sort((left, right) => left.sortOrder - right.sortOrder)
-                    .map((testCase) => ({ ...testCase })),
-                },
-              },
-              include: revisionInclude,
-            });
-          await writeGovernanceAuditLog(transaction, {
-            actorId: teacherId,
-            action: AuditAction.PROGRAMMING_CONFIG_REVISION_CREATED,
-            targetType: AuditTargetType.QUESTION,
-            targetId: questionId,
-            summary: `创建 Python 判题配置修订 ${created.revisionNumber}`,
-            beforeData: null,
-            afterData: {
-              revisionNumber: created.revisionNumber,
-              configurationHash: created.configurationHash,
-              testCasesHash: created.testCasesHash,
-              publicCaseCount: created.testCases.filter(
-                (item) => item.visibility === ProgrammingTestVisibility.PUBLIC,
-              ).length,
-              hiddenCaseCount: created.testCases.filter(
-                (item) => item.visibility === ProgrammingTestVisibility.HIDDEN,
-              ).length,
-              executorRuleVersion: created.executorRuleVersion,
-            },
+            input,
             context,
-          });
-          return created;
+          );
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );

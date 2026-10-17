@@ -36,7 +36,9 @@ export const questionMappingJobInputSchema = z
   .object({
     ...commonInput,
     batchId: z.string().cuid(),
-    questionIds: z.array(z.string().cuid()).min(1).max(50),
+    // One course-level job can contain up to 500 IDs. The mapping service
+    // sends them to the AI provider in groups of 50.
+    questionIds: z.array(z.string().cuid()).min(1).max(500),
     context: auditContextSchema,
   })
   .strict();

@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CourseGradebooksWorkspace } from "@/components/courses/course-gradebooks-workspace";
@@ -19,17 +19,14 @@ export default async function GradebooksPage({
     <section className="space-y-6">
       <PageHeader
         title="课程成绩台账"
-        description="汇总平台作业、人工录入和固定模板总评，保存可复算的正式成绩版本。"
+        description="按教学班查看、维护和发布成绩，下载完整成绩单。"
         actions={
-          <Link
-            className="rounded-md border bg-white px-4 py-2 text-sm"
-            href={`/teacher/courses/${id.data}`}
-          >
+          <TeacherBackLink href={`/teacher/courses/${id.data}`}>
             返回课程
-          </Link>
+          </TeacherBackLink>
         }
       />
-      <CourseGradebooksWorkspace courseId={id.data} />
+      <CourseGradebooksWorkspace key={id.data} courseId={id.data} />
     </section>
   );
 }

@@ -2,7 +2,10 @@ import { Role } from "@prisma/client";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { attendanceApiError } from "@/lib/attendance-api";
 import { auditRequestContext } from "@/services/audit/request-context";
-import { createAttendanceSessionSchema } from "@/services/attendance/schemas";
+import {
+  attendanceQuerySchema,
+  createAttendanceSessionSchema,
+} from "@/services/attendance/schemas";
 import {
   createTeacherAttendanceSession,
   getTeacherCourseAttendance,
@@ -11,12 +14,22 @@ import { requireAuthenticatedUser } from "@/services/auth/authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
 
 type Context = { params: Promise<{ courseId: string }> };
-export async function GET(_request: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   const id = courseIdSchema.safeParse((await context.params).courseId);
   if (!id.success) return apiError("课程 ID 格式无效", 400);
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
-    return apiSuccess(await getTeacherCourseAttendance(teacher.id, id.data));
+    const query = attendanceQuerySchema.safeParse({
+      classroomId: new URL(request.url).searchParams.get("classroomId"),
+    });
+    if (!query.success) return apiError("班级筛选参数无效", 400);
+    return apiSuccess(
+      await getTeacherCourseAttendance(
+        teacher.id,
+        id.data,
+        query.data.classroomId,
+      ),
+    );
   } catch (error) {
     return attendanceApiError(error);
   }

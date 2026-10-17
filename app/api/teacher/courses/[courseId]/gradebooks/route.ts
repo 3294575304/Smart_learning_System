@@ -8,6 +8,7 @@ import { courseIdSchema } from "@/services/courses/schemas";
 import { createGradebookSchema } from "@/services/gradebook/schemas";
 import {
   createTeacherCourseGradebook,
+  getTeacherGradebookOverview,
   listTeacherCourseGradebooks,
 } from "@/services/gradebook/service";
 
@@ -21,7 +22,9 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
     return apiSuccess(
-      await listTeacherCourseGradebooks(teacher.id, courseId.data),
+      new URL(_request.url).searchParams.get("view") === "overview"
+        ? await getTeacherGradebookOverview(teacher.id, courseId.data)
+        : await listTeacherCourseGradebooks(teacher.id, courseId.data),
     );
   } catch (error: unknown) {
     return gradebookApiError(error);
@@ -49,6 +52,7 @@ export async function POST(request: Request, context: RouteContext) {
         courseId.data,
         input.data.classroomId,
         auditRequestContext(request),
+        input.data.expectedSchemeId,
       ),
       201,
     );

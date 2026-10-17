@@ -39,6 +39,8 @@ import {
   QUALITY_REPORT_TEMPLATE_VERSION,
 } from "@/services/quality-reports/constants";
 import { buildQualityReportDocx } from "@/services/quality-reports/docx-writer";
+import { resolveReportTemplate } from "@/services/quality-reports/template-service";
+import { buildGradeComposition } from "@/services/quality-reports/presentation";
 import { QualityReportOperationError } from "@/services/quality-reports/errors";
 import {
   calculateUploadedOutcomeAttainment,
@@ -162,6 +164,17 @@ function syllabusSnapshot(
     applicableMajors: info.applicableMajors ?? null,
     objectiveCount: structure.objectives.length,
     assessmentCount: structure.assessments.length,
+    teachingContent: structure.chapters.map((chapter) => chapter.title),
+    assessmentDescriptions: structure.assessments.map(
+      (item) => `${item.name}：${item.description ?? "评分标准待教师核实"}`,
+    ),
+    assessments: structure.assessments
+      .filter((item) => item.weight !== null)
+      .map((item) => ({
+        code: item.code,
+        name: item.name,
+        weight: Number(item.weight) / 100,
+      })),
   };
 }
 
@@ -172,6 +185,8 @@ function resolvedMetadata(
     majorClass: string;
     college: string;
     major: string;
+    teachingMethodDetails: string;
+    scoringCriteria: string;
   },
   structure: SyllabusParseOutput | null,
   classroomName: string,
@@ -187,6 +202,8 @@ function resolvedMetadata(
     majorClass: input.majorClass || classroomName,
     college: input.college || info?.teachingCollege || "",
     major: input.major || info?.applicableMajors || "",
+    teachingMethodDetails: input.teachingMethodDetails,
+    scoringCriteria: input.scoringCriteria,
   };
 }
 
@@ -269,6 +286,8 @@ function componentResults(value: Prisma.JsonValue) {
       ? [
           {
             code: record.code,
+            status:
+              typeof record.status === "string" ? record.status : "INCOMPLETE",
             score:
               typeof record.score === "string" ? Number(record.score) : null,
           },
@@ -277,7 +296,7 @@ function componentResults(value: Prisma.JsonValue) {
   });
 }
 
-async function platformSource(
+export async function getTeacherQualityReportPlatformSource(
   teacherId: string,
   courseId: string,
   rawInput: unknown,
@@ -436,6 +455,21 @@ async function platformSource(
           item.score,
         ]),
       ),
+      componentStatuses: Object.fromEntries(
+        componentResults(row.gradeRevision.componentResultsJson).map((item) => [
+          item.code,
+          item.status,
+        ]),
+      ),
+      totalScoreOverridden: (() => {
+        const snapshot = row.gradeRevision.inputSnapshotJson;
+        return (
+          !!snapshot &&
+          typeof snapshot === "object" &&
+          !Array.isArray(snapshot) &&
+          !!snapshot.override
+        );
+      })(),
       totalScore:
         row.gradeRevision.effectiveStatus === GradeValueStatus.SCORED
           ? Number(row.gradeRevision.effectiveScore)
@@ -476,6 +510,8 @@ async function platformSource(
     sourceReference: {
       gradebookId: gradebook.id,
       gradebookPublicationId: gradebook.currentPublication.id,
+      publicationVersion: gradebook.currentPublication.versionNumber,
+      publishedAt: gradebook.currentPublication.publishedAt.toISOString(),
       outcomeAttainmentRunId: attainment?.id ?? null,
       schemeId: gradebook.schemeId,
       publishedSyllabusStructureId:
@@ -711,8 +747,12 @@ async function queueReport(
           sourceType: source.sourceType,
           versionNumber: (latest?.versionNumber ?? 0) + 1,
           inputFingerprint,
-          templateVersion: QUALITY_REPORT_TEMPLATE_VERSION,
-          templateChecksumSha256: QUALITY_REPORT_TEMPLATE_CHECKSUM,
+          templateVersion: source.reportTemplate
+            ? `custom:${source.reportTemplate.fileVersionId}`
+            : QUALITY_REPORT_TEMPLATE_VERSION,
+          templateChecksumSha256:
+            source.reportTemplate?.checksumSha256 ??
+            QUALITY_REPORT_TEMPLATE_CHECKSUM,
           calculationRuleVersion: QUALITY_REPORT_RULE_VERSION,
           promptVersion: QUALITY_REPORT_PROMPT_VERSION,
           sourceSnapshotJson: json(source),
@@ -762,6 +802,11 @@ export async function queuePlatformQualityReport(
   context: AuditRequestContext,
 ) {
   const parsedInput = qualityReportPlatformInputSchema.parse(input);
+  const reportTemplate = await resolveReportTemplate(
+    teacherId,
+    courseId,
+    parsedInput,
+  );
   const ownedGradebook = await prisma.courseGradebook.findFirst({
     where: {
       id: parsedInput.gradebookId,
@@ -786,10 +831,13 @@ export async function queuePlatformQualityReport(
   return queueReport(
     teacherId,
     courseId,
-    await platformSource(teacherId, courseId, {
-      ...parsedInput,
-      outcomeAttainmentRunId,
-    }),
+    {
+      ...(await getTeacherQualityReportPlatformSource(teacherId, courseId, {
+        ...parsedInput,
+        outcomeAttainmentRunId,
+      })),
+      ...(reportTemplate ? { reportTemplate } : {}),
+    },
     context,
   );
 }
@@ -802,8 +850,20 @@ export async function queueUploadedQualityReport(
   context: AuditRequestContext,
 ) {
   if (!file) throw new QualityReportOperationError("请选择成绩文件。");
+  const parsedMetadata = qualityReportUploadMetadataSchema.parse(metadata);
+  const reportTemplate = await resolveReportTemplate(
+    teacherId,
+    courseId,
+    parsedMetadata,
+  );
   const upload = await uploadSource(teacherId, courseId, metadata, file);
-  return queueReport(teacherId, courseId, upload.snapshot, context, upload);
+  return queueReport(
+    teacherId,
+    courseId,
+    { ...upload.snapshot, ...(reportTemplate ? { reportTemplate } : {}) },
+    context,
+    upload,
+  );
 }
 
 export async function processQualityReportJob(
@@ -1027,6 +1087,18 @@ export async function approveTeacherQualityReport(
       "OUTCOME_ATTAINMENT_FORMULA_MISMATCH",
     );
   const expectedCodes = statistics.outcomes.map((item) => item.code).sort();
+  if (
+    reviewedAudit.issues.some(
+      (item) =>
+        item.code === "ASSESSMENT_SYLLABUS_MISMATCH" ||
+        item.code === "ASSESSMENT_WEIGHT_TOTAL_INVALID",
+    )
+  )
+    throw new QualityReportOperationError(
+      "成绩来源的考核名称或权重与正式教学大纲不一致，请修正后重新生成报告。",
+      409,
+      "ASSESSMENT_SYLLABUS_MISMATCH",
+    );
   const reviewedCodes = reviewedNarrative.outcomeDetails
     .map((item) => item.code)
     .sort();
@@ -1149,6 +1221,7 @@ export async function getTeacherQualityReports(
         reviewStatus: true,
         aiStatus: true,
         narrativeSnapshotJson: true,
+        sourceSnapshotJson: true,
         reviewedNarrativeJson: true,
         reviewedAt: true,
         reviewComment: true,
@@ -1162,8 +1235,27 @@ export async function getTeacherQualityReports(
   const structure = parsedSyllabus(course.currentPublishedSyllabusStructure);
   return {
     gradebooks,
-    reports,
+    reports: reports.map(({ sourceSnapshotJson, ...report }) => {
+      const source =
+        qualityReportSourceSnapshotSchema.safeParse(sourceSnapshotJson);
+      return {
+        ...report,
+        templateName: source.success
+          ? (source.data.reportTemplate?.name ?? "系统默认 · 2024 版")
+          : "系统默认 · 2024 版",
+      };
+    }),
     metadataDefaults: {
+      gradeComposition: structure
+        ? buildGradeComposition(
+            structure.assessments
+              .filter((item) => item.weight !== null)
+              .map((item) => ({
+                name: item.name,
+                weight: Number(item.weight) / 100,
+              })),
+          )
+        : "",
       ...resolvedMetadata(
         {
           courseNature: "",
@@ -1171,6 +1263,8 @@ export async function getTeacherQualityReports(
           majorClass: "",
           college: "",
           major: "",
+          teachingMethodDetails: "",
+          scoringCriteria: "",
         },
         structure,
         "",

@@ -18,13 +18,17 @@ interface RouteContext {
   params: Promise<{ courseId: string }>;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const path = courseRecommendationPathSchema.safeParse(await context.params);
   if (!path.success) return apiError("课程 ID 格式无效", 400);
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
     return apiSuccess(
-      await getTeachingProgress(teacher.id, path.data.courseId),
+      await getTeachingProgress(
+        teacher.id,
+        path.data.courseId,
+        new URL(request.url).searchParams.get("classroomId") ?? undefined,
+      ),
     );
   } catch (error: unknown) {
     return recommendationApiError(error);

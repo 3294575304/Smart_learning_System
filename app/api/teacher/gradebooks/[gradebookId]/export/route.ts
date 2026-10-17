@@ -4,8 +4,11 @@ import { apiError } from "@/lib/api-response";
 import { gradebookApiError } from "@/lib/gradebook-api";
 import { auditRequestContext } from "@/services/audit/request-context";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
-import { exportTeacherGradeTemplate } from "@/services/gradebook/grade-import-service";
-import { gradebookIdSchema } from "@/services/gradebook/schemas";
+import { exportTeacherGradeWorkbook } from "@/services/gradebook/workbook-export-service";
+import {
+  gradeExportFormatSchema,
+  gradebookIdSchema,
+} from "@/services/gradebook/schemas";
 
 interface RouteContext {
   params: Promise<{ gradebookId: string }>;
@@ -14,9 +17,13 @@ interface RouteContext {
 export async function GET(request: Request, context: RouteContext) {
   const id = gradebookIdSchema.safeParse((await context.params).gradebookId);
   if (!id.success) return apiError("成绩台账 ID 格式无效", 400);
+  const format = gradeExportFormatSchema.safeParse(
+    new URL(request.url).searchParams.get("format") ?? "workbook",
+  );
+  if (!format.success) return apiError("成绩导出格式无效", 400);
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
-    const result = await exportTeacherGradeTemplate(
+    const result = await exportTeacherGradeWorkbook(
       teacher.id,
       id.data,
       auditRequestContext(request),

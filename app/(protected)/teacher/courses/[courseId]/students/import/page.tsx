@@ -1,6 +1,6 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import { ArrowLeft, UsersRound } from "lucide-react";
-import Link from "next/link";
+import { UsersRound } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { CourseRosterImportWizard } from "@/components/courses/course-roster-import-wizard";
@@ -34,13 +34,9 @@ export default async function TeacherCourseRosterImportPage({
     <section className="space-y-6">
       <PageHeader
         actions={
-          <Link
-            className="inline-flex items-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium hover:bg-sky-50/70"
-            href={`/teacher/courses/${course.id}`}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            返回课程详情
-          </Link>
+          <TeacherBackLink href={`/teacher/courses/${course.id}/students`}>
+            返回名单管理
+          </TeacherBackLink>
         }
         description="上传名单、核对字段映射、处理错误并建立待认领学生身份与班级预分配。"
         title="学生名单导入"

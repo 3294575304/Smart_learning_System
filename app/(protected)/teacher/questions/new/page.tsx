@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 
 import { QuestionForm } from "@/components/questions/question-form";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -11,12 +11,7 @@ export default async function NewQuestionPage() {
   return (
     <section className="space-y-6">
       <div>
-        <Link
-          className="text-sm text-gray-500 hover:underline"
-          href="/teacher/questions"
-        >
-          ← 返回题库
-        </Link>
+        <TeacherBackLink href="/teacher/questions">返回题库</TeacherBackLink>
         <h1 className="mt-2 text-2xl font-semibold">创建题目</h1>
       </div>
       <QuestionForm knowledgePoints={knowledgePoints} mode="create" />

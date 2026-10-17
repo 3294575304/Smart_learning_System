@@ -1,3 +1,4 @@
+import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { ArrowRight, BookOpenCheck, Eye } from "lucide-react";
 import Link from "next/link";
 
@@ -51,15 +52,18 @@ export function WrongQuestionList({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="space-y-3">
       {items.map((item) => (
         <article
-          className="flex min-w-0 flex-col rounded-xl border bg-white p-5"
+          className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
           key={item.id}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-800">
+                  {item.course?.name ?? "历史错题（未归属课程）"}
+                </span>
                 <span className="rounded-full bg-gray-100 px-2.5 py-1">
                   {QUESTION_TYPE_LABELS[item.type]}
                 </span>
@@ -73,31 +77,36 @@ export function WrongQuestionList({
                   {item.isMastered ? "已掌握" : "未掌握"}
                 </span>
               </div>
-              <h2 className="mt-3 font-semibold break-words">{item.title}</h2>
+              <h2 className="mt-2 text-sm font-semibold break-words sm:text-base">
+                {item.title}
+              </h2>
             </div>
             <span className="shrink-0 text-sm font-medium text-red-700">
               错误 {item.wrongCount} 次
             </span>
           </div>
 
-          <p className="text-muted-foreground mt-3 text-sm leading-6 break-words">
+          <p className="text-muted-foreground mt-2 line-clamp-2 text-sm leading-6 break-words">
             {item.summary}
           </p>
 
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div className="rounded-md bg-gray-50 p-3">
-              <dt className="text-muted-foreground text-xs">最近错误答案</dt>
-              <dd className="mt-1 line-clamp-3 whitespace-pre-wrap">
-                {item.recentWrongAnswer}
-              </dd>
-            </div>
-            <div className="rounded-md bg-gray-50 p-3">
-              <dt className="text-muted-foreground text-xs">最近错误时间</dt>
-              <dd className="mt-1">
-                {item.lastWrongAt.toLocaleString("zh-CN")}
-              </dd>
-            </div>
-          </dl>
+          <details className="mt-3 text-xs text-slate-500">
+            <summary className="cursor-pointer">最近错误记录</summary>
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div className="rounded-md bg-gray-50 p-3">
+                <dt className="text-muted-foreground text-xs">最近错误答案</dt>
+                <dd className="mt-1 line-clamp-3 whitespace-pre-wrap">
+                  {item.recentWrongAnswer}
+                </dd>
+              </div>
+              <div className="rounded-md bg-gray-50 p-3">
+                <dt className="text-muted-foreground text-xs">最近错误时间</dt>
+                <dd className="mt-1">
+                  {item.lastWrongAt.toLocaleString("zh-CN")}
+                </dd>
+              </div>
+            </dl>
+          </details>
 
           <div className="text-muted-foreground mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs">
             <span>
@@ -126,6 +135,10 @@ export function WrongQuestionList({
               查看详情与重新练习
               <ArrowRight aria-hidden="true" className="size-4" />
             </Link>
+            <FavoriteButton
+              questionId={item.questionId}
+              source={{ kind: "WRONG_QUESTION", id: item.id }}
+            />
             <MasteryToggleButton
               compact
               initialIsMastered={item.isMastered}

@@ -15,9 +15,23 @@ export const assignmentUpsertSchema = z
     publishedAt: z.coerce.date().optional(),
     dueAt: z.coerce.date().optional(),
     allowResubmission: z.boolean().default(false),
+    allowAttachments: z.boolean().optional(),
+    submissionTask: z
+      .object({
+        prompt: z.string().trim().min(2, "请输入任务要求").max(10000),
+        referenceAnswer: z.string().trim().max(10000).default(""),
+        points: z.number().positive().max(10000),
+      })
+      .optional(),
     questions: z.array(assignmentQuestionSchema).max(200),
   })
   .superRefine((value, context) => {
+    if (value.submissionTask && value.questions.length)
+      context.addIssue({
+        code: "custom",
+        path: ["questions"],
+        message: "直接布置任务与题库组卷请分别保存",
+      });
     const questionIds = value.questions.map((item) => item.questionId);
     const sortOrders = value.questions.map((item) => item.sortOrder);
     if (new Set(questionIds).size !== questionIds.length) {
@@ -82,8 +96,18 @@ export const teacherSubmissionListQuerySchema = z
 export const assignmentListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
-  status: z.nativeEnum(AssignmentStatus).optional(),
-  classroomId: z.string().cuid("班级 ID 格式无效").optional(),
+  courseId: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().cuid("课程 ID 格式无效").optional(),
+  ),
+  status: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.nativeEnum(AssignmentStatus).optional(),
+  ),
+  classroomId: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().cuid("班级 ID 格式无效").optional(),
+  ),
   keyword: z
     .string()
     .trim()

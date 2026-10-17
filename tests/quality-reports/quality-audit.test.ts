@@ -23,6 +23,8 @@ function source(): QualityReportSourceSnapshot {
       majorClass: "计算机 2025 级 1 班",
       college: "",
       major: "",
+      teachingMethodDetails: "",
+      scoringCriteria: "",
     },
     classroom: { id: null, name: "计算机 2025 级 1 班" },
     sourceType: QualityReportSourceType.UPLOAD,
@@ -43,6 +45,49 @@ function source(): QualityReportSourceSnapshot {
     sourceReference: {},
   };
 }
+
+test("总评构成使用冻结的大纲，目标占比不作为总评权重；来源不一致必须提示错误", () => {
+  const input = source();
+  input.syllabus = {
+    publishedStructureId: "cm0000000000000000000002",
+    versionNumber: 2,
+    courseName: input.course.name,
+    courseCategory: null,
+    courseNature: null,
+    credits: 4,
+    teachingCollege: null,
+    applicableMajors: null,
+    objectiveCount: 0,
+    assessmentCount: 2,
+    assessments: [
+      { code: "usual", name: "平时表现", weight: 0.4 },
+      { code: "final", name: "期末考试", weight: 0.6 },
+    ],
+  };
+  const stats = calculateQualityReportStatistics(input);
+  const narrative = buildDeterministicNarrative(input, stats);
+  assert.equal(narrative.gradeComposition, "平时表现 40% + 期末考试 60%");
+  assert.ok(
+    auditQualityReportDraft(input, stats, narrative).issues.some(
+      (item) => item.code === "ASSESSMENT_SYLLABUS_MISMATCH",
+    ),
+  );
+  input.components = input.syllabus.assessments ?? [];
+  assert.equal(
+    auditQualityReportDraft(
+      input,
+      calculateQualityReportStatistics(input),
+      narrative,
+    ).issues.some((item) => item.code === "ASSESSMENT_SYLLABUS_MISMATCH"),
+    false,
+  );
+  input.syllabus.assessments = [];
+  assert.ok(
+    auditQualityReportDraft(input, stats, narrative).issues.some(
+      (item) => item.code === "ASSESSMENT_SYLLABUS_MISMATCH",
+    ),
+  );
+});
 
 test("自动审查区分大纲、基础信息、目标达成和问卷缺口", () => {
   const input = source();

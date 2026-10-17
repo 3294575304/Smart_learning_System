@@ -30,12 +30,12 @@ export function CourseStudentRosterImportCard({
             <h2 className="font-semibold">学生名单管理</h2>
           </div>
           <p className="text-muted-foreground mt-2 text-sm">
-            上传名单、核对信息，完成学生身份预导入。
+            查看及维护班级人员，支持单人添加、待认领信息纠正与批量导入。
           </p>
         </div>
         <Link
           className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors hover:bg-sky-50/70 focus-visible:outline-2 focus-visible:outline-offset-2"
-          href={`/teacher/courses/${courseId}/students/import`}
+          href={`/teacher/courses/${courseId}/students`}
         >
           名单管理
           <ArrowRight className="h-4 w-4" />

@@ -22,7 +22,7 @@ test("teaching progress requires a current graph and de-duplicates concepts", ()
       expectedRevision: 0,
       conceptIds: [],
     }).success,
-    false,
+    true,
   );
 });
 
@@ -46,8 +46,52 @@ test("course recommendation conditions are bounded and only accept supported pra
   assert.equal(
     courseRecommendationGenerationSchema.safeParse({
       classroomId: "classroom-1",
-      count: 21,
+      count: 51,
     }).success,
     false,
+  );
+});
+
+test("custom practice counts are bounded and cannot change fixed tests", () => {
+  const input = {
+    classroomId: "classroom-1",
+    mode: "PRACTICE",
+    template: "CHOICE20",
+    practiceCount: 7,
+  };
+  assert.equal(
+    courseRecommendationGenerationSchema.parse(input).practiceCount,
+    7,
+  );
+  for (const count of [0, 51, 1.5])
+    assert.equal(
+      courseRecommendationGenerationSchema.safeParse({
+        ...input,
+        practiceCount: count,
+      }).success,
+      false,
+    );
+  assert.equal(
+    courseRecommendationGenerationSchema.safeParse({
+      ...input,
+      mode: "TEST",
+      template: "MIXED_TEST50",
+    }).success,
+    false,
+  );
+  assert.equal(
+    courseRecommendationGenerationSchema.safeParse({
+      classroomId: "classroom-1",
+      mode: "TEST",
+      template: "MIXED_TEST50",
+    }).success,
+    true,
+  );
+  assert.equal(
+    courseRecommendationGenerationSchema.parse({
+      classroomId: "classroom-1",
+      template: "CHOICE20",
+    }).practiceCount,
+    undefined,
   );
 });

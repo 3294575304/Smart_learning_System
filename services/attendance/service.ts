@@ -1,3 +1,4 @@
+import { getStudentClassroomContext } from "@/services/courses/student-access";
 import {
   AttendanceRecordSource,
   AttendanceSessionStatus,
@@ -346,10 +347,19 @@ export async function correctTeacherAttendanceRecord(
 export async function getTeacherCourseAttendance(
   teacherId: string,
   courseId: string,
+  classroomId?: string,
 ) {
   await ownedCourse(teacherId, courseId);
+  if (
+    classroomId &&
+    !(await prisma.classroom.findFirst({
+      where: { id: classroomId, courseId, teacherId },
+      select: { id: true },
+    }))
+  )
+    throw new ResourceNotFoundError("班级不存在。");
   const sessions = await prisma.attendanceSession.findMany({
-    where: { courseId, teacherId },
+    where: { courseId, teacherId, ...(classroomId ? { classroomId } : {}) },
     orderBy: { startsAt: "desc" },
     include: {
       classroom: { select: { id: true, name: true } },
@@ -399,7 +409,10 @@ export async function getTeacherCourseAttendance(
 export async function getStudentAttendance(
   studentId: string,
   courseId?: string,
+  classroomId?: string,
 ) {
+  if (classroomId)
+    await getStudentClassroomContext(studentId, classroomId, courseId);
   const course = courseId
     ? await getStudentCourseContext(studentId, courseId)
     : null;
@@ -407,6 +420,7 @@ export async function getStudentAttendance(
     where: {
       studentId,
       session: {
+        ...(classroomId ? { classroomId } : {}),
         ...(courseId ? { courseId } : {}),
         classroom: {
           memberships: { some: { studentId, status: MembershipStatus.ACTIVE } },

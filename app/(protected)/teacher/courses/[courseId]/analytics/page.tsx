@@ -1,5 +1,6 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import { ArrowLeft, FileChartColumn, Users } from "lucide-react";
+import { FileChartColumn, Users } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -42,13 +43,9 @@ export default async function TeacherCourseAnalyticsPage({ params }: Props) {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link
-                href={`/teacher/courses/${data.course.id}`}
-                className="inline-flex items-center gap-2 rounded-xl border border-sky-100 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:border-sky-200 hover:text-sky-800"
-              >
-                <ArrowLeft aria-hidden="true" className="size-4" />
+              <TeacherBackLink href={`/teacher/courses/${data.course.id}`}>
                 返回课程
-              </Link>
+              </TeacherBackLink>
               <Link
                 href={`/teacher/courses/${data.course.id}/profiles`}
                 className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-sky-700"

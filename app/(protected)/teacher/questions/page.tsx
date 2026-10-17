@@ -1,5 +1,5 @@
 import { Role } from "@prisma/client";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileUp, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -11,7 +11,7 @@ import {
   type QuestionListQuery,
 } from "@/services/questions/schemas";
 import {
-  listKnowledgePointOptions,
+  listTeacherQuestionCourseOptions,
   listTeacherQuestions,
 } from "@/services/questions/service";
 
@@ -38,6 +38,9 @@ function pageHref(query: QuestionListQuery, page: number): string {
   if (query.difficulty) params.set("difficulty", String(query.difficulty));
   if (query.knowledgePointId)
     params.set("knowledgePointId", query.knowledgePointId);
+  if (query.courseId) params.set("courseId", query.courseId);
+  if (query.courseConceptId)
+    params.set("courseConceptId", query.courseConceptId);
   return `/teacher/questions?${params.toString()}`;
 }
 
@@ -64,27 +67,40 @@ export default async function QuestionsPage({
   const query = parsed.success
     ? parsed.data
     : questionListQuerySchema.parse({});
-  const [questions, knowledgePoints] = await Promise.all([
+  const [questions, courseOptions] = await Promise.all([
     listTeacherQuestions(teacher.id, query),
-    listKnowledgePointOptions(),
+    listTeacherQuestionCourseOptions(teacher.id),
   ]);
 
   return (
     <section className="space-y-6">
       <PageHeader
         actions={
-          <Link
-            className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
-            href="/teacher/questions/new"
-          >
-            <Plus className="h-4 w-4" />
-            创建题目
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              className="flex items-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              href="/teacher/questions/import"
+            >
+              <FileUp className="h-4 w-4" />
+              批量导入
+            </Link>
+            <Link
+              className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
+              href="/teacher/questions/new"
+            >
+              <Plus className="h-4 w-4" />
+              创建题目
+            </Link>
+          </div>
         }
-        description="搜索和筛选自己的题目，或从公共题库复制后再编辑。"
+        description="按题型、知识点与学科标签管理题目，适用于编程、数学、英语等课程；也可从公共题库复制后编辑。"
         title="教师题库"
       />
-      <QuestionFilters knowledgePoints={knowledgePoints} query={query} />
+      <QuestionFilters
+        key={JSON.stringify(query)}
+        courses={courseOptions}
+        query={query}
+      />
       <div className="flex items-center justify-between text-sm text-gray-500">
         <span>共 {questions.pagination.total} 道题</span>
         <span aria-live="polite">
@@ -92,7 +108,7 @@ export default async function QuestionsPage({
           {Math.max(questions.pagination.totalPages, 1)} 页
         </span>
       </div>
-      <QuestionList items={questions.items} />
+      <QuestionList items={questions.items} scope={query.scope} />
       {questions.pagination.totalPages > 1 ? (
         <nav
           aria-label="题库分页"

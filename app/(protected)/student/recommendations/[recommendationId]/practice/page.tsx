@@ -1,7 +1,8 @@
-import { RecommendationStatus, Role } from "@prisma/client";
+import { Role } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 
-import { RecommendationPractice } from "@/components/recommendations/recommendation-practice";
+import { RecommendationPracticeSet } from "@/components/recommendations/recommendation-practice-set";
+import { getPracticeSet } from "@/services/practice-sets/service";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
   AuthorizationError,
@@ -21,13 +22,13 @@ export default async function RecommendationPracticePage({ params }: Props) {
       student,
       recommendationId,
     );
-    if (
-      recommendation.status !== RecommendationStatus.STARTED &&
-      recommendation.status !== RecommendationStatus.COMPLETED
-    ) {
-      redirect(`/student/recommendations/${recommendationId}`);
-    }
-    return <RecommendationPractice recommendation={recommendation} />;
+    const set = await getPracticeSet(student, recommendationId);
+    return (
+      <RecommendationPracticeSet
+        set={set}
+        initialRecommendation={recommendation}
+      />
+    );
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) notFound();
     if (error instanceof AuthorizationError) redirect("/403");

@@ -47,7 +47,6 @@ export function SurveyListWorkspace({
   const router = useRouter();
   const defaults = useMemo(() => {
     const opensAt = new Date();
-    opensAt.setMinutes(opensAt.getMinutes() + 10);
     const dueAt = new Date(opensAt.getTime() + 7 * 86_400_000);
     return { opensAt: localInput(opensAt), dueAt: localInput(dueAt) };
   }, []);
@@ -71,8 +70,8 @@ export function SurveyListWorkspace({
             description: data.get("description"),
             instructions: "本问卷不计入课程成绩，请根据真实学习体验作答。",
             mode: data.get("mode"),
-            opensAt: data.get("opensAt"),
-            dueAt: data.get("dueAt"),
+            opensAt: new Date(String(data.get("opensAt"))).toISOString(),
+            dueAt: new Date(String(data.get("dueAt"))).toISOString(),
           }),
         },
       );

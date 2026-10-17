@@ -48,6 +48,7 @@ export interface TeacherClassroomDetail extends TeacherClassroomListItem {
   joinCodeExpiresAt: Date | null;
   closedAt: Date | null;
   students: ClassroomStudent[];
+  studentPage?: { page: number; pageSize: number; totalPages: number };
 }
 
 export interface StudentClassroomListItem {
@@ -298,6 +299,7 @@ export async function dissolveTeacherClassroom(
 export async function getTeacherClassroom(
   teacherId: string,
   classroomId: string,
+  studentPage?: number,
 ): Promise<TeacherClassroomDetail> {
   const classroom = await prisma.classroom.findFirst({
     where: {
@@ -316,9 +318,13 @@ export async function getTeacherClassroom(
       closedAt: true,
       createdAt: true,
       course: { select: { id: true, name: true } },
+      _count: {
+        select: { memberships: { where: { status: MembershipStatus.ACTIVE } } },
+      },
       memberships: {
         where: { status: MembershipStatus.ACTIVE },
-        orderBy: { joinedAt: "asc" },
+        orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
+        ...(studentPage ? { take: 20, skip: (studentPage - 1) * 20 } : {}),
         select: {
           id: true,
           studentId: true,
@@ -340,10 +346,19 @@ export async function getTeacherClassroom(
     throw new ResourceNotFoundError("班级不存在");
   }
 
-  const { memberships, ...classroomData } = classroom;
+  const { memberships, _count, ...classroomData } = classroom;
   return {
     ...classroomData,
-    studentCount: memberships.length,
+    studentCount: _count.memberships,
+    ...(studentPage
+      ? {
+          studentPage: {
+            page: studentPage,
+            pageSize: 20,
+            totalPages: Math.ceil(_count.memberships / 20),
+          },
+        }
+      : {}),
     students: memberships.map((membership) => ({
       membershipId: membership.id,
       studentId: membership.studentId,

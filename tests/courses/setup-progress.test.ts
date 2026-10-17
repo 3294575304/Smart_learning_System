@@ -50,6 +50,7 @@ test("基础准备完整时为 8/8，不依赖可选教学材料或课程发布�
   assert.equal(progress.totalCount, 8);
   assert.equal(progress.percentage, 100);
   assert.equal(progress.nextStep, null);
+  assert.equal(progress.activeStudentCount, 30);
   assert.ok(
     progress.steps.every((item) =>
       item.href.startsWith("/teacher/courses/course-one"),

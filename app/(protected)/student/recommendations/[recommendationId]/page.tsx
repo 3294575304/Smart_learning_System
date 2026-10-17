@@ -1,3 +1,4 @@
+import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { RecommendationStatus, Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -59,11 +60,17 @@ export default async function RecommendationDetailPage({ params }: Props) {
                 </span>
               </p>
             </div>
-            <span
-              className={`w-fit shrink-0 rounded-full px-2.5 py-1 text-xs ${RECOMMENDATION_STATUS_STYLES[recommendation.status]}`}
-            >
-              {RECOMMENDATION_STATUS_LABELS[recommendation.status]}
-            </span>
+            <div className="flex items-center gap-2">
+              <FavoriteButton
+                questionId={recommendation.questionId}
+                source={{ kind: "RECOMMENDATION", id: recommendation.id }}
+              />
+              <span
+                className={`w-fit shrink-0 rounded-full px-2.5 py-1 text-xs ${RECOMMENDATION_STATUS_STYLES[recommendation.status]}`}
+              >
+                {RECOMMENDATION_STATUS_LABELS[recommendation.status]}
+              </span>
+            </div>
           </div>
         </header>
 

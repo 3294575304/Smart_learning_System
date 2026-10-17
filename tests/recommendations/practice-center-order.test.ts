@@ -7,20 +7,13 @@ test("练习中心先展示筛选结果，再提供生成入口", async () => {
     "app/(protected)/student/recommendations/page.tsx",
     "utf8",
   );
-  const recommendationHeading = page.indexOf(
-    'id="recommendation-results-heading"',
-  );
-  const filters = page.indexOf("<RecommendationFilters");
-  const results = page.indexOf("{result.items.length === 0");
-  const pagination = page.indexOf("{result.pagination.nextCursor ?");
+  const groupedResults = page.indexOf("<PracticeSetCenter");
   const generationHeading = page.indexOf('id="generate-practice-heading"');
   const recommendationGenerator = page.indexOf("<GenerateRecommendationsForm");
   const practiceGenerator = page.indexOf("<CoursePracticeCenter");
 
-  assert.ok(recommendationHeading >= 0 && recommendationHeading < filters);
-  assert.ok(filters < results);
-  assert.ok(results < pagination);
-  assert.ok(pagination < generationHeading);
+  assert.ok(groupedResults >= 0 && groupedResults < generationHeading);
+  assert.doesNotMatch(page, /<RecommendationCard|查看下一页推荐/);
   assert.ok(generationHeading < recommendationGenerator);
   assert.ok(recommendationGenerator < practiceGenerator);
 });

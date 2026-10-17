@@ -85,6 +85,8 @@ const source: QualityReportSourceSnapshot = {
     majorClass: "大气科学类、2025级挂排班",
     college: "龙山书院、大气科学学院",
     major: "大气科学类",
+    teachingMethodDetails: "",
+    scoringCriteria: "",
   },
   classroom: { id: null, name: "2025级挂排班" },
   sourceType: QualityReportSourceType.PLATFORM,

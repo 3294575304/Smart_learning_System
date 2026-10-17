@@ -1,5 +1,6 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
+import { PageIndex } from "@/components/dashboard/page-index";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ClassroomForm } from "@/components/classrooms/classroom-form";
@@ -7,15 +8,20 @@ import { RemoveStudentButton } from "@/components/classrooms/remove-student-butt
 import { TeacherClassroomControls } from "@/components/classrooms/teacher-classroom-controls";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { classroomIdSchema } from "@/services/classrooms/schemas";
+import {
+  classroomIdSchema,
+  classroomStudentPageSchema,
+} from "@/services/classrooms/schemas";
 import { getTeacherClassroom } from "@/services/classrooms/service";
 
 interface TeacherClassroomPageProps {
   params: Promise<{ classroomId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function TeacherClassroomPage({
   params,
+  searchParams,
 }: TeacherClassroomPageProps) {
   const teacher = await requirePageRole(Role.TEACHER);
   const { classroomId } = await params;
@@ -25,17 +31,21 @@ export default async function TeacherClassroomPage({
     notFound();
   }
 
+  const raw = await searchParams;
+  const pageQuery = classroomStudentPageSchema.safeParse({ page: raw.page });
+  if (!pageQuery.success) notFound();
   try {
-    const classroom = await getTeacherClassroom(teacher.id, parsedId.data);
+    const classroom = await getTeacherClassroom(
+      teacher.id,
+      parsedId.data,
+      pageQuery.data.page,
+    );
     return (
       <section className="space-y-6">
         <div>
-          <Link
-            className="text-muted-foreground text-sm underline"
-            href="/teacher"
-          >
+          <TeacherBackLink href="/teacher/classrooms">
             返回班级列表
-          </Link>
+          </TeacherBackLink>
           <h1 className="mt-3 text-2xl font-semibold">{classroom.name}</h1>
           <p className="text-muted-foreground mt-2">
             {classroom.description ?? "暂无班级说明"}
@@ -77,10 +87,17 @@ export default async function TeacherClassroomPage({
           />
         </div>
         <section className="bg-card rounded-xl border p-5">
-          <h2 className="font-semibold">学生名单</h2>
+          <h2 className="font-semibold">
+            学生名单{" "}
+            <span className="text-sm font-normal text-slate-500">
+              共 {classroom.studentCount} 人 · 每页 20 人
+            </span>
+          </h2>
           {classroom.students.length === 0 ? (
             <div className="text-muted-foreground mt-4 rounded-lg border border-dashed p-8 text-center text-sm">
-              暂无学生加入该班级。
+              {classroom.studentCount
+                ? "当前页没有学生，请返回上一页。"
+                : "暂无学生加入该班级。"}
             </div>
           ) : (
             <div className="mt-4 overflow-x-auto">
@@ -123,6 +140,18 @@ export default async function TeacherClassroomPage({
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {classroom.studentPage && classroom.studentPage.totalPages > 1 && (
+            <div className="mt-4">
+              <PageIndex
+                page={classroom.studentPage.page}
+                ariaLabel="学生名单分页"
+                totalPages={classroom.studentPage.totalPages}
+                hrefForPage={(page) =>
+                  `/teacher/classrooms/${classroom.id}?page=${page}`
+                }
+              />
             </div>
           )}
         </section>

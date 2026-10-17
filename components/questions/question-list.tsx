@@ -1,14 +1,23 @@
 import Link from "next/link";
+import { questionContentReview } from "@/services/questions/content-review";
 
 import { QuestionActions } from "@/components/questions/question-actions";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import type { QuestionListItem } from "@/services/questions/types";
 
-export function QuestionList({ items }: { items: QuestionListItem[] }) {
+export function QuestionList({
+  items,
+  scope,
+}: {
+  items: QuestionListItem[];
+  scope: "OWNED" | "PUBLIC";
+}) {
   if (items.length === 0) {
     return (
       <div className="text-muted-foreground rounded-xl border border-dashed p-10 text-center">
-        没有符合条件的题目。
+        {scope === "PUBLIC"
+          ? "公共题库中暂无符合条件的可复制题目。可以清除搜索或题型筛选，或联系管理员维护公共题库。"
+          : "没有符合条件的题目。可以调整筛选条件，或批量导入题目。"}
       </div>
     );
   }
@@ -25,7 +34,11 @@ export function QuestionList({ items }: { items: QuestionListItem[] }) {
                   {question.visibility === "PUBLIC" ? "公开" : "私有"}
                 </span>
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
-                  {question.status === "ACTIVE" ? "使用中" : question.status}
+                  {question.status === "ACTIVE"
+                    ? "使用中"
+                    : question.status === "DRAFT"
+                      ? "草稿 · 待配置"
+                      : question.status}
                 </span>
                 <span>创建者：{question.creator.displayName}</span>
               </div>
@@ -38,18 +51,35 @@ export function QuestionList({ items }: { items: QuestionListItem[] }) {
               <p className="mt-2 line-clamp-2 text-sm text-gray-600">
                 {question.content}
               </p>
+              {questionContentReview(question.content).length > 0 && (
+                <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                  待核对题干 ·{" "}
+                  {questionContentReview(question.content).join("；")}
+                  。点击题目标题查看并修正，历史作业快照保持不变。
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
-                {question.knowledgePoints.map((point) => (
+                {!question.courseGraphConcepts ? (
+                  <span className="text-xs text-slate-500">
+                    选择课程后查看该课程的知识点分类
+                  </span>
+                ) : null}
+                {(question.courseGraphConcepts ?? []).map((point) => (
                   <span
-                    className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700"
+                    className="rounded-full bg-sky-50 px-2 py-1 text-xs text-sky-700"
                     key={point.id}
                   >
-                    {point.name}
+                    {point.code} · {point.name}
                   </span>
                 ))}
+                {question.courseGraphConcepts?.length === 0 ? (
+                  <span className="text-xs text-slate-500">
+                    此题尚未绑定到所选课程
+                  </span>
+                ) : null}
                 {question.tags.map((tag) => (
                   <span
-                    className="rounded-full bg-gray-100 px-2 py-1 text-xs"
+                    className="rounded-full bg-violet-50 px-2 py-1 text-xs text-violet-800"
                     key={tag}
                   >
                     #{tag}

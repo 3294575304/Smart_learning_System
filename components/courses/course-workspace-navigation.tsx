@@ -1,3 +1,6 @@
+"use client";
+
+import { useRememberedSelection } from "@/components/dashboard/navigation-memory";
 import {
   BarChart3,
   BookOpenCheck,
@@ -37,14 +40,14 @@ const WORKSPACE_GROUPS = [
         icon: ClipboardCheck,
       },
       {
-        title: "批量题目映射",
-        description: "审核题目与课程知识点的关联",
+        title: "题目关联",
+        description: "批量匹配题目知识点并由教师确认",
         path: "question-mapping",
         icon: ListChecks,
       },
       {
         title: "教学进度",
-        description: "管理已授知识点与推荐范围",
+        description: "维护课堂授课进度",
         path: "teaching-progress",
         icon: BookOpenCheck,
       },
@@ -53,6 +56,12 @@ const WORKSPACE_GROUPS = [
   {
     title: "教学管理",
     items: [
+      {
+        title: "学生名单",
+        description: "维护人员与认领信息",
+        path: "students",
+        icon: Users,
+      },
       {
         title: "成绩台账",
         description: "管理成绩、发布与目标达成度",
@@ -99,20 +108,75 @@ const WORKSPACE_GROUPS = [
 ];
 
 export function CourseWorkspaceNavigation({ courseId }: { courseId: string }) {
+  const [activeGroup, setActiveGroup] = useRememberedSelection<string>(
+    "workspace-group",
+    "教学管理",
+    ["教学管理", "课程建设", "评价分析"],
+  );
+  const orderedGroups = [
+    WORKSPACE_GROUPS[1],
+    WORKSPACE_GROUPS[0],
+    WORKSPACE_GROUPS[2],
+  ];
   return (
-    <nav
-      aria-label="课程功能"
-      className="bg-card space-y-6 rounded-xl border p-5 sm:p-6"
-    >
+    <nav aria-label="课程功能" className="bg-card rounded-xl border p-5 sm:p-6">
+      <div
+        role="tablist"
+        aria-label="课程管理分类"
+        className="mb-4 flex flex-wrap gap-2 border-b pb-3"
+      >
+        {orderedGroups.map((group) => (
+          <button
+            key={group.title}
+            type="button"
+            role="tab"
+            aria-selected={activeGroup === group.title}
+            aria-controls={`course-workspace-${group.title}`}
+            id={`course-workspace-tab-${group.title}`}
+            tabIndex={activeGroup === group.title ? 0 : -1}
+            onKeyDown={(event) => {
+              const index = orderedGroups.findIndex(
+                (item) => item.title === group.title,
+              );
+              const next =
+                event.key === "ArrowRight"
+                  ? (index + 1) % orderedGroups.length
+                  : event.key === "ArrowLeft"
+                    ? (index + orderedGroups.length - 1) % orderedGroups.length
+                    : event.key === "Home"
+                      ? 0
+                      : event.key === "End"
+                        ? orderedGroups.length - 1
+                        : null;
+              if (next === null) return;
+              event.preventDefault();
+              const target = orderedGroups[next];
+              setActiveGroup(target.title);
+              document
+                .getElementById(`course-workspace-tab-${target.title}`)
+                ?.focus();
+            }}
+            onClick={() => setActiveGroup(group.title)}
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${activeGroup === group.title ? "bg-sky-600 text-white" : "bg-sky-50 text-slate-600 hover:bg-sky-100"}`}
+          >
+            {group.title}
+          </button>
+        ))}
+      </div>
       {WORKSPACE_GROUPS.map((group) => (
-        <section key={group.title}>
-          <h2 className="mb-3 text-sm font-semibold">{group.title}</h2>
+        <section
+          key={group.title}
+          role="tabpanel"
+          id={`course-workspace-${group.title}`}
+          aria-labelledby={`course-workspace-tab-${group.title}`}
+          hidden={activeGroup !== group.title}
+        >
           <div className="grid gap-2 sm:grid-cols-2">
             {group.items.map(({ title, description, path, icon: Icon }) => (
               <Link
                 key={path}
                 href={`/teacher/courses/${courseId}/${path}`}
-                className="group flex min-w-0 items-center gap-3 rounded-lg border border-transparent bg-sky-50/80 p-3 transition-colors hover:border-sky-100 hover:bg-sky-50/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
               >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 transition-colors group-hover:border-sky-100 group-hover:text-blue-600">
                   <Icon aria-hidden="true" className="size-5" />
@@ -127,7 +191,7 @@ export function CourseWorkspaceNavigation({ courseId }: { courseId: string }) {
                 </div>
                 <ChevronRight
                   aria-hidden="true"
-                  className="size-4 shrink-0 text-slate-400 group-hover:text-blue-600"
+                  className="size-5 shrink-0 text-sky-600 group-hover:translate-x-0.5"
                 />
               </Link>
             ))}

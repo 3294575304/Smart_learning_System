@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory = $true)]
   [string]$ConfigPath
 )
@@ -14,6 +14,8 @@ $arguments = @(
   "-i", $config.sshKeyPath,
   "-o", "IdentitiesOnly=yes",
   "-o", "BatchMode=yes",
+  "-o", "ConnectTimeout=10",
+  "-o", "ConnectionAttempts=1",
   "-o", "StrictHostKeyChecking=yes",
   "-o", "UserKnownHostsFile=$($config.knownHostsPath)",
   "-o", "ExitOnForwardFailure=yes",

@@ -46,6 +46,7 @@ export interface QuestionListItem {
   tags: string[];
   creator: QuestionCreatorData;
   knowledgePoints: QuestionKnowledgePointData[];
+  courseGraphConcepts?: Array<{ id: string; code: string; name: string }>;
   assignmentReferenceCount: number;
   canEdit: boolean;
   canDelete: boolean;

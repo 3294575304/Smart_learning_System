@@ -37,6 +37,7 @@ const practiceSubmissionSelect =
     expiresAt: true,
     questionId: true,
     practiceAnswer: { select: { id: true } },
+    programmingAttempts: { select: { id: true }, take: 1 },
     question: {
       select: {
         type: true,
@@ -102,7 +103,17 @@ function validatedSavedAnswer(
       responseTimeMs: answer.responseTimeMs,
     };
   }
-  if (type === QuestionType.FILL_BLANK && answer.kind === "TEXT") {
+  if (
+    answer.kind === "TEXT" &&
+    (type === QuestionType.FILL_BLANK ||
+      ((
+        [
+          QuestionType.SHORT_ANSWER,
+          QuestionType.PYTHON_PROGRAMMING,
+        ] as QuestionType[]
+      ).includes(type) &&
+        !answer.value.trim()))
+  ) {
     return {
       assignmentQuestionId: recommendation.questionId,
       kind: answer.kind,
@@ -204,7 +215,24 @@ async function completePracticeTransaction(
       ) {
         throw new RecommendationOperationError("推荐题目当前不可用", 409);
       }
-      if (!isAutoGradableQuestionType(recommendation.question.type)) {
+      const blankText =
+        input.answers.length === 1 &&
+        input.answers[0].kind === "TEXT" &&
+        !input.answers[0].value.trim();
+      if (
+        blankText &&
+        recommendation.question.type === QuestionType.PYTHON_PROGRAMMING &&
+        recommendation.programmingAttempts.length
+      ) {
+        throw new RecommendationOperationError(
+          "已有编程判题记录，请等待或重试判题，不能改为空答",
+          409,
+        );
+      }
+      if (
+        !isAutoGradableQuestionType(recommendation.question.type) &&
+        !blankText
+      ) {
         throw new RecommendationOperationError("当前题型暂不支持自动判分", 409);
       }
       if (input.answers.length !== 1) {
@@ -216,17 +244,19 @@ async function completePracticeTransaction(
 
       const submittedAnswer = input.answers[0];
       const savedAnswer = validatedSavedAnswer(recommendation, submittedAnswer);
-      const grading = gradeAnswer(
-        {
-          type: recommendation.question.type,
-          points: 1,
-          correctBoolean: recommendation.question.correctBoolean,
-          acceptableAnswers: recommendation.question.acceptableAnswers,
-          isCaseSensitive: recommendation.question.isCaseSensitive,
-          options: recommendation.question.options,
-        },
-        savedAnswer,
-      );
+      const grading = blankText
+        ? { score: 0, isCorrect: false }
+        : gradeAnswer(
+            {
+              type: recommendation.question.type,
+              points: 1,
+              correctBoolean: recommendation.question.correctBoolean,
+              acceptableAnswers: recommendation.question.acceptableAnswers,
+              isCaseSensitive: recommendation.question.isCaseSensitive,
+              options: recommendation.question.options,
+            },
+            savedAnswer,
+          );
       if (grading.score === null || grading.isCorrect === null) {
         throw new RecommendationOperationError("当前题目无法自动判分", 409);
       }

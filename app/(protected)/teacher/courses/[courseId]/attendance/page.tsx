@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AttendanceWorkspace } from "@/components/courses/attendance-workspace";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -21,12 +21,9 @@ export default async function AttendancePage({
         title="课堂签到与出勤台账"
         description="服务端判断准时与迟到；结束场次自动结算缺勤，教师纠正保留完整原因和历史。"
         actions={
-          <Link
-            className="rounded-md border bg-white px-4 py-2 text-sm"
-            href={`/teacher/courses/${id.data}`}
-          >
+          <TeacherBackLink href={`/teacher/courses/${id.data}`}>
             返回课程
-          </Link>
+          </TeacherBackLink>
         }
       />
       <AttendanceWorkspace

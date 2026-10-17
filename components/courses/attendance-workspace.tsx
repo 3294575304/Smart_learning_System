@@ -1,5 +1,20 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { correctAttendanceRecordSchema } from "@/services/attendance/schemas";
+const attendanceLabels: Record<string, string> = {
+  PRESENT: "正常出勤",
+  LATE: "迟到",
+  EARLY_LEAVE: "早退",
+  LEAVE: "请假",
+  ABSENT: "缺勤",
+  PENDING: "待确认",
+};
+const sessionLabels: Record<string, string> = {
+  SCHEDULED: "待开放",
+  OPEN: "签到中",
+  CLOSED: "已结算",
+  CANCELLED: "已取消",
+};
 type RecordRow = {
   id: string;
   studentId: string;
@@ -49,20 +64,35 @@ export function AttendanceWorkspace({
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [classroomFilter, setClassroomFilter] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{
+    session: Session;
+    record: RecordRow;
+    status: string;
+    reason: string;
+  } | null>(null);
+  const loadRevision = useRef(0);
   const load = useCallback(async () => {
+    const revision = ++loadRevision.current;
+    setData(null);
     try {
       setError(null);
-      setData(
-        (await json(`/api/teacher/courses/${courseId}/attendance`)) as Data,
-      );
+      const result = (await json(
+        `/api/teacher/courses/${courseId}/attendance${classroomFilter ? `?classroomId=${classroomFilter}` : ""}`,
+      )) as Data;
+      if (revision === loadRevision.current) setData(result);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "加载失败。");
+      if (revision === loadRevision.current)
+        setError(caught instanceof Error ? caught.message : "加载失败。");
     }
-  }, [courseId]);
+  }, [courseId, classroomFilter]);
   useEffect(() => {
     void load();
   }, [load]);
   async function create(form: FormData) {
+    if (busy) return;
+    setError(null);
     setBusy(true);
     try {
       const startsAt = new Date(String(form.get("startsAt")));
@@ -80,6 +110,7 @@ export function AttendanceWorkspace({
         body: JSON.stringify(body),
       });
       await load();
+      setMessage("签到场次已创建。");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "创建失败。");
     } finally {
@@ -87,6 +118,17 @@ export function AttendanceWorkspace({
     }
   }
   async function update(session: Session, action: string) {
+    if (busy) return;
+    if (
+      ["CLOSE", "CANCEL"].includes(action) &&
+      !window.confirm(
+        action === "CLOSE"
+          ? "确认结束签到并结算未签到学生的缺勤记录？"
+          : "确认取消本次签到场次？",
+      )
+    )
+      return;
+    setError(null);
     setBusy(true);
     try {
       await json(`/api/teacher/attendance-sessions/${session.id}`, {
@@ -95,20 +137,36 @@ export function AttendanceWorkspace({
         body: JSON.stringify({ action, expectedRevision: session.revision }),
       });
       await load();
+      setMessage("签到场次状态已更新。");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "操作失败。");
     } finally {
       setBusy(false);
     }
   }
-  async function correct(session: Session, record: RecordRow) {
-    const status = window.prompt(
-      "新状态：PRESENT/LATE/EARLY_LEAVE/LEAVE/ABSENT",
-      record.currentStatus,
-    );
-    if (!status) return;
-    const reason = window.prompt("纠正原因（必填）");
-    if (!reason) return;
+  function correct(session: Session, record: RecordRow) {
+    setEditing({
+      session,
+      record,
+      status:
+        record.currentStatus === "PENDING" ? "PRESENT" : record.currentStatus,
+      reason: "",
+    });
+    setError(null);
+  }
+  async function saveCorrection(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing || busy) return;
+    const { session, record } = editing;
+    const input = correctAttendanceRecordSchema.safeParse({
+      status: editing.status,
+      reason: editing.reason,
+      expectedRevisionNumber: record.currentRevisionNumber,
+    });
+    if (!input.success) {
+      setError("请选择有效出勤状态并填写纠正原因。");
+      return;
+    }
     setBusy(true);
     try {
       await json(
@@ -116,14 +174,12 @@ export function AttendanceWorkspace({
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            status,
-            reason,
-            expectedRevisionNumber: record.currentRevisionNumber,
-          }),
+          body: JSON.stringify(input.data),
         },
       );
       await load();
+      setEditing(null);
+      setMessage("出勤记录已纠正，原记录与修正原因保留。");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "纠正失败。");
     } finally {
@@ -132,6 +188,91 @@ export function AttendanceWorkspace({
   }
   return (
     <div className="space-y-6">
+      <label className="block rounded-xl border bg-white p-4 text-sm">
+        查看班级
+        <select
+          aria-label="查看出勤班级"
+          value={classroomFilter}
+          onChange={(e) => {
+            setClassroomFilter(e.target.value);
+            setEditing(null);
+          }}
+          className="ml-3 rounded-md border p-2"
+        >
+          <option value="">全部班级</option>
+          {classrooms.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {message && (
+        <p
+          role="status"
+          className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700"
+        >
+          {message}
+        </p>
+      )}
+      {editing && (
+        <form
+          onSubmit={saveCorrection}
+          className="space-y-3 rounded-xl border border-sky-200 bg-white p-5"
+        >
+          <h2 className="font-semibold">
+            纠正出勤 · {editing.record.student.profile?.displayName ?? "学生"}
+          </h2>
+          <label className="block text-sm">
+            出勤状态
+            <select
+              value={editing.status}
+              disabled={busy}
+              onChange={(e) =>
+                setEditing({ ...editing, status: e.target.value })
+              }
+              className="ml-3 rounded-md border p-2"
+            >
+              {Object.entries(attendanceLabels)
+                .filter(([value]) => value !== "PENDING")
+                .map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            纠正原因
+            <input
+              required
+              maxLength={500}
+              disabled={busy}
+              value={editing.reason}
+              onChange={(e) =>
+                setEditing({ ...editing, reason: e.target.value })
+              }
+              className="mt-1 block w-full rounded-md border p-2"
+            />
+          </label>
+          <div className="flex gap-2">
+            <button
+              disabled={busy}
+              className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white"
+            >
+              保存纠正
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setEditing(null)}
+              className="rounded-md border px-4 py-2 text-sm"
+            >
+              取消
+            </button>
+          </div>
+        </form>
+      )}
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error}
@@ -171,7 +312,7 @@ export function AttendanceWorkspace({
             className="rounded-md border px-3 py-2 text-sm"
           />
           <button
-            disabled={busy}
+            disabled={busy || !classrooms.length}
             className="rounded-md bg-sky-600 px-3 py-2 text-sm text-white"
           >
             创建（前10分钟开放）
@@ -188,7 +329,8 @@ export function AttendanceWorkspace({
           data.sessions.map((session) => (
             <details className="mt-3 rounded-lg border p-3" key={session.id}>
               <summary className="cursor-pointer font-medium">
-                {session.title} · {session.classroom.name} · {session.status}
+                {session.title} · {session.classroom.name} ·{" "}
+                {sessionLabels[session.status] ?? session.status}
               </summary>
               <div className="mt-3 flex gap-2">
                 {session.status === "SCHEDULED" ? (
@@ -230,7 +372,9 @@ export function AttendanceWorkspace({
                     className="rounded border px-2 py-1"
                     onClick={() => void correct(session, record)}
                   >
-                    {record.currentStatus}（纠正）
+                    {attendanceLabels[record.currentStatus] ??
+                      record.currentStatus}
+                    （纠正）
                   </button>
                 </div>
               ))}

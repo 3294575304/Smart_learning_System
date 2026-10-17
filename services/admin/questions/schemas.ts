@@ -22,6 +22,10 @@ export const adminQuestionListQuerySchema = z
       optionalQueryValue,
       z.nativeEnum(QuestionType).optional(),
     ),
+    courseId: z.preprocess(
+      optionalQueryValue,
+      z.string().cuid("课程 ID 格式无效").optional(),
+    ),
     knowledgePointId: z.preprocess(
       optionalQueryValue,
       z.string().cuid("知识点 ID 格式无效").optional(),

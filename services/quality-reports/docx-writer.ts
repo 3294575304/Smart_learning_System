@@ -10,6 +10,7 @@ import type { z } from "zod";
 import type { QualityReportStatistics } from "@/services/quality-reports/calculation";
 import { QUALITY_REPORT_TEMPLATE_CHECKSUM } from "@/services/quality-reports/constants";
 import { normalizeQualityReportNarrative } from "@/services/quality-reports/presentation";
+import { runTemplateTool } from "./template-runtime";
 import {
   qualityReportNarrativeSchema,
   type QualityReportSourceSnapshot,
@@ -45,6 +46,55 @@ export async function buildQualityReportDocx(
   narrative: QualityReportNarrative,
   options: { reviewed: boolean } = { reviewed: false },
 ): Promise<Buffer> {
+  if (source.reportTemplate) {
+    const { readFrozenReportTemplate } = await import("./template-service");
+    const template = await readFrozenReportTemplate(
+      source.course.id,
+      source.reportTemplate,
+    );
+    const percent = (value: number | null) =>
+      value === null ? "暂无数据" : `${(value * 100).toFixed(2)}%`;
+    const normalized = normalizeQualityReportNarrative(
+      narrative,
+      source.outcomes,
+    );
+    const fields = {
+      ...source.course,
+      courseName: source.course.name,
+      classroomName: source.classroom.name,
+      participantCount: statistics.participantCount,
+      excludedCount: statistics.excludedCount,
+      mean: statistics.mean?.toFixed(2) ?? "暂无数据",
+      passRate: percent(statistics.passRate),
+      excellentRate: percent(statistics.excellentRate),
+      ...normalized,
+      gradeComposition: narrative.gradeComposition,
+      gradeDistribution: statistics.distribution
+        .map(
+          (item) => `${item.label}：${item.count} 人（${percent(item.ratio)}）`,
+        )
+        .join("\n"),
+      outcomeSummary: statistics.outcomes
+        .map(
+          (item) =>
+            `${item.code} ${item.title}：${item.attainmentIndex === null ? "暂无数据" : item.attainmentIndex.toFixed(4)}`,
+        )
+        .join("\n"),
+      outcomeDetails: normalized.outcomeDetails
+        .map((item) => `${item.code}：${item.analysis}`)
+        .join("\n"),
+      attendanceSummary: `签到 ${statistics.attendance.sessionCount} 次；出勤率 ${percent(statistics.attendance.presentRate)}`,
+      surveySummary: !source.survey
+        ? "暂无已关闭问卷"
+        : source.survey.isSuppressed
+          ? "样本不足，问卷细分结果受保护"
+          : `参与 ${source.survey.responseCount} 人；响应率 ${percent(source.survey.responseRate)}；${source.survey.themeNarrative}`,
+    };
+    return runTemplateTool(template, {
+      fields,
+      mappings: source.reportTemplate.mappings,
+    });
+  }
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "quality-report-"));
   const payloadPath = path.join(temp, "payload.json");
   const outputPath = path.join(temp, "report.docx");

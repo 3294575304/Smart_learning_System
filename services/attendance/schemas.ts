@@ -1,5 +1,11 @@
 import { AttendanceStatus } from "@prisma/client";
 import { z } from "zod";
+export const attendanceQuerySchema = z.object({
+  classroomId: z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.string().cuid().optional(),
+  ),
+});
 
 export const attendanceSessionIdSchema = z
   .string()

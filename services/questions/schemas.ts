@@ -81,7 +81,6 @@ export const questionUpsertSchema = z
       .max(5000, "答案解析不能超过 5000 个字符"),
     knowledgePointIds: z
       .array(z.string().cuid("知识点 ID 格式无效"))
-      .min(1, "至少选择一个知识点")
       .max(10, "知识点不能超过 10 个"),
     tags: z
       .array(
@@ -95,6 +94,12 @@ export const questionUpsertSchema = z
     visibility: z.nativeEnum(QuestionVisibility),
   })
   .superRefine((value, context) => {
+    if (!value.knowledgePointIds.length && !value.tags.length)
+      context.addIssue({
+        code: "custom",
+        path: ["tags"],
+        message: "请填写自定义知识点标签，或选择一个已有分类",
+      });
     const optionLabels = value.options.map((option) => option.label);
     const optionSortOrders = value.options.map((option) => option.sortOrder);
     if (new Set(optionLabels).size !== optionLabels.length) {
@@ -242,7 +247,7 @@ export const questionUpsertSchema = z
       context.addIssue({
         code: "custom",
         path: ["answer"],
-        message: "Python 编程题答案格式无效",
+        message: "编程题答案格式无效",
       });
     }
   });
@@ -261,6 +266,8 @@ export const questionListQuerySchema = z.object({
   type: z.nativeEnum(QuestionType).optional(),
   difficulty: z.coerce.number().int().min(1).max(5).optional(),
   knowledgePointId: z.string().cuid("知识点 ID 格式无效").optional(),
+  courseId: z.string().cuid("课程 ID 格式无效").optional(),
+  courseConceptId: z.string().trim().min(1).max(120).optional(),
 });
 
 export type QuestionUpsertInput = z.input<typeof questionUpsertSchema>;

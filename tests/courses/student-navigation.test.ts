@@ -12,11 +12,11 @@ test("学生共享路径使用学生名称，顶部与面包屑保持一致", ()
   const cases = [
     ["/student/assignments", "我的作业"],
     ["/student/tasks", "学习任务"],
-    ["/student/results", "我的成绩"],
+    ["/student/results", "课程总评"],
     ["/student/attendance", "签到与出勤"],
     ["/student/surveys", "课程问卷"],
     ["/student/recommendations", "练习中心"],
-    ["/student/wrong-questions", "错题本"],
+    ["/student/wrong-questions", "复习中心"],
     ["/student/analytics", "学习分析"],
     ["/student/course-grades", "课程正式成绩"],
   ];
@@ -26,14 +26,14 @@ test("学生共享路径使用学生名称，顶部与面包屑保持一致", ()
   }
 });
 
-test("课程总评与成绩详情路径只选中我的成绩，首页不会同时选中", () => {
+test("课程总评与成绩详情路径只选中课程总评，首页不会同时选中", () => {
   const items = NAVIGATION.STUDENT.flatMap((group) => group.items);
   for (const pathname of ["/student/results", "/student/course-grades"]) {
     assert.deepEqual(
       items
         .filter((item) => isNavigationItemActive(pathname, item))
         .map((item) => item.href),
-      ["/student/results"],
+      ["/student/course-grades"],
     );
   }
   assert.equal(
@@ -108,4 +108,53 @@ test("学生命名不会影响教师同名路径或管理员导航", () => {
   );
   assert.equal(NAVIGATION.TEACHER.length, 1);
   assert.equal(NAVIGATION.ADMIN.length, 1);
+});
+
+test("课程练习和收藏详情保留练习中心选中，面包屑不指向不存在的根页", () => {
+  const items = NAVIGATION.STUDENT.flatMap((group) => group.items);
+  for (const path of [
+    "/student/practice/cycle1",
+    "/student/question-favorites/question1",
+  ]) {
+    assert.deepEqual(
+      items
+        .filter((item) => isNavigationItemActive(path, item))
+        .map((item) => item.href),
+      [
+        path.includes("question-favorites")
+          ? "/student/wrong-questions"
+          : "/student/recommendations",
+      ],
+    );
+    const crumbs = buildBreadcrumbs(path);
+    assert.equal(
+      crumbs[1].href,
+      path.includes("question-favorites")
+        ? "/student/wrong-questions?view=favorites"
+        : "/student/recommendations",
+    );
+  }
+  assert.equal(
+    buildBreadcrumbs("/student/submissions/sub1/answer")[1].href,
+    "/student/assignments",
+  );
+});
+
+test("作答和提交结果统一选中学习任务入口", () => {
+  const items = NAVIGATION.STUDENT.flatMap((group) => group.items);
+  for (const [path, expected] of [
+    ["/student/submissions/sub1/answer", "/student/tasks"],
+    ["/student/submissions/sub1/result", "/student/tasks"],
+  ]) {
+    assert.deepEqual(
+      items
+        .filter((item) => isNavigationItemActive(path, item))
+        .map((item) => item.href),
+      [expected],
+    );
+  }
+  assert.equal(
+    buildBreadcrumbs("/student/submissions/sub1/result")[1].href,
+    "/student/assignments?view=records",
+  );
 });

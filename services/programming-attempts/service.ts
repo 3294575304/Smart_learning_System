@@ -14,6 +14,7 @@ import {
   SubmissionStatus,
 } from "@prisma/client";
 
+import { needsProgrammingScoreReview } from "@/services/programming-attempts/review-policy";
 import { prisma } from "@/lib/prisma";
 import { AssignmentOperationError } from "@/services/assignments/errors";
 import { runAssignmentSerializable } from "@/services/assignments/transactions";
@@ -558,11 +559,23 @@ async function projectJudgeResult(
     },
   });
   if (attempt.kind === ProgrammingAttemptKind.FORMAL_JUDGE) {
+    const requiresScoreReview = rows.some((row) =>
+      needsProgrammingScoreReview(
+        row.errorType,
+        earned.toNumber(),
+        attempt.maxScore.toNumber(),
+        attempt.sourceCode,
+      ),
+    );
     if (attempt.studentAnswerId && attempt.studentAnswer)
       await transaction.studentAnswer.update({
         where: { id: attempt.studentAnswerId },
         data: {
-          gradingStatus: GradingStatus.AUTO_GRADED,
+          gradingStatus: requiresScoreReview
+            ? GradingStatus.MANUAL_REVIEW_REQUIRED
+            : GradingStatus.AUTO_GRADED,
+          graderId: null,
+          teacherFeedback: null,
           score: earned,
           maxScore: attempt.maxScore,
           isCorrect: earned.equals(attempt.maxScore),

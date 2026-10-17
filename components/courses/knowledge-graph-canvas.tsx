@@ -6,6 +6,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { ForceGraphMethods, ForceGraphProps } from "react-force-graph-3d";
 import * as THREE from "three";
+import { sphericalGraphLayout } from "@/components/courses/knowledge-graph-sphere-layout";
 import { chapterGraphLayout } from "@/components/courses/knowledge-graph-presentation";
 import { KnowledgeGraphNodeVisual } from "@/components/courses/knowledge-graph-node-visual";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
@@ -85,6 +86,7 @@ export function KnowledgeGraphCanvas3D({
   questionCountByPoint,
   nodeColorByKey,
   nodeColorHelp,
+  compact = false,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -94,6 +96,7 @@ export function KnowledgeGraphCanvas3D({
   questionCountByPoint?: Map<string, number>;
   nodeColorByKey?: Map<string, string>;
   nodeColorHelp?: string;
+  compact?: boolean;
 }) {
   const fgRef = useRef<FGMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -105,6 +108,27 @@ export function KnowledgeGraphCanvas3D({
   const [graphReady, setGraphReady] = useState(false);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [showPointNames, setShowPointNames] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<"CHAPTER" | "SPHERE">("CHAPTER");
+  useEffect(() => {
+    try {
+      if (
+        window.localStorage.getItem("zhixue:knowledge-graph:layout") ===
+        "SPHERE"
+      )
+        setLayoutMode("SPHERE");
+    } catch {
+      /* 浏览器禁用存储时仍可正常切换。 */
+    }
+  }, []);
+  function changeLayout(mode: "CHAPTER" | "SPHERE") {
+    setLayoutMode(mode);
+    try {
+      window.localStorage.setItem("zhixue:knowledge-graph:layout", mode);
+    } catch {
+      /* 只丢失偏好记忆，不影响图谱交互。 */
+    }
+  }
+
   const handleGraphReady = useCallback(() => setGraphReady(true), []);
   useEffect(() => {
     const container = containerRef.current;
@@ -124,8 +148,11 @@ export function KnowledgeGraphCanvas3D({
     return () => observer.disconnect();
   }, []);
   const layout = useMemo(
-    () => chapterGraphLayout(structure ?? { nodes, edges }),
-    [structure, nodes, edges],
+    () =>
+      (layoutMode === "SPHERE" ? sphericalGraphLayout : chapterGraphLayout)(
+        structure ?? { nodes, edges },
+      ),
+    [structure, nodes, edges, layoutMode],
   );
   const graphData = useMemo(() => {
     const visible = new Set(nodes.map((node) => node.key));
@@ -390,6 +417,35 @@ export function KnowledgeGraphCanvas3D({
       }}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-white px-3 py-2">
+        <div
+          className="inline-flex rounded-lg bg-slate-100 p-1"
+          role="group"
+          aria-label="图谱显示模式"
+        >
+          {(
+            [
+              ["CHAPTER", "当前视图"],
+              ["SPHERE", "三维球形"],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={layoutMode === mode}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 ${layoutMode === mode ? "bg-sky-600 text-white shadow-sm" : "text-slate-600 hover:bg-white"}`}
+              onClick={() => changeLayout(mode)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-slate-500" role="status">
+          {layoutMode === "SPHERE"
+            ? "球形星团 · 点击章节聚焦，拖动空白处旋转"
+            : "按章节排列 · 点击节点查看详情"}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-white px-3 py-2">
         <div className="text-xs leading-5 text-gray-600">
           {nodeColorHelp ?? "彩色标题：课程 / 章节 · 同章知识点同色"}
           <br />
@@ -453,7 +509,14 @@ export function KnowledgeGraphCanvas3D({
           <span className="text-violet-700">— 相关</span> · <span>— 包含</span>
         </span>
       </div>
-      <div className="relative h-[720px] w-full" ref={containerRef}>
+      <div
+        className={
+          compact
+            ? "relative h-[420px] w-full sm:h-[560px]"
+            : "relative h-[720px] w-full"
+        }
+        ref={containerRef}
+      >
         {canvasSize.width > 0 ? (
           <ForceGraph3D
             graphRef={fgRef}

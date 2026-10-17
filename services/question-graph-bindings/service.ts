@@ -4,6 +4,8 @@ import {
   KnowledgeGraphRelationType,
   Prisma,
   QuestionGraphBindingType,
+  QuestionStatus,
+  QuestionVisibility,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -16,13 +18,18 @@ import type {
   SaveGraphBindingsData,
 } from "@/services/question-graph-bindings/schemas";
 
-async function ownedQuestion(
+async function accessibleQuestion(
   teacherId: string,
   questionId: string,
   client: typeof prisma | Prisma.TransactionClient = prisma,
 ) {
   const question = await client.question.findFirst({
-    where: { id: questionId, creatorId: teacherId, deletedAt: null },
+    where: {
+      id: questionId,
+      deletedAt: null,
+      status: QuestionStatus.ACTIVE,
+      OR: [{ creatorId: teacherId }, { visibility: QuestionVisibility.PUBLIC }],
+    },
     select: { id: true },
   });
   if (!question) throw new ResourceNotFoundError("题目不存在");
@@ -95,7 +102,13 @@ export async function getGraphQuestionCoverage(
     where: {
       courseId,
       conceptId: { in: version.nodes.map((node) => node.conceptId) },
-      question: { creatorId: teacherId, deletedAt: null },
+      question: {
+        deletedAt: null,
+        OR: [
+          { creatorId: teacherId },
+          { visibility: QuestionVisibility.PUBLIC },
+        ],
+      },
     },
     _count: { _all: true },
   });
@@ -141,18 +154,38 @@ export async function listGraphConceptQuestions(
 
   const bindingScope = { courseId, conceptId };
   const where: Prisma.QuestionWhereInput = {
-    creatorId: teacherId,
+    AND: [
+      {
+        OR: [
+          { creatorId: teacherId },
+          { visibility: QuestionVisibility.PUBLIC },
+        ],
+      },
+      ...(query.keyword
+        ? [
+            {
+              OR: [
+                {
+                  title: {
+                    contains: query.keyword,
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  content: {
+                    contains: query.keyword,
+                    mode: "insensitive" as const,
+                  },
+                },
+              ],
+            },
+          ]
+        : []),
+    ],
+    status: QuestionStatus.ACTIVE,
     deletedAt: null,
     graphBindings:
       query.mode === "BOUND" ? { some: bindingScope } : { none: bindingScope },
-    ...(query.keyword
-      ? {
-          OR: [
-            { title: { contains: query.keyword, mode: "insensitive" } },
-            { content: { contains: query.keyword, mode: "insensitive" } },
-          ],
-        }
-      : {}),
   };
   const [total, questions] = await prisma.$transaction([
     prisma.question.count({ where }),
@@ -257,7 +290,7 @@ export async function getQuestionGraphBindings(
   courseId: string,
 ) {
   await Promise.all([
-    ownedQuestion(teacherId, questionId),
+    accessibleQuestion(teacherId, questionId),
     ownedCourse(teacherId, courseId),
   ]);
   const course = await ownedCourse(teacherId, courseId);
@@ -342,7 +375,7 @@ export async function saveQuestionGraphBindings(
   try {
     await prisma.$transaction(
       async (tx) => {
-        await ownedQuestion(teacherId, questionId, tx);
+        await accessibleQuestion(teacherId, questionId, tx);
         const course = await ownedCourse(teacherId, input.courseId, tx);
         if (!course.currentPublishedKnowledgeGraphVersionId)
           throw new QuestionGraphBindingError(
@@ -468,7 +501,7 @@ export async function clearQuestionGraphBindings(
   context: AuditRequestContext,
 ) {
   await prisma.$transaction(async (tx) => {
-    await ownedQuestion(teacherId, questionId, tx);
+    await accessibleQuestion(teacherId, questionId, tx);
     await ownedCourse(teacherId, courseId, tx);
     const set = await tx.questionKnowledgeGraphBindingSet.findUnique({
       where: { questionId_courseId: { questionId, courseId } },

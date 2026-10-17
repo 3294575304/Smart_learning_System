@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 
 import { TrendChart } from "@/components/dashboard/trend-chart";
+import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import type { StudentCourseLearningCenter } from "@/services/learner-profiles/learning-center";
 
 type ConceptStatus =
@@ -37,12 +38,12 @@ const statusPresentation: Record<
     dotClassName: "bg-red-500",
   },
   INSUFFICIENT: {
-    label: "证据不足",
+    label: "待进一步评估",
     className: "border-blue-200 bg-blue-50 text-blue-800",
     dotClassName: "bg-blue-500",
   },
   NO_EVIDENCE: {
-    label: "暂无证据",
+    label: "尚未评估",
     className: "border-sky-100 bg-sky-50/70 text-gray-600",
     dotClassName: "bg-gray-300",
   },
@@ -166,7 +167,7 @@ export function StudentCourseLearningCenterView({
                 }
               />
               <ActionLink
-                href={`/student/courses/${data.course.id}/knowledge-graph`}
+                href={`/student/courses/${data.course.id}/knowledge-graph${data.classroom ? `?classroomId=${encodeURIComponent(data.classroom.id)}` : ""}`}
                 label="查看课程知识图谱"
               />
             </div>
@@ -209,7 +210,7 @@ export function StudentCourseLearningCenterView({
           </div>
           <Link
             className="inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-slate-950"
-            href={`/student/courses/${data.course.id}/profile`}
+            href={`/student/courses/${data.course.id}/profile${data.classroom ? `?classroomId=${encodeURIComponent(data.classroom.id)}` : ""}`}
           >
             查看完整画像
             <ArrowRight aria-hidden="true" className="size-4" />
@@ -250,20 +251,22 @@ export function StudentCourseLearningCenterView({
         <div>
           <h2 className="text-lg font-semibold">学习变化趋势</h2>
           <p className="mt-1 text-sm text-slate-500">
-            掌握度只采用达到证据门槛的画像；得分率来自正式作业和推荐练习。
+            掌握度只采用达到证据门槛的画像；得分率按已发布作业、已完成整组练习展示，二者取样不同。
           </p>
         </div>
         <div className="grid gap-6 xl:grid-cols-2">
           <TrendPanel
-            description="未达到证据门槛的画像不会进入折线。"
+            description="课程汇总：仅统计证据充足知识点，未评估不等于零分。"
+            caption="课程汇总 · 各版本只统计当时证据充足的知识点，覆盖范围可能变化；展开查看版本和更新时间。"
             emptyMessage="当前还没有足够的历史画像生成趋势。"
             label="课程稳定掌握度变化"
             points={data.masteryTrend}
             title="稳定掌握度变化"
           />
           <TrendPanel
-            description="每个点表示一次包含课程知识点的有效评分事件。"
-            emptyMessage="当前还没有带课程知识点的有效评分记录。"
+            description="每根柱代表一份已发布作业或一组全部判完的练习；不会把同次作答拆成多根柱。"
+            caption="按作答时间排列，最多展示最近 8 组；待发布、未完成及待判题不按零分计算。"
+            emptyMessage="当前还没有已发布的作业成绩或全部完成的练习。"
             label="近期评分得分率变化"
             points={data.accuracyTrend}
             title="近期评分得分率"
@@ -405,6 +408,49 @@ function KnowledgeStatus({ data }: { data: StudentCourseLearningCenter }) {
                         {concept.code} · {concept.taught ? "已授" : "未授"} ·{" "}
                         {concept.evidenceCount} 条证据
                       </p>
+                      <div className="mt-3 border-t pt-3">
+                        <p className="text-xs font-medium text-slate-600">
+                          教师关联题目 · {concept.relatedQuestions.length} 道
+                        </p>
+                        {concept.relatedQuestions.length ? (
+                          <>
+                            <ul className="mt-2 max-h-36 space-y-2 overflow-y-auto">
+                              {concept.relatedQuestions.map((question) => (
+                                <li
+                                  className="rounded-md bg-slate-50 p-2"
+                                  key={question.id}
+                                >
+                                  <p className="text-xs leading-5 text-slate-800">
+                                    {question.title}
+                                  </p>
+                                  <p className="mt-1 text-[11px] text-slate-400">
+                                    {QUESTION_TYPE_LABELS[question.type]} · 难度{" "}
+                                    {question.difficulty}/5 ·{" "}
+                                    {question.bindingType === "PRIMARY"
+                                      ? "主要考查"
+                                      : "次要涉及"}
+                                    {question.fromCourseTeacher
+                                      ? " · 任课教师题目"
+                                      : " · 公共题库"}
+                                  </p>
+                                </li>
+                              ))}
+                            </ul>
+                            {concept.conceptId ? (
+                              <Link
+                                className="mt-3 inline-flex rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-sky-700 active:scale-[0.98]"
+                                href={`/student/recommendations?view=generate&courseId=${encodeURIComponent(data.course.id)}&conceptId=${encodeURIComponent(concept.conceptId)}${data.classroom ? `&classroomId=${encodeURIComponent(data.classroom.id)}` : ""}`}
+                              >
+                                按此知识点选择练习或测试
+                              </Link>
+                            ) : null}
+                          </>
+                        ) : (
+                          <p className="mt-2 text-xs text-slate-400">
+                            教师尚未为此知识点绑定可练习题目。
+                          </p>
+                        )}
+                      </div>
                     </article>
                   );
                 })}
@@ -500,7 +546,9 @@ function TrendPanel({
   label,
   emptyMessage,
   points,
+  caption,
 }: {
+  caption?: string;
   title: string;
   description: string;
   label: string;
@@ -513,6 +561,8 @@ function TrendPanel({
       <p className="mt-1 text-sm text-slate-500">{description}</p>
       <TrendChart
         ariaLabel={label}
+        caption={caption}
+        showDetails
         emptyMessage={emptyMessage}
         points={points}
       />

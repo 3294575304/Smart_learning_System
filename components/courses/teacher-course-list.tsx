@@ -212,78 +212,73 @@ export function TeacherCourseList({
           title="暂无课程"
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {courses.map((course) => (
             <article
-              className="bg-card rounded-xl border p-5 transition-shadow hover:shadow-md"
               key={course.id}
+              className="min-w-0 rounded-xl border bg-white p-4 transition hover:border-sky-300"
             >
               <div className="flex items-start justify-between gap-3">
                 <Link
-                  className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+                  className="flex min-w-0 items-center gap-2 rounded text-slate-950 hover:text-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600"
                   href={`/teacher/courses/${course.id}`}
                 >
-                  <span className="mb-4 flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                    <BookOpenCheck aria-hidden="true" className="size-5" />
-                  </span>
-                  <h3 className="font-semibold break-words">{course.name}</h3>
-                  <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
-                    {course.description ?? "暂无课程说明"}
-                  </p>
+                  <BookOpenCheck
+                    aria-hidden="true"
+                    className="size-5 shrink-0 text-sky-600"
+                  />
+                  <h3 className="text-base font-semibold break-words">
+                    {course.name}
+                  </h3>
                 </Link>
-                <div className="flex items-start gap-1">
-                  <span
-                    className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
-                  >
-                    {COURSE_STATUS_LABELS[course.status]}
-                  </span>
-                </div>
-              </div>
-
-              <Link
-                className="block rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
-                href={`/teacher/courses/${course.id}`}
-              >
-                <div className="mt-5 grid grid-cols-2 gap-4 rounded-lg bg-sky-50/80 p-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground text-xs">课程号</p>
-                    <p className="mt-1 font-medium break-all">
-                      {course.courseNo}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">学期</p>
-                    <p className="mt-1 font-medium break-words">
-                      {course.term}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">关联班级</p>
-                    <p className="mt-1 font-medium">{course.classroomCount}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">学生人数</p>
-                    <p className="mt-1 font-medium">
-                      {course.activeStudentCount}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between gap-3 text-xs">
-                  <span className="text-muted-foreground min-w-0 truncate">
-                    {course.template.name}
-                  </span>
-                  <span className="inline-flex shrink-0 items-center gap-1 font-medium text-slate-700">
-                    课程详情
-                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                  </span>
-                </div>
-              </Link>
-              <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3">
-                <span className="text-muted-foreground text-xs">
-                  {course.activeClassroomCount} 个开课班级
+                <span
+                  className={`shrink-0 rounded-full px-2 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
+                >
+                  {COURSE_STATUS_LABELS[course.status]}
                 </span>
-                <CourseDeleteAction course={course} onDeleted={handleDeleted} />
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                {course.courseNo} · {course.term}
+              </p>
+              {course.description && (
+                <p className="mt-1 line-clamp-1 text-xs text-slate-500">
+                  {course.description}
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-sky-50/70 px-3 py-2 text-xs text-slate-600">
+                <span>
+                  <strong className="text-slate-900">
+                    {course.classroomCount}
+                  </strong>{" "}
+                  个关联班级
+                </span>
+                <span>
+                  <strong className="text-slate-900">
+                    {course.activeClassroomCount}
+                  </strong>{" "}
+                  个开课班级
+                </span>
+                <span>
+                  <strong className="text-slate-900">
+                    {course.activeStudentCount}
+                  </strong>{" "}
+                  学生人次
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link
+                  className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600"
+                  href={`/teacher/courses/${course.id}`}
+                >
+                  进入课程
+                  <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                </Link>
+                <div className="ml-auto">
+                  <CourseDeleteAction
+                    course={course}
+                    onDeleted={handleDeleted}
+                  />
+                </div>
               </div>
             </article>
           ))}

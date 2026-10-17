@@ -8,6 +8,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ResourceNotFoundError } from "@/services/auth/policy";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageIndex } from "@/components/dashboard/page-index";
@@ -20,6 +22,7 @@ import {
 } from "@/services/assignments/schemas";
 import { listTeacherAssignments } from "@/services/assignments/service";
 import { listTeacherClassrooms } from "@/services/classrooms/service";
+import { listTeacherCourses } from "@/services/courses/service";
 
 const STATUS_LABELS: Record<AssignmentStatus, string> = {
   DRAFT: "草稿",
@@ -42,14 +45,6 @@ interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-function firstValues(values: Record<string, string | string[] | undefined>) {
-  return Object.fromEntries(
-    Object.entries(values).flatMap(([key, value]) =>
-      typeof value === "string" ? [[key, value]] : [],
-    ),
-  );
-}
-
 function queryHref(query: AssignmentListQuery, page: number): string {
   const params = new URLSearchParams({
     page: String(page),
@@ -58,6 +53,7 @@ function queryHref(query: AssignmentListQuery, page: number): string {
   });
   if (query.status) params.set("status", query.status);
   if (query.classroomId) params.set("classroomId", query.classroomId);
+  if (query.courseId) params.set("courseId", query.courseId);
   if (query.keyword) params.set("keyword", query.keyword);
   return `/teacher/assignments?${params.toString()}`;
 }
@@ -78,16 +74,23 @@ function displayStatus(input: {
 
 export default async function TeacherAssignmentsPage({ searchParams }: Props) {
   const teacher = await requirePageRole(Role.TEACHER);
-  const parsed = assignmentListQuerySchema.safeParse(
-    firstValues(await searchParams),
-  );
-  const query = parsed.success
-    ? parsed.data
-    : assignmentListQuerySchema.parse({});
-  const [assignments, classrooms] = await Promise.all([
-    listTeacherAssignments(teacher.id, query),
+  const parsed = assignmentListQuerySchema.safeParse(await searchParams);
+  if (!parsed.success) notFound();
+  const query = parsed.data;
+  const [assignments, allClassrooms, courses] = await Promise.all([
+    listTeacherAssignments(teacher.id, query).catch((error: unknown) => {
+      if (error instanceof ResourceNotFoundError) notFound();
+      throw error;
+    }),
     listTeacherClassrooms(teacher.id),
+    listTeacherCourses(teacher.id),
   ]);
+  const classrooms = query.courseId
+    ? allClassrooms.filter(
+        (classroom) => classroom.course?.id === query.courseId,
+      )
+    : allClassrooms;
+  const scopedCourse = courses.find((course) => course.id === query.courseId);
 
   return (
     <section className="space-y-6">
@@ -105,7 +108,21 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
         title="作业管理"
       />
 
-      <form className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 xl:grid-cols-[minmax(20rem,2fr)_repeat(3,minmax(9rem,1fr))_auto] xl:items-end">
+      {scopedCourse ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+          <span>
+            当前课程：{scopedCourse.name} · {scopedCourse.term}
+          </span>
+          <Link
+            className="text-sky-700 hover:underline"
+            href={`/teacher?courseId=${scopedCourse.id}${query.classroomId ? `&classroomId=${query.classroomId}` : ""}`}
+          >
+            返回课程工作台
+          </Link>
+        </div>
+      ) : null}
+
+      <form className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1.3fr)_repeat(3,minmax(8rem,1fr))_auto] xl:items-end">
         <label className="space-y-1 sm:col-span-2 xl:col-span-1">
           <span className="text-xs font-medium">搜索</span>
           <input
@@ -160,10 +177,17 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
           </AutoSubmitSelect>
         </label>
         <input name="pageSize" type="hidden" value={query.pageSize} />
+        {query.courseId ? (
+          <input name="courseId" type="hidden" value={query.courseId} />
+        ) : null}
         <div className="flex items-end sm:col-span-2 xl:col-span-1">
           <Link
             className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-sky-200 bg-white px-4 text-sm font-medium text-sky-700 transition hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none xl:w-auto"
-            href="/teacher/assignments"
+            href={
+              query.courseId
+                ? `/teacher/assignments?courseId=${query.courseId}`
+                : "/teacher/assignments"
+            }
           >
             <RotateCcw aria-hidden="true" className="h-4 w-4" />
             重置

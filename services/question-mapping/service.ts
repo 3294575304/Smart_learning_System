@@ -6,6 +6,8 @@ import {
   AuditTargetType,
   Prisma,
   QuestionGraphBindingType,
+  QuestionStatus,
+  QuestionVisibility,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -19,12 +21,14 @@ import {
   completeBackgroundJob,
   createBackgroundJob,
   failBackgroundJob,
+  heartbeatBackgroundJob,
 } from "@/services/background-jobs/repository";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { learnerProfileFingerprint } from "@/services/learner-profiles/fingerprint";
 import { QuestionGraphBindingError } from "@/services/question-graph-bindings/errors";
 import { localQuestionConceptCandidates } from "@/services/question-mapping/candidates";
+import { buildMappingQuestionCatalog } from "@/services/question-mapping/question-catalog";
 import {
   QUESTION_MAPPING_MODEL,
   QUESTION_MAPPING_JOB_TYPE,
@@ -78,7 +82,11 @@ async function generateCandidates(
     input.questions.map((question) => [
       question.id,
       localQuestionConceptCandidates(
-        { title: question.title, content: question.content, tags: [] },
+        {
+          title: question.title,
+          content: question.content,
+          tags: question.tags,
+        },
         nodes,
       ),
     ]),
@@ -182,8 +190,13 @@ async function mappingSource(
     prisma.question.findMany({
       where: {
         id: { in: questionIds },
-        creatorId: teacherId,
+        OR: [
+          { creatorId: teacherId },
+          { visibility: QuestionVisibility.PUBLIC },
+        ],
         deletedAt: null,
+        status: QuestionStatus.ACTIVE,
+        isAssignmentOnly: false,
         graphBindingSets: { none: { courseId } },
       },
       orderBy: { id: "asc" },
@@ -237,6 +250,52 @@ function configuredMappingProvider() {
     // The worker can still generate deterministic local fallback candidates.
   }
   return { provider, providerName, model };
+}
+
+export async function generateCandidatesForCourse(
+  provider: AIProvider | null,
+  input: QuestionMappingAIInput,
+  nodes: Array<{
+    id: string;
+    conceptId: string;
+    code: string;
+    name: string;
+    description: string | null;
+  }>,
+  onChunkComplete?: (
+    completedQuestions: number,
+    totalQuestions: number,
+  ) => Promise<void>,
+) {
+  const candidates = new Map<string, GeneratedCandidate[]>();
+  let providerName = QUESTION_MAPPING_MODEL;
+  let modelName = QUESTION_MAPPING_MODEL;
+  let failure: { code: string; summary: string } | undefined;
+
+  for (let index = 0; index < input.questions.length; index += 50) {
+    const chunk = input.questions.slice(index, index + 50);
+    const result = await generateCandidates(
+      provider,
+      { ...input, questions: chunk },
+      nodes,
+    );
+    providerName = result.provider;
+    modelName = result.model;
+    if (!failure && result.failure) failure = result.failure;
+    for (const [questionId, options] of result.candidates)
+      candidates.set(questionId, options);
+    await onChunkComplete?.(
+      Math.min(index + chunk.length, input.questions.length),
+      input.questions.length,
+    );
+  }
+
+  return {
+    candidates,
+    provider: providerName,
+    model: modelName,
+    failure,
+  };
 }
 
 export async function queueQuestionMappingBatch(
@@ -369,6 +428,7 @@ export async function executeClaimedQuestionMappingJob(
         content: question.content,
         type: question.type,
         difficulty: question.difficulty,
+        tags: question.tags,
       })),
       concepts: graphVersion.nodes.map((node) => ({
         id: node.conceptId,
@@ -377,10 +437,28 @@ export async function executeClaimedQuestionMappingJob(
         description: node.description,
       })),
     };
-    const generation = await generateCandidates(
+    await heartbeatBackgroundJob(jobId, {
+      leaseId,
+      progress: 1,
+      leaseDurationMs: 120_000,
+    });
+    const generation = await generateCandidatesForCourse(
       configured.provider,
       aiInput,
       graphVersion.nodes,
+      async (completedQuestions, totalQuestions) => {
+        await heartbeatBackgroundJob(jobId, {
+          leaseId,
+          progress: Math.max(
+            1,
+            Math.min(
+              95,
+              Math.floor((completedQuestions / totalQuestions) * 95),
+            ),
+          ),
+          leaseDurationMs: 120_000,
+        });
+      },
     );
     await completeBackgroundJob(
       jobId,
@@ -480,8 +558,13 @@ export async function createQuestionMappingBatch(
     prisma.question.findMany({
       where: {
         id: { in: input.questionIds },
-        creatorId: teacherId,
+        OR: [
+          { creatorId: teacherId },
+          { visibility: QuestionVisibility.PUBLIC },
+        ],
         deletedAt: null,
+        status: QuestionStatus.ACTIVE,
+        isAssignmentOnly: false,
         graphBindingSets: { none: { courseId } },
       },
       orderBy: { id: "asc" },
@@ -566,6 +649,7 @@ export async function createQuestionMappingBatch(
       content: question.content,
       type: question.type,
       difficulty: question.difficulty,
+      tags: question.tags,
     })),
     concepts: graphVersion.nodes.map((node) => ({
       id: node.conceptId,
@@ -574,7 +658,7 @@ export async function createQuestionMappingBatch(
       description: node.description,
     })),
   };
-  const generation = await generateCandidates(
+  const generation = await generateCandidatesForCourse(
     provider,
     aiInput,
     graphVersion.nodes,
@@ -665,6 +749,22 @@ export async function getQuestionMappingBatch(
   if (!batch) throw new ResourceNotFoundError("候选批次不存在");
   return {
     ...batch,
+    status:
+      (batch.status === AIQuestionMappingBatchStatus.PENDING ||
+        batch.status === AIQuestionMappingBatchStatus.PROCESSING) &&
+      batch.backgroundJob?.status === "FAILED"
+        ? AIQuestionMappingBatchStatus.FAILED
+        : batch.status,
+    failureCode:
+      batch.failureCode ??
+      (batch.backgroundJob?.status === "FAILED"
+        ? batch.backgroundJob.errorCode
+        : null),
+    failureSummary:
+      batch.failureSummary ??
+      (batch.backgroundJob?.status === "FAILED"
+        ? `后台任务已失败（${batch.backgroundJob.attemptCount}/${batch.backgroundJob.maxAttempts} 次尝试），请重新发起候选生成。`
+        : null),
     candidates: batch.candidates.map((candidate) => ({
       ...candidate,
       confidence: candidate.confidence.toNumber(),
@@ -687,7 +787,9 @@ export async function confirmQuestionMappingBatch(
       },
       include: {
         course: { select: { currentPublishedKnowledgeGraphVersionId: true } },
-        candidates: { select: { questionId: true } },
+        candidates: {
+          select: { questionId: true, conceptId: true, publishedNodeId: true },
+        },
       },
     });
     if (!batch) throw new ResourceNotFoundError("待确认候选批次不存在");
@@ -703,10 +805,24 @@ export async function confirmQuestionMappingBatch(
     const batchQuestionIds = new Set(
       batch.candidates.map((item) => item.questionId),
     );
+    const candidateKeys = new Set(
+      batch.candidates.map(
+        (item) =>
+          `${item.questionId}:${item.conceptId}:${item.publishedNodeId}`,
+      ),
+    );
     if (
-      input.selections.some((item) => !batchQuestionIds.has(item.questionId))
+      input.selections.some(
+        (item) =>
+          !batchQuestionIds.has(item.questionId) ||
+          !candidateKeys.has(
+            `${item.questionId}:${item.conceptId}:${item.publishedNodeId}`,
+          ),
+      )
     ) {
-      throw new QuestionGraphBindingError("选择中包含批次外题目");
+      throw new QuestionGraphBindingError(
+        "选择中包含批次外题目或 AI 未推荐的绑定",
+      );
     }
     const grouped = new Map<string, typeof input.selections>();
     for (const selection of input.selections) {
@@ -754,29 +870,44 @@ export async function confirmQuestionMappingBatch(
     const existingQuestionIds = new Set(
       existing.map((item) => item.questionId),
     );
-    let confirmedQuestionCount = 0;
-    for (const [questionId, selections] of grouped) {
-      if (existingQuestionIds.has(questionId) || selections.length === 0)
-        continue;
-      await transaction.questionKnowledgeGraphBindingSet.create({
-        data: {
+    const newSelections = [...grouped.entries()].filter(
+      ([questionId, selections]) =>
+        !existingQuestionIds.has(questionId) && selections.length > 0,
+    );
+    if (newSelections.length) {
+      const questionIds = newSelections.map(([questionId]) => questionId);
+      await transaction.questionKnowledgeGraphBindingSet.createMany({
+        data: questionIds.map((questionId) => ({
           questionId,
           courseId: batch.courseId,
-          bindings: {
-            create: selections.map((selection) => ({
-              questionId,
-              courseId: batch.courseId,
-              conceptId: selection.conceptId,
-              sourceGraphVersionId: batch.graphVersionId,
-              sourceNodeId: selection.publishedNodeId,
-              bindingType: selection.type,
-              createdById: teacherId,
-            })),
-          },
-        },
+        })),
       });
-      confirmedQuestionCount += 1;
+      const bindingSets =
+        await transaction.questionKnowledgeGraphBindingSet.findMany({
+          where: { courseId: batch.courseId, questionId: { in: questionIds } },
+          select: { id: true, questionId: true },
+        });
+      const setIds = new Map(
+        bindingSets.map((bindingSet) => [bindingSet.questionId, bindingSet.id]),
+      );
+      await transaction.questionKnowledgeGraphBinding.createMany({
+        data: newSelections.flatMap(([questionId, selections]) => {
+          const bindingSetId = setIds.get(questionId);
+          if (!bindingSetId) return [];
+          return selections.map((selection) => ({
+            bindingSetId,
+            questionId,
+            courseId: batch.courseId,
+            conceptId: selection.conceptId,
+            sourceGraphVersionId: batch.graphVersionId,
+            sourceNodeId: selection.publishedNodeId,
+            bindingType: selection.type,
+            createdById: teacherId,
+          }));
+        }),
+      });
     }
+    const confirmedQuestionCount = newSelections.length;
     await transaction.aIQuestionMappingBatch.update({
       where: { id: batch.id },
       data: {
@@ -811,15 +942,45 @@ export async function listUnboundTeacherQuestions(
   courseId: string,
 ) {
   const course = await ownedCourse(teacherId, courseId);
-  const questions = await prisma.question.findMany({
-    where: {
-      creatorId: teacherId,
-      deletedAt: null,
-      graphBindingSets: { none: { courseId } },
+  const where = {
+    OR: [{ creatorId: teacherId }, { visibility: QuestionVisibility.PUBLIC }],
+    deletedAt: null,
+    status: QuestionStatus.ACTIVE,
+    isAssignmentOnly: false,
+  } satisfies Prisma.QuestionWhereInput;
+  const rows = await prisma.question.findMany({
+    where,
+    orderBy: [{ visibility: "asc" }, { updatedAt: "desc" }, { id: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      type: true,
+      difficulty: true,
+      visibility: true,
+      creatorId: true,
+      content: true,
+      correctBoolean: true,
+      referenceAnswer: true,
+      acceptableAnswers: true,
+      isCaseSensitive: true,
+      gradingConfig: true,
+      options: { select: { label: true, content: true, isCorrect: true } },
+      programmingConfigRevisions: {
+        orderBy: { revisionNumber: "desc" },
+        take: 1,
+        select: { configurationHash: true },
+      },
+      graphBindingSets: { where: { courseId }, select: { id: true } },
     },
-    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-    take: 100,
-    select: { id: true, title: true, type: true, difficulty: true },
   });
-  return { course, questions };
+  const catalog = buildMappingQuestionCatalog(teacherId, rows);
+  const unbound = catalog.filter((question) => !question.isBound);
+  return {
+    course,
+    questions: unbound.slice(0, 500),
+    total: unbound.length,
+    catalog,
+    duplicateCount: rows.length - catalog.length,
+    limit: 500,
+  };
 }

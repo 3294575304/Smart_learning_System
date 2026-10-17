@@ -23,6 +23,7 @@ export interface WrongQuestionListItem {
   sourceLabel: string;
   sourceRecordId: string;
   classroom: { id: string; name: string } | null;
+  course: { id: string; name: string } | null;
 }
 
 export interface WrongQuestionDetail extends WrongQuestionListItem {
@@ -45,6 +46,7 @@ export interface WrongQuestionListResult {
   };
   filterOptions: {
     classrooms: Array<{ id: string; name: string }>;
+    courses: Array<{ id: string; name: string }>;
     knowledgePoints: WrongQuestionKnowledgePoint[];
   };
   items: WrongQuestionListItem[];

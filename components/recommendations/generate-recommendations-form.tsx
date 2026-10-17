@@ -14,6 +14,7 @@ export interface RecommendationClassroomOption {
 interface Props {
   classrooms: RecommendationClassroomOption[];
   studentId: string;
+  initialClassroomId?: string;
 }
 
 export function isGenerateRecommendationDisabled(
@@ -23,9 +24,17 @@ export function isGenerateRecommendationDisabled(
   return pending || classroomCount === 0;
 }
 
-export function GenerateRecommendationsForm({ classrooms, studentId }: Props) {
+export function GenerateRecommendationsForm({
+  classrooms,
+  studentId,
+  initialClassroomId,
+}: Props) {
   const router = useRouter();
-  const [classroomId, setClassroomId] = useState(classrooms[0]?.id ?? "");
+  const [classroomId, setClassroomId] = useState(
+    classrooms.find((item) => item.id === initialClassroomId)?.id ??
+      classrooms[0]?.id ??
+      "",
+  );
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{
     kind: "success" | "error";

@@ -38,6 +38,14 @@ export async function POST(request: Request, context: Context) {
     if (contentType.includes("multipart/form-data")) {
       const form = await request.formData();
       const file = form.get("file");
+      let templateMappings: unknown;
+      try {
+        templateMappings = form.has("templateMappings")
+          ? JSON.parse(String(form.get("templateMappings")))
+          : undefined;
+      } catch {
+        return apiError("模板字段对应关系格式无效，请重新确认。", 400);
+      }
       queued = await queueUploadedQualityReport(
         teacher.id,
         courseId.data,
@@ -49,6 +57,12 @@ export async function POST(request: Request, context: Context) {
           majorClass: String(form.get("majorClass") ?? ""),
           college: String(form.get("college") ?? ""),
           major: String(form.get("major") ?? ""),
+          templateFileVersionId:
+            String(form.get("templateFileVersionId") ?? "") || undefined,
+          templateMappingConfirmed: form.has("templateMappingConfirmed")
+            ? form.get("templateMappingConfirmed") === "true"
+            : undefined,
+          templateMappings,
         },
         file instanceof File ? file : null,
         requestContext,

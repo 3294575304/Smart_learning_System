@@ -11,18 +11,26 @@ import {
 
 export default async function TeachingProgressPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ classroomId?: string }>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
   const { courseId } = await params;
+  const { classroomId } = await searchParams;
   try {
     const [data, policy] = await Promise.all([
-      getTeachingProgress(teacher.id, courseId),
+      getTeachingProgress(teacher.id, courseId, classroomId),
       getRecommendationPolicy(teacher.id, courseId),
     ]);
     return (
-      <TeachingProgressPanel courseId={courseId} data={data} policy={policy} />
+      <TeachingProgressPanel
+        key={classroomId ?? "default"}
+        courseId={courseId}
+        data={data}
+        policy={policy}
+      />
     );
   } catch (error) {
     if (error instanceof ResourceNotFoundError) notFound();

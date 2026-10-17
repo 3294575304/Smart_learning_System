@@ -1,3 +1,4 @@
+import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,9 +11,17 @@ import { getStudentSubmissionResult } from "@/services/assignments/service";
 
 interface Props {
   params: Promise<{ submissionId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
-export default async function ResultPage({ params }: Props) {
+export default async function ResultPage({ params, searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
+  const query = await searchParams;
+  const returnParams = new URLSearchParams({ view: "records" });
+  for (const key of ["courseId", "classroomId", "page", "pageSize"]) {
+    const value = query[key];
+    if (typeof value === "string" && value.length < 100)
+      returnParams.set(key, value);
+  }
   try {
     const result = await getStudentSubmissionResult(
       student.id,
@@ -22,10 +31,10 @@ export default async function ResultPage({ params }: Props) {
       <section className="space-y-6">
         <div>
           <Link
-            className="text-sm text-gray-500 hover:underline"
-            href={`/student/assignments/${result.assignmentId}`}
+            className="inline-flex rounded-lg border bg-white px-3 py-2 text-sm text-sky-700 hover:bg-sky-50"
+            href={`/student/assignments?${returnParams}`}
           >
-            ← 返回作业详情
+            ← 返回作业与成绩
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">
             {result.assignmentTitle} · 提交结果
@@ -42,7 +51,8 @@ export default async function ResultPage({ params }: Props) {
               {result.score} / {result.maxScore}
             </p>
             <p className="mt-2 text-sm text-gray-500">
-              正确率折算：{result.percentage ?? 0}%
+              得分率：
+              {result.percentage === null ? "—" : `${result.percentage}%`}
             </p>
           </div>
         ) : (
@@ -91,6 +101,12 @@ export default async function ResultPage({ params }: Props) {
                       {answer.studentAnswer}
                     </dd>
                   </div>
+                  {answer.type === "SHORT_ANSWER" && (
+                    <SubmissionAttachments
+                      submissionId={result.id}
+                      questionId={answer.assignmentQuestionId}
+                    />
+                  )}
                   <div className="rounded-md bg-sky-50/70 p-3">
                     <dt className="text-muted-foreground">正确 / 参考答案</dt>
                     <dd className="mt-1 whitespace-pre-wrap">

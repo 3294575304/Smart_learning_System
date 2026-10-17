@@ -13,6 +13,7 @@ export interface TeacherResultOverviewItem {
   dueAt: Date | null;
   studentCount: number;
   submittedCount: number;
+  historicalSubmittedCount: number;
   pendingReviewCount: number;
   averageScore: number | null;
   averagePercentage: number | null;

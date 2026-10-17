@@ -15,6 +15,12 @@ export interface AssignmentQuestionInputView {
 }
 
 export interface TeacherAssignmentView {
+  allowAttachments?: boolean;
+  submissionTask?: {
+    prompt: string;
+    referenceAnswer: string;
+    points: number;
+  } | null;
   id: string;
   title: string;
   description: string;
@@ -42,6 +48,9 @@ export interface StudentAssignmentListItem {
   attemptCount: number;
   inProgressSubmissionId: string | null;
   latestSubmissionId: string | null;
+  historyOnly?: boolean;
+  latestSubmissionStatus?: SubmissionStatus | null;
+  latestPublishedScore?: number | null;
 }
 
 export interface StudentQuestionView {

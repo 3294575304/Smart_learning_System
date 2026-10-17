@@ -48,7 +48,7 @@ test("学生课程学习中心复用正式图谱、画像、进度与学习事�
   assert.match(service, /listStudentPracticeCourses/u);
   assert.match(service, /prisma\.learningEvent\.findMany/u);
   assert.match(service, /supersededBy: null/u);
-  assert.match(service, /courseCycle: \{ is: \{ courseId \} \}/u);
+  assert.match(service, /courseCycle:[\s\S]*?classroomId/u);
   assert.match(service, /const taught = orderedPointViews\.filter/u);
   assert.match(service, /progressSteps:/u);
   assert.match(service, /trackableRecommendations/u);
@@ -62,16 +62,14 @@ test("学生课程学习中心复用正式图谱、画像、进度与学习事�
   assert.match(view, /我的学习路径/u);
   assert.match(view, /优先巩固/u);
   assert.match(view, /先补：/u);
-  assert.match(view, /证据不足/u);
+  assert.match(view, /待进一步评估/u);
   assert.match(analytics, /进入课程学习中心/u);
-  assert.match(analytics, /我的课程画像/u);
+  assert.match(analytics, /我的课程/u);
   assert.match(analytics, /learning-center/u);
   assert.match(courses, /requirePageRole\(Role\.STUDENT\)/u);
-  assert.match(courses, /listStudentLearnerProfileCourses/u);
-  assert.match(courses, /listStudentPracticeCourses/u);
-  assert.match(courses, /进入课程学习中心/u);
-  assert.match(courses, /知识图谱/u);
-  assert.match(courses, /我的画像/u);
+  assert.match(courses, /listStudentCourseEvaluationContexts/u);
+  assert.match(courses, /key=\{classroom.id\}/u);
+  assert.match(courses, /进入教学班/u);
   assert.match(courses, /自主练习/u);
   assert.ok(
     NAVIGATION.STUDENT.flatMap((group) => group.items).some(

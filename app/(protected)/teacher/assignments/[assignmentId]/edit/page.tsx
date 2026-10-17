@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AssignmentForm } from "@/components/assignments/assignment-form";
@@ -26,12 +26,9 @@ export default async function EditAssignmentPage({ params }: Props) {
     return (
       <section className="space-y-6">
         <div>
-          <Link
-            className="text-sm text-gray-500 hover:underline"
-            href="/teacher/assignments"
-          >
-            ← 返回作业管理
-          </Link>
+          <TeacherBackLink href="/teacher/assignments">
+            返回作业管理
+          </TeacherBackLink>
           <h1 className="mt-2 text-2xl font-semibold">编辑作业草稿</h1>
         </div>
         <AssignmentForm assignment={assignment} mode="edit" {...options} />

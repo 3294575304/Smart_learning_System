@@ -85,3 +85,44 @@ test("insufficient evidence creates a diagnostic reason instead of a weak label"
   assert.match(result.reason, /证据不足/u);
   assert.doesNotMatch(result.reason, /未掌握/u);
 });
+
+test("course teacher and core-concept questions receive explicit priority", () => {
+  const result = rankCourseRecommendationCandidates({
+    candidates: [
+      {
+        question: { id: "public", difficulty: 3 },
+        bindings: [
+          {
+            conceptId: "concept-core",
+            conceptName: "核心知识点",
+            bindingType: QuestionGraphBindingType.PRIMARY,
+          },
+        ],
+        coreImportance: true,
+      },
+      {
+        question: { id: "teacher", difficulty: 3 },
+        bindings: [
+          {
+            conceptId: "concept-core",
+            conceptName: "核心知识点",
+            bindingType: QuestionGraphBindingType.PRIMARY,
+          },
+        ],
+        coreImportance: true,
+        ownedByCourseTeacher: true,
+      },
+    ],
+    profiles: [],
+    requestedDifficulty: 3,
+    policy,
+    limit: 2,
+  });
+  assert.deepEqual(
+    result.map((item) => item.question.id),
+    ["teacher", "public"],
+  );
+  assert.ok(result[0].reasonCodes.includes("CORE_CONCEPT"));
+  assert.ok(result[0].reasonCodes.includes("COURSE_TEACHER_QUESTION"));
+  assert.match(result[0].reason, /课程核心内容/u);
+});

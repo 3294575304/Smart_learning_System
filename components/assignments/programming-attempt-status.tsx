@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 
@@ -27,13 +27,16 @@ const terminal = new Set(["SUCCEEDED", "SYSTEM_ERROR", "CANCELLED"]);
 export function ProgrammingAttemptStatus({
   assignmentQuestionId,
   attemptId,
+  onComplete,
 }: {
   assignmentQuestionId: string;
   attemptId: string;
+  onComplete?: (score: number, maxScore: number) => void;
 }) {
   const [attempt, setAttempt] = useState<AttemptDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const attemptStatus = attempt?.status;
+  const didComplete = useRef(false);
 
   const load = useCallback(async () => {
     const response = await requestAssignmentApi<AttemptDto>(
@@ -46,6 +49,13 @@ export function ProgrammingAttemptStatus({
     setAttempt(response.data);
     setError(null);
   }, [attemptId]);
+
+  useEffect(() => {
+    if (attempt?.status === "SUCCEEDED" && onComplete && !didComplete.current) {
+      didComplete.current = true;
+      onComplete(attempt.score ?? 0, attempt.maxScore);
+    }
+  }, [attempt, onComplete]);
 
   useEffect(() => {
     void load();

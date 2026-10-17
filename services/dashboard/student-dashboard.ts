@@ -1,3 +1,7 @@
+import {
+  analysisKnowledgePointIds,
+  presentAnalysisText,
+} from "@/services/ai/presentation";
 import "server-only";
 
 import {
@@ -110,7 +114,13 @@ export async function getStudentDashboard(studentId: string) {
     const submitted = assignment.submissions.some(
       (submission) => submission.status !== SubmissionStatus.IN_PROGRESS,
     );
-    return !submitted && Boolean(assignment.dueAt && assignment.dueAt > now);
+    const inProgress = assignment.submissions.some(
+      (submission) => submission.status === SubmissionStatus.IN_PROGRESS,
+    );
+    return (
+      (!submitted || inProgress) &&
+      Boolean(assignment.dueAt && assignment.dueAt > now)
+    );
   });
   const latestByAssignment = new Map<
     string,
@@ -166,7 +176,7 @@ export async function getStudentDashboard(studentId: string) {
                     month: "numeric",
                     day: "numeric",
                   }) ?? "—",
-                value: Math.round(submission.percentage.toNumber()),
+                value: submission.percentage.toNumber(),
                 detail: submission.assignment.title,
               },
             ],
@@ -192,9 +202,16 @@ export async function getStudentDashboard(studentId: string) {
 export async function listStudentResults(
   studentId: string,
   query: StudentResultsQuery,
+  courseId?: string,
+  classroomId?: string,
 ) {
   const where = {
     studentId,
+    assignment: {
+      status: { not: "ARCHIVED" as const },
+      ...(classroomId ? { classroomId } : {}),
+      ...(courseId ? { classroom: { courseId } } : {}),
+    },
     status: { in: VISIBLE_RESULT_STATUSES },
   };
   const [total, submissions] = await prisma.$transaction([
@@ -216,7 +233,13 @@ export async function listStudentResults(
           select: {
             id: true,
             title: true,
-            classroom: { select: { name: true } },
+            classroom: {
+              select: {
+                name: true,
+                status: true,
+                memberships: { where: { studentId }, select: { status: true } },
+              },
+            },
           },
         },
       },
@@ -230,6 +253,9 @@ export async function listStudentResults(
         assignmentId: submission.assignment.id,
         assignmentTitle: submission.assignment.title,
         classroomName: submission.assignment.classroom.name,
+        isHistorical:
+          submission.assignment.classroom.status !== "ACTIVE" ||
+          submission.assignment.classroom.memberships[0]?.status !== "ACTIVE",
         attemptNumber: submission.attemptNumber,
         status: submission.status,
         submittedAt: submission.submittedAt,
@@ -307,6 +333,20 @@ export async function getStudentLearningOverview(studentId: string) {
     }),
   ]);
 
+  const referenceIds = analysisKnowledgePointIds(
+    latestAnalysis?.insights.flatMap((insight) => [
+      insight.title,
+      insight.detail,
+      insight.recommendedAction,
+    ]) ?? [],
+  );
+  const references = referenceIds.length
+    ? await prisma.knowledgePoint.findMany({
+        where: { id: { in: referenceIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const names = new Map(references.map((point) => [point.id, point.name]));
   return {
     masteries: masteries.map((mastery) => ({
       id: mastery.knowledgePointId,
@@ -322,6 +362,19 @@ export async function getStudentLearningOverview(studentId: string) {
     latestAnalysis: latestAnalysis
       ? {
           ...latestAnalysis,
+          summary: latestAnalysis.summary
+            ? presentAnalysisText(latestAnalysis.summary, names)
+            : null,
+          insights: latestAnalysis.insights.map((insight) => ({
+            ...insight,
+            title: insight.knowledgePoint?.name
+              ? `${presentAnalysisText(insight.title, names)} · ${insight.knowledgePoint.name}`
+              : presentAnalysisText(insight.title, names),
+            detail: presentAnalysisText(insight.detail, names),
+            recommendedAction: insight.recommendedAction
+              ? presentAnalysisText(insight.recommendedAction, names)
+              : null,
+          })),
           overallScore: latestAnalysis.overallScore?.toNumber() ?? null,
         }
       : null,
@@ -335,7 +388,7 @@ export async function getStudentLearningOverview(studentId: string) {
                   month: "numeric",
                   day: "numeric",
                 }) ?? "—",
-              value: Math.round(result.percentage.toNumber()),
+              value: result.percentage.toNumber(),
               detail: result.assignment.title,
             },
           ],

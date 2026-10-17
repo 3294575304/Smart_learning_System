@@ -8,6 +8,22 @@ import {
   wrongQuestionPracticeSchema,
 } from "../../services/wrong-questions/schemas";
 
+test("错题支持独立课程筛选和历史未归属范围，不把课程当知识点", () => {
+  assert.equal(
+    wrongQuestionListQuerySchema.parse({ courseId: "cm123456789" }).courseId,
+    "cm123456789",
+  );
+  assert.equal(
+    wrongQuestionListQuerySchema.parse({ courseId: "LEGACY" }).courseId,
+    "LEGACY",
+  );
+  assert.equal(
+    wrongQuestionListQuerySchema.safeParse({ courseId: "运算符与表达式" })
+      .success,
+    false,
+  );
+});
+
 test("错题查询使用安全的分页默认值", () => {
   assert.deepEqual(wrongQuestionListQuerySchema.parse({}), {
     page: 1,

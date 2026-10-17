@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { KnowledgeGraphWorkspace } from "@/components/courses/knowledge-graph-workspace";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -19,12 +19,9 @@ export default async function Page({
         title="Python 课程知识图谱"
         description="基于正式教学大纲生成、审核并显式发布不可变图谱版本。"
         actions={
-          <Link
-            className="rounded-md border bg-white px-4 py-2 text-sm"
-            href={`/teacher/courses/${parsed.data}`}
-          >
+          <TeacherBackLink href={`/teacher/courses/${parsed.data}`}>
             返回课程
-          </Link>
+          </TeacherBackLink>
         }
       />
       <KnowledgeGraphWorkspace courseId={parsed.data} />

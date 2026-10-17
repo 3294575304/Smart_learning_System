@@ -13,6 +13,7 @@ export interface QuestionMappingAIInput {
     content: string;
     type: string;
     difficulty: number;
+    tags: string[];
   }>;
   concepts: Array<{
     id: string;
@@ -69,7 +70,9 @@ export const questionMappingAIOutputSchema = z
 
 export const createQuestionMappingBatchSchema = z
   .object({
-    questionIds: z.array(z.string().cuid()).min(1).max(50),
+    // The worker sends provider requests in groups of 50 while retaining one
+    // course-level review and confirmation batch.
+    questionIds: z.array(z.string().cuid()).min(1).max(500),
     idempotencyKey: z.string().uuid(),
   })
   .strict()
@@ -102,7 +105,7 @@ export const confirmQuestionMappingBatchSchema = z
           })
           .strict(),
       )
-      .max(100),
+      .max(1500),
   })
   .strict();
 

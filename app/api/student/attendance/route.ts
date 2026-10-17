@@ -9,6 +9,9 @@ import { courseIdSchema } from "@/services/courses/schemas";
 export async function GET(request: Request) {
   try {
     const student = await requireAuthenticatedUser([Role.STUDENT]);
+    const classroomId = new URL(request.url).searchParams.get("classroomId");
+    if (classroomId !== null && !courseIdSchema.safeParse(classroomId).success)
+      throw new AttendanceOperationError("教学班 ID 格式无效。", 400);
     const rawCourseId = new URL(request.url).searchParams.get("courseId");
     const parsedCourseId =
       rawCourseId !== null ? courseIdSchema.safeParse(rawCourseId) : null;
@@ -19,6 +22,7 @@ export async function GET(request: Request) {
       await getStudentAttendance(
         student.id,
         parsedCourseId?.success ? parsedCourseId.data : undefined,
+        classroomId ?? undefined,
       ),
     );
   } catch (error) {

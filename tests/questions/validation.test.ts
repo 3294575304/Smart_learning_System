@@ -117,8 +117,11 @@ test("难度、知识点、标签和填空答案执行边界校验", () => {
     false,
   );
   assert.equal(
-    questionUpsertSchema.safeParse({ ...baseInput(), knowledgePointIds: [] })
-      .success,
+    questionUpsertSchema.safeParse({
+      ...baseInput(),
+      knowledgePointIds: [],
+      tags: [],
+    }).success,
     false,
   );
   assert.equal(

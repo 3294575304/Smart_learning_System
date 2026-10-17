@@ -13,6 +13,7 @@ import {
 } from "@/services/assignment-results/schemas";
 import { listTeacherResultsOverview } from "@/services/assignment-results/service";
 import { listTeacherClassrooms } from "@/services/classrooms/service";
+import { listTeacherCourses } from "@/services/courses/service";
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -46,20 +47,48 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
   const query = parsed.success
     ? parsed.data
     : teacherResultsOverviewQuerySchema.parse({});
-  const [results, classrooms] = await Promise.all([
+  const [results, classrooms, courses] = await Promise.all([
     listTeacherResultsOverview(teacher.id, query),
     listTeacherClassrooms(teacher.id),
+    listTeacherCourses(teacher.id),
   ]);
 
   return (
     <section className="space-y-6">
       <PageHeader
-        description="按作业查看提交进度与成绩概览，并进入详细的题目、知识点和学生统计。"
+        description="查看班级作业成绩，进入课程台账维护总评及课程目标达成度。"
         title="成绩统计"
       />
+      <details className="rounded-xl border bg-white p-4">
+        <summary className="cursor-pointer font-medium">
+          课程成绩台账 · {courses.length} 门课程
+        </summary>
+        <p className="mt-2 text-sm text-slate-500">
+          作业成绩与课程总评分别维护；各班级使用独立台账，正式成绩保留发布版本。
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {courses.map((course) => (
+            <Link
+              key={course.id}
+              href={`/teacher/courses/${course.id}/gradebook`}
+              className="rounded-lg border px-4 py-3 text-sm text-sky-700 hover:bg-sky-50"
+            >
+              {course.name} · {course.term} →
+            </Link>
+          ))}
+        </div>
+        {!courses.length && (
+          <Link
+            className="mt-3 block text-sm text-sky-700"
+            href="/teacher/courses"
+          >
+            创建或关联课程
+          </Link>
+        )}
+      </details>
 
       <form className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4">
-        <label className="min-w-56 flex-1 space-y-1">
+        <label className="w-full space-y-1 sm:max-w-xs">
           <span className="text-xs font-medium">班级</span>
           <AutoSubmitSelect
             className="w-full rounded-md border px-3 py-2 text-sm"
@@ -105,7 +134,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                 <th className="px-5 py-3 font-medium">作业</th>
                 <th className="px-4 py-3 font-medium">提交进度</th>
                 <th className="px-4 py-3 font-medium">平均分</th>
-                <th className="px-4 py-3 font-medium">平均正确率</th>
+                <th className="px-4 py-3 font-medium">平均得分率</th>
                 <th className="px-4 py-3 font-medium">最高 / 最低</th>
                 <th className="px-4 py-3 font-medium">待处理</th>
                 <th className="px-5 py-3 font-medium">操作</th>
@@ -125,6 +154,12 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                   </td>
                   <td className="px-4 py-4">
                     {item.submittedCount} / {item.studentCount}
+                    {item.historicalSubmittedCount > 0 && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        另有 {item.historicalSubmittedCount}{" "}
+                        位已移出学生的历史提交
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-4">{valueText(item.averageScore)}</td>
                   <td className="px-4 py-4">

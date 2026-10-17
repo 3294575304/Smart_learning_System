@@ -10,6 +10,14 @@ export function resolveNotificationDestination(
   type: NotificationType,
   actionUrl: string | null,
 ): string | null {
+  if (
+    actionUrl &&
+    (!actionUrl.startsWith("/") ||
+      actionUrl.startsWith("//") ||
+      actionUrl.includes("\\") ||
+      /[\u0000-\u001f\u007f]/u.test(actionUrl))
+  )
+    return null;
   switch (type) {
     case NotificationType.ASSIGNMENT_PUBLISHED:
     case NotificationType.ASSIGNMENT_DUE_SOON:

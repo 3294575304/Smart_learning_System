@@ -2,7 +2,10 @@ import { GradeValueStatus } from "@prisma/client";
 import { z } from "zod";
 
 export const createGradebookSchema = z
-  .object({ classroomId: z.string().cuid("班级 ID 格式无效") })
+  .object({
+    classroomId: z.string().cuid("班级 ID 格式无效"),
+    expectedSchemeId: z.string().cuid("考核方案 ID 格式无效").optional(),
+  })
   .strict();
 
 export const syncPlatformGradesSchema = z
@@ -42,3 +45,5 @@ export const gradebookIdSchema = z.string().cuid("成绩台账 ID 格式无效")
 export const gradeItemIdSchema = z.string().cuid("成绩项 ID 格式无效");
 export const studentIdSchema = z.string().cuid("学生 ID 格式无效");
 export const gradeImportBatchIdSchema = z.string().cuid("导入批次 ID 格式无效");
+
+export const gradeExportFormatSchema = z.enum(["workbook"]);

@@ -1,13 +1,24 @@
 "use client";
+import { editQuestionKnowledgeTag } from "@/services/questions/knowledge-tags";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { QuestionType, QuestionVisibility } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import {
+  defaultAnswerDraft,
+  removeChoiceOption,
+  questionValidationMessages,
+  type QuestionAnswerDraft,
+} from "@/services/questions/form-draft";
 import { useFieldArray, useForm } from "react-hook-form";
 
 import { requestQuestionApi } from "@/components/questions/request-api";
-import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
+import {
+  QUESTION_TYPE_DESCRIPTIONS,
+  QUESTION_TYPE_GROUPS,
+  QUESTION_TYPE_LABELS,
+} from "@/services/questions/constants";
 import {
   questionUpsertSchema,
   type QuestionUpsertData,
@@ -29,11 +40,7 @@ function emptyQuestion(): QuestionUpsertData {
     content: "",
     type: QuestionType.SINGLE_CHOICE,
     difficulty: 3,
-    options: [
-      { label: "A", content: "", sortOrder: 1 },
-      { label: "B", content: "", sortOrder: 2 },
-    ],
-    answer: { kind: "CHOICE", correctOptionLabels: ["A"] },
+    ...defaultAnswerDraft(QuestionType.SINGLE_CHOICE),
     explanation: "",
     knowledgePointIds: [],
     tags: [],
@@ -70,55 +77,73 @@ export function QuestionForm({
 }: QuestionFormProps) {
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [tagDraft, setTagDraft] = useState("");
+  const [editingTag, setEditingTag] = useState<number | null>(null);
+  const [tagError, setTagError] = useState<string | null>(null);
   const form = useForm<QuestionUpsertData>({
     resolver: zodResolver(questionUpsertSchema),
     defaultValues: initialQuestion(question),
   });
-  const { fields, append, remove, replace } = useFieldArray({
+  const { fields, append, replace } = useFieldArray({
     control: form.control,
     name: "options",
   });
+  const answerDrafts = useRef<
+    Partial<Record<QuestionType, QuestionAnswerDraft>>
+  >({});
+  const validationRef = useRef<HTMLDivElement>(null);
   const type = form.watch("type");
+  const validationMessages = questionValidationMessages(form.formState.errors);
   const answer = form.watch("answer");
   const tags = form.watch("tags");
   const selectedKnowledgePoints = form.watch("knowledgePointIds");
+  function saveKnowledgeTag() {
+    const result = editQuestionKnowledgeTag(
+      form.getValues("tags"),
+      tagDraft,
+      editingTag,
+    );
+    if (result.error) {
+      setTagError(result.error);
+      return false;
+    }
+    if (!result.tags) return false;
+    form.setValue("tags", result.tags, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    setTagDraft("");
+    setEditingTag(null);
+    setTagError(null);
+    return true;
+  }
   const isChoice =
     type === QuestionType.SINGLE_CHOICE ||
     type === QuestionType.MULTIPLE_CHOICE;
 
   function changeType(nextType: QuestionType) {
-    form.setValue("type", nextType, { shouldValidate: true });
-    if (
-      nextType === QuestionType.SINGLE_CHOICE ||
-      nextType === QuestionType.MULTIPLE_CHOICE
-    ) {
-      if (fields.length < 2) {
-        replace([
-          { label: "A", content: "", sortOrder: 1 },
-          { label: "B", content: "", sortOrder: 2 },
-        ]);
-      }
-      form.setValue("answer", {
-        kind: "CHOICE",
-        correctOptionLabels:
-          nextType === QuestionType.SINGLE_CHOICE ? ["A"] : ["A", "B"],
-      });
-      return;
-    }
-    replace([]);
-    if (nextType === QuestionType.TRUE_FALSE) {
-      form.setValue("answer", { kind: "BOOLEAN", value: true });
-    } else if (nextType === QuestionType.FILL_BLANK) {
-      form.setValue("answer", {
-        kind: "TEXT",
-        acceptableAnswers: [""],
-        caseSensitive: false,
-      });
-    } else if (nextType === QuestionType.PYTHON_PROGRAMMING) {
-      form.setValue("answer", { kind: "PROGRAMMING" });
-    } else {
-      form.setValue("answer", { kind: "REFERENCE", value: "" });
-    }
+    if (nextType === type) return;
+    answerDrafts.current[type] = structuredClone({
+      options: form.getValues("options"),
+      answer: form.getValues("answer"),
+    });
+    const next = answerDrafts.current[nextType] ?? defaultAnswerDraft(nextType);
+    form.clearErrors();
+    form.setValue("type", nextType, { shouldDirty: true });
+    replace(next.options);
+    form.setValue("answer", next.answer, { shouldDirty: true });
+  }
+
+  function removeOption(index: number) {
+    const next = removeChoiceOption(
+      { options: form.getValues("options"), answer: form.getValues("answer") },
+      index,
+    );
+    replace(next.options);
+    form.setValue("answer", next.answer, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
   }
 
   function toggleCorrectLabel(label: string, checked: boolean) {
@@ -161,12 +186,74 @@ export function QuestionForm({
       setServerError(result.error);
       return;
     }
-    router.push(`/teacher/questions/${result.data.id}`);
+    router.push(
+      input.type === QuestionType.PYTHON_PROGRAMMING && mode === "create"
+        ? `/teacher/questions/${result.data.id}/edit#programming-config`
+        : `/teacher/questions/${result.data.id}`,
+    );
     router.refresh();
   }
 
   return (
-    <form className="space-y-6" onSubmit={form.handleSubmit(submit)}>
+    <form
+      className="space-y-5 rounded-2xl border bg-white p-4 shadow-sm sm:p-6"
+      onSubmit={(event) => {
+        if (tagDraft.trim() && !saveKnowledgeTag()) {
+          event.preventDefault();
+          return;
+        }
+        void form.handleSubmit(submit, () => {
+          requestAnimationFrame(() => validationRef.current?.focus());
+        })(event);
+      }}
+    >
+      <fieldset disabled={form.formState.isSubmitting} className="space-y-3">
+        <legend className="text-base font-semibold">1. 选择题型</legend>
+        <p className="text-xs text-slate-500">
+          六类题型均可创建；切换题型会保留本次填写的答案草稿。
+        </p>
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+          {QUESTION_TYPE_GROUPS.flatMap((group) => group.types).map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={type === value}
+              onClick={() => changeType(value)}
+              className={`rounded-xl border p-3 text-left transition focus-visible:outline-2 focus-visible:outline-sky-600 ${type === value ? "border-sky-500 bg-sky-50 text-sky-800 ring-1 ring-sky-500" : "border-slate-200 hover:border-sky-300 hover:bg-slate-50"}`}
+            >
+              <span className="block text-sm font-semibold">
+                {QUESTION_TYPE_LABELS[value]}
+                {type === value ? " ✓" : ""}
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-slate-500">
+                {value === "PYTHON_PROGRAMMING"
+                  ? "Python · 样例与隐藏用例判题"
+                  : value === "SHORT_ANSWER"
+                    ? "参考答案与评分要点 · 人工批改"
+                    : "标准答案 · 自动判分"}
+              </span>
+            </button>
+          ))}
+        </div>
+      </fieldset>
+      {validationMessages.length ? (
+        <div
+          ref={validationRef}
+          tabIndex={-1}
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          <p className="font-medium">请完善以下内容后保存：</p>
+          <ul className="mt-1 list-inside list-disc">
+            {validationMessages.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <h2 className="border-t pt-4 text-base font-semibold">
+        2. 题目内容与答案
+      </h2>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="space-y-2 md:col-span-2">
           <span className="text-sm font-medium">题目标题</span>
@@ -194,17 +281,15 @@ export function QuestionForm({
         </label>
         <label className="space-y-2">
           <span className="text-sm font-medium">题型</span>
-          <select
-            className="w-full rounded-md border px-3 py-2"
-            value={type}
-            onChange={(event) => changeType(event.target.value as QuestionType)}
+          <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800">
+            {QUESTION_TYPE_LABELS[type]}
+          </p>
+          <p
+            id="question-type-description"
+            className="text-xs leading-5 text-gray-500"
           >
-            {Object.values(QuestionType).map((value) => (
-              <option key={value} value={value}>
-                {QUESTION_TYPE_LABELS[value]}
-              </option>
-            ))}
-          </select>
+            {QUESTION_TYPE_DESCRIPTIONS[type]}
+          </p>
         </label>
         <label className="space-y-2">
           <span className="text-sm font-medium">难度（1–5）</span>
@@ -224,6 +309,12 @@ export function QuestionForm({
       {isChoice ? (
         <fieldset className="space-y-3 rounded-lg border p-4">
           <legend className="px-2 font-medium">选项与正确答案</legend>
+          <p className="text-xs text-slate-500">
+            {type === QuestionType.SINGLE_CHOICE
+              ? "勾选一个正确答案。"
+              : "至少勾选两个正确答案，全部选对才计为正确。"}{" "}
+            支持 2–20 个选项。
+          </p>
           {fields.map((field, index) => {
             const label = String.fromCharCode(65 + index);
             const checked =
@@ -235,6 +326,7 @@ export function QuestionForm({
                   type={
                     type === QuestionType.SINGLE_CHOICE ? "radio" : "checkbox"
                   }
+                  aria-label={`将选项 ${label} 设为正确答案`}
                   name="correct-option"
                   checked={checked}
                   onChange={(event) =>
@@ -254,8 +346,9 @@ export function QuestionForm({
                   })}
                   value={index + 1}
                 />
-                <input
-                  className="flex-1 rounded-md border px-3 py-2"
+                <textarea
+                  rows={2}
+                  className="min-w-0 flex-1 rounded-md border px-3 py-2"
                   placeholder={`选项 ${label}`}
                   {...form.register(`options.${index}.content`)}
                 />
@@ -263,7 +356,7 @@ export function QuestionForm({
                   <button
                     className="text-sm text-red-600"
                     type="button"
-                    onClick={() => remove(index)}
+                    onClick={() => removeOption(index)}
                   >
                     移除
                   </button>
@@ -271,7 +364,7 @@ export function QuestionForm({
               </div>
             );
           })}
-          {fields.length < 8 ? (
+          {fields.length < 20 ? (
             <button
               className="rounded-md border px-3 py-2 text-sm"
               type="button"
@@ -322,6 +415,9 @@ export function QuestionForm({
         <div className="space-y-3 rounded-lg border p-4">
           <label className="block space-y-2">
             <span className="font-medium">可接受答案（每行一个）</span>
+            <p className="text-xs text-slate-500">
+              每行是同一道填空题的等价答案，不代表多个独立空格。最多 20 个答案。
+            </p>
             <textarea
               className="min-h-28 w-full rounded-md border px-3 py-2"
               value={answer.acceptableAnswers.join("\n")}
@@ -359,6 +455,7 @@ export function QuestionForm({
           <span className="font-medium">参考答案</span>
           <textarea
             className="min-h-32 w-full rounded-md border px-3 py-2"
+            placeholder="填写参考答案与评分要点，例如数学解题步骤、英语写作要点或代码分析过程。"
             value={answer.value}
             onChange={(event) =>
               form.setValue(
@@ -375,6 +472,10 @@ export function QuestionForm({
       answer.kind === "PROGRAMMING" ? (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
           保存题目基本信息后，请在编辑页继续维护标准代码、初始代码、公开样例、隐藏用例和资源限制。判题配置每次保存都会生成不可变修订。
+          <p className="mt-2">
+            当前自动判题执行语言为 Python。C、Java
+            等课程的代码分析题可使用简答与解答题，填写参考答案后人工批改。
+          </p>
         </div>
       ) : null}
 
@@ -392,7 +493,82 @@ export function QuestionForm({
       </label>
 
       <fieldset className="space-y-3 rounded-lg border p-4">
-        <legend className="px-2 font-medium">知识点</legend>
+        <legend className="px-2 font-medium">自定义知识点与标签</legend>
+        <p className="text-sm text-gray-500">
+          直接填写本题考查的知识点，可随时修改。最多 10 个，每个最多 30 字。
+        </p>
+        <div className="flex gap-2">
+          <input
+            aria-label="自定义知识点名称"
+            className="min-w-0 flex-1 rounded-md border px-3 py-2"
+            placeholder="例如：列表切片、异常处理、函数参数"
+            value={tagDraft}
+            maxLength={30}
+            onChange={(event) => setTagDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                saveKnowledgeTag();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="rounded-md border px-3 py-2 text-sky-700"
+            onClick={saveKnowledgeTag}
+          >
+            {editingTag === null ? "添加知识点" : "保存知识点"}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {tags.map((tag, index) => (
+            <span
+              key={`${tag}-${index}`}
+              className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-1 text-sm text-sky-800"
+            >
+              <button
+                type="button"
+                title="点击编辑"
+                aria-label={`编辑知识点 ${tag}`}
+                onClick={() => {
+                  setTagDraft(tag);
+                  setEditingTag(index);
+                  setTagError(null);
+                }}
+              >
+                {tag}
+              </button>
+              <button
+                type="button"
+                aria-label={`删除知识点 ${tag}`}
+                onClick={() => {
+                  form.setValue(
+                    "tags",
+                    tags.filter((_, i) => i !== index),
+                    { shouldValidate: true, shouldDirty: true },
+                  );
+                  setEditingTag(null);
+                  setTagDraft("");
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+        {tagError || form.formState.errors.tags?.message ? (
+          <p role="alert" className="text-sm text-red-600">
+            {tagError ?? form.formState.errors.tags?.message}
+          </p>
+        ) : null}
+        <p className="text-xs text-gray-500">
+          正式课程知识点用于画像与推荐，可在课程知识图谱中新增、编辑并审核发布；保存题目后再确认课程关联。
+        </p>
+      </fieldset>
+      <details className="space-y-3 rounded-lg border p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          已有题库分类（可选）
+        </summary>
         {knowledgePoints.length === 0 ? (
           <p className="text-muted-foreground text-sm">暂无可用知识点。</p>
         ) : (
@@ -421,27 +597,7 @@ export function QuestionForm({
             {form.formState.errors.knowledgePointIds.message}
           </p>
         ) : null}
-      </fieldset>
-
-      <div>
-        <label className="space-y-2">
-          <span className="text-sm font-medium">标签（逗号分隔）</span>
-          <input
-            className="w-full rounded-md border px-3 py-2"
-            value={tags.join(", ")}
-            onChange={(event) =>
-              form.setValue(
-                "tags",
-                event.target.value
-                  .split(/[,，]/)
-                  .map((tag) => tag.trim())
-                  .filter(Boolean),
-                { shouldValidate: true },
-              )
-            }
-          />
-        </label>
-      </div>
+      </details>
 
       {serverError ? (
         <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
@@ -457,7 +613,9 @@ export function QuestionForm({
           {form.formState.isSubmitting
             ? "保存中…"
             : mode === "create"
-              ? "创建题目"
+              ? type === QuestionType.PYTHON_PROGRAMMING
+                ? "保存并配置判题 →"
+                : "创建题目"
               : "保存修改"}
         </button>
         <button

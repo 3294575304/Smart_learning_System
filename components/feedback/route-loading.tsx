@@ -11,7 +11,9 @@ export function RouteLoading() {
         ))}
       </div>
       <div className="bg-muted mt-6 h-72 rounded-xl" />
-      <p className="sr-only">正在加载</p>
+      <p role="status" className="mt-4 text-sm text-sky-800">
+        正在加载页面，请稍候…
+      </p>
     </main>
   );
 }

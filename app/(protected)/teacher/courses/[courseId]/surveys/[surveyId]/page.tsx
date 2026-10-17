@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { SurveyEditor } from "@/components/course-surveys/survey-editor";
@@ -30,12 +30,9 @@ export default async function TeacherCourseSurveyDetailPage({
       <section className="space-y-6">
         <PageHeader
           actions={
-            <Link
-              className="rounded-md border bg-white px-4 py-2 text-sm"
-              href={`/teacher/courses/${courseId.data}/surveys`}
-            >
+            <TeacherBackLink href={`/teacher/courses/${courseId.data}/surveys`}>
               返回问卷列表
-            </Link>
+            </TeacherBackLink>
           }
           description={`${survey.classroom.name} · ${survey.mode === "ANONYMOUS" ? "匿名收集" : "实名收集"} · 不计入课程成绩`}
           title={survey.title}

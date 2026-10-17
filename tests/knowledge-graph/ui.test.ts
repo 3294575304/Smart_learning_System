@@ -81,8 +81,8 @@ test("学生只查看有成员权限课程的正式图谱并复用图谱画布",
   assert.match(view, /KnowledgeGraphDirectory/u);
   assert.match(view, /个人掌握度图例/u);
   assert.match(view, /nodeColorByKey/u);
-  assert.match(view, /练习这个知识点/u);
-  assert.match(view, /尚未将此知识点纳入已授进度/u);
+  assert.match(view, /练习此知识点/u);
+  assert.doesNotMatch(view, /尚未将此知识点纳入已授进度/u);
   assert.match(view, /conceptId=/u);
   assert.doesNotMatch(view, /KnowledgeGraphWorkspace/u);
 });
@@ -107,8 +107,11 @@ test("学生从图谱进入练习时预选课程和知识点", async () => {
   assert.match(page, /initialCourseId/u);
   assert.match(page, /initialConceptId/u);
   assert.match(center, /requestedCourse/u);
-  assert.match(center, /\[initialConceptId\]/u);
-  assert.match(center, /尚未纳入当前教学进度/u);
+  assert.match(
+    center,
+    /conceptIds: focusedConceptId \? \[focusedConceptId\] : \[\]/u,
+  );
+  assert.match(center, /自主练习不受教师教学进度限制/u);
 });
 
 test("课程推荐列表优先显示冻结的中文 Concept 名称", async () => {

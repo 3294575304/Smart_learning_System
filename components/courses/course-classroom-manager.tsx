@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, Link2, School, Trash2, Unlink } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -22,14 +23,22 @@ export function CourseClassroomManager({
   classrooms: TeacherCourseClassroomView[];
 }) {
   const router = useRouter();
+  const linkedIds = new Set(linkedClassrooms.map((item) => item.id));
+  const availableClassrooms = classrooms.filter(
+    (item) => !linkedIds.has(item.id) && item.currentCourse?.id !== courseId,
+  );
   const [pendingClassroomId, setPendingClassroomId] = useState<string | null>(
     null,
   );
   const [dissolvingClassroom, setDissolvingClassroom] =
     useState<DissolvableClassroom | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function linkClassroom(classroomId: string) {
+    if (pendingClassroomId) return;
+    setErrorMessage(null);
+    setSuccessMessage(null);
     const classroom = classrooms.find((item) => item.id === classroomId);
     const currentCourse = classroom?.currentCourse;
     const message = currentCourse
@@ -44,13 +53,17 @@ export function CourseClassroomManager({
     );
     setPendingClassroomId(null);
     if (!result.success) {
-      window.alert(result.error);
+      setErrorMessage(result.error);
       return;
     }
+    setSuccessMessage("班级已关联到当前课程。");
     router.refresh();
   }
 
   async function unlinkClassroom(classroomId: string) {
+    if (pendingClassroomId) return;
+    setErrorMessage(null);
+    setSuccessMessage(null);
     const classroom = classrooms.find((item) => item.id === classroomId);
     if (
       !window.confirm(
@@ -67,14 +80,23 @@ export function CourseClassroomManager({
     );
     setPendingClassroomId(null);
     if (!result.success) {
-      window.alert(result.error);
+      setErrorMessage(result.error);
       return;
     }
+    setSuccessMessage("已解除班级关联，历史教学记录保留。");
     router.refresh();
   }
 
   return (
     <div className="space-y-6">
+      {errorMessage && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          {errorMessage} 请检查班级状态后重试。
+        </div>
+      )}
       {successMessage ? (
         <div
           aria-live="polite"
@@ -123,6 +145,23 @@ export function CourseClassroomManager({
                 <p className="text-muted-foreground mt-3 text-xs">
                   班级成员 {classroom.studentCount} 名
                 </p>
+                <div className="mt-3 flex flex-wrap gap-2 text-sm text-sky-700 [&_a]:rounded-lg [&_a]:border [&_a]:border-sky-200 [&_a]:bg-sky-50 [&_a]:px-3 [&_a]:py-2 [&_a:hover]:bg-sky-100">
+                  <Link
+                    href={`/teacher/courses/${courseId}/teaching-progress?classroomId=${classroom.id}`}
+                  >
+                    本班进度
+                  </Link>
+                  <Link
+                    href={`/teacher/courses/${courseId}/profiles?classroomId=${classroom.id}`}
+                  >
+                    学生画像
+                  </Link>
+                  <Link
+                    href={`/teacher/assignments?classroomId=${classroom.id}`}
+                  >
+                    班级作业
+                  </Link>
+                </div>
                 <div className="mt-4 flex flex-wrap gap-4">
                   <button
                     className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 disabled:text-gray-400"
@@ -164,27 +203,31 @@ export function CourseClassroomManager({
       <section className="bg-card rounded-xl border p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="font-semibold">我的班级</h2>
+            <h2 className="font-semibold">可关联班级</h2>
             <p className="text-muted-foreground mt-1 text-xs">
-              关联到其他课程的班级也会显示当前去向，方便重新调整。
+              选择未关联或其他课程下的班级，当前已关联班级不重复显示。
             </p>
           </div>
           <span className="text-muted-foreground text-sm">
-            {classrooms.length} 个
+            {availableClassrooms.length} 个
           </span>
         </div>
-        {classrooms.length === 0 ? (
+        {availableClassrooms.length === 0 ? (
           <div className="mt-4">
             <EmptyState
               compact
-              description="先创建班级，再回来把它们挂到课程下面。"
+              description={
+                classrooms.length
+                  ? "现有班级均已关联当前课程，可在上方管理。"
+                  : "先创建班级，再关联到当前课程。"
+              }
               icon={School}
-              title="暂无班级"
+              title="暂无可关联班级"
             />
           </div>
         ) : (
           <div className="mt-4 space-y-3">
-            {classrooms.map((classroom) => {
+            {availableClassrooms.map((classroom) => {
               const isLinked = classroom.currentCourse?.id === courseId;
               return (
                 <div

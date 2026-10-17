@@ -1,3 +1,4 @@
+import type { LearningAssistantInput } from "@/services/learning-assistant/schemas";
 import type { StudentAnalysisInput } from "@/services/ai/schemas";
 import type { SyllabusParseInput } from "@/services/syllabus-parsing/schemas";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
@@ -84,6 +85,11 @@ export interface AIProvider {
 
   mapQuestionsToConcepts?(
     input: QuestionMappingAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  answerCourseLearningQuestion?(
+    input: LearningAssistantInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 

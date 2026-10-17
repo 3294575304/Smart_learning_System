@@ -12,6 +12,10 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
 };
 
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  COURSE_ROSTER_UPDATED: "课程名单维护",
+  SUBMISSION_ATTACHMENT_UPLOADED: "上传作业附件",
+  SUBMISSION_ATTACHMENT_DOWNLOADED: "下载作业附件",
+  SUBMISSION_ATTACHMENT_DELETED: "移除作业附件",
   USER_CREATED: "创建用户",
   USER_UPDATED: "更新用户资料",
   USER_ROLE_CHANGED: "修改用户角色",
@@ -30,6 +34,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   QUESTION_MADE_PUBLIC: "题目设为公开",
   QUESTION_MADE_PRIVATE: "题目设为私有",
   QUESTION_DISABLED: "停用题目",
+  QUESTION_BULK_IMPORTED: "批量导入题目",
   CLASSROOM_CLOSED_BY_ADMIN: "管理员关闭班级",
   CLASSROOM_DISSOLVED: "教师解散班级",
   COURSE_TEMPLATE_CREATED: "创建课程模板",

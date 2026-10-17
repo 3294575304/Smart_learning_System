@@ -55,8 +55,7 @@ export function CourseSetupChecklist({
             开课准备
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            已完成 {progress.completedCount} / {progress.totalCount}{" "}
-            项准备。根据已保存的数据更新，返回此页可继续。
+            已完成 {progress.completedCount} / {progress.totalCount} 项准备
           </p>
         </div>
         <span className="text-sm font-semibold tabular-nums">
@@ -87,7 +86,7 @@ export function CourseSetupChecklist({
             下一步：{progress.nextStep.title}
           </p>
           <Link
-            className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-sky-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
+            className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-4"
             href={progress.nextStep.href}
           >
             {progress.nextStep.action}
@@ -99,42 +98,47 @@ export function CourseSetupChecklist({
           基础准备已齐全。请继续核对题目关联，并按教学安排发布作业。
         </p>
       )}
-      <ol className="mt-4 grid gap-3 lg:grid-cols-2">
-        {progress.steps.map((step, index) => {
-          const { label, icon: Icon, style } = statePresentation[step.state];
-          return (
-            <li
-              className="flex min-w-0 flex-col rounded-lg border p-4"
-              key={step.id}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">
-                  {index + 1}. {step.title}
-                </h3>
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${style}`}
-                >
-                  <Icon aria-hidden="true" className="size-3.5" />
-                  {label}
-                </span>
-              </div>
-              <p className="text-muted-foreground mt-2 mb-3 text-sm leading-6">
-                {step.detail}
-              </p>
-              <Link
-                aria-label={`${step.title}：${step.action}`}
-                className="mt-auto w-fit rounded-sm text-sm font-medium text-sky-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
-                href={step.href}
+      <details className="group mt-3">
+        <summary className="w-fit cursor-pointer rounded-lg border bg-white px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2">
+          查看准备明细
+        </summary>
+        <ol className="mt-3 divide-y rounded-lg border">
+          {progress.steps.map((step, index) => {
+            const { label, icon: Icon, style } = statePresentation[step.state];
+            return (
+              <li
+                className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 p-3"
+                key={step.id}
               >
-                {step.action} →
-              </Link>
-            </li>
-          );
-        })}
-      </ol>
-      <p className="text-muted-foreground mt-4 text-xs leading-5">
-        此处统计课程准备情况；“课程启用”与“大纲、图谱、考核方案正式发布”分别管理。教材、课件等可选材料不影响准备进度。
-      </p>
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                  <h3 className="text-sm font-semibold">
+                    {index + 1}. {step.title}
+                  </h3>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${style}`}
+                  >
+                    <Icon aria-hidden="true" className="size-3.5" />
+                    {label}
+                  </span>
+                </div>
+                <Link
+                  aria-label={`${step.title}：${step.action}`}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-4"
+                  href={step.href}
+                >
+                  {step.action} →
+                </Link>
+                <p className="text-muted-foreground w-full text-xs leading-5">
+                  {step.detail}
+                </p>
+              </li>
+            );
+          })}
+        </ol>
+        <p className="text-muted-foreground mt-4 text-xs leading-5">
+          此处统计课程准备情况；“课程启用”与“大纲、图谱、考核方案正式发布”分别管理。教材、课件等可选材料不影响准备进度。
+        </p>
+      </details>
     </section>
   );
 }

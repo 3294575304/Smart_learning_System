@@ -1,15 +1,13 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { CourseStatus, Role } from "@prisma/client";
-import { ArrowLeft, School, Users } from "lucide-react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CourseClassroomManager } from "@/components/courses/course-classroom-manager";
 import { CourseSetupChecklist } from "@/components/courses/course-setup-checklist";
 import { CourseWorkspaceNavigation } from "@/components/courses/course-workspace-navigation";
 import { CourseForm } from "@/components/courses/course-form";
-import { CourseStudentRosterImportCard } from "@/components/courses/course-student-roster-import-card";
+import { CourseDetailDisclosure } from "@/components/courses/course-detail-disclosure";
 import { PageHeader } from "@/components/dashboard/page-header";
-import { StatCard } from "@/components/dashboard/stat-card";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
@@ -58,13 +56,9 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
     <section className="space-y-6">
       <PageHeader
         actions={
-          <Link
-            className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium transition-colors hover:bg-sky-50/70 focus-visible:outline-2 focus-visible:outline-offset-2"
-            href="/teacher/courses"
-          >
-            <ArrowLeft aria-hidden="true" className="size-4" />
-            课程列表
-          </Link>
+          <TeacherBackLink href="/teacher/courses">
+            返回课程列表
+          </TeacherBackLink>
         }
         description={`${course.courseNo} · ${course.term}`}
         title={course.name}
@@ -72,111 +66,106 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
 
       <CourseSetupChecklist progress={setupProgress} />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard
-          hint="当前课程下所有已关联班级"
-          icon={School}
-          label="关联班级"
-          value={course.linkedClassrooms.length}
-        />
-        <StatCard
-          hint="仍在启用状态的班级数量"
-          icon={School}
-          label="开课班级"
-          value={course.activeClassroomCount}
-        />
-        <StatCard
-          hint="所有关联班级的在读人数"
-          icon={Users}
-          label="学生人数"
-          value={course.activeStudentCount}
-        />
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-1 text-sm text-slate-600">
+        <span
+          className={`rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
+        >
+          {COURSE_STATUS_LABELS[course.status]}
+        </span>
+        <span>
+          开课班级{" "}
+          <strong className="text-slate-900">
+            {course.activeClassroomCount}
+          </strong>
+        </span>
+        <span>
+          在读学生（去重）{" "}
+          <strong className="text-slate-900">
+            {setupProgress.activeStudentCount}
+          </strong>
+        </span>
+        <span>{course.term}</span>
       </div>
-
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="min-w-0 space-y-5">
-          <CourseWorkspaceNavigation courseId={course.id} />
-
-          <CourseStudentRosterImportCard
-            courseId={course.id}
-            linkedClassrooms={course.linkedClassrooms}
-          />
-
-          <div
-            className="bg-card scroll-mt-20 rounded-xl border p-5"
-            id="course-basics"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="font-semibold">课程概览</h2>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  课程号 {course.courseNo} · 学期 {course.term}
-                </p>
-              </div>
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
-              >
-                {COURSE_STATUS_LABELS[course.status]}
-              </span>
+      <CourseWorkspaceNavigation courseId={course.id} />
+      <CourseDetailDisclosure
+        id="course-classrooms"
+        title="授课班级"
+        summary={`${course.linkedClassrooms.length} 个关联班级 · 按班级分别管理教学记录`}
+      >
+        <CourseClassroomManager
+          classrooms={course.classrooms}
+          courseId={course.id}
+          linkedClassrooms={course.linkedClassrooms}
+        />
+      </CourseDetailDisclosure>
+      <CourseDetailDisclosure
+        id="course-basics"
+        title="课程信息与设置"
+        summary={`${course.courseNo} · ${course.template.name}`}
+      >
+        <div className="bg-card scroll-mt-20 rounded-xl border p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">课程概览</h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                课程号 {course.courseNo} · 学期 {course.term}
+              </p>
             </div>
-            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <p className="text-muted-foreground text-xs">模板</p>
-                <p className="mt-1 font-medium">
-                  {course.template.name}
-                  <span className="text-muted-foreground mt-1 block text-xs break-all">
-                    {course.template.code}
-                  </span>
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">版本</p>
-                <p className="mt-1 font-medium">{course.template.version}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">创建时间</p>
-                <p className="mt-1 font-medium">
-                  {course.createdAt.toLocaleString("zh-CN")}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">更新时间</p>
-                <p className="mt-1 font-medium">
-                  {course.updatedAt.toLocaleString("zh-CN")}
-                </p>
-              </div>
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
+            >
+              {COURSE_STATUS_LABELS[course.status]}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <p className="text-muted-foreground text-xs">模板</p>
+              <p className="mt-1 font-medium">
+                {course.template.name}
+                <span className="text-muted-foreground mt-1 block text-xs break-all">
+                  {course.template.code}
+                </span>
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">版本</p>
+              <p className="mt-1 font-medium">{course.template.version}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">创建时间</p>
+              <p className="mt-1 font-medium">
+                {course.createdAt.toLocaleString("zh-CN")}
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">更新时间</p>
+              <p className="mt-1 font-medium">
+                {course.updatedAt.toLocaleString("zh-CN")}
+              </p>
             </div>
           </div>
-
-          <details className="bg-card group rounded-xl border p-5">
-            <summary className="cursor-pointer rounded-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4">
-              编辑课程基础信息
-            </summary>
-            <p className="text-muted-foreground mt-1 mb-5 text-sm">
-              这里只修改课程号、学期、名称和描述，不影响班级关联。
-            </p>
-            <CourseForm
-              courseId={course.id}
-              defaultValues={{
-                courseNo: course.courseNo,
-                term: course.term,
-                name: course.name,
-                description: course.description ?? "",
-              }}
-              mode="edit"
-              template={course.template}
-            />
-          </details>
-        </section>
-
-        <div className="min-w-0 scroll-mt-20" id="course-classrooms">
-          <CourseClassroomManager
-            classrooms={course.classrooms}
-            courseId={course.id}
-            linkedClassrooms={course.linkedClassrooms}
-          />
         </div>
-      </div>
+
+        <details className="bg-card group rounded-xl border p-5">
+          <summary className="cursor-pointer rounded-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4">
+            编辑课程基础信息
+          </summary>
+          <p className="text-muted-foreground mt-1 mb-5 text-sm">
+            这里只修改课程号、学期、名称和描述，不影响班级关联。
+          </p>
+          <CourseForm
+            courseId={course.id}
+            defaultValues={{
+              courseNo: course.courseNo,
+              term: course.term,
+              name: course.name,
+              description: course.description ?? "",
+            }}
+            mode="edit"
+            template={course.template}
+          />
+        </details>
+      </CourseDetailDisclosure>
     </section>
   );
 }

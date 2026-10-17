@@ -1,5 +1,5 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BatchMappingPanel } from "@/components/question-mapping/batch-mapping-panel";
@@ -22,22 +22,22 @@ export default async function QuestionMappingPage({ params }: Props) {
     return (
       <section className="space-y-6">
         <header>
-          <Link
-            className="text-muted-foreground text-sm underline"
-            href={`/teacher/courses/${path.data.courseId}`}
-          >
+          <TeacherBackLink href={`/teacher/courses/${path.data.courseId}`}>
             返回课程
-          </Link>
+          </TeacherBackLink>
           <h1 className="mt-3 text-2xl font-semibold">
-            {result.course.name} · 批量题目映射
+            {result.course.name} · 一键关联绑定题目
           </h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            候选与正式绑定分离；已有人工确认绑定永不被覆盖，未确认候选不会进入作业快照、画像或推荐。
+            为未绑定题目匹配课程知识点。逐题选择“仅关联最合适的”或“关联所有匹配项”，预览后由教师确认；已有人工绑定不会被覆盖。
           </p>
         </header>
         <BatchMappingPanel
           courseId={path.data.courseId}
-          questions={result.questions}
+          totalQuestions={result.total}
+          questionLimit={result.limit}
+          catalog={result.catalog}
+          duplicateCount={result.duplicateCount}
         />
       </section>
     );

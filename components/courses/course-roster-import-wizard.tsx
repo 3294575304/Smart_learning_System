@@ -1,5 +1,6 @@
 "use client";
 
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import {
   AlertCircle,
   ArrowLeft,
@@ -13,7 +14,6 @@ import {
   Upload,
   UsersRound,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { requestApi } from "@/components/courses/request-api";
@@ -654,12 +654,9 @@ export function CourseRosterImportWizard({
               <p className="mt-1">
                 请先返回课程详情关联自己的班级，再开始名单导入。
               </p>
-              <Link
-                className="mt-3 inline-flex font-medium text-amber-950 underline"
-                href={`/teacher/courses/${courseId}`}
-              >
-                返回课程详情
-              </Link>
+              <TeacherBackLink href={`/teacher/courses/${courseId}`}>
+                返回课程
+              </TeacherBackLink>
             </div>
           ) : (
             <label className="block text-sm">

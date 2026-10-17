@@ -71,6 +71,9 @@ export function SurveyEditor({
 }) {
   const router = useRouter();
   const [survey, setSurvey] = useState(initialSurvey);
+  const [openImmediately, setOpenImmediately] = useState(
+    () => new Date(initialSurvey.opensAt).getTime() <= Date.now(),
+  );
   const [questions, setQuestions] = useState(initialSurvey.questions);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -94,6 +97,7 @@ export function SurveyEditor({
     setMessage(null);
     try {
       const result = await callback();
+      let publishFeedback = "问卷已发布并通知目标班级。";
       if (
         result &&
         typeof result === "object" &&
@@ -103,12 +107,16 @@ export function SurveyEditor({
         const next = result as SurveyEditorValue;
         setSurvey(next);
         setQuestions(next.questions);
+        publishFeedback =
+          new Date(next.opensAt).getTime() > Date.now()
+            ? `问卷已预约发布，将于 ${new Date(next.opensAt).toLocaleString("zh-CN")} 开放。`
+            : "问卷已发布并开放，学生现在可以填写。";
       }
       setMessage(
         name === "save"
           ? "草稿已保存。"
           : name === "publish"
-            ? "问卷已发布并通知目标班级。"
+            ? publishFeedback
             : name === "close"
               ? "问卷已关闭并生成汇总。"
               : "汇总已更新。",
@@ -122,6 +130,35 @@ export function SurveyEditor({
   }
 
   const endpoint = `/api/teacher/courses/${courseId}/surveys/${survey.id}`;
+  async function saveDraft() {
+    return requestCourseSurveyApi<SurveyEditorValue>(endpoint, {
+      method: "PUT",
+      body: JSON.stringify({
+        expectedVersion: survey.version,
+        title: survey.title,
+        description: survey.description ?? "",
+        instructions: survey.instructions,
+        mode: survey.mode,
+        opensAt: openImmediately
+          ? new Date().toISOString()
+          : new Date(survey.opensAt).toISOString(),
+        dueAt: new Date(survey.dueAt).toISOString(),
+        questions: questions.map((item, index) => ({
+          ...(item.id ? { id: item.id } : {}),
+          type: item.type,
+          dimension: item.dimension,
+          prompt: item.prompt,
+          required: item.required,
+          sortOrder: index + 1,
+          outcomeCode: item.outcomeCode,
+          outcomeTitle: item.outcomeTitle,
+          sourceRefs: Array.isArray(item.sourceRefsJson)
+            ? item.sourceRefsJson
+            : [],
+        })),
+      }),
+    });
+  }
   const statistics = survey.summaryRevisions[0]?.statisticsJson as
     | {
         responseRate?: number;
@@ -156,7 +193,7 @@ export function SurveyEditor({
             <span>名称</span>
             <input
               className="w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
-              disabled={!editable}
+              disabled={!editable || busy !== null}
               value={survey.title}
               onChange={(event) =>
                 setSurvey({ ...survey, title: event.target.value })
@@ -167,7 +204,7 @@ export function SurveyEditor({
             <span>说明</span>
             <textarea
               className="min-h-20 w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
-              disabled={!editable}
+              disabled={!editable || busy !== null}
               value={survey.description ?? ""}
               onChange={(event) =>
                 setSurvey({ ...survey, description: event.target.value })
@@ -178,7 +215,7 @@ export function SurveyEditor({
             <span>模式</span>
             <select
               className="w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
-              disabled={!editable}
+              disabled={!editable || busy !== null}
               value={survey.mode}
               onChange={(event) =>
                 setSurvey({
@@ -194,11 +231,36 @@ export function SurveyEditor({
           <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">
             发布后模式、题目和时间冻结；匿名回答无法按学生反查。
           </div>
+          {editable ? (
+            <div className="space-y-2 rounded-lg border border-sky-100 bg-sky-50/60 p-3 text-sm sm:col-span-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 font-medium">
+                <input
+                  type="checkbox"
+                  checked={openImmediately}
+                  disabled={!editable || busy !== null}
+                  onChange={(event) => setOpenImmediately(event.target.checked)}
+                  className="size-4 accent-sky-600"
+                />
+                发布后立即开放
+              </label>
+              <p className="text-xs leading-5 text-slate-600">
+                {openImmediately
+                  ? "发布成功后，学生即可填写，首页和学习任务计入待处理。"
+                  : "按下方时间预约开放；开放前学生可查看时间，到时自动进入待处理。"}
+              </p>
+            </div>
+          ) : null}
           <label className="space-y-1 text-sm">
-            <span>开放时间</span>
+            <span>
+              {!editable
+                ? "开放时间"
+                : openImmediately
+                  ? "开放时间（以实际发布为准）"
+                  : "预约开放时间"}
+            </span>
             <input
               className="w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
-              disabled={!editable}
+              disabled={!editable || busy !== null || openImmediately}
               type="datetime-local"
               value={localInput(survey.opensAt)}
               onChange={(event) =>
@@ -210,7 +272,7 @@ export function SurveyEditor({
             <span>截止时间</span>
             <input
               className="w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
-              disabled={!editable}
+              disabled={!editable || busy !== null}
               type="datetime-local"
               value={localInput(survey.dueAt)}
               onChange={(event) =>
@@ -272,7 +334,7 @@ export function SurveyEditor({
             </div>
             <textarea
               className="min-h-20 w-full rounded-md border px-3 py-2 disabled:bg-sky-50/70"
-              disabled={!editable}
+              disabled={!editable || busy !== null}
               value={question.prompt}
               onChange={(event) =>
                 updateQuestion(index, { prompt: event.target.value })
@@ -282,7 +344,7 @@ export function SurveyEditor({
               <label className="flex items-center gap-2 text-sm">
                 <input
                   checked={question.required}
-                  disabled={!editable}
+                  disabled={!editable || busy !== null}
                   type="checkbox"
                   onChange={(event) =>
                     updateQuestion(index, { required: event.target.checked })
@@ -332,29 +394,7 @@ export function SurveyEditor({
             <button
               className="rounded-md border bg-white px-4 py-2 text-sm disabled:opacity-50"
               disabled={busy !== null}
-              onClick={() =>
-                void action("save", () =>
-                  requestCourseSurveyApi<SurveyEditorValue>(endpoint, {
-                    method: "PUT",
-                    body: JSON.stringify({
-                      expectedVersion: survey.version,
-                      title: survey.title,
-                      description: survey.description ?? "",
-                      instructions: survey.instructions,
-                      mode: survey.mode,
-                      opensAt: survey.opensAt,
-                      dueAt: survey.dueAt,
-                      questions: questions.map((item, index) => ({
-                        ...item,
-                        sortOrder: index + 1,
-                        sourceRefs: Array.isArray(item.sourceRefsJson)
-                          ? item.sourceRefsJson
-                          : [],
-                      })),
-                    }),
-                  }),
-                )
-              }
+              onClick={() => void action("save", saveDraft)}
             >
               {busy === "save" ? "保存中…" : "保存草稿"}
             </button>
@@ -364,23 +404,31 @@ export function SurveyEditor({
               onClick={() => {
                 if (
                   window.confirm(
-                    "发布后题目、匿名模式和时间将冻结，确认发布吗？",
+                    `${openImmediately ? "立即发布并开放" : `预约发布，开放时间为 ${new Date(survey.opensAt).toLocaleString("zh-CN")}`}。将保存当前编辑内容，发布后题目、匿名模式和时间冻结，确认发布吗？`,
                   )
                 )
-                  void action("publish", () =>
-                    requestCourseSurveyApi<SurveyEditorValue>(
+                  void action("publish", async () => {
+                    const saved = await saveDraft();
+                    setSurvey(saved);
+                    setQuestions(saved.questions);
+                    return requestCourseSurveyApi<SurveyEditorValue>(
                       `${endpoint}/publish`,
                       {
                         method: "POST",
                         body: JSON.stringify({
-                          expectedVersion: survey.version,
+                          expectedVersion: saved.version,
+                          openImmediately,
                         }),
                       },
-                    ),
-                  );
+                    );
+                  });
               }}
             >
-              {busy === "publish" ? "发布中…" : "发布问卷"}
+              {busy === "publish"
+                ? "发布中…"
+                : openImmediately
+                  ? "立即发布并开放"
+                  : "预约发布问卷"}
             </button>
           </>
         ) : null}

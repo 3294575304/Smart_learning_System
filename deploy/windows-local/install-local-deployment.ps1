@@ -1,8 +1,8 @@
-param(
+﻿param(
   [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path,
   [string]$SandboxHost = "8.133.167.139",
   [string]$SshKeyPath = "",
-  [string]$KnownHostsPath = "C:\Users\HONOR\.ssh\codex_sandbox_known_hosts_20260808",
+  [string]$KnownHostsPath = (Join-Path $HOME ".ssh\codex_sandbox_known_hosts_20260808"),
   [switch]$SkipBuild
 )
 
@@ -32,12 +32,12 @@ function Wait-LocalPort {
   )
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   while ([DateTime]::UtcNow -lt $deadline) {
-    if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) {
+    if ([System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() | Where-Object { $_.Port -eq $Port }) {
       return
     }
     Start-Sleep -Milliseconds 500
   }
-  throw "Port $Port did not become ready within $TimeoutSeconds seconds"
+  throw "Port $Port did not become ready within $TimeoutSeconds seconds. Check service logs in .data/local-deployment/logs and retry start-all.ps1."
 }
 
 foreach ($path in @($RepoRoot, $SshKeyPath, $KnownHostsPath)) {
@@ -71,19 +71,28 @@ if (-not $SkipBuild) {
   }
   try {
     $env:NEXT_DIST_DIR = $nextBuildDirectory
+    # Same hazard as in start-all.ps1: under ErrorActionPreference=Stop,
+    # PowerShell 5 turns a build tool's stderr output into a terminating
+    # NativeCommandError. Relax the preference and check $LASTEXITCODE.
+    $ErrorActionPreference = "Continue"
     & $npmExecutable run build
-    if ($LASTEXITCODE -ne 0) {
+    $nextBuildExitCode = $LASTEXITCODE
+    & $npmExecutable run build:programming-judge-worker
+    $judgeWorkerBuildExitCode = $LASTEXITCODE
+    & $npmExecutable run build:background-worker
+    $backgroundWorkerBuildExitCode = $LASTEXITCODE
+    $ErrorActionPreference = "Stop"
+    if ($nextBuildExitCode -ne 0) {
       throw "Next.js production build failed"
     }
-    & $npmExecutable run build:programming-judge-worker
-    if ($LASTEXITCODE -ne 0) {
+    if ($judgeWorkerBuildExitCode -ne 0) {
       throw "Programming judge worker build failed"
     }
-    & $npmExecutable run build:background-worker
-    if ($LASTEXITCODE -ne 0) {
+    if ($backgroundWorkerBuildExitCode -ne 0) {
       throw "Persistent background worker build failed"
     }
   } finally {
+    $ErrorActionPreference = "Stop"
     foreach ($generatedTypeFile in $generatedTypeFiles) {
       [System.IO.File]::WriteAllBytes(
         $generatedTypeFile,
@@ -127,6 +136,7 @@ if (Test-Path -LiteralPath $configPath) {
 }
 $workerSecret = if ($existingSecret.Length -ge 32) { $existingSecret } else { New-RandomSecret }
 
+$ErrorActionPreference = "Continue"
 $executorApiKey = (& $sshExecutable `
   -i $SshKeyPath `
   -o IdentitiesOnly=yes `
@@ -135,7 +145,9 @@ $executorApiKey = (& $sshExecutable `
   -o "UserKnownHostsFile=$KnownHostsPath" `
   "root@$SandboxHost" `
   "sed -n 's/^SANDBOX_EXECUTOR_API_KEY=//p' /etc/zhixue-sandbox-executor.env").Trim()
-if ($LASTEXITCODE -ne 0 -or $executorApiKey.Length -lt 32) {
+$sshExitCode = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
+if ($sshExitCode -ne 0 -or $executorApiKey.Length -lt 32) {
   throw "Unable to retrieve the remote executor credential"
 }
 
@@ -240,7 +252,7 @@ $settings = New-ScheduledTaskSettingsSet `
 
 foreach ($definition in $taskDefinitions) {
   $scriptPath = Join-Path $PSScriptRoot $definition.Script
-  $arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`" -ConfigPath `"$configPath`""
+  $arguments = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`" -ConfigPath `"$configPath`""
   $action = New-ScheduledTaskAction -Execute $powershellExecutable -Argument $arguments -WorkingDirectory $RepoRoot
   # No trigger is registered: these tasks only run when start-all.ps1 (or the
   # operator) starts them explicitly, and they stay stopped after stop-all.ps1.
@@ -249,12 +261,12 @@ foreach ($definition in $taskDefinitions) {
 }
 
 Start-ScheduledTask -TaskName "Zhixue-SSH-Tunnel"
-Wait-LocalPort -Port 18788 -TimeoutSeconds 15
+Wait-LocalPort -Port 18788 -TimeoutSeconds 60
 Start-ScheduledTask -TaskName "Zhixue-Next"
-Wait-LocalPort -Port 3000 -TimeoutSeconds 30
+Wait-LocalPort -Port 3000 -TimeoutSeconds 60
 Start-ScheduledTask -TaskName "Zhixue-Judge-Worker"
 Start-ScheduledTask -TaskName "Zhixue-Background-Worker"
-Wait-LocalPort -Port 18789 -TimeoutSeconds 15
+Wait-LocalPort -Port 18789 -TimeoutSeconds 45
 Start-Sleep -Seconds 2
 
 $health = Invoke-RestMethod -Uri "http://127.0.0.1:18788/health" -Headers @{

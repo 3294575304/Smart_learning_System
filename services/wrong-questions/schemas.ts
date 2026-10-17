@@ -22,6 +22,10 @@ export const wrongQuestionListQuerySchema = z
   .object({
     keyword: z.string().trim().max(120, "关键词不能超过 120 个字符").optional(),
     classroomId: z.string().cuid("班级 ID 格式无效").optional(),
+    courseId: z
+      .union([z.string().cuid("课程 ID 格式无效"), z.literal("LEGACY")])
+      .optional(),
+    chapterId: z.string().cuid("章节 ID 格式无效").optional(),
     knowledgePointId: z.string().cuid("知识点 ID 格式无效").optional(),
     type: z.nativeEnum(QuestionType).optional(),
     isMastered: optionalBooleanQuery,

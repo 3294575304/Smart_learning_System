@@ -1,9 +1,14 @@
 import { GradeValueStatus, QualityReportSourceType } from "@prisma/client";
 import { z } from "zod";
+import {
+  templateSelectionShape,
+  templateSnapshotSchema,
+} from "./template-schema";
 
 export const qualityReportPlatformInputSchema = z
   .object({
     sourceType: z.literal(QualityReportSourceType.PLATFORM),
+    ...templateSelectionShape,
     gradebookId: z.string().cuid(),
     outcomeAttainmentRunId: z.string().cuid().optional(),
     courseNature: z.string().trim().max(50).default(""),
@@ -11,18 +16,23 @@ export const qualityReportPlatformInputSchema = z
     majorClass: z.string().trim().max(200).default(""),
     college: z.string().trim().max(200).default(""),
     major: z.string().trim().max(200).default(""),
+    teachingMethodDetails: z.string().trim().max(2000).default(""),
+    scoringCriteria: z.string().trim().max(2000).default(""),
   })
   .strict();
 
 export const qualityReportUploadMetadataSchema = z
   .object({
     sourceType: z.literal(QualityReportSourceType.UPLOAD),
+    ...templateSelectionShape,
     classroomId: z.string().cuid().optional(),
     courseNature: z.string().trim().max(50).default(""),
     credits: z.coerce.number().min(0).max(20).default(0),
     majorClass: z.string().trim().max(200).default(""),
     college: z.string().trim().max(200).default(""),
     major: z.string().trim().max(200).default(""),
+    teachingMethodDetails: z.string().trim().max(2000).default(""),
+    scoringCriteria: z.string().trim().max(2000).default(""),
   })
   .strict();
 
@@ -39,6 +49,8 @@ export const reportStudentSchema = z.object({
   displayName: z.string().min(1).max(100),
   status: z.nativeEnum(GradeValueStatus),
   componentScores: z.record(z.number().min(0).max(100).nullable()),
+  componentStatuses: z.record(z.string()).optional(),
+  totalScoreOverridden: z.boolean().optional(),
   totalScore: z.number().min(0).max(100).nullable(),
 });
 
@@ -95,8 +107,11 @@ export const qualityReportSourceSnapshotSchema = z.object({
     majorClass: z.string(),
     college: z.string(),
     major: z.string(),
+    teachingMethodDetails: z.string().default(""),
+    scoringCriteria: z.string().default(""),
   }),
   classroom: z.object({ id: z.string().nullable(), name: z.string() }),
+  reportTemplate: templateSnapshotSchema.optional(),
   sourceType: z.nativeEnum(QualityReportSourceType),
   components: z.array(reportComponentSchema).min(1).max(30),
   students: z.array(reportStudentSchema).min(1).max(2000),
@@ -136,6 +151,9 @@ export const qualityReportSourceSnapshotSchema = z.object({
       applicableMajors: z.string().nullable(),
       objectiveCount: z.number().int().nonnegative(),
       assessmentCount: z.number().int().nonnegative(),
+      assessments: z.array(reportComponentSchema).max(100).optional(),
+      teachingContent: z.array(z.string()).max(200).optional(),
+      assessmentDescriptions: z.array(z.string()).max(100).optional(),
     })
     .nullable()
     .optional(),
@@ -247,6 +265,7 @@ export interface QualityReportAIInput {
     }>;
     attendance: { sessionCount: number; presentRate: number | null };
   };
+  syllabus?: QualityReportSourceSnapshot["syllabus"];
   survey: QualityReportSourceSnapshot["survey"];
   dataAvailability: {
     publishedSyllabus: boolean;

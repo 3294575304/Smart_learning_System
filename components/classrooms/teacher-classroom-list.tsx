@@ -121,6 +121,7 @@ export function TeacherClassroomList({
                 <Link
                   className="min-w-0 flex-1"
                   href={`/teacher/classrooms/${classroom.id}`}
+                  prefetch={true}
                 >
                   <h3 className="truncate font-semibold">{classroom.name}</h3>
                   <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
@@ -142,6 +143,7 @@ export function TeacherClassroomList({
               <Link
                 className="block"
                 href={`/teacher/classrooms/${classroom.id}`}
+                prefetch={true}
               >
                 <div className="text-muted-foreground mt-5 flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1">

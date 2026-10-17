@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { requestApi } from "@/components/courses/request-api";
 import { planKnowledgePointBindingChange } from "@/components/courses/knowledge-point-binding-change";
 import type {
@@ -37,6 +37,18 @@ export function KnowledgePointQuestionPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selected, setSelected] = useState<QuestionItem | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!selected) return;
+    const frame = window.requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selected]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -75,29 +87,30 @@ export function KnowledgePointQuestionPanel({
           <span className="text-emerald-700">{point.questionCount} 道</span>
         </h5>
         <Link
-          className="text-xs text-sky-700 underline"
+          className="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-800 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
           href={`/teacher/courses/${courseId}/question-mapping`}
           target="_blank"
           rel="noreferrer"
         >
-          AI 批量匹配与审核 ↗
+          一键关联绑定题目 ↗
         </Link>
       </div>
       <p className="text-xs leading-5 text-gray-500">
-        题目可关联多个知识点，区分主要考查与次要涉及。仅显示您可管理的题目。
+        AI
+        或教师确认的课程知识点关联会作为独立标签展示，不会覆盖题目原有教师标签。题目可关联多个知识点，区分主要考查与次要涉及。
       </p>
       <div className="flex gap-2" role="group" aria-label="题目范围">
         {(
           [
             ["BOUND", "已关联题目"],
-            ["AVAILABLE", "从我的题库添加"],
+            ["AVAILABLE", "从题库添加"],
           ] as const
         ).map(([value, label]) => (
           <button
             key={value}
             type="button"
             aria-pressed={mode === value}
-            className={`rounded-md border px-3 py-2 text-xs ${mode === value ? "border-sky-600 bg-sky-50 text-sky-800" : ""}`}
+            className={`rounded-md border px-3 py-2 text-xs transition-colors active:scale-[0.98] ${mode === value ? "border-sky-600 bg-sky-50 text-sky-800" : "hover:bg-slate-50"}`}
             onClick={() => {
               setMode(value);
               setPage(1);
@@ -125,8 +138,12 @@ export function KnowledgePointQuestionPanel({
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
         />
-        <button type="submit" className="rounded border px-3 text-sm">
-          查找
+        <button
+          type="submit"
+          disabled={loading}
+          className="rounded border px-3 text-sm transition-colors hover:bg-slate-50 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+        >
+          {loading ? "查找中…" : "查找"}
         </button>
       </form>
       {notice ? (
@@ -164,14 +181,14 @@ export function KnowledgePointQuestionPanel({
               {search
                 ? "没有找到匹配题目，请换一个关键词。"
                 : mode === "BOUND"
-                  ? "该知识点尚未关联题目，可从“我的题库”添加。"
-                  : "暂无可添加的题目。您可以先在题库创建题目，或复制公共题目到我的题库。"}
+                  ? "该知识点尚未关联题目，可从我的题库或公共题库直接添加。"
+                  : "暂无可添加的题目。可先维护题库，公共题目无需复制即可关联。"}
             </p>
           ) : (
             <ul className="max-h-96 space-y-2 overflow-y-auto">
               {result.items.map((question) => (
                 <li
-                  className="rounded-lg border bg-white p-3"
+                  className={`rounded-lg border bg-white p-3 transition-[border-color,box-shadow] ${selected?.id === question.id ? "border-sky-500 ring-2 ring-sky-100" : "hover:border-sky-300"}`}
                   key={question.id}
                 >
                   <Link
@@ -200,7 +217,8 @@ export function KnowledgePointQuestionPanel({
                   </div>
                   <button
                     type="button"
-                    className="mt-2 rounded border px-3 py-1.5 text-xs text-sky-800"
+                    aria-pressed={selected?.id === question.id}
+                    className="mt-2 rounded border px-3 py-1.5 text-xs text-sky-800 transition-colors hover:border-sky-500 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-600 active:scale-[0.98]"
                     onClick={() => {
                       setSelected(question);
                       setNotice(null);
@@ -239,21 +257,23 @@ export function KnowledgePointQuestionPanel({
         </>
       ) : null}
       {selected ? (
-        <PointBindingEditor
-          key={selected.id}
-          courseId={courseId}
-          graphVersionId={graphVersionId}
-          point={point}
-          question={selected}
-          onCancel={() => setSelected(null)}
-          onSaved={() => {
-            setSelected(null);
-            setNotice("题目关联已保存，历史作业与成绩不受影响。");
-            setPage(1);
-            setRefresh((value) => value + 1);
-            onChanged();
-          }}
-        />
+        <div ref={editorRef} className="scroll-mt-4" tabIndex={-1}>
+          <PointBindingEditor
+            key={selected.id}
+            courseId={courseId}
+            graphVersionId={graphVersionId}
+            point={point}
+            question={selected}
+            onCancel={() => setSelected(null)}
+            onSaved={() => {
+              setSelected(null);
+              setNotice("题目关联已保存，历史作业与成绩不受影响。");
+              setPage(1);
+              setRefresh((value) => value + 1);
+              onChanged();
+            }}
+          />
+        </div>
       ) : null}
     </section>
   );
@@ -349,8 +369,9 @@ function PointBindingEditor({
   }
   return (
     <div
-      className="space-y-3 rounded-lg border border-sky-200 bg-sky-50 p-3"
+      className="space-y-3 rounded-lg border border-sky-200 bg-sky-50 p-3 shadow-sm transition-shadow"
       aria-label="确认知识点关联"
+      aria-busy={saving || !binding}
     >
       <p className="font-medium">{question.title}</p>
       <p className="text-sm">关联到：{point.name}</p>
@@ -417,16 +438,16 @@ function PointBindingEditor({
         <button
           type="button"
           disabled={!binding || saving || needsReview}
-          className="rounded bg-sky-700 px-3 py-2 text-xs text-white disabled:opacity-40"
+          className="rounded bg-sky-700 px-3 py-2 text-xs text-white transition hover:bg-sky-800 active:scale-[0.98] disabled:cursor-wait disabled:opacity-50"
           onClick={() => void save(false)}
         >
-          {saving ? "保存中…" : "确认保存关联"}
+          {saving ? "正在保存关联…" : current ? "确认更新关联" : "确认绑定此题"}
         </button>
         {current ? (
           <button
             type="button"
             disabled={saving || needsReview}
-            className="rounded border bg-white px-3 py-2 text-xs text-red-700 disabled:opacity-40"
+            className="rounded border bg-white px-3 py-2 text-xs text-red-700 transition hover:bg-red-50 active:scale-[0.98] disabled:cursor-wait disabled:opacity-50"
             onClick={() => void save(true)}
           >
             移除此关联

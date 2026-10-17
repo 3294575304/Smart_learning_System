@@ -1,16 +1,23 @@
 import "server-only";
+import { runAssignmentSerializable } from "@/services/assignments/transactions";
+import { AssignmentOperationError } from "@/services/assignments/errors";
+import { groupKnowledgeChapters } from "@/services/knowledge-graph/chapter-groups";
 
 import {
   AuditAction,
   AuditTargetType,
+  AssignmentStatus,
   MembershipStatus,
   Prisma,
   QuestionStatus,
+  QuestionType,
   RecommendationSource,
   RecommendationStatus,
   Role,
 } from "@prisma/client";
 
+import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
+import { expireStudentRecommendations } from "@/services/recommendations/repository";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import type { AuthenticatedUser } from "@/services/auth/types";
@@ -23,6 +30,10 @@ import {
   DEFAULT_COURSE_RECOMMENDATION_POLICY,
 } from "@/services/course-recommendations/constants";
 import { courseRecommendationFingerprint } from "@/services/course-recommendations/fingerprint";
+import {
+  currentPracticeProgress,
+  requiresCompletePracticePaper,
+} from "@/services/course-recommendations/practice-scope";
 import type {
   CourseRecommendationGenerationInput,
   CourseRecommendationPolicyInput,
@@ -34,15 +45,28 @@ function ownedCourseWhere(teacherId: string, courseId: string) {
   return { id: courseId, teacherId };
 }
 
-export async function getTeachingProgress(teacherId: string, courseId: string) {
+export async function getTeachingProgress(
+  teacherId: string,
+  courseId: string,
+  classroomId?: string,
+) {
   const course = await prisma.course.findFirst({
     where: ownedCourseWhere(teacherId, courseId),
     select: {
       id: true,
+      classrooms: {
+        where: { status: "ACTIVE", teacherId },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      },
       currentPublishedKnowledgeGraphVersion: {
         select: {
           id: true,
           versionNumber: true,
+          edges: {
+            where: { relationType: "CONTAINS" },
+            select: { fromNodeId: true, toNodeId: true },
+          },
           nodes: {
             orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
             select: {
@@ -68,7 +92,32 @@ export async function getTeachingProgress(teacherId: string, courseId: string) {
     },
   });
   if (!course) throw new ResourceNotFoundError("课程不存在");
+  if (classroomId && !course.classrooms.some((item) => item.id === classroomId))
+    throw new ResourceNotFoundError("课程或班级不存在");
+  const scoped = classroomId
+    ? await prisma.courseTeachingProgressRevision.findFirst({
+        where: { courseId, classroomId },
+        orderBy: { revisionNumber: "desc" },
+        select: {
+          id: true,
+          revisionNumber: true,
+          graphVersionId: true,
+          note: true,
+          createdAt: true,
+          concepts: { select: { conceptId: true, publishedNodeId: true } },
+        },
+      })
+    : null;
   return {
+    classroomId: classroomId ?? null,
+    classrooms: course.classrooms,
+    inherited: Boolean(
+      classroomId && !scoped && course.currentTeachingProgressRevision,
+    ),
+    chapters: groupKnowledgeChapters(
+      course.currentPublishedKnowledgeGraphVersion?.nodes ?? [],
+      course.currentPublishedKnowledgeGraphVersion?.edges ?? [],
+    ),
     graphVersion: course.currentPublishedKnowledgeGraphVersion
       ? {
           id: course.currentPublishedKnowledgeGraphVersion.id,
@@ -76,7 +125,7 @@ export async function getTeachingProgress(teacherId: string, courseId: string) {
             course.currentPublishedKnowledgeGraphVersion.versionNumber,
         }
       : null,
-    revision: course.currentTeachingProgressRevision,
+    revision: scoped ?? course.currentTeachingProgressRevision,
     nodes: course.currentPublishedKnowledgeGraphVersion?.nodes ?? [],
   };
 }
@@ -99,7 +148,27 @@ export async function listStudentPracticeCourses(studentId: string) {
               id: true,
               name: true,
               currentPublishedKnowledgeGraphVersion: {
-                select: { versionNumber: true },
+                select: {
+                  versionNumber: true,
+                  nodes: {
+                    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+                    select: {
+                      id: true,
+                      conceptId: true,
+                      code: true,
+                      name: true,
+                      nodeType: true,
+                      outgoingEdges: {
+                        where: { relationType: "CONTAINS" },
+                        select: {
+                          toNode: {
+                            select: { conceptId: true, nodeType: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
               currentTeachingProgressRevision: {
                 select: {
@@ -119,6 +188,13 @@ export async function listStudentPracticeCourses(studentId: string) {
       },
     },
   });
+  const scopedRevisions = await prisma.courseTeachingProgressRevision.findMany({
+    where: {
+      classroomId: { in: memberships.map((item) => item.classroom.id) },
+    },
+    orderBy: { revisionNumber: "desc" },
+    include: { concepts: { include: { publishedNode: true } } },
+  });
   return memberships.flatMap(({ classroom }) =>
     classroom.course
       ? [
@@ -131,15 +207,36 @@ export async function listStudentPracticeCourses(studentId: string) {
               classroom.course.currentPublishedKnowledgeGraphVersion
                 ?.versionNumber ?? null,
             progressRevisionNumber:
-              classroom.course.currentTeachingProgressRevision
-                ?.revisionNumber ?? null,
+              (
+                scopedRevisions.find(
+                  (item) =>
+                    item.classroomId === classroom.id &&
+                    item.courseId === classroom.course?.id,
+                ) ?? classroom.course.currentTeachingProgressRevision
+              )?.revisionNumber ?? null,
             concepts: (
-              classroom.course.currentTeachingProgressRevision?.concepts ?? []
+              classroom.course.currentPublishedKnowledgeGraphVersion?.nodes.filter(
+                (node) => node.nodeType === "KNOWLEDGE_POINT",
+              ) ?? []
             ).map((item) => ({
               id: item.conceptId,
-              code: item.publishedNode.code,
-              name: item.publishedNode.name,
+              code: item.code,
+              name: item.name,
             })),
+            chapters: (
+              classroom.course.currentPublishedKnowledgeGraphVersion?.nodes ??
+              []
+            )
+              .filter((node) => node.nodeType === "CHAPTER")
+              .map((chapter) => ({
+                id: chapter.id,
+                code: chapter.code,
+                name: chapter.name,
+                conceptIds: chapter.outgoingEdges
+                  .filter((edge) => edge.toNode.nodeType === "KNOWLEDGE_POINT")
+                  .map((edge) => edge.toNode.conceptId),
+              }))
+              .filter((chapter) => chapter.conceptIds.length > 0),
           },
         ]
       : [],
@@ -156,114 +253,136 @@ export async function updateTeachingProgress(
     graphVersionId: input.graphVersionId,
     conceptIds: [...input.conceptIds].sort(),
     note: input.note ?? null,
+    ...(input.classroomId ? { classroomId: input.classroomId } : {}),
   });
-  const result = await prisma.$transaction(
-    async (transaction) => {
-      const course = await transaction.course.findFirst({
-        where: ownedCourseWhere(teacherId, courseId),
-        select: {
-          currentPublishedKnowledgeGraphVersionId: true,
-          currentTeachingProgressRevision: {
-            select: {
-              id: true,
-              revisionNumber: true,
-              inputFingerprint: true,
-              graphVersionId: true,
-              note: true,
-              concepts: { select: { conceptId: true } },
-            },
+  const result = await runAssignmentSerializable(async (transaction) => {
+    const course = await transaction.course.findFirst({
+      where: ownedCourseWhere(teacherId, courseId),
+      select: {
+        currentPublishedKnowledgeGraphVersionId: true,
+        currentTeachingProgressRevision: {
+          select: {
+            id: true,
+            revisionNumber: true,
+            inputFingerprint: true,
+            graphVersionId: true,
+            note: true,
+            concepts: { select: { conceptId: true } },
           },
         },
-      });
-      if (!course) throw new ResourceNotFoundError("课程不存在");
-      if (!course.currentPublishedKnowledgeGraphVersionId)
-        throw new RecommendationOperationError("课程尚未发布正式知识图谱", 409);
-      if (
-        course.currentPublishedKnowledgeGraphVersionId !== input.graphVersionId
-      )
-        throw new RecommendationOperationError(
-          "正式知识图谱版本已变化，请刷新后重新配置",
-          409,
-        );
-      if (
-        course.currentTeachingProgressRevision?.inputFingerprint === fingerprint
-      )
-        return {
-          id: course.currentTeachingProgressRevision.id,
-          revisionNumber: course.currentTeachingProgressRevision.revisionNumber,
-        };
-      const currentRevision =
-        course.currentTeachingProgressRevision?.revisionNumber ?? 0;
-      if (currentRevision !== input.expectedRevision)
-        throw new RecommendationOperationError(
-          "教学进度已被其他页面修改，请刷新后重试",
-          409,
-        );
-      const nodes = await transaction.publishedKnowledgeGraphNode.findMany({
+      },
+    });
+    if (!course) throw new ResourceNotFoundError("课程不存在");
+    if (
+      input.classroomId &&
+      !(await transaction.classroom.findFirst({
         where: {
-          graphVersionId: input.graphVersionId,
-          conceptId: { in: input.conceptIds },
-        },
-        select: { id: true, conceptId: true },
-      });
-      if (nodes.length !== input.conceptIds.length)
-        throw new RecommendationOperationError(
-          "已授知识点必须全部来自当前正式图谱",
-          400,
-        );
-      const revision = await transaction.courseTeachingProgressRevision.create({
-        data: {
+          id: input.classroomId,
           courseId,
-          graphVersionId: input.graphVersionId,
-          createdById: teacherId,
-          revisionNumber: currentRevision + 1,
-          inputFingerprint: fingerprint,
-          note: input.note,
-          concepts: {
-            create: nodes.map((node) => ({
-              conceptId: node.conceptId,
-              publishedNodeId: node.id,
-            })),
-          },
+          teacherId,
+          status: "ACTIVE",
         },
-        select: { id: true, revisionNumber: true },
-      });
+        select: { id: true },
+      }))
+    )
+      throw new ResourceNotFoundError("课程或班级不存在");
+    const scoped = input.classroomId
+      ? await transaction.courseTeachingProgressRevision.findFirst({
+          where: { courseId, classroomId: input.classroomId },
+          orderBy: { revisionNumber: "desc" },
+          include: { concepts: { select: { conceptId: true } } },
+        })
+      : null;
+    const current = scoped ?? course.currentTeachingProgressRevision;
+    if (!course.currentPublishedKnowledgeGraphVersionId)
+      throw new RecommendationOperationError("课程尚未发布正式知识图谱", 409);
+    if (course.currentPublishedKnowledgeGraphVersionId !== input.graphVersionId)
+      throw new RecommendationOperationError(
+        "正式知识图谱版本已变化，请刷新后重新配置",
+        409,
+      );
+    if (current?.inputFingerprint === fingerprint)
+      return {
+        id: current.id,
+        revisionNumber: current.revisionNumber,
+      };
+    const currentRevision = current?.revisionNumber ?? 0;
+    if (currentRevision !== input.expectedRevision)
+      throw new RecommendationOperationError(
+        "教学进度已被其他页面修改，请刷新后重试",
+        409,
+      );
+    const nodes = await transaction.publishedKnowledgeGraphNode.findMany({
+      where: {
+        graphVersionId: input.graphVersionId,
+        conceptId: { in: input.conceptIds },
+        nodeType: "KNOWLEDGE_POINT",
+      },
+      select: { id: true, conceptId: true },
+    });
+    if (nodes.length !== input.conceptIds.length)
+      throw new RecommendationOperationError(
+        "已授知识点必须全部来自当前正式图谱",
+        400,
+      );
+    const latest = await transaction.courseTeachingProgressRevision.aggregate({
+      where: { courseId },
+      _max: { revisionNumber: true },
+    });
+    const revision = await transaction.courseTeachingProgressRevision.create({
+      data: {
+        courseId,
+        classroomId: input.classroomId,
+        graphVersionId: input.graphVersionId,
+        createdById: teacherId,
+        revisionNumber: (latest._max.revisionNumber ?? 0) + 1,
+        inputFingerprint: fingerprint,
+        note: input.note,
+        concepts: {
+          create: nodes.map((node) => ({
+            conceptId: node.conceptId,
+            publishedNodeId: node.id,
+          })),
+        },
+      },
+      select: { id: true, revisionNumber: true },
+    });
+    if (!input.classroomId)
       await transaction.course.update({
         where: { id: courseId },
         data: { currentTeachingProgressRevisionId: revision.id },
       });
-      await writeGovernanceAuditLog(transaction, {
-        actorId: teacherId,
-        action: AuditAction.COURSE_TEACHING_PROGRESS_UPDATED,
-        targetType: AuditTargetType.COURSE,
-        targetId: courseId,
-        summary: "更新课程已授知识点范围",
-        beforeData: course.currentTeachingProgressRevision
-          ? {
-              revisionNumber:
-                course.currentTeachingProgressRevision.revisionNumber,
-              graphVersionId:
-                course.currentTeachingProgressRevision.graphVersionId,
-              conceptIds: course.currentTeachingProgressRevision.concepts.map(
-                (item) => item.conceptId,
-              ),
-              note: course.currentTeachingProgressRevision.note,
-            }
-          : null,
-        afterData: {
-          revisionNumber: revision.revisionNumber,
-          graphVersionId: input.graphVersionId,
-          conceptIds: [...input.conceptIds].sort(),
-          note: input.note ?? null,
-        },
-        context,
-      });
-      return revision;
-    },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-  );
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: AuditAction.COURSE_TEACHING_PROGRESS_UPDATED,
+      targetType: AuditTargetType.COURSE,
+      targetId: courseId,
+      summary: "更新课程已授知识点范围",
+      beforeData: current
+        ? {
+            revisionNumber: current.revisionNumber,
+            graphVersionId: current.graphVersionId,
+            conceptIds: current.concepts.map((item) => item.conceptId),
+            note: current.note,
+          }
+        : null,
+      afterData: {
+        classroomId: input.classroomId ?? null,
+        revisionNumber: revision.revisionNumber,
+        graphVersionId: input.graphVersionId,
+        conceptIds: [...input.conceptIds].sort(),
+        note: input.note ?? null,
+      },
+      context,
+    });
+    return revision;
+  }, "教学进度正在被其他页面更新，请刷新后重试").catch((error: unknown) => {
+    if (error instanceof AssignmentOperationError)
+      throw new RecommendationOperationError(error.message, 409);
+    throw error;
+  });
   return {
-    ...(await getTeachingProgress(teacherId, courseId)),
+    ...(await getTeachingProgress(teacherId, courseId, input.classroomId)),
     savedRevisionId: result.id,
   };
 }
@@ -414,14 +533,66 @@ async function ensureDefaultPolicy(
   return policy;
 }
 
+type PracticeQuestionDistribution = Partial<Record<QuestionType, number>>;
+
+function normalizedQuestionDistribution(
+  raw: Partial<Record<QuestionType, number>>,
+  total: number,
+): PracticeQuestionDistribution {
+  const entries = Object.entries(raw).filter(
+    (entry): entry is [QuestionType, number] =>
+      entry[1] !== undefined && entry[1] > 0,
+  );
+  const sourceTotal = entries.reduce((sum, [, count]) => sum + count, 0);
+  if (sourceTotal === 0) return {};
+  const scaled = entries.map(([type, count]) => {
+    const exact = (count / sourceTotal) * total;
+    return { type, count: Math.floor(exact), remainder: exact % 1 };
+  });
+  let remaining = total - scaled.reduce((sum, item) => sum + item.count, 0);
+  for (const item of [...scaled].sort(
+    (left, right) => right.remainder - left.remainder,
+  )) {
+    if (remaining <= 0) break;
+    item.count += 1;
+    remaining -= 1;
+  }
+  return Object.fromEntries(
+    scaled
+      .filter((item) => item.count > 0)
+      .map((item) => [item.type, item.count]),
+  );
+}
+
+const DEFAULT_TEST_QUESTION_DISTRIBUTION: PracticeQuestionDistribution = {
+  [QuestionType.SINGLE_CHOICE]: 20,
+  [QuestionType.MULTIPLE_CHOICE]: 10,
+  [QuestionType.TRUE_FALSE]: 10,
+  [QuestionType.FILL_BLANK]: 5,
+  [QuestionType.PYTHON_PROGRAMMING]: 5,
+};
+
 export async function createCourseRecommendations(
   actor: AuthenticatedUser,
   courseId: string,
   input: CourseRecommendationGenerationInput,
   now = new Date(),
+  favorite?: { favoriteId: string; questionId: string; requestId: string },
 ) {
   if (actor.role !== Role.STUDENT)
     throw new ResourceNotFoundError("课程或班级不存在");
+  if (favorite) {
+    const ownedFavorite = await prisma.studentQuestionFavorite.findFirst({
+      where: {
+        id: favorite.favoriteId,
+        studentId: actor.id,
+        courseId,
+        questionId: favorite.questionId,
+      },
+      select: { id: true },
+    });
+    if (!ownedFavorite) throw new ResourceNotFoundError("收藏不存在");
+  }
   const context = await prisma.course.findFirst({
     where: {
       id: courseId,
@@ -461,24 +632,86 @@ export async function createCourseRecommendations(
   });
   if (!context) throw new ResourceNotFoundError("课程或班级不存在");
   const graph = context.currentPublishedKnowledgeGraphVersion;
-  const progress = context.currentTeachingProgressRevision;
+  const latestProgress =
+    (await prisma.courseTeachingProgressRevision.findFirst({
+      where: { courseId, classroomId: input.classroomId },
+      orderBy: { revisionNumber: "desc" },
+      select: {
+        id: true,
+        revisionNumber: true,
+        graphVersionId: true,
+        inputFingerprint: true,
+        concepts: {
+          select: {
+            conceptId: true,
+            publishedNode: {
+              select: { id: true, name: true, sortOrder: true },
+            },
+          },
+        },
+      },
+    })) ?? context.currentTeachingProgressRevision;
+  const chapterIds = input.chapterIds ?? [];
   if (!graph)
     throw new RecommendationOperationError("课程尚未发布正式知识图谱", 409);
-  if (!progress || progress.graphVersionId !== graph.id)
-    throw new RecommendationOperationError(
-      "教师尚未为当前正式图谱配置教学进度",
-      409,
-    );
-  const taughtConceptIds = new Set(
-    progress.concepts.map((item) => item.conceptId),
+  // Teaching progress remains provenance when applicable, never a gate for
+  // student-initiated practice in the current published graph.
+  const progress = currentPracticeProgress(graph.id, latestProgress);
+  const graphConceptNodes = await prisma.publishedKnowledgeGraphNode.findMany({
+    where: { graphVersionId: graph.id, nodeType: "KNOWLEDGE_POINT" },
+    select: { conceptId: true },
+  });
+  const graphConceptIds = new Set(
+    graphConceptNodes.map((node) => node.conceptId),
   );
-  const requestedConceptIds =
-    input.conceptIds.length > 0 ? input.conceptIds : [...taughtConceptIds];
-  if (requestedConceptIds.some((conceptId) => !taughtConceptIds.has(conceptId)))
-    throw new RecommendationOperationError("练习知识点超出当前教学进度", 400);
+  const selectedChapters = chapterIds.length
+    ? await prisma.publishedKnowledgeGraphNode.findMany({
+        where: {
+          id: { in: chapterIds },
+          graphVersionId: graph.id,
+          nodeType: "CHAPTER",
+        },
+        select: {
+          id: true,
+          outgoingEdges: {
+            where: { relationType: "CONTAINS" },
+            select: {
+              toNode: { select: { conceptId: true, nodeType: true } },
+            },
+          },
+        },
+      })
+    : [];
+  if (selectedChapters.length !== chapterIds.length)
+    throw new RecommendationOperationError(
+      "所选章节不属于当前课程正式图谱",
+      400,
+    );
+  const chapterConceptIds = selectedChapters.flatMap((chapter) =>
+    chapter.outgoingEdges
+      .filter((edge) => edge.toNode.nodeType === "KNOWLEDGE_POINT")
+      .map((edge) => edge.toNode.conceptId),
+  );
+  const requestedConceptIds = [
+    ...new Set(
+      chapterIds.length
+        ? chapterConceptIds
+        : input.conceptIds.length
+          ? input.conceptIds
+          : [...graphConceptIds],
+    ),
+  ];
+  if (chapterIds.length && !requestedConceptIds.length)
+    throw new RecommendationOperationError("所选章节下没有可练习的知识点", 400);
+  if (requestedConceptIds.some((conceptId) => !graphConceptIds.has(conceptId)))
+    throw new RecommendationOperationError(
+      "练习知识点不属于当前正式课程图谱",
+      400,
+    );
 
   const expiresAt = new Date(now);
   expiresAt.setUTCDate(expiresAt.getUTCDate() + 7);
+  await expireStudentRecommendations(actor.id, now);
   return prisma.$transaction(
     async (transaction) => {
       const policy = await ensureDefaultPolicy(
@@ -486,7 +719,7 @@ export async function createCourseRecommendations(
         courseId,
         context.teacherId,
       );
-      if (input.count > policy.maxQuestionCount)
+      if (!input.template && input.count > policy.maxQuestionCount)
         throw new RecommendationOperationError(
           `单次最多推荐 ${policy.maxQuestionCount} 道题`,
           400,
@@ -546,7 +779,7 @@ export async function createCourseRecommendations(
             status: {
               in: [RecommendationStatus.PENDING, RecommendationStatus.STARTED],
             },
-            courseCycle: { is: { courseId } },
+            // 活跃题目唯一约束跨旧版推荐与课程推荐，去重范围必须一致。
             OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
           },
           select: { questionId: true },
@@ -564,20 +797,92 @@ export async function createCourseRecommendations(
         }),
       ]);
       const mastery = masteryState?.revisions[0] ?? null;
-      const allowedTypes = input.questionTypes.length
-        ? input.questionTypes
-        : [...AUTO_GRADABLE_QUESTION_TYPES, "PYTHON_PROGRAMMING" as const];
+      let typeDistribution: PracticeQuestionDistribution;
+      if (input.template === "MIXED_TEST50") {
+        const previousTest = await transaction.assignment.findFirst({
+          where: {
+            teacherId: context.teacherId,
+            status: {
+              in: [AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED],
+            },
+            classroom: {
+              courseId,
+              OR: [
+                { name: { contains: "测验" } },
+                { name: { contains: "测试" } },
+                { name: { contains: "考试" } },
+                { name: { contains: "test", mode: "insensitive" } },
+                { name: { contains: "exam", mode: "insensitive" } },
+              ],
+            },
+          },
+          orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+          select: {
+            questions: { select: { typeSnapshot: true } },
+          },
+        });
+        const historicalCounts: PracticeQuestionDistribution = {};
+        for (const item of previousTest?.questions ?? []) {
+          if (
+            AUTO_GRADABLE_QUESTION_TYPES.some(
+              (type) => type === item.typeSnapshot,
+            ) ||
+            item.typeSnapshot === QuestionType.PYTHON_PROGRAMMING
+          ) {
+            historicalCounts[item.typeSnapshot] =
+              (historicalCounts[item.typeSnapshot] ?? 0) + 1;
+          }
+        }
+        typeDistribution = normalizedQuestionDistribution(historicalCounts, 50);
+        if (!Object.keys(typeDistribution).length)
+          typeDistribution = DEFAULT_TEST_QUESTION_DISTRIBUTION;
+      } else if (input.template === "TRUE_FALSE10") {
+        typeDistribution = {
+          [QuestionType.TRUE_FALSE]: input.practiceCount ?? 10,
+        };
+      } else if (input.template === "PYTHON5") {
+        typeDistribution = {
+          [QuestionType.PYTHON_PROGRAMMING]: input.practiceCount ?? 5,
+        };
+      } else if (input.template === "CHOICE20") {
+        typeDistribution = normalizedQuestionDistribution(
+          {
+            [QuestionType.SINGLE_CHOICE]: 15,
+            [QuestionType.MULTIPLE_CHOICE]: 5,
+          },
+          input.practiceCount ?? 20,
+        );
+      } else {
+        const legacyTypes = input.questionTypes.length
+          ? input.questionTypes
+          : [...AUTO_GRADABLE_QUESTION_TYPES, QuestionType.PYTHON_PROGRAMMING];
+        typeDistribution = normalizedQuestionDistribution(
+          Object.fromEntries(legacyTypes.map((type) => [type, 1])),
+          input.count,
+        );
+      }
+      const targetCount = Object.values(typeDistribution).reduce(
+        (sum, count) => sum + (count ?? 0),
+        0,
+      );
+      const allowedTypes = Object.keys(typeDistribution) as QuestionType[];
       const requestSnapshot = {
+        ...(favorite ? { favoriteReview: favorite } : {}),
         courseId,
         classroomId: input.classroomId,
+        mode: input.mode ?? "PRACTICE",
+        template: input.template ?? "CUSTOM",
+        chapterIds: chapterIds.toSorted(),
+        typeDistribution,
         conceptIds: [...requestedConceptIds].sort(),
         questionTypes: [...allowedTypes].sort(),
-        count: input.count,
+        count: targetCount,
         difficulty: input.difficulty,
         graphVersionId: graph.id,
         profileSnapshotId: profile?.id ?? null,
         masteryRevisionId: mastery?.id ?? null,
-        teachingProgressRevisionId: progress.id,
+        scopeMode: "SELF_PRACTICE_FULL_GRAPH",
+        teachingProgressRevisionId: progress?.id ?? null,
         policyRevisionId: policy.id,
         ruleVersion: policy.ruleVersion,
         generatedForDay: now.toISOString().slice(0, 10),
@@ -599,7 +904,7 @@ export async function createCourseRecommendations(
           transaction,
           existingCycle.id,
           graph.versionNumber,
-          progress.revisionNumber,
+          progress?.revisionNumber ?? null,
         );
       const excludedQuestionIds = [
         ...new Set([
@@ -618,13 +923,17 @@ export async function createCourseRecommendations(
       const questions = await transaction.question.findMany({
         where: {
           status: QuestionStatus.ACTIVE,
+          isAssignmentOnly: false,
           deletedAt: null,
+          OR: [{ creatorId: context.teacherId }, { visibility: "PUBLIC" }],
           explanation: { not: "" },
           type: { in: allowedTypes },
           difficulty: { gte: minimumDifficulty, lte: maximumDifficulty },
-          ...(excludedQuestionIds.length
-            ? { id: { notIn: excludedQuestionIds } }
-            : {}),
+          ...(favorite
+            ? { id: favorite.questionId }
+            : excludedQuestionIds.length
+              ? { id: { notIn: excludedQuestionIds } }
+              : {}),
           graphBindings: {
             some: {
               courseId,
@@ -632,11 +941,15 @@ export async function createCourseRecommendations(
               concept: { nodes: { some: { graphVersionId: graph.id } } },
             },
           },
-          ...(allowedTypes.includes("PYTHON_PROGRAMMING")
+          ...(allowedTypes.includes(QuestionType.PYTHON_PROGRAMMING)
             ? {
-                OR: [
-                  { type: { not: "PYTHON_PROGRAMMING" } },
-                  { programmingConfigRevisions: { some: {} } },
+                AND: [
+                  {
+                    OR: [
+                      { type: { not: QuestionType.PYTHON_PROGRAMMING } },
+                      { programmingConfigRevisions: { some: {} } },
+                    ],
+                  },
                 ],
               }
             : {}),
@@ -645,6 +958,7 @@ export async function createCourseRecommendations(
         take: 1000,
         select: {
           id: true,
+          creatorId: true,
           title: true,
           content: true,
           type: true,
@@ -664,7 +978,12 @@ export async function createCourseRecommendations(
                   nodes: {
                     where: { graphVersionId: graph.id },
                     take: 1,
-                    select: { id: true, name: true, sortOrder: true },
+                    select: {
+                      id: true,
+                      name: true,
+                      sortOrder: true,
+                      importance: true,
+                    },
                   },
                 },
               },
@@ -702,6 +1021,10 @@ export async function createCourseRecommendations(
             ),
           ),
           teacherPriority: question.tags.includes("teacher-priority"),
+          ownedByCourseTeacher: question.creatorId === context.teacherId,
+          coreImportance: question.graphBindings.some((binding) =>
+            binding.concept.nodes.some((node) => node.importance === "CORE"),
+          ),
         })),
         profiles: (profile?.concepts ?? []).map((item) => ({
           conceptId: item.conceptId,
@@ -710,13 +1033,39 @@ export async function createCourseRecommendations(
         })),
         requestedDifficulty: input.difficulty,
         policy,
-        limit: input.count,
+        limit: 1000,
       });
-      if (!scored.length)
+      const selectedQuestions = allowedTypes.flatMap((type) =>
+        scored
+          .filter((item) => item.question.type === type)
+          .slice(0, typeDistribution[type] ?? 0),
+      );
+      if (!selectedQuestions.length)
         throw new RecommendationOperationError(
-          "当前教学范围内没有符合审核、解析、难度和去重条件的题目",
+          "当前知识点或章节暂无符合题型、难度和去重条件的已审核题目；请调整题型或难度后重试",
           422,
         );
+      if (
+        selectedQuestions.length !== targetCount &&
+        requiresCompletePracticePaper(input.mode)
+      ) {
+        const missing = allowedTypes
+          .map((type) => {
+            const expected = typeDistribution[type] ?? 0;
+            const available = scored.filter(
+              (item) => item.question.type === type,
+            ).length;
+            return expected > available
+              ? `${QUESTION_TYPE_LABELS[type]}还缺 ${expected - available} 道`
+              : null;
+          })
+          .filter((item): item is string => item !== null)
+          .join("、");
+        throw new RecommendationOperationError(
+          `当前章节的已审核教师/公共题库题目不足以组成完整试卷（${selectedQuestions.length}/${targetCount}）；${missing}`,
+          422,
+        );
+      }
       const cycleKey = `course-recommendation-v1:${inputFingerprint.slice(0, 32)}`;
       const cycle = await transaction.courseRecommendationCycle.create({
         data: {
@@ -726,7 +1075,7 @@ export async function createCourseRecommendations(
           graphVersionId: graph.id,
           profileSnapshotId: profile?.id ?? null,
           masteryRevisionId: mastery?.id ?? null,
-          teachingProgressRevisionId: progress.id,
+          teachingProgressRevisionId: progress?.id ?? null,
           policyRevisionId: policy.id,
           cycleKey,
           inputFingerprint,
@@ -735,7 +1084,7 @@ export async function createCourseRecommendations(
           expiresAt,
         },
       });
-      for (const item of scored) {
+      for (const item of selectedQuestions) {
         const recommendation =
           await transaction.personalizedRecommendation.upsert({
             where: {
@@ -754,7 +1103,9 @@ export async function createCourseRecommendations(
               cycleKey,
               source: RecommendationSource.RULE,
               status: RecommendationStatus.PENDING,
-              reason: item.reason,
+              reason: favorite
+                ? "你主动收藏的题目，用于自主复习；本次作答不计入正式课程成绩。"
+                : item.reason,
               reasonCodes: item.reasonCodes,
               targetDifficulty: input.difficulty,
               priority: item.score,
@@ -793,7 +1144,7 @@ export async function createCourseRecommendations(
         transaction,
         cycle.id,
         graph.versionNumber,
-        progress.revisionNumber,
+        progress?.revisionNumber ?? null,
       );
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -804,7 +1155,7 @@ async function courseRecommendationCycleView(
   transaction: Prisma.TransactionClient,
   cycleId: string,
   graphVersionNumber: number,
-  teachingProgressRevisionNumber: number,
+  teachingProgressRevisionNumber: number | null,
 ) {
   const cycle = await transaction.courseRecommendationCycle.findUniqueOrThrow({
     where: { id: cycleId },
@@ -851,6 +1202,137 @@ async function courseRecommendationCycleView(
     items: cycle.recommendations.map((record) => ({
       ...record,
       rankingScore: record.rankingScore?.toNumber() ?? null,
+    })),
+  };
+}
+
+export async function getStudentPracticeSession(
+  studentId: string,
+  cycleId: string,
+) {
+  const cycle = await prisma.courseRecommendationCycle.findFirst({
+    where: { id: cycleId, studentId },
+    select: {
+      id: true,
+      requestSnapshot: true,
+      generatedAt: true,
+      course: { select: { id: true, name: true } },
+      classroom: { select: { name: true } },
+      graphVersion: { select: { versionNumber: true } },
+      recommendations: {
+        orderBy: [{ priority: "desc" }, { id: "asc" }],
+        select: {
+          id: true,
+          status: true,
+          reason: true,
+          wasCorrect: true,
+          score: true,
+          maxScore: true,
+          practiceAnswer: {
+            select: { score: true, maxScore: true, isCorrect: true },
+          },
+          programmingAttempts: {
+            orderBy: [{ revisionNumber: "desc" }, { id: "desc" }],
+            take: 1,
+            select: {
+              id: true,
+              status: true,
+              score: true,
+              maxScore: true,
+              backgroundJob: { select: { progress: true } },
+            },
+          },
+          question: {
+            select: {
+              id: true,
+              title: true,
+              content: true,
+              type: true,
+              difficulty: true,
+              explanation: true,
+              options: {
+                orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+                select: {
+                  id: true,
+                  label: true,
+                  content: true,
+                  sortOrder: true,
+                },
+              },
+              programmingConfigRevisions: {
+                orderBy: { revisionNumber: "desc" },
+                take: 1,
+                select: { starterCode: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!cycle) throw new ResourceNotFoundError("练习或测试不存在");
+  const snapshot = cycle.requestSnapshot;
+  const rawDistribution =
+    typeof snapshot === "object" &&
+    snapshot !== null &&
+    !Array.isArray(snapshot) &&
+    typeof snapshot.typeDistribution === "object" &&
+    snapshot.typeDistribution !== null &&
+    !Array.isArray(snapshot.typeDistribution)
+      ? snapshot.typeDistribution
+      : {};
+  const mode =
+    typeof snapshot === "object" &&
+    snapshot !== null &&
+    !Array.isArray(snapshot)
+      ? snapshot.mode === "TEST"
+        ? "TEST"
+        : "PRACTICE"
+      : "PRACTICE";
+  return {
+    id: cycle.id,
+    course: cycle.course,
+    classroomName: cycle.classroom.name,
+    graphVersionNumber: cycle.graphVersion.versionNumber,
+    generatedAt: cycle.generatedAt.toISOString(),
+    mode,
+    requestedCount:
+      typeof snapshot === "object" &&
+      snapshot !== null &&
+      !Array.isArray(snapshot) &&
+      typeof snapshot.count === "number"
+        ? snapshot.count
+        : cycle.recommendations.length,
+    questionDistribution: Object.fromEntries(
+      Object.entries(rawDistribution).filter(
+        (entry): entry is [string, number] =>
+          typeof entry[1] === "number" && Number.isInteger(entry[1]),
+      ),
+    ),
+    items: cycle.recommendations.map((item) => ({
+      id: item.id,
+      status: item.status,
+      reason: item.reason,
+      wasCorrect: item.practiceAnswer?.isCorrect ?? item.wasCorrect,
+      score:
+        item.practiceAnswer?.score.toNumber() ?? item.score?.toNumber() ?? null,
+      maxScore:
+        item.practiceAnswer?.maxScore.toNumber() ??
+        item.maxScore?.toNumber() ??
+        1,
+      programmingAttempt: item.programmingAttempts[0]
+        ? {
+            id: item.programmingAttempts[0].id,
+            status: item.programmingAttempts[0].status,
+            score: item.programmingAttempts[0].score?.toNumber() ?? null,
+            progress: item.programmingAttempts[0].backgroundJob?.progress ?? 0,
+          }
+        : null,
+      question: {
+        ...item.question,
+        starterCode:
+          item.question.programmingConfigRevisions[0]?.starterCode ?? "",
+      },
     })),
   };
 }
