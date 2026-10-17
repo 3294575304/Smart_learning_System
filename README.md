@@ -46,6 +46,8 @@ MVP 已完成演示验收，V1.0 迭代一至六保留既有专项验收结论�
 
 ## 教学质量报告
 
+报告图表默认使用 Windows 宋体和 Times New Roman。Linux 部署需安装中文和西文字体，并通过 `QUALITY_REPORT_CJK_FONT_PATH`、`QUALITY_REPORT_LATIN_FONT_PATH`、`QUALITY_REPORT_LATIN_BOLD_FONT_PATH` 指定可读取的字体文件；CI 使用 Noto Serif CJK 和 Liberation Serif。配置只影响图表绘制，DOCX 模板文字的字体声明保持不变。
+
 - 教师从课程详情进入 `/teacher/courses/:courseId/quality-report`，可选择平台正式成绩台账，也可上传隔离的 `.xlsx`/`.csv` 成绩源；上传源只生成报告快照，不回写正式成绩。
 - 报告冻结模板校验和、来源数据、统计结果、规则版本和生成记录，通过通用后台任务执行并支持安全重试与幂等复用。
 - 当前先生成基于固定 2024 模板的 AI 审核稿和带公式的成绩工作簿；教师逐项核对、修改并确认后才生成正式 DOCX。课程评价小组、学院意见、签字和日期保持空白，所有下载执行教师/课程归属校验并使用私有无缓存响应。
