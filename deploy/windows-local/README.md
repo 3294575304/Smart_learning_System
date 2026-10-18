@@ -29,14 +29,7 @@ powershell -ExecutionPolicy Bypass -File deploy/windows-local/install-local-depl
 
 任务分别为 `Zhixue-SSH-Tunnel`、`Zhixue-Next`、`Zhixue-Judge-Worker` 和 `Zhixue-Background-Worker`。它们不注册登录、定时或失败重启触发器，只在运行本机部署流程时启动；停止后不会自行恢复。任务通过 `IgnoreNew` 保持单实例。运行时配置保存在被 Git 忽略的 `.data/local-deployment/service-config.json`，安装脚本会为该文件单独关闭 ACL 继承，仅允许当前用户和 SYSTEM 读取；日志保存在同目录的 `logs` 下。脚本不会输出远程执行器密钥或后台任务密钥。
 
-完成首次安装后，可以手动停止本机部署服务：
-
-```powershell
-# 停止应用、worker 和 SSH 隧道
-powershell -ExecutionPolicy Bypass -File .\stop-all.ps1
-```
-
-根目录 `start-all.ps1` 含机器相关的启动编排，现作为本机文件维护并被 Git 忽略；仓库部署请使用上文的 `install-local-deployment.ps1`。`stop-all.ps1` 只停止本项目的应用、两类 worker、SSH 隧道和 Next.js 开发预览（包括 3001 端口预览），不会停止其他项目的 Node 服务或 PostgreSQL。若仍提示 DLL 被占用，请关闭本仓库的 Prisma Studio 或其他使用 Prisma 的独立脚本后重试。
+根目录 `start-all.ps1` 和 `stop-all.ps1` 都是机器相关的本机运维脚本，已从 Git 跟踪中移除并由 `.gitignore` 忽略；仓库部署请使用上文的 `install-local-deployment.ps1`。安装后可在 Windows 任务计划程序中手动停止四个 `Zhixue-*` 任务。本机如保留脚本化启停文件，应单独维护且不要提交。
 
 重新登录或重启 Windows 后任务保持停止，需按本机部署流程再次启动任务。如果未来确实需要无人登录自启，应另行设计服务账户和 ACL，不应在手动部署脚本中隐式启用。
 

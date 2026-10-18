@@ -154,11 +154,7 @@ MVP 已完成演示验收，V1.0 迭代一至六保留既有专项验收结论�
 
 本机部署包含 Next.js、Python 判题 worker、持久化长任务 worker 和远程 gVisor SSH 隧道。请按 [`deploy/windows-local/README.md`](deploy/windows-local/README.md) 配置环境并运行部署脚本；根目录 `start-all.ps1` 是按机器配置的本地文件，已从仓库移除并加入 Git 忽略规则。服务运行日志位于 `.data/local-deployment/logs`。
 
-停止本机应用、worker 和 SSH 隧道时运行：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\stop-all.ps1
-```
+本机启停脚本属于机器相关配置，不随仓库分发。部署任务可通过 Windows 任务计划程序手动停止；如需脚本化启停，请在本机单独维护并确保不纳入 Git。
 
 ### 手动启动 Web 开发服务器
 
