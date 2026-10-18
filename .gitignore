@@ -53,6 +53,8 @@ prisma/*.db-journal
 /tmp
 .workbuddy/memory/
 /docs
+
+# Per-machine Windows startup configuration; keep the local copy out of GitHub.
+/start-all.ps1
 /outputs/
-start-all.ps1
 stop-all.ps1
