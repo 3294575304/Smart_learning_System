@@ -16,6 +16,7 @@ import {
 } from "@/services/courses/service";
 import { LocalStorageService } from "@/services/storage/local-storage";
 import type { StorageService } from "@/services/storage/types";
+import { ensureTestQuestionCategory } from "@/tests/helpers/question-course-category";
 
 const prisma = new PrismaClient();
 const auditContext = {
@@ -80,6 +81,7 @@ async function createOwnedCourse(teacherId: string) {
     teacherId,
     {
       templateId: template.id,
+      questionCategoryId: (await ensureTestQuestionCategory(prisma)).id,
       courseNo: `SYLLABUS-${suffix.toUpperCase()}`,
       term: "2026-2027-1",
       name: `教学大纲上传测试 ${suffix}`,

@@ -3,18 +3,18 @@ import test from "node:test";
 import { editQuestionKnowledgeTag } from "@/services/questions/knowledge-tags";
 import { questionUpsertSchema } from "@/services/questions/schemas";
 
-test("老师可只填写自定义知识点创建题目，不必选择固定分类", () => {
+test("题目必须选择课程分类，仍可使用自定义知识点标签", () => {
   const result = questionUpsertSchema.safeParse({
     title: "函数参数",
     content: "Python支持默认参数吗？",
     type: "TRUE_FALSE",
+    questionCategoryId: "ccategory00000000000000001",
     difficulty: 2,
     options: [],
     answer: { kind: "BOOLEAN", value: true },
     explanation: "可在参数定义时指定默认值。",
     knowledgePointIds: [],
     tags: ["函数参数"],
-    visibility: "PRIVATE",
   });
   assert.equal(result.success, true);
 });
@@ -23,13 +23,13 @@ test("知识点标签为空且没有分类时给出明确校验错误", () => {
     title: "函数参数",
     content: "Python支持默认参数吗？",
     type: "TRUE_FALSE",
+    questionCategoryId: "ccategory00000000000000001",
     difficulty: 2,
     options: [],
     answer: { kind: "BOOLEAN", value: true },
     explanation: "支持默认参数。",
     knowledgePointIds: [],
     tags: [],
-    visibility: "PRIVATE",
   });
   assert.equal(result.success, false);
   if (!result.success)

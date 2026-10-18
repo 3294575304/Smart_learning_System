@@ -37,7 +37,6 @@ export default async function QuestionMappingPage({ params }: Props) {
           totalQuestions={result.total}
           questionLimit={result.limit}
           catalog={result.catalog}
-          duplicateCount={result.duplicateCount}
         />
       </section>
     );

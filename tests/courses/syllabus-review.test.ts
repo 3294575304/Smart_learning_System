@@ -24,6 +24,7 @@ import {
   saveTeacherSyllabusReview,
 } from "@/services/syllabus-parsing/review-service";
 import type { SyllabusParseOutput } from "@/services/syllabus-parsing/schemas";
+import { ensureTestQuestionCategory } from "@/tests/helpers/question-course-category";
 
 const prisma = new PrismaClient();
 const context = { ipAddress: "127.0.0.1", userAgent: "syllabus-review-test" };
@@ -62,6 +63,7 @@ test("审核修订保持 AI 原稿、阻止并发覆盖并幂等发布不可变�
       teacher.id,
       {
         templateId: template.id,
+        questionCategoryId: (await ensureTestQuestionCategory(prisma)).id,
         courseNo: `REVIEW-${randomBytes(4).toString("hex")}`,
         term: "2026-2027-1",
         name: "Python Review Test",

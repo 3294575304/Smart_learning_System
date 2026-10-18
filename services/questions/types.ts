@@ -1,10 +1,4 @@
-import type {
-  QuestionStatus,
-  QuestionType,
-  QuestionVisibility,
-} from "@prisma/client";
-
-export type QuestionScope = "OWNED" | "PUBLIC";
+import type { QuestionStatus, QuestionType } from "@prisma/client";
 
 export type QuestionAnswer =
   | { kind: "CHOICE"; correctOptionLabels: string[] }
@@ -42,7 +36,9 @@ export interface QuestionListItem {
   type: QuestionType;
   difficulty: number;
   status: QuestionStatus;
-  visibility: QuestionVisibility;
+  questionCategoryId: string | null;
+  questionCategoryName: string | null;
+  revision: number;
   tags: string[];
   creator: QuestionCreatorData;
   knowledgePoints: QuestionKnowledgePointData[];
@@ -50,7 +46,6 @@ export interface QuestionListItem {
   assignmentReferenceCount: number;
   canEdit: boolean;
   canDelete: boolean;
-  canCopy: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -81,7 +76,7 @@ export interface QuestionReferenceCounts {
 
 export interface DeleteQuestionResult {
   questionId: string;
-  mode: "PHYSICAL" | "ARCHIVED";
+  mode: "ARCHIVED";
   references: QuestionReferenceCounts;
 }
 

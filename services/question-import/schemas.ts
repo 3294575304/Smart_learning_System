@@ -29,17 +29,11 @@ export const questionImportCommitSchema = z
       fileName: z.string().trim().min(1).max(255),
       checksum: z.string().regex(/^[a-f0-9]{64}$/u),
     }),
-    courseId: z.string().cuid("请选择有效课程").optional(),
+    categoryId: z.string().cuid("请选择有效课程分类"),
     knowledgePointIds: z.array(z.string().cuid()).max(10).default([]),
     questions: z.array(questionImportCommitItemSchema).min(1).max(500),
   })
   .superRefine((value, context) => {
-    if (!value.courseId && !value.knowledgePointIds.length)
-      context.addIssue({
-        code: "custom",
-        path: ["courseId"],
-        message: "请选择题目所属课程",
-      });
     if (
       new Set(value.knowledgePointIds).size !== value.knowledgePointIds.length
     )

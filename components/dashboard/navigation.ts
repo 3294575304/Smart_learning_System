@@ -36,7 +36,12 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
       items: [
         { href: "/admin", label: "平台概览", icon: ShieldCheck },
         { href: "/admin/users", label: "用户管理", icon: Users },
-        { href: "/admin/questions", label: "公共题库", icon: BookOpenCheck },
+        { href: "/admin/questions", label: "共享题库", icon: BookOpenCheck },
+        {
+          href: "/admin/question-course-categories",
+          label: "题库课程分类",
+          icon: BookOpenCheck,
+        },
         { href: "/admin/classrooms", label: "班级治理", icon: School },
         {
           href: "/admin/course-templates",
@@ -55,7 +60,7 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
         { href: "/teacher", label: "工作台", icon: Home },
         { href: "/teacher/courses", label: "课程管理", icon: BookOpenCheck },
         { href: "/teacher/classrooms", label: "班级管理", icon: School },
-        { href: "/teacher/questions", label: "题库管理", icon: BookOpenCheck },
+        { href: "/teacher/questions", label: "共享题库", icon: BookOpenCheck },
         {
           href: "/teacher/assignments",
           label: "作业管理",

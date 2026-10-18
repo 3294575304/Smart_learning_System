@@ -1,9 +1,4 @@
-import type {
-  QuestionStatus,
-  QuestionType,
-  QuestionVisibility,
-  Role,
-} from "@prisma/client";
+import type { QuestionStatus, QuestionType, Role } from "@prisma/client";
 
 export interface AdminQuestionView {
   id: string;
@@ -17,7 +12,9 @@ export interface AdminQuestionView {
   acceptableAnswers: string[];
   isCaseSensitive: boolean;
   status: QuestionStatus;
-  visibility: QuestionVisibility;
+  questionCategoryId: string | null;
+  questionCategoryName: string | null;
+  archivedFromStatus: QuestionStatus | null;
   tags: string[];
   createdAt: Date;
   updatedAt: Date;

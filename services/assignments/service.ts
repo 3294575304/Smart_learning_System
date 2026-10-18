@@ -126,9 +126,16 @@ async function assertAssignmentResources(
 ) {
   const classroom = await transaction.classroom.findUnique({
     where: { id: input.classroomId },
-    select: { teacherId: true, status: true },
+    select: {
+      teacherId: true,
+      status: true,
+      course: { select: { questionCategoryId: true } },
+    },
   });
   assertTeacherOwnsClassroom(teacherId, classroom);
+  if (!classroom) {
+    throw new AssignmentOperationError("班级不存在或无权访问", 400);
+  }
 
   const questionIds = input.questions.map((item) => item.questionId);
   const questions = await transaction.question.findMany({
@@ -155,7 +162,12 @@ async function assertAssignmentResources(
   });
   if (
     questions.length !== questionIds.length ||
-    questions.some((question) => !canTeacherUseQuestion(teacherId, question))
+    questions.some(
+      (question) =>
+        !canTeacherUseQuestion(question) ||
+        (classroom.course &&
+          question.questionCategoryId !== classroom.course.questionCategoryId),
+    )
   ) {
     throw new AssignmentOperationError("部分题目不存在、已停用或无权使用", 400);
   }
@@ -282,17 +294,19 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
     prisma.classroom.findMany({
       where: { teacherId, status: "ACTIVE" },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, courseId: true },
+      select: {
+        id: true,
+        name: true,
+        courseId: true,
+        course: { select: { questionCategoryId: true } },
+      },
     }),
     prisma.question.findMany({
       where: {
         status: QuestionStatus.ACTIVE,
         isAssignmentOnly: false,
         deletedAt: null,
-        OR: [
-          { creatorId: teacherId },
-          { visibility: QuestionVisibility.PUBLIC },
-        ],
+        questionCategoryId: { not: null },
       },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       select: {
@@ -301,8 +315,8 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
         content: true,
         type: true,
         difficulty: true,
-        visibility: true,
-        creatorId: true,
+        questionCategoryId: true,
+        questionCategory: { select: { name: true } },
         graphBindings: {
           where: { course: { teacherId } },
           select: { courseId: true, conceptId: true },
@@ -341,7 +355,10 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
     }),
   ]);
   return {
-    classrooms,
+    classrooms: classrooms.map(({ course, ...classroom }) => ({
+      ...classroom,
+      questionCategoryId: course?.questionCategoryId ?? null,
+    })),
     courses: buildEditorCourseOptions(
       courses,
       new Set(
@@ -352,7 +369,6 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
     ),
     questions: questions.map((question) => ({
       ...question,
-      isOwned: question.creatorId === teacherId,
     })),
   };
 }

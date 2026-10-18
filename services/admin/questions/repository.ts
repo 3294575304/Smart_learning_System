@@ -17,7 +17,9 @@ const adminQuestionSelect = Prisma.validator<Prisma.QuestionSelect>()({
   acceptableAnswers: true,
   isCaseSensitive: true,
   status: true,
-  visibility: true,
+  questionCategoryId: true,
+  questionCategory: { select: { name: true } },
+  archivedFromStatus: true,
   tags: true,
   deletedAt: true,
   createdAt: true,
@@ -68,19 +70,7 @@ export async function loadAdminQuestionPage(query: AdminQuestionListQuery) {
         }
       : {}),
     ...(query.type ? { type: query.type } : {}),
-    ...(query.courseId
-      ? {
-          AND: [
-            {
-              OR: [
-                { categoryCourseId: query.courseId },
-                { graphBindings: { some: { courseId: query.courseId } } },
-              ],
-            },
-          ],
-        }
-      : {}),
-    ...(query.visibility ? { visibility: query.visibility } : {}),
+    ...(query.categoryId ? { questionCategoryId: query.categoryId } : {}),
     ...(query.status ? { status: query.status } : {}),
     ...(query.creatorId ? { creatorId: query.creatorId } : {}),
     ...(query.knowledgePointId

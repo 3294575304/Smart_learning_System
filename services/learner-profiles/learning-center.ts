@@ -6,7 +6,6 @@ import {
   RecommendationStatus,
   SubmissionStatus,
   QuestionStatus,
-  QuestionVisibility,
   StudentSelfReflectionStatus,
 } from "@prisma/client";
 
@@ -293,40 +292,30 @@ export async function getStudentCourseLearningCenter(
   const conceptIds = pointViews.flatMap((point) =>
     point.conceptId ? [point.conceptId] : [],
   );
-  const courseTeacher = published
+  const courseScope = published
     ? await prisma.course.findUnique({
         where: { id: courseId },
-        select: { teacherId: true },
+        select: { questionCategoryId: true },
       })
     : null;
   const boundQuestions =
-    published && courseTeacher && conceptIds.length
+    published && courseScope && conceptIds.length
       ? await prisma.question.findMany({
           where: {
             status: QuestionStatus.ACTIVE,
             deletedAt: null,
-            AND: [
-              {
-                OR: [
-                  { creatorId: courseTeacher.teacherId },
-                  { visibility: QuestionVisibility.PUBLIC },
-                ],
-              },
-              {
-                graphBindings: {
-                  some: { courseId, conceptId: { in: conceptIds } },
-                },
-              },
-            ],
+            questionCategoryId: courseScope.questionCategoryId,
+            graphBindings: {
+              some: { courseId, conceptId: { in: conceptIds } },
+            },
           },
-          orderBy: [{ creatorId: "asc" }, { title: "asc" }, { id: "asc" }],
+          orderBy: [{ title: "asc" }, { id: "asc" }],
           take: 1000,
           select: {
             id: true,
             title: true,
             type: true,
             difficulty: true,
-            creatorId: true,
             graphBindings: {
               where: { courseId, conceptId: { in: conceptIds } },
               select: { conceptId: true, bindingType: true },
@@ -342,7 +331,6 @@ export async function getStudentCourseLearningCenter(
       type: (typeof boundQuestions)[number]["type"];
       difficulty: number;
       bindingType: (typeof boundQuestions)[number]["graphBindings"][number]["bindingType"];
-      fromCourseTeacher: boolean;
     }>
   >();
   for (const question of boundQuestions) {
@@ -354,7 +342,6 @@ export async function getStudentCourseLearningCenter(
         type: question.type,
         difficulty: question.difficulty,
         bindingType: binding.bindingType,
-        fromCourseTeacher: question.creatorId === courseTeacher?.teacherId,
       });
       questionsByConceptId.set(binding.conceptId, related);
     }

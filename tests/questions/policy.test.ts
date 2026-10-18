@@ -1,97 +1,45 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QuestionVisibility } from "@prisma/client";
-
-import { AuthorizationError } from "@/services/auth/policy";
 import {
-  assertTeacherCanEditQuestion,
-  assertTeacherQuestionIsPrivate,
-  assertTeacherOwnsQuestion,
-  canTeacherCopyQuestion,
-  canTeacherViewQuestion,
-} from "@/services/questions/policy";
+  questionListQuerySchema,
+  questionUpsertSchema,
+} from "@/services/questions/schemas";
 
-test("教师可以查看自己的私有题和其他人的公共题", () => {
+const categoryId = "ccategory00000000000000001";
+
+test("题库不再读取 scope，按课程分类筛选共享题目", () => {
+  const parsed = questionListQuerySchema.parse({
+    scope: "OWNED",
+    categoryId,
+  });
+  assert.equal(parsed.categoryId, categoryId);
+  assert.equal("scope" in parsed, false);
+});
+
+test("新题必须选择课程分类，修订号仅在编辑时传入", () => {
+  const base = {
+    title: "课程题目",
+    content: "判断命题是否成立。",
+    type: "TRUE_FALSE",
+    difficulty: 2,
+    options: [],
+    answer: { kind: "BOOLEAN", value: true },
+    explanation: "成立。",
+    knowledgePointIds: [],
+    tags: ["逻辑"],
+  };
+  assert.equal(questionUpsertSchema.safeParse(base).success, false);
   assert.equal(
-    canTeacherViewQuestion("teacher-1", {
-      creatorId: "teacher-1",
-      visibility: QuestionVisibility.PRIVATE,
-    }),
+    questionUpsertSchema.safeParse({ ...base, questionCategoryId: categoryId })
+      .success,
     true,
   );
   assert.equal(
-    canTeacherViewQuestion("teacher-1", {
-      creatorId: "teacher-2",
-      visibility: QuestionVisibility.PUBLIC,
-    }),
+    questionUpsertSchema.safeParse({
+      ...base,
+      questionCategoryId: categoryId,
+      revision: 3,
+    }).success,
     true,
-  );
-});
-
-test("只有其他教师的公共题可以复制到当前教师题库", () => {
-  assert.equal(
-    canTeacherCopyQuestion("teacher-1", {
-      creatorId: "teacher-2",
-      visibility: QuestionVisibility.PUBLIC,
-    }),
-    true,
-  );
-  assert.equal(
-    canTeacherCopyQuestion("teacher-1", {
-      creatorId: "teacher-1",
-      visibility: QuestionVisibility.PUBLIC,
-    }),
-    false,
-  );
-  assert.equal(
-    canTeacherCopyQuestion("teacher-1", {
-      creatorId: "teacher-2",
-      visibility: QuestionVisibility.PRIVATE,
-    }),
-    false,
-  );
-});
-
-test("教师创建或更新请求不能提交公共可见性", () => {
-  assert.doesNotThrow(() =>
-    assertTeacherQuestionIsPrivate(QuestionVisibility.PRIVATE),
-  );
-  assert.throws(
-    () => assertTeacherQuestionIsPrivate(QuestionVisibility.PUBLIC),
-    /公共题库由管理员维护/,
-  );
-});
-
-test("教师不能继续编辑历史公共题目", () => {
-  assert.throws(
-    () =>
-      assertTeacherCanEditQuestion(
-        {
-          creatorId: "teacher-1",
-          visibility: QuestionVisibility.PUBLIC,
-        },
-        "teacher-1",
-      ),
-    /联系管理员撤销公共状态/,
-  );
-});
-
-test("教师不能查看其他教师的私有题", () => {
-  assert.equal(
-    canTeacherViewQuestion("teacher-1", {
-      creatorId: "teacher-2",
-      visibility: QuestionVisibility.PRIVATE,
-    }),
-    false,
-  );
-});
-
-test("只有创建教师可以修改或删除题目", () => {
-  assert.doesNotThrow(() =>
-    assertTeacherOwnsQuestion("teacher-1", { creatorId: "teacher-1" }),
-  );
-  assert.throws(
-    () => assertTeacherOwnsQuestion("teacher-1", { creatorId: "teacher-2" }),
-    AuthorizationError,
   );
 });

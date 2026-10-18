@@ -9,7 +9,6 @@ import {
   ClassroomStatus,
   PrismaClient,
   QuestionStatus,
-  QuestionVisibility,
   Role,
   type SystemConfig,
   UserStatus,
@@ -102,7 +101,6 @@ let originalSystemConfig: SystemConfig | null | undefined;
 let systemConfigTargetId: string | null = null;
 let governanceQuestionOriginal: {
   id: string;
-  visibility: QuestionVisibility;
   status: QuestionStatus;
 } | null = null;
 let governanceClassroomOriginal: {
@@ -199,6 +197,71 @@ async function main(): Promise<void> {
     originalSystemConfig = await prisma.systemConfig.findUnique({
       where: { singletonKey: "default" },
     });
+
+    const categoryPath = "/api/admin/question-course-categories";
+    assert.equal((await requestJson(categoryPath)).status, 401);
+    assert.equal((await requestJson(categoryPath, teacherCookie)).status, 403);
+    assert.equal((await requestJson(categoryPath, studentCookie)).status, 403);
+    const invalidCategory = await requestJson(
+      categoryPath,
+      adminCookie,
+      "POST",
+      { name: " " },
+    );
+    assert.equal(invalidCategory.status, 400);
+    assert.equal(
+      (
+        await requestJson(categoryPath, teacherCookie, "POST", {
+          name: `管理员课程分类 ${testSuffix}`,
+        })
+      ).status,
+      403,
+    );
+    const categoryName = `管理员课程分类 ${testSuffix}`;
+    const createCategoryResponse = await requestJson(
+      categoryPath,
+      adminCookie,
+      "POST",
+      { name: categoryName },
+    );
+    assert.equal(createCategoryResponse.status, 201);
+    const createdCategory =
+      (await createCategoryResponse.json()) as ApiSuccess<{
+        id: string;
+        name: string;
+        isActive: boolean;
+      }>;
+    assert.equal(createdCategory.data.name, categoryName);
+    assert.equal(createdCategory.data.isActive, true);
+    assert.equal(
+      (
+        await requestJson(categoryPath, adminCookie, "POST", {
+          name: categoryName,
+        })
+      ).status,
+      409,
+    );
+    const updateCategoryResponse = await requestJson(
+      `${categoryPath}/${createdCategory.data.id}`,
+      adminCookie,
+      "PATCH",
+      { name: `${categoryName} 已更新` },
+    );
+    assert.equal(updateCategoryResponse.status, 200);
+    const disabledCategoryResponse = await requestJson(
+      `${categoryPath}/${createdCategory.data.id}`,
+      adminCookie,
+      "PATCH",
+      { name: `${categoryName} 已更新`, isActive: false },
+    );
+    assert.equal(disabledCategoryResponse.status, 200);
+    const reenabledCategoryResponse = await requestJson(
+      `${categoryPath}/${createdCategory.data.id}`,
+      adminCookie,
+      "PATCH",
+      { name: `${categoryName} 已更新`, isActive: true },
+    );
+    assert.equal(reenabledCategoryResponse.status, 200);
 
     assert.equal((await requestJson("/api/admin/users")).status, 401);
     assert.equal((await requestJson("/api/admin/system-config")).status, 401);
@@ -821,14 +884,32 @@ async function main(): Promise<void> {
     const governanceQuestion = await prisma.question.findFirstOrThrow({
       where: {
         creatorId: teacher.id,
-        visibility: QuestionVisibility.PRIVATE,
         status: QuestionStatus.ACTIVE,
         deletedAt: null,
+        questionCategoryId: { not: null },
         knowledgePointLinks: { some: {} },
       },
-      select: { id: true, visibility: true, status: true },
+      select: { id: true, status: true, questionCategoryId: true },
     });
-    governanceQuestionOriginal = governanceQuestion;
+    governanceQuestionOriginal = {
+      id: governanceQuestion.id,
+      status: governanceQuestion.status,
+    };
+    const categoryQuestionList = await requestJson(
+      `/api/admin/questions?categoryId=${governanceQuestion.questionCategoryId}`,
+      adminCookie,
+    );
+    assert.equal(categoryQuestionList.status, 200);
+    const categoryQuestionData =
+      (await categoryQuestionList.json()) as ApiSuccess<{
+        items: Array<{ id: string }>;
+      }>;
+    assert.equal(
+      categoryQuestionData.data.items.some(
+        (item) => item.id === governanceQuestion.id,
+      ),
+      true,
+    );
     assert.equal(
       (await requestJson("/api/admin/questions", teacherCookie)).status,
       403,
@@ -840,10 +921,10 @@ async function main(): Promise<void> {
     assert.equal(
       (
         await requestJson(
-          `/api/admin/questions/${governanceQuestion.id}/visibility`,
+          `/api/admin/questions/${governanceQuestion.id}/status`,
           teacherCookie,
           "PATCH",
-          { visibility: QuestionVisibility.PUBLIC },
+          { status: QuestionStatus.INACTIVE },
         )
       ).status,
       403,
@@ -851,10 +932,10 @@ async function main(): Promise<void> {
     assert.equal(
       (
         await requestJson(
-          `/api/admin/questions/${governanceQuestion.id}/visibility`,
+          `/api/admin/questions/${governanceQuestion.id}/status`,
           adminCookie,
           "PATCH",
-          { visibility: QuestionVisibility.PUBLIC },
+          { status: QuestionStatus.INACTIVE },
         )
       ).status,
       200,
@@ -863,35 +944,19 @@ async function main(): Promise<void> {
       (
         await prisma.question.findUniqueOrThrow({
           where: { id: governanceQuestion.id },
-          select: { visibility: true },
+          select: { status: true },
         })
-      ).visibility,
-      QuestionVisibility.PUBLIC,
-    );
-    assert.equal(
-      (
-        await requestJson(
-          `/api/admin/questions/${governanceQuestion.id}/visibility`,
-          adminCookie,
-          "PATCH",
-          { visibility: QuestionVisibility.PRIVATE },
-        )
       ).status,
-      200,
+      QuestionStatus.INACTIVE,
     );
     assert.equal(
       await prisma.auditLog.count({
         where: {
           targetId: governanceQuestion.id,
-          action: {
-            in: [
-              AuditAction.QUESTION_MADE_PUBLIC,
-              AuditAction.QUESTION_MADE_PRIVATE,
-            ],
-          },
+          action: AuditAction.QUESTION_DISABLED,
         },
       }),
-      2,
+      1,
     );
 
     const governanceClassroom = await prisma.classroom.findFirstOrThrow({
@@ -966,7 +1031,6 @@ async function main(): Promise<void> {
       await prisma.question.update({
         where: { id: governanceQuestionOriginal.id },
         data: {
-          visibility: governanceQuestionOriginal.visibility,
           status: governanceQuestionOriginal.status,
         },
       });

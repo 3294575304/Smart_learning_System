@@ -5,15 +5,17 @@ import { TeacherCourseList } from "@/components/courses/teacher-course-list";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
+  listTeacherQuestionCourseCategories,
   listTeacherCourseTemplates,
   listTeacherCourses,
 } from "@/services/courses/service";
 
 export default async function TeacherCoursesPage() {
   const teacher = await requirePageRole(Role.TEACHER);
-  const [courses, templates] = await Promise.all([
+  const [courses, templates, categories] = await Promise.all([
     listTeacherCourses(teacher.id),
     listTeacherCourseTemplates(),
+    listTeacherQuestionCourseCategories(),
   ]);
   const defaultTemplateId =
     templates.find((template) => template.code === "python-programming-v1")
@@ -49,12 +51,13 @@ export default async function TeacherCoursesPage() {
               <CourseForm
                 defaultTemplateId={defaultTemplateId}
                 mode="create"
+                categories={categories}
                 templates={templates}
               />
             ) : (
               <EmptyState
                 compact
-                description="请联系管理员启用课程模板。"
+                description="请联系管理员启用课程模板和课程分类。"
                 icon={BookOpenCheck}
                 title="暂无可用模板"
               />

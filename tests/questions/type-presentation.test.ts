@@ -39,6 +39,7 @@ test("course filters explain unavailable concepts and retain course selection", 
       courses: [
         {
           id: courseId,
+          questionCategoryId: "ccategory00000000000000001",
           name: "英语",
           term: "2026",
           courseNo: "EN",
@@ -46,6 +47,7 @@ test("course filters explain unavailable concepts and retain course selection", 
           concepts: [],
         },
       ],
+      categories: [],
     }),
   );
   assert.match(html, /暂无正式知识点/u);
@@ -62,14 +64,15 @@ function question(type: QuestionType): QuestionDetail {
     type,
     difficulty: 3,
     status: "ACTIVE",
-    visibility: "PRIVATE",
+    questionCategoryId: "ccategory00000000000000001",
+    questionCategoryName: "Python 程序设计",
+    revision: 1,
     tags: [],
     creator: { id: "cteacher0000000000000001", displayName: "教师" },
     knowledgePoints: [],
     assignmentReferenceCount: 0,
     canEdit: true,
     canDelete: true,
-    canCopy: true,
     createdAt: new Date(),
     updatedAt: new Date(),
     explanation: "参考解析",
@@ -86,6 +89,7 @@ test("historical programming filters retain their value while displaying a cours
     React.createElement(QuestionFilters, {
       query: questionListQuerySchema.parse({ type: "PYTHON_PROGRAMMING" }),
       courses: [],
+      categories: [],
     }),
   );
   assert.match(html, /value="PYTHON_PROGRAMMING" selected="">编程题/u);
@@ -101,6 +105,9 @@ test("subjective question editing supports mathematics, English and code analysi
     React.createElement(QuestionForm, {
       mode: "edit",
       knowledgePoints: [],
+      categories: [
+        { id: "ccategory00000000000000001", name: "Python 程序设计" },
+      ],
       question: detail,
     }),
   );
@@ -119,7 +126,8 @@ test("subjective question editing supports mathematics, English and code analysi
         explanation: detail.explanation,
         knowledgePointIds: ["cknowledge00000000000001"],
         tags: [],
-        visibility: detail.visibility,
+        questionCategoryId: detail.questionCategoryId,
+        revision: detail.revision,
       }).success,
     );
   }
@@ -130,6 +138,9 @@ test("programming creation uses a generic type but clearly states the supported 
     React.createElement(QuestionForm, {
       mode: "edit",
       knowledgePoints: [],
+      categories: [
+        { id: "ccategory00000000000000001", name: "Python 程序设计" },
+      ],
       question: question(QuestionType.PYTHON_PROGRAMMING),
     }),
   );
@@ -143,7 +154,13 @@ test("programming creation uses a generic type but clearly states the supported 
 
 test("六种题型入口可见，选中状态明确，编程创建提供下一步", () => {
   const html = render(
-    React.createElement(QuestionForm, { mode: "create", knowledgePoints: [] }),
+    React.createElement(QuestionForm, {
+      mode: "create",
+      knowledgePoints: [],
+      categories: [
+        { id: "ccategory00000000000000001", name: "Python 程序设计" },
+      ],
+    }),
   );
   assert.equal((html.match(/aria-pressed=/gu) ?? []).length, 6);
   assert.match(html, /选择题型/u);
@@ -157,6 +174,7 @@ test("高级筛选默认折叠，已选知识点或难度时展开，筛选值�
     React.createElement(QuestionFilters, {
       query: questionListQuerySchema.parse({}),
       courses: [],
+      categories: [],
     }),
   );
   assert.match(plain, /更多筛选/u);
@@ -165,6 +183,7 @@ test("高级筛选默认折叠，已选知识点或难度时展开，筛选值�
     React.createElement(QuestionFilters, {
       query: questionListQuerySchema.parse({ difficulty: 4 }),
       courses: [],
+      categories: [],
     }),
   );
   assert.match(selected, /<details[^>]*open/u);

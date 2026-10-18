@@ -7,7 +7,6 @@ import {
   Prisma,
   QuestionGraphBindingType,
   QuestionStatus,
-  QuestionVisibility,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -169,6 +168,7 @@ async function ownedCourse(teacherId: string, courseId: string) {
     where: { id: courseId, teacherId },
     select: {
       id: true,
+      questionCategoryId: true,
       name: true,
       currentPublishedKnowledgeGraphVersionId: true,
     },
@@ -186,14 +186,12 @@ async function mappingSource(
   questionIds: string[],
   graphVersionId: string,
 ) {
+  const course = await ownedCourse(teacherId, courseId);
   const [questions, graphVersion] = await Promise.all([
     prisma.question.findMany({
       where: {
         id: { in: questionIds },
-        OR: [
-          { creatorId: teacherId },
-          { visibility: QuestionVisibility.PUBLIC },
-        ],
+        questionCategoryId: course.questionCategoryId,
         deletedAt: null,
         status: QuestionStatus.ACTIVE,
         isAssignmentOnly: false,
@@ -558,10 +556,7 @@ export async function createQuestionMappingBatch(
     prisma.question.findMany({
       where: {
         id: { in: input.questionIds },
-        OR: [
-          { creatorId: teacherId },
-          { visibility: QuestionVisibility.PUBLIC },
-        ],
+        questionCategoryId: course.questionCategoryId,
         deletedAt: null,
         status: QuestionStatus.ACTIVE,
         isAssignmentOnly: false,
@@ -943,21 +938,19 @@ export async function listUnboundTeacherQuestions(
 ) {
   const course = await ownedCourse(teacherId, courseId);
   const where = {
-    OR: [{ creatorId: teacherId }, { visibility: QuestionVisibility.PUBLIC }],
+    questionCategoryId: course.questionCategoryId,
     deletedAt: null,
     status: QuestionStatus.ACTIVE,
     isAssignmentOnly: false,
   } satisfies Prisma.QuestionWhereInput;
   const rows = await prisma.question.findMany({
     where,
-    orderBy: [{ visibility: "asc" }, { updatedAt: "desc" }, { id: "asc" }],
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     select: {
       id: true,
       title: true,
       type: true,
       difficulty: true,
-      visibility: true,
-      creatorId: true,
       content: true,
       correctBoolean: true,
       referenceAnswer: true,
@@ -973,14 +966,13 @@ export async function listUnboundTeacherQuestions(
       graphBindingSets: { where: { courseId }, select: { id: true } },
     },
   });
-  const catalog = buildMappingQuestionCatalog(teacherId, rows);
+  const catalog = buildMappingQuestionCatalog(rows);
   const unbound = catalog.filter((question) => !question.isBound);
   return {
     course,
     questions: unbound.slice(0, 500),
     total: unbound.length,
     catalog,
-    duplicateCount: rows.length - catalog.length,
     limit: 500,
   };
 }

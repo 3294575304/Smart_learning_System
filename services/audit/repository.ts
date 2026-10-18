@@ -150,6 +150,7 @@ interface WriteGovernanceAuditInput {
     | typeof AuditTargetType.CLASSROOM
     | typeof AuditTargetType.COURSE
     | typeof AuditTargetType.COURSE_TEMPLATE
+    | typeof AuditTargetType.QUESTION_COURSE_CATEGORY
     | typeof AuditTargetType.COURSE_FILE
     | typeof AuditTargetType.STUDENT_IMPORT_BATCH
     | typeof AuditTargetType.SYLLABUS_REVIEW

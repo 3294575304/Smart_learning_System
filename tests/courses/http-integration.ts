@@ -243,6 +243,11 @@ async function main(): Promise<void> {
         where: { email: "student@example.com" },
       }),
     ]);
+    const questionCategory =
+      await prisma.questionCourseCategory.findFirstOrThrow({
+        where: { isActive: true },
+        select: { id: true },
+      });
     const [adminCookie, teacherCookie, teacherTwoCookie, studentCookie] =
       await Promise.all([
         sessionCookie(admin.id),
@@ -349,6 +354,7 @@ async function main(): Promise<void> {
       (
         await requestJson("/api/teacher/courses", teacherCookie, "POST", {
           templateId: createdTemplate.data.id,
+          questionCategoryId: questionCategory.id,
           courseNo: `HTTP-${randomBytes(3).toString("hex").toUpperCase()}`,
           term: "2026-2027-1",
           name: "停用模板课程",
@@ -405,6 +411,7 @@ async function main(): Promise<void> {
       "POST",
       {
         templateId: createdTemplate.data.id,
+        questionCategoryId: questionCategory.id,
         courseNo,
         term: "2026-2027-1",
         name: "HTTP 测试课程",
@@ -1083,6 +1090,7 @@ async function main(): Promise<void> {
       (
         await requestJson("/api/teacher/courses", teacherCookie, "POST", {
           templateId: createdTemplate.data.id,
+          questionCategoryId: questionCategory.id,
           courseNo,
           term: "2026-2027-1",
           name: "重复课程",
@@ -1107,8 +1115,17 @@ async function main(): Promise<void> {
 
     const deletableCourse = await prisma.course.create({
       data: {
-        templateId: createdTemplate.data.id,
-        teacherId: teacher.id,
+        questionCategory: {
+          connectOrCreate: {
+            where: { normalizedName: "automated-test-category" },
+            create: {
+              name: "自动化测试课程分类",
+              normalizedName: "automated-test-category",
+            },
+          },
+        },
+        template: { connect: { id: createdTemplate.data.id } },
+        teacher: { connect: { id: teacher.id } },
         courseNo: `HTTP-DELETE-${randomBytes(3).toString("hex").toUpperCase()}`,
         term: "2026-2027-1",
         name: "HTTP 可直接删除启用课程",
@@ -1202,8 +1219,17 @@ async function main(): Promise<void> {
 
     const formalCourse = await prisma.course.create({
       data: {
-        templateId: createdTemplate.data.id,
-        teacherId: teacher.id,
+        questionCategory: {
+          connectOrCreate: {
+            where: { normalizedName: "automated-test-category" },
+            create: {
+              name: "自动化测试课程分类",
+              normalizedName: "automated-test-category",
+            },
+          },
+        },
+        template: { connect: { id: createdTemplate.data.id } },
+        teacher: { connect: { id: teacher.id } },
         courseNo: `HTTP-FORMAL-${randomBytes(3).toString("hex").toUpperCase()}`,
         term: "2026-2027-1",
         name: "HTTP 已有教学数据草稿",
@@ -1786,6 +1812,7 @@ async function main(): Promise<void> {
           teacherCookie,
           "PATCH",
           {
+            questionCategoryId: questionCategory.id,
             courseNo: `HTTP-${randomBytes(3).toString("hex").toUpperCase()}`,
             term: "2026-2027-1",
             name: "HTTP 测试课程（更新）",

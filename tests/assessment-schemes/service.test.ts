@@ -16,6 +16,7 @@ import {
 } from "@/services/courses/service";
 import type { SyllabusParseOutput } from "@/services/syllabus-parsing/schemas";
 import type { StorageService } from "@/services/storage/types";
+import { ensureTestQuestionCategory } from "@/tests/helpers/question-course-category";
 
 const prisma = new PrismaClient();
 const context = {
@@ -122,6 +123,7 @@ test("考核方案草稿乐观并发、正式发布不可变且重复发布幂�
     teacher.id,
     {
       templateId: template.id,
+      questionCategoryId: (await ensureTestQuestionCategory(prisma)).id,
       courseNo: `SCHEME-${randomBytes(4).toString("hex")}`,
       term: "2026-2027-1",
       name: "Assessment Scheme Test",

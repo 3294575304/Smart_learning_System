@@ -1,7 +1,6 @@
 import type {
   QuestionStatus,
   QuestionType,
-  QuestionVisibility,
   RecommendationSource,
   RecommendationStatus,
 } from "@prisma/client";
@@ -27,11 +26,9 @@ export interface CandidateKnowledgePoint {
 
 export interface RecommendationCandidate {
   id: string;
-  creatorId: string;
   title: string;
   type: QuestionType;
   difficulty: number;
-  visibility: QuestionVisibility;
   status: QuestionStatus;
   deletedAt: Date | null;
   tags: string[];

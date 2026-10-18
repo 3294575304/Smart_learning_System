@@ -41,6 +41,12 @@ enum AuditAction {
   QUESTION_MADE_PUBLIC
   QUESTION_MADE_PRIVATE
   QUESTION_DISABLED
+  QUESTION_UPDATED
+  QUESTION_ARCHIVED
+  QUESTION_RESTORED
+  QUESTION_COURSE_CATEGORY_CREATED
+  QUESTION_COURSE_CATEGORY_UPDATED
+  QUESTION_COURSE_CATEGORY_DISABLED
   QUESTION_BULK_IMPORTED
   CLASSROOM_CLOSED_BY_ADMIN
   CLASSROOM_DISSOLVED
@@ -174,6 +180,7 @@ enum AuditTargetType {
   CLASSROOM
   COURSE
   COURSE_TEMPLATE
+  QUESTION_COURSE_CATEGORY
   COURSE_FILE
   STUDENT_IMPORT_BATCH
   SYLLABUS_REVIEW
@@ -966,8 +973,23 @@ model CourseTemplate {
   @@index([name, isActive])
 }
 
+model QuestionCourseCategory {
+  id             String   @id @default(cuid())
+  name           String   @db.VarChar(100)
+  normalizedName String   @unique @db.VarChar(100)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  courses   Course[]
+  questions Question[]
+
+  @@index([isActive, name])
+}
+
 model Course {
   categorizedQuestions                    Question[]   @relation("QuestionCategoryCourse")
+  questionCategoryId                      String
   id                                      String       @id @default(cuid())
   templateId                              String
   teacherId                               String
@@ -987,6 +1009,7 @@ model Course {
   updatedAt                               DateTime     @updatedAt
 
   template                              CourseTemplate                        @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  questionCategory                      QuestionCourseCategory                @relation(fields: [questionCategoryId], references: [id], onDelete: Restrict)
   teacher                               User                                  @relation("CourseTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
   classrooms                            Classroom[]                           @relation("ClassroomCourse")
   courseFileVersions                    CourseFileVersion[]                   @relation("CourseFileCourse")
@@ -2360,27 +2383,31 @@ model KnowledgePoint {
 }
 
 model Question {
-  categoryCourseId  String?
-  categoryCourse    Course?            @relation("QuestionCategoryCourse", fields: [categoryCourseId], references: [id], onDelete: Restrict)
-  isAssignmentOnly  Boolean            @default(false)
-  id                String             @id @default(cuid())
-  creatorId         String
-  title             String
-  content           String             @db.Text
-  type              QuestionType
-  difficulty        Int
-  visibility        QuestionVisibility @default(PRIVATE)
-  status            QuestionStatus     @default(DRAFT)
-  explanation       String             @db.Text
-  tags              String[]           @default([])
-  correctBoolean    Boolean?
-  referenceAnswer   String?            @db.Text
-  acceptableAnswers String[]           @default([])
-  isCaseSensitive   Boolean            @default(false)
-  gradingConfig     Json?
-  deletedAt         DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  categoryCourseId   String?
+  categoryCourse     Course?                 @relation("QuestionCategoryCourse", fields: [categoryCourseId], references: [id], onDelete: Restrict)
+  questionCategoryId String?
+  questionCategory   QuestionCourseCategory? @relation(fields: [questionCategoryId], references: [id], onDelete: Restrict)
+  isAssignmentOnly   Boolean                 @default(false)
+  id                 String                  @id @default(cuid())
+  creatorId          String
+  title              String
+  content            String                  @db.Text
+  type               QuestionType
+  difficulty         Int
+  visibility         QuestionVisibility      @default(PRIVATE)
+  status             QuestionStatus          @default(DRAFT)
+  explanation        String                  @db.Text
+  tags               String[]                @default([])
+  correctBoolean     Boolean?
+  referenceAnswer    String?                 @db.Text
+  acceptableAnswers  String[]                @default([])
+  isCaseSensitive    Boolean                 @default(false)
+  gradingConfig      Json?
+  deletedAt          DateTime?
+  revision           Int                     @default(1)
+  archivedFromStatus QuestionStatus?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   studentFavorites                  StudentQuestionFavorite[]
   creator                           User                                  @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
@@ -2402,6 +2429,7 @@ model Question {
   aiQuestionMappingCandidates       AIQuestionMappingCandidate[]
 
   @@index([categoryCourseId, status, deletedAt])
+  @@index([questionCategoryId, status, deletedAt])
   @@index([creatorId, status, deletedAt, createdAt])
   @@index([visibility, status, deletedAt, type, difficulty])
   @@index([type, difficulty])

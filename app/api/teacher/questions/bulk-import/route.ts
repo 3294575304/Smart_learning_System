@@ -11,6 +11,7 @@ import {
 } from "@/services/questions/service";
 
 const payloadSchema = z.object({
+  questionCategoryId: z.string().cuid(),
   knowledgePointIds: z.array(z.string().cuid()).min(1).max(10),
   questions: z.array(z.unknown()).min(1).max(100),
 });
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
           ? item
           : {}),
         knowledgePointIds: parsed.data.knowledgePointIds,
-        visibility: "PRIVATE",
+        questionCategoryId: parsed.data.questionCategoryId,
       });
       if (!result.success)
         return apiError(

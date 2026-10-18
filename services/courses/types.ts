@@ -44,6 +44,8 @@ export interface TeacherCourseClassroomView {
 export interface TeacherCourseListItem {
   id: string;
   template: TeacherCourseTemplateOption;
+  questionCategoryId: string;
+  questionCategoryName: string;
   courseNo: string;
   term: string;
   name: string;

@@ -9,6 +9,8 @@ import { TeacherCourseList } from "../../components/courses/teacher-course-list"
 
 const course = {
   id: "course-delete-ui",
+  questionCategoryId: "ccategory00000000000000001",
+  questionCategoryName: "Python 程序设计",
   template: {
     id: "template-delete-ui",
     code: "python-programming-v1",

@@ -38,8 +38,7 @@ const metadataSelect = Prisma.validator<Prisma.QuestionSelect>()({
   type: true,
   status: true,
   deletedAt: true,
-  creatorId: true,
-  visibility: true,
+  questionCategoryId: true,
   explanation: true,
   difficulty: true,
   knowledgePointLinks: {
@@ -94,7 +93,7 @@ async function studentScopes(studentId: string) {
             select: {
               id: true,
               name: true,
-              teacherId: true,
+              questionCategoryId: true,
               currentPublishedKnowledgeGraphVersionId: true,
             },
           },
@@ -109,15 +108,16 @@ function available(record: FavoriteRecord, scopes: Scopes) {
     ? scopes.find((item) => item.classroom.courseId === record.courseId)
         ?.classroom.course
     : null;
-  const allowed = record.courseId
-    ? Boolean(course) &&
-      (record.question.visibility === "PUBLIC" ||
-        record.question.creatorId === course?.teacherId)
-    : scopes.some(
-        (item) =>
-          record.question.visibility === "PUBLIC" ||
-          item.classroom.teacherId === record.question.creatorId,
-      );
+  const allowed = Boolean(
+    record.question.questionCategoryId &&
+    (record.courseId
+      ? course?.questionCategoryId === record.question.questionCategoryId
+      : scopes.some(
+          (item) =>
+            item.classroom.course?.questionCategoryId ===
+            record.question.questionCategoryId,
+        )),
+  );
   const graph = course?.currentPublishedKnowledgeGraphVersionId;
   const hasCourseBinding = Boolean(
     course &&
@@ -211,13 +211,13 @@ async function resolveSource(
         )
       : scopes.find(
           (item) =>
-            record.question.visibility === "PUBLIC" ||
-            item.classroom.teacherId === record.question.creatorId,
+            item.classroom.course?.questionCategoryId ===
+            record.question.questionCategoryId,
         );
     if (
       !scope ||
-      (record.question.visibility !== "PUBLIC" &&
-        record.question.creatorId !== scope.classroom.teacherId)
+      scope.classroom.course?.questionCategoryId !==
+        record.question.questionCategoryId
     )
       throw new ResourceNotFoundError("题目不存在");
     return {

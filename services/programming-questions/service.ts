@@ -89,9 +89,8 @@ export function publicProgrammingRevisionDto(record: RevisionRecord) {
   };
 }
 
-async function requireOwnedProgrammingQuestion(
+async function requireProgrammingQuestion(
   transaction: Prisma.TransactionClient,
-  teacherId: string,
   questionId: string,
 ) {
   const question = await transaction.question.findFirst({
@@ -100,9 +99,9 @@ async function requireOwnedProgrammingQuestion(
       deletedAt: null,
       status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
     },
-    select: { id: true, creatorId: true, type: true },
+    select: { id: true, type: true },
   });
-  if (!question || question.creatorId !== teacherId) {
+  if (!question) {
     throw new ResourceNotFoundError("题目不存在");
   }
   if (question.type !== QuestionType.PYTHON_PROGRAMMING) {
@@ -118,7 +117,6 @@ export async function getLatestProgrammingConfig(
   const question = await prisma.question.findFirst({
     where: {
       id: questionId,
-      creatorId: teacherId,
       deletedAt: null,
       status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
       type: QuestionType.PYTHON_PROGRAMMING,
@@ -143,7 +141,7 @@ export async function createProgrammingConfigInTransaction(
 ) {
   const input = programmingConfigRevisionInputSchema.parse(rawInput);
   const fingerprints = programmingConfigFingerprints(input);
-  await requireOwnedProgrammingQuestion(transaction, teacherId, questionId);
+  await requireProgrammingQuestion(transaction, questionId);
   const existing =
     await transaction.programmingQuestionConfigRevision.findUnique({
       where: {

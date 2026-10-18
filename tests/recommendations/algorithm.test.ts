@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  QuestionStatus,
-  QuestionType,
-  QuestionVisibility,
-} from "@prisma/client";
+import { QuestionStatus, QuestionType } from "@prisma/client";
 
 import { recommendQuestions } from "../../services/recommendations/algorithm";
 import type {
@@ -19,11 +15,9 @@ function candidate(
 ): RecommendationCandidate {
   return {
     id,
-    creatorId: "teacher-1",
     title: `题目 ${id}`,
     type: QuestionType.SINGLE_CHOICE,
     difficulty: 2,
-    visibility: QuestionVisibility.PRIVATE,
     status: QuestionStatus.ACTIVE,
     deletedAt: null,
     tags: ["algebra"],
@@ -59,7 +53,7 @@ function algorithmInput(
   };
 }
 
-test("hard filters remove unavailable, unauthorized, recent, duplicate and difficulty-mismatched questions", () => {
+test("hard filters remove unavailable, recent, duplicate and difficulty-mismatched questions", () => {
   const valid = candidate("valid");
   const input = algorithmInput(
     [
@@ -67,7 +61,6 @@ test("hard filters remove unavailable, unauthorized, recent, duplicate and diffi
       valid,
       candidate("inactive", { status: QuestionStatus.INACTIVE }),
       candidate("deleted", { deletedAt: new Date() }),
-      candidate("private-other", { creatorId: "teacher-2" }),
       candidate("recent"),
       candidate("active-recommendation"),
       candidate("too-hard", { difficulty: 4 }),
@@ -82,7 +75,6 @@ test("hard filters remove unavailable, unauthorized, recent, duplicate and diffi
           "valid",
           "inactive",
           "deleted",
-          "private-other",
           "recent",
           "active-recommendation",
           "too-hard",
@@ -101,7 +93,7 @@ test("hard filters remove unavailable, unauthorized, recent, duplicate and diffi
   );
   assert.equal(result.metadata.excludedCounts.DUPLICATE_CANDIDATE, 1);
   assert.equal(result.metadata.excludedCounts.UNAVAILABLE, 2);
-  assert.equal(result.metadata.excludedCounts.UNAUTHORIZED, 1);
+  assert.equal(result.metadata.excludedCounts.UNAUTHORIZED, 0);
   assert.equal(result.metadata.excludedCounts.RECENTLY_COMPLETED, 1);
   assert.equal(result.metadata.excludedCounts.ALREADY_RECOMMENDED, 1);
   assert.equal(result.metadata.excludedCounts.DIFFICULTY_MISMATCH, 1);

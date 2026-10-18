@@ -99,7 +99,7 @@ interface QuestionFileImportProps {
 
 export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
   const [preview, setPreview] = useState<QuestionImportPreview | null>(null);
-  const [courseId, setCourseId] = useState(
+  const [categoryId, setCategoryId] = useState(
     courses.length === 1 ? courses[0].id : "",
   );
   const [page, setPage] = useState(1);
@@ -117,11 +117,10 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
   const commitEndpoint = isAdmin
     ? "/api/admin/questions/import/commit"
     : "/api/teacher/questions/import/commit";
-  const targetName = isAdmin ? "公共题库" : "我的题库";
+  const targetName = "共享题库";
   const backHref = isAdmin ? "/admin/questions" : "/teacher/questions";
 
-  const importable =
-    preview?.questions.filter((question) => !question.duplicate) ?? [];
+  const importable = preview?.questions ?? [];
   const invalidCount = importable.filter(
     (question) => currentIssues(question).length > 0,
   ).length;
@@ -190,7 +189,13 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
   }
 
   async function commit() {
-    if (!preview || invalidCount > 0 || !courseId || !importable.length || busy)
+    if (
+      !preview ||
+      invalidCount > 0 ||
+      !categoryId ||
+      !importable.length ||
+      busy
+    )
       return;
     setBusy(true);
     setMessage(null);
@@ -205,7 +210,7 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
           fileName: preview.source.fileName,
           checksum: preview.source.checksum,
         },
-        courseId,
+        categoryId,
         questions: importable,
       }),
     });
@@ -216,7 +221,7 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
       return;
     }
     setMessage(
-      `导入完成：新增 ${result.data.createdCount} 道，跳过重复 ${result.data.skippedCount} 道。`,
+      `导入完成：新增 ${result.data.createdCount} 道；文件中的重复题按独立题目保留。`,
     );
     setPreview(null);
     setImportFinished(true);
@@ -713,41 +718,34 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
       {preview ? (
         <>
           <section className="rounded-xl border bg-white p-5">
-            <h2 className="font-semibold">2. 选择题目所属课程</h2>
+            <h2 className="font-semibold">2. 选择题目课程分类</h2>
             <p className="mt-2 text-sm text-slate-600">
               文件：{sourceLabel}
-              。本批题目将归入所选课程，自动知识标签会保留在每道题上。
+              。本批题目将归入管理员维护的全局课程分类，自动知识标签会保留在每道题上。
             </p>
             {courses.length ? (
               <label className="mt-3 block space-y-2 text-sm">
                 <span className="font-medium">课程分类</span>
                 <select
                   className="w-full rounded-md border bg-white px-3 py-2"
-                  value={courseId}
+                  value={categoryId}
                   disabled={busy}
-                  onChange={(event) => setCourseId(event.target.value)}
+                  onChange={(event) => setCategoryId(event.target.value)}
                 >
-                  <option value="">请选择课程</option>
+                  <option value="">请选择课程分类</option>
                   {courses.map((course) => (
                     <option key={course.id} value={course.id}>
-                      {course.name}（{course.courseNo} · {course.term}）
+                      {course.name}
                     </option>
                   ))}
                 </select>
                 <span className="block text-slate-500">
-                  课程列表随已创建课程更新；课程知识点可在导入后单独审核绑定。
+                  课程目录由管理员维护；课程知识点可在导入后单独审核绑定。
                 </span>
               </label>
             ) : (
               <p className="mt-3 text-sm text-amber-700" role="status">
-                暂无可用课程。请先
-                <Link
-                  className="underline"
-                  href={isAdmin ? "/admin" : "/teacher/courses"}
-                >
-                  创建课程
-                </Link>
-                ，然后返回此页刷新重试。
+                暂无可用课程分类，请联系管理员维护目录。
               </p>
             )}
           </section>
@@ -760,8 +758,7 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
                   <p className="mt-1 text-sm text-slate-600">
                     共 {preview.questions.length} 道 · 可导入{" "}
                     {importable.length - invalidCount} 道 · 需补充{" "}
-                    {invalidCount} 道 · 重复{" "}
-                    {preview.questions.length - importable.length} 道
+                    {invalidCount} 道 · 重复 {preview.summary.duplicates} 道
                   </p>
                 </div>
                 <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-700">
@@ -781,15 +778,15 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
               const issues = currentIssues(question);
               return (
                 <details
-                  className={`rounded-xl border bg-white p-4 ${question.duplicate ? "opacity-60" : issues.length ? "border-amber-300" : "border-emerald-200"}`}
+                  className={`rounded-xl border bg-white p-4 ${issues.length ? "border-amber-300" : "border-emerald-200"}`}
                   key={question.rowKey}
-                  open={issues.length > 0 && !question.duplicate}
+                  open={issues.length > 0}
                 >
                   <summary className="cursor-pointer font-medium">
                     {question.title}{" "}
                     {question.duplicate ? (
                       <span className="text-sm text-slate-500">
-                        （重复，将跳过）
+                        （内容重复，将作为独立题目保留）
                       </span>
                     ) : issues.length ? (
                       <span className="text-sm text-amber-700">（需补充）</span>
@@ -799,128 +796,126 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
                       </span>
                     )}
                   </summary>
-                  {!question.duplicate ? (
-                    <div className="mt-4 space-y-4">
-                      <div className="grid gap-3 md:grid-cols-[1fr_10rem_8rem]">
-                        <label className="space-y-1 text-sm">
-                          <span className="font-medium">标题</span>
-                          <input
-                            className="w-full rounded-md border px-3 py-2"
-                            maxLength={120}
-                            onChange={(event) =>
-                              updateQuestion(question.rowKey, (current) => ({
-                                ...current,
-                                title: event.target.value,
-                              }))
-                            }
-                            value={question.title}
-                          />
-                        </label>
-                        <label className="space-y-1 text-sm">
-                          <span className="font-medium">题型</span>
-                          <select
-                            className="w-full rounded-md border px-3 py-2"
-                            onChange={(event) =>
-                              updateQuestion(question.rowKey, (current) => ({
-                                ...current,
-                                type: event.target
-                                  .value as QuestionImportDraft["type"],
-                                options: [
-                                  "SINGLE_CHOICE",
-                                  "MULTIPLE_CHOICE",
-                                ].includes(event.target.value)
-                                  ? current.options
-                                  : [],
-                                answer: emptyAnswer(
-                                  event.target
-                                    .value as QuestionImportDraft["type"],
-                                ),
-                              }))
-                            }
-                            value={question.type}
-                          >
-                            {TYPE_OPTIONS.map(([value, label]) => (
-                              <option key={value} value={value}>
-                                {label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="space-y-1 text-sm">
-                          <span className="font-medium">难度</span>
-                          <select
-                            className="w-full rounded-md border px-3 py-2"
-                            onChange={(event) =>
-                              updateQuestion(question.rowKey, (current) => ({
-                                ...current,
-                                difficulty: Number(event.target.value),
-                              }))
-                            }
-                            value={question.difficulty}
-                          >
-                            {[1, 2, 3, 4, 5].map((value) => (
-                              <option key={value} value={value}>
-                                {value}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      <label className="block space-y-1 text-sm">
-                        <span className="font-medium">题干</span>
-                        <textarea
-                          className="min-h-28 w-full rounded-md border px-3 py-2"
-                          maxLength={5000}
-                          onChange={(event) =>
-                            updateQuestion(question.rowKey, (current) => ({
-                              ...current,
-                              content: event.target.value,
-                            }))
-                          }
-                          value={question.content}
-                        />
-                      </label>
-                      {answerEditor(question)}
-                      <label className="block space-y-1 text-sm">
-                        <span className="font-medium">答案解析</span>
-                        <textarea
-                          className="min-h-20 w-full rounded-md border px-3 py-2"
-                          maxLength={5000}
-                          onChange={(event) =>
-                            updateQuestion(question.rowKey, (current) => ({
-                              ...current,
-                              explanation: event.target.value,
-                            }))
-                          }
-                          value={question.explanation}
-                        />
-                      </label>
-                      <label className="block space-y-1 text-sm">
-                        <span className="font-medium">
-                          知识点与来源标签（逗号分隔，最多 10 个）
-                        </span>
+                  <div className="mt-4 space-y-4">
+                    <div className="grid gap-3 md:grid-cols-[1fr_10rem_8rem]">
+                      <label className="space-y-1 text-sm">
+                        <span className="font-medium">标题</span>
                         <input
+                          className="w-full rounded-md border px-3 py-2"
+                          maxLength={120}
+                          onChange={(event) =>
+                            updateQuestion(question.rowKey, (current) => ({
+                              ...current,
+                              title: event.target.value,
+                            }))
+                          }
+                          value={question.title}
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="font-medium">题型</span>
+                        <select
                           className="w-full rounded-md border px-3 py-2"
                           onChange={(event) =>
                             updateQuestion(question.rowKey, (current) => ({
                               ...current,
-                              tags: event.target.value
-                                .split(/[,，]/u)
-                                .map((item) => item.trim())
-                                .filter(Boolean)
-                                .slice(0, 10),
+                              type: event.target
+                                .value as QuestionImportDraft["type"],
+                              options: [
+                                "SINGLE_CHOICE",
+                                "MULTIPLE_CHOICE",
+                              ].includes(event.target.value)
+                                ? current.options
+                                : [],
+                              answer: emptyAnswer(
+                                event.target
+                                  .value as QuestionImportDraft["type"],
+                              ),
                             }))
                           }
-                          value={question.tags.join("，")}
-                        />
+                          value={question.type}
+                        >
+                          {TYPE_OPTIONS.map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-                      {issues.length ? (
-                        <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">
-                          {issues.join("；")}
-                        </p>
-                      ) : null}
+                      <label className="space-y-1 text-sm">
+                        <span className="font-medium">难度</span>
+                        <select
+                          className="w-full rounded-md border px-3 py-2"
+                          onChange={(event) =>
+                            updateQuestion(question.rowKey, (current) => ({
+                              ...current,
+                              difficulty: Number(event.target.value),
+                            }))
+                          }
+                          value={question.difficulty}
+                        >
+                          {[1, 2, 3, 4, 5].map((value) => (
+                            <option key={value} value={value}>
+                              {value}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
-                  ) : null}
+                    <label className="block space-y-1 text-sm">
+                      <span className="font-medium">题干</span>
+                      <textarea
+                        className="min-h-28 w-full rounded-md border px-3 py-2"
+                        maxLength={5000}
+                        onChange={(event) =>
+                          updateQuestion(question.rowKey, (current) => ({
+                            ...current,
+                            content: event.target.value,
+                          }))
+                        }
+                        value={question.content}
+                      />
+                    </label>
+                    {answerEditor(question)}
+                    <label className="block space-y-1 text-sm">
+                      <span className="font-medium">答案解析</span>
+                      <textarea
+                        className="min-h-20 w-full rounded-md border px-3 py-2"
+                        maxLength={5000}
+                        onChange={(event) =>
+                          updateQuestion(question.rowKey, (current) => ({
+                            ...current,
+                            explanation: event.target.value,
+                          }))
+                        }
+                        value={question.explanation}
+                      />
+                    </label>
+                    <label className="block space-y-1 text-sm">
+                      <span className="font-medium">
+                        知识点与来源标签（逗号分隔，最多 10 个）
+                      </span>
+                      <input
+                        className="w-full rounded-md border px-3 py-2"
+                        onChange={(event) =>
+                          updateQuestion(question.rowKey, (current) => ({
+                            ...current,
+                            tags: event.target.value
+                              .split(/[,，]/u)
+                              .map((item) => item.trim())
+                              .filter(Boolean)
+                              .slice(0, 10),
+                          }))
+                        }
+                        value={question.tags.join("，")}
+                      />
+                    </label>
+                    {issues.length ? (
+                      <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+                        {issues.join("；")}
+                      </p>
+                    ) : null}
+                  </div>
                 </details>
               );
             })}
@@ -968,7 +963,7 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
                     disabled={
                       busy ||
                       invalidCount > 0 ||
-                      !courseId ||
+                      !categoryId ||
                       !importable.length
                     }
                     onClick={() => void commit()}
@@ -993,8 +988,8 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
           </h2>
           <p className="mt-1">
             {isAdmin
-              ? "自动标签来自文件原有“知识点”字段和题干关键词，可由管理员逐题修改。公共题目进入某门课程后，教师仍需使用课程知识图谱的“一键关联绑定题目”审核主知识点和次要知识点，自动标签不会越过教师确认直接进入正式学情证据。"
-              : "自动标签来自文件原有“知识点”字段和题干关键词，可由教师逐题修改。导入题目会保存到“我的题目”并保持私有；之后可在课程知识图谱中使用“一键关联绑定题目”审核主知识点和次要知识点。"}
+              ? "自动标签来自文件原有“知识点”字段和题干关键词，可由管理员逐题修改。教师仍需使用课程知识图谱的“一键关联绑定题目”审核主知识点和次要知识点，自动标签不会越过教师确认直接进入正式学情证据。"
+              : "自动标签来自文件原有“知识点”字段和题干关键词，可由教师逐题修改。导入题目会保存到教师共同维护的共享题库，之后可在课程知识图谱中审核主知识点和次要知识点。"}
           </p>
         </div>
       </aside>

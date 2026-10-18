@@ -11,6 +11,7 @@ import {
   type QuestionListQuery,
 } from "@/services/questions/schemas";
 import {
+  listTeacherQuestionCategoryOptions,
   listTeacherQuestionCourseOptions,
   listTeacherQuestions,
 } from "@/services/questions/service";
@@ -29,7 +30,6 @@ function firstValues(values: Record<string, string | string[] | undefined>) {
 
 function pageHref(query: QuestionListQuery, page: number): string {
   const params = new URLSearchParams({
-    scope: query.scope,
     page: String(page),
     pageSize: String(query.pageSize),
   });
@@ -39,6 +39,7 @@ function pageHref(query: QuestionListQuery, page: number): string {
   if (query.knowledgePointId)
     params.set("knowledgePointId", query.knowledgePointId);
   if (query.courseId) params.set("courseId", query.courseId);
+  if (query.categoryId) params.set("categoryId", query.categoryId);
   if (query.courseConceptId)
     params.set("courseConceptId", query.courseConceptId);
   return `/teacher/questions?${params.toString()}`;
@@ -67,9 +68,10 @@ export default async function QuestionsPage({
   const query = parsed.success
     ? parsed.data
     : questionListQuerySchema.parse({});
-  const [questions, courseOptions] = await Promise.all([
+  const [questions, courseOptions, categories] = await Promise.all([
     listTeacherQuestions(teacher.id, query),
     listTeacherQuestionCourseOptions(teacher.id),
+    listTeacherQuestionCategoryOptions(),
   ]);
 
   return (
@@ -93,11 +95,12 @@ export default async function QuestionsPage({
             </Link>
           </div>
         }
-        description="按题型、知识点与学科标签管理题目，适用于编程、数学、英语等课程；也可从公共题库复制后编辑。"
-        title="教师题库"
+        description="教师共同维护的课程题库。按课程分类管理题目，课程知识点、题型、难度和标签可继续筛选。"
+        title="共享题库"
       />
       <QuestionFilters
         key={JSON.stringify(query)}
+        categories={categories}
         courses={courseOptions}
         query={query}
       />
@@ -108,7 +111,7 @@ export default async function QuestionsPage({
           {Math.max(questions.pagination.totalPages, 1)} 页
         </span>
       </div>
-      <QuestionList items={questions.items} scope={query.scope} />
+      <QuestionList items={questions.items} />
       {questions.pagination.totalPages > 1 ? (
         <nav
           aria-label="题库分页"

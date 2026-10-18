@@ -2,7 +2,7 @@
 import { editQuestionKnowledgeTag } from "@/services/questions/knowledge-tags";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { QuestionType, QuestionVisibility } from "@prisma/client";
+import { QuestionType } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import {
@@ -30,33 +30,39 @@ import type {
 
 interface QuestionFormProps {
   mode: "create" | "edit";
+  categories: Array<{ id: string; name: string }>;
   knowledgePoints: KnowledgePointOption[];
   question?: QuestionDetail;
 }
 
-function emptyQuestion(): QuestionUpsertData {
+function emptyQuestion(categoryId: string): QuestionUpsertData {
   return {
     title: "",
     content: "",
     type: QuestionType.SINGLE_CHOICE,
     difficulty: 3,
+    questionCategoryId: categoryId,
     ...defaultAnswerDraft(QuestionType.SINGLE_CHOICE),
     explanation: "",
     knowledgePointIds: [],
     tags: [],
-    visibility: QuestionVisibility.PRIVATE,
   };
 }
 
-function initialQuestion(question?: QuestionDetail): QuestionUpsertData {
+function initialQuestion(
+  question: QuestionDetail | undefined,
+  categories: Array<{ id: string; name: string }>,
+): QuestionUpsertData {
   if (!question) {
-    return emptyQuestion();
+    return emptyQuestion(categories[0]?.id ?? "");
   }
   return {
     title: question.title,
     content: question.content,
     type: question.type,
     difficulty: question.difficulty,
+    questionCategoryId: question.questionCategoryId ?? "",
+    revision: question.revision,
     options: question.options.map(({ label, content, sortOrder }) => ({
       label,
       content,
@@ -66,12 +72,12 @@ function initialQuestion(question?: QuestionDetail): QuestionUpsertData {
     explanation: question.explanation,
     knowledgePointIds: question.knowledgePoints.map(({ id }) => id),
     tags: question.tags,
-    visibility: QuestionVisibility.PRIVATE,
   };
 }
 
 export function QuestionForm({
   mode,
+  categories,
   knowledgePoints,
   question,
 }: QuestionFormProps) {
@@ -82,7 +88,7 @@ export function QuestionForm({
   const [tagError, setTagError] = useState<string | null>(null);
   const form = useForm<QuestionUpsertData>({
     resolver: zodResolver(questionUpsertSchema),
-    defaultValues: initialQuestion(question),
+    defaultValues: initialQuestion(question, categories),
   });
   const { fields, append, replace } = useFieldArray({
     control: form.control,
@@ -180,7 +186,10 @@ export function QuestionForm({
     const result = await requestQuestionApi<QuestionDetail>(endpoint, {
       method: mode === "create" ? "POST" : "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        ...input,
+        ...(mode === "edit" && question ? { revision: question.revision } : {}),
+      }),
     });
     if (!result.success) {
       setServerError(result.error);
@@ -305,6 +314,31 @@ export function QuestionForm({
           </select>
         </label>
       </div>
+
+      <label className="block space-y-2">
+        <span className="font-medium">课程分类</span>
+        <select
+          className="w-full rounded-md border px-3 py-2"
+          {...form.register("questionCategoryId")}
+        >
+          <option value="">请选择课程分类</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+        {form.formState.errors.questionCategoryId?.message ? (
+          <p className="text-sm text-red-600">
+            {form.formState.errors.questionCategoryId.message}
+          </p>
+        ) : null}
+        {categories.length === 0 ? (
+          <p className="text-sm text-amber-700">
+            暂无可用课程分类，请联系管理员维护目录。
+          </p>
+        ) : null}
+      </label>
 
       {isChoice ? (
         <fieldset className="space-y-3 rounded-lg border p-4">

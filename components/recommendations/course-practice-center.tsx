@@ -247,7 +247,7 @@ export function CoursePracticeCenter({
       <div>
         <h2 className="font-semibold">按课程章节生成练习或测试</h2>
         <p className="mt-1 text-sm text-gray-500">
-          优先使用本课程授课教师的已审核题目，再从公共题库补充；可练习课程图谱中的任意章节，包含尚未授课的内容。
+          从本课程分类的共享题库中筛选已审核题目；可练习课程图谱中的任意章节，包含尚未授课的内容。
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">

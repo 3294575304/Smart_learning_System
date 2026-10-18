@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { listQuestionImportCourses } from "@/services/question-import/courses";
 import {
-  commitTeacherQuestionImport,
   commitAdminQuestionImport,
+  commitTeacherQuestionImport,
 } from "@/services/question-import/service";
 import { questionImportCommitSchema } from "@/services/question-import/schemas";
 import { listTeacherQuestions } from "@/services/questions/service";
 import { questionListQuerySchema } from "@/services/questions/schemas";
 import { loadAdminQuestionPage } from "@/services/admin/questions/repository";
 import { adminQuestionListQuerySchema } from "@/services/admin/questions/schemas";
+
 async function main() {
   const teacher = await prisma.user.findFirstOrThrow({
     where: { role: "TEACHER" },
@@ -23,36 +25,26 @@ async function main() {
   const student = await prisma.user.findFirstOrThrow({
     where: { role: "STUDENT" },
   });
-  const template = await prisma.courseTemplate.findFirstOrThrow();
-  const createCourse = (
-    teacherId: string,
-    name: string,
-    status: "DRAFT" | "ARCHIVED" = "DRAFT",
-  ) =>
-    prisma.course.create({
-      data: {
-        teacherId,
-        templateId: template.id,
-        name,
-        courseNo: name,
-        term: "2026-2027-1",
-        status,
-      },
-    });
-  const first = await createCourse(teacher.id, "Python测试课程");
-  const second = await createCourse(teacher.id, "Java测试课程");
-  const foreign = await createCourse(other.id, "外部教师课程");
-  const archived = await createCourse(teacher.id, "已归档课程", "ARCHIVED");
-  const available = await listQuestionImportCourses(teacher.id);
-  assert.ok(available.some((c) => c.id === first.id));
-  assert.ok(available.some((c) => c.id === second.id));
-  assert.ok(!available.some((c) => [foreign.id, archived.id].includes(c.id)));
-  assert.ok(
-    (await listQuestionImportCourses()).some((c) => c.id === foreign.id),
-  );
-  const input = (courseId: string) =>
+  const suffix = randomBytes(4).toString("hex");
+  const firstCategory = await prisma.questionCourseCategory.create({
+    data: {
+      name: `共享题库测试课程 ${suffix}`,
+      normalizedName: `shared-test-course-${suffix}`,
+    },
+  });
+  const secondCategory = await prisma.questionCourseCategory.create({
+    data: {
+      name: `共享题库测试课程二 ${suffix}`,
+      normalizedName: `shared-test-course-two-${suffix}`,
+    },
+  });
+  const available = await listQuestionImportCourses();
+  assert.ok(available.some((item) => item.id === firstCategory.id));
+  assert.ok(available.some((item) => item.id === secondCategory.id));
+
+  const input = (categoryId: string) =>
     questionImportCommitSchema.parse({
-      courseId,
+      categoryId,
       source: { fileName: "test.txt", checksum: "a".repeat(64) },
       questions: [
         {
@@ -68,31 +60,31 @@ async function main() {
         },
       ],
     });
-  const context = { ipAddress: null, userAgent: "isolated-course-import-test" };
-  for (const courseId of [
-    foreign.id,
-    archived.id,
-    "c0000000000000000000000000",
-  ])
-    await assert.rejects(
-      () => commitTeacherQuestionImport(teacher.id, input(courseId), context),
-      /课程不存在或无权访问/,
-    );
+  const context = { ipAddress: null, userAgent: "shared-question-import-test" };
+
   await assert.rejects(
-    () => commitTeacherQuestionImport(student.id, input(first.id), context),
-    /无权导入/,
+    () =>
+      commitTeacherQuestionImport(student.id, input(firstCategory.id), context),
+    /无权导入/u,
   );
   await assert.rejects(
-    () => commitAdminQuestionImport(teacher.id, input(first.id), context),
-    /无权导入/,
+    () =>
+      commitAdminQuestionImport(teacher.id, input(firstCategory.id), context),
+    /无权导入/u,
   );
-  assert.equal(
-    await prisma.question.count({ where: { title: "课程分类测试" } }),
-    0,
+  await assert.rejects(
+    () =>
+      commitTeacherQuestionImport(
+        teacher.id,
+        input("c0000000000000000000000000"),
+        context,
+      ),
+    /课程分类不存在或已停用/u,
   );
+
   const result = await commitTeacherQuestionImport(
     teacher.id,
-    input(first.id),
+    input(firstCategory.id),
     context,
   );
   assert.equal(result.createdCount, 1);
@@ -100,58 +92,59 @@ async function main() {
     where: { id: result.questionIds[0] },
     include: { graphBindings: true, knowledgePointLinks: true },
   });
-  assert.equal(record.categoryCourseId, first.id);
-  assert.equal(record.visibility, "PRIVATE");
+  assert.equal(record.questionCategoryId, firstCategory.id);
+  assert.equal(record.categoryCourseId, null);
   assert.equal(record.graphBindings.length, 0);
   assert.equal(record.knowledgePointLinks.length, 0);
-  assert.equal(
-    (await commitTeacherQuestionImport(teacher.id, input(first.id), context))
-      .skippedCount,
-    1,
-  );
-  assert.equal(
-    (await commitTeacherQuestionImport(teacher.id, input(second.id), context))
-      .createdCount,
-    1,
-  );
-  const listed = await listTeacherQuestions(
+
+  const repeated = await commitTeacherQuestionImport(
     teacher.id,
-    questionListQuerySchema.parse({
-      scope: "OWNED",
-      courseId: first.id,
-      keyword: "课程分类测试",
-    }),
-  );
-  assert.equal(listed.pagination.total, 1);
-  assert.equal(listed.items[0]?.id, record.id);
-  await assert.rejects(
-    () =>
-      listTeacherQuestions(
-        other.id,
-        questionListQuerySchema.parse({ scope: "OWNED", courseId: first.id }),
-      ),
-    /课程不存在/,
-  );
-  const pub = await commitAdminQuestionImport(
-    admin.id,
-    input(foreign.id),
+    input(firstCategory.id),
     context,
   );
-  assert.equal(pub.createdCount, 1);
-  const adminList = await loadAdminQuestionPage(
-    adminQuestionListQuerySchema.parse({
-      courseId: foreign.id,
+  assert.equal(repeated.createdCount, 1);
+  assert.equal(repeated.skippedCount, 0);
+  assert.notEqual(repeated.questionIds[0], record.id);
+
+  const secondCategoryImport = await commitTeacherQuestionImport(
+    other.id,
+    input(secondCategory.id),
+    context,
+  );
+  assert.equal(secondCategoryImport.createdCount, 1);
+
+  const shared = await listTeacherQuestions(
+    other.id,
+    questionListQuerySchema.parse({
+      scope: "OWNED",
+      categoryId: firstCategory.id,
       keyword: "课程分类测试",
     }),
   );
-  assert.equal(adminList.total, 1);
+  assert.equal(shared.pagination.total, 2);
+  assert.ok(shared.items.some((item) => item.id === record.id));
+
+  const adminImport = await commitAdminQuestionImport(
+    admin.id,
+    input(firstCategory.id),
+    context,
+  );
+  assert.equal(adminImport.createdCount, 1);
+  const adminList = await loadAdminQuestionPage(
+    adminQuestionListQuerySchema.parse({
+      categoryId: firstCategory.id,
+      keyword: "课程分类测试",
+    }),
+  );
+  assert.equal(adminList.total, 3);
   console.log(
-    "PASS: dynamic courses, ownership/role/archive/missing checks, atomic failure, course persistence, no fabricated bindings, scoped deduplication, teacher/admin filters",
+    "PASS: category based imports, teacher shared access, ignored legacy scope, duplicate preservation, role checks, and admin filters",
   );
 }
+
 main()
   .finally(() => prisma.$disconnect())
-  .catch((e) => {
-    console.error(e);
+  .catch((error: unknown) => {
+    console.error(error);
     process.exitCode = 1;
   });

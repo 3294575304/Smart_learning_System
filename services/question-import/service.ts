@@ -11,6 +11,7 @@ import {
 } from "@prisma/client";
 
 import { createProgrammingConfigInTransaction } from "@/services/programming-questions/service";
+import { requireActiveQuestionCourseCategory } from "@/services/question-course-categories/service";
 import { prisma } from "@/lib/prisma";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
@@ -29,16 +30,14 @@ import {
 
 const IMPORT_RULE_VERSION = "question-file-import-v5";
 
-function persistenceFields(
-  input: QuestionUpsertData,
-  visibility: QuestionVisibility,
-) {
+function persistenceFields(input: QuestionUpsertData) {
   const base = {
+    questionCategoryId: input.questionCategoryId,
     title: input.title,
     content: input.content,
     type: input.type,
     difficulty: input.difficulty,
-    visibility,
+    visibility: QuestionVisibility.PUBLIC,
     status: QuestionStatus.ACTIVE,
     explanation: input.explanation,
     tags: input.tags,
@@ -82,10 +81,6 @@ function optionCreateData(input: QuestionUpsertData) {
     sortOrder: option.sortOrder,
     isCorrect: correct.has(option.label),
   }));
-}
-
-function duplicateKey(title: string, content: string): string {
-  return `${title.trim().toLocaleLowerCase()}\u0000${content.trim().toLocaleLowerCase()}`;
 }
 
 async function previewQuestionImport(
@@ -136,9 +131,9 @@ async function previewQuestionImport(
           `有 ${needsReview} 道题需要核对题干、答案或选项，请查看逐题提示并修正后导入。`,
         ]
       : []),
-    "重复题将在确认导入时按所选课程检查，同一文件可分别导入不同课程。",
+    "题目分类由管理员维护，导入确认后所有教师均可共同维护。",
     ...(duplicates > 0
-      ? [`检测到 ${duplicates} 道重复题，确认导入时会自动跳过。`]
+      ? [`检测到 ${duplicates} 道重复题，导入时会按独立题目保留。`]
       : []),
   ];
   return {
@@ -153,7 +148,7 @@ async function previewQuestionImport(
     suggestedKnowledgePointIds: [],
     summary: {
       total: questions.length,
-      ready: questions.length - needsReview - duplicates,
+      ready: questions.length - needsReview,
       needsReview,
       duplicates,
     },
@@ -177,11 +172,7 @@ async function commitQuestionImport(
   actorId: string,
   input: QuestionImportCommitData,
   context: AuditRequestContext,
-  options: {
-    visibility: QuestionVisibility;
-    duplicateOwnerId?: string;
-    targetLabel: string;
-  },
+  options: { role: Role; targetLabel: string },
 ): Promise<{
   createdCount: number;
   skippedCount: number;
@@ -190,7 +181,7 @@ async function commitQuestionImport(
   const actor = await prisma.user.findFirst({
     where: {
       id: actorId,
-      role: options.duplicateOwnerId ? Role.TEACHER : Role.ADMIN,
+      role: options.role,
     },
     select: { id: true },
   });
@@ -211,7 +202,7 @@ async function commitQuestionImport(
       ...item,
       knowledgePointIds: input.knowledgePointIds,
       tags: item.tags.length ? item.tags : ["题库导入"],
-      visibility: options.visibility,
+      questionCategoryId: input.categoryId,
     });
     if (!parsed.success) {
       throw new QuestionImportError(
@@ -225,49 +216,14 @@ async function commitQuestionImport(
 
   return prisma.$transaction(
     async (transaction) => {
-      if (input.courseId) {
-        const course = await transaction.course.findFirst({
-          where: {
-            id: input.courseId,
-            status: { not: "ARCHIVED" },
-            ...(options.duplicateOwnerId ? { teacherId: actorId } : {}),
-          },
-          select: { id: true },
-        });
-        if (!course)
-          throw new QuestionImportError(
-            "课程不存在或无权访问，请刷新后重新选择。",
-            404,
-            "COURSE_NOT_FOUND",
-          );
-      }
-      const existing = await transaction.question.findMany({
-        where: {
-          deletedAt: null,
-          ...(input.courseId ? { categoryCourseId: input.courseId } : {}),
-          ...(options.duplicateOwnerId
-            ? { creatorId: options.duplicateOwnerId }
-            : {}),
-          title: { in: [...new Set(questions.map((item) => item.title))] },
-        },
-        select: { title: true, content: true },
-      });
-      const keys = new Set(
-        existing.map((item) => duplicateKey(item.title, item.content)),
-      );
+      await requireActiveQuestionCourseCategory(input.categoryId, transaction);
       const ids: string[] = [];
-      let skippedCount = 0;
+      const skippedCount = 0;
       for (const [index, question] of questions.entries()) {
-        const key = duplicateKey(question.title, question.content);
-        if (keys.has(key)) {
-          skippedCount += 1;
-          continue;
-        }
         const created = await transaction.question.create({
           data: {
             creatorId: actorId,
-            categoryCourseId: input.courseId ?? null,
-            ...persistenceFields(question, options.visibility),
+            ...persistenceFields(question),
             ...(question.type === QuestionType.PYTHON_PROGRAMMING
               ? {
                   status: QuestionStatus.DRAFT,
@@ -298,7 +254,6 @@ async function commitQuestionImport(
           );
         }
         ids.push(created.id);
-        keys.add(key);
       }
       await writeGovernanceAuditLog(transaction, {
         actorId,
@@ -313,8 +268,7 @@ async function commitQuestionImport(
           requestedCount: questions.length,
           createdCount: ids.length,
           skippedCount,
-          visibility: options.visibility,
-          courseId: input.courseId ?? null,
+          categoryId: input.categoryId,
           ruleVersion: IMPORT_RULE_VERSION,
         },
         context,
@@ -331,8 +285,8 @@ export async function commitAdminQuestionImport(
   context: AuditRequestContext,
 ) {
   return commitQuestionImport(actorId, input, context, {
-    visibility: QuestionVisibility.PUBLIC,
-    targetLabel: "公共题目",
+    role: Role.ADMIN,
+    targetLabel: "共享题库",
   });
 }
 
@@ -342,9 +296,8 @@ export async function commitTeacherQuestionImport(
   context: AuditRequestContext,
 ) {
   return commitQuestionImport(teacherId, input, context, {
-    visibility: QuestionVisibility.PRIVATE,
-    duplicateOwnerId: teacherId,
-    targetLabel: "教师私有题目",
+    role: Role.TEACHER,
+    targetLabel: "共享题库",
   });
 }
 

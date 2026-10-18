@@ -205,15 +205,7 @@ export async function getTeacherDashboard(
           deletedAt: null,
           isAssignmentOnly: false,
           status: "ACTIVE",
-          AND: [
-            { OR: [{ creatorId: teacherId }, { visibility: "PUBLIC" }] },
-            {
-              OR: [
-                { categoryCourseId: courseId },
-                { graphBindings: { some: { courseId } } },
-              ],
-            },
-          ],
+          questionCategory: { courses: { some: { id: courseId } } },
         },
       }),
       prisma.courseQualityReport.findMany({

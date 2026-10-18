@@ -13,12 +13,8 @@ interface QuestionItem {
   title: string;
   type: string;
   difficulty: number;
-  visibility: "PRIVATE" | "PUBLIC";
-  isOwn: boolean;
-  hasPublic: boolean;
   isBound: boolean;
   bindingQuestionId: string;
-  duplicateCount: number;
 }
 
 interface Candidate {
@@ -57,13 +53,11 @@ export function BatchMappingPanel({
   totalQuestions,
   questionLimit,
   catalog,
-  duplicateCount,
 }: {
   courseId: string;
   totalQuestions: number;
   questionLimit: number;
   catalog: QuestionItem[];
-  duplicateCount: number;
 }) {
   const router = useRouter();
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
@@ -74,14 +68,11 @@ export function BatchMappingPanel({
   const [matchingMode, setMatchingMode] = useState<"BEST" | "ALL">("BEST");
   const [pending, setPending] = useState<"generate" | "confirm" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [scope, setScope] = useState<"ALL" | "OWN" | "PUBLIC">("ALL");
   const [showBound, setShowBound] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
-  const scoped = catalog.filter(
-    (q) =>
-      (scope === "ALL" || (scope === "OWN" ? q.isOwn : q.hasPublic)) &&
-      q.title.toLocaleLowerCase().includes(keyword.trim().toLocaleLowerCase()),
+  const scoped = catalog.filter((q) =>
+    q.title.toLocaleLowerCase().includes(keyword.trim().toLocaleLowerCase()),
   );
   const visible = scoped.filter((q) => q.isBound === showBound);
   const pageQuestions = visible.slice((page - 1) * 20, page * 20);
@@ -205,23 +196,6 @@ export function BatchMappingPanel({
           选择未绑定题目后，系统会匹配当前课程正式图谱中的知识点。你可以选择每题只绑定最合适的知识点，或绑定所有匹配项；确认前仍可逐项调整主、次知识点。
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <label className="text-sm">
-            题库来源
-            <select
-              className="ml-2 rounded-md border p-2"
-              aria-label="题库来源"
-              value={scope}
-              disabled={pending !== null || batchIsActive}
-              onChange={(event) => {
-                setScope(event.target.value as typeof scope);
-                setPage(1);
-              }}
-            >
-              <option value="ALL">全部题库</option>
-              <option value="OWN">我的题库</option>
-              <option value="PUBLIC">公共题库</option>
-            </select>
-          </label>
           <input
             aria-label="搜索关联题目"
             className="rounded-md border p-2 text-sm"
@@ -253,8 +227,7 @@ export function BatchMappingPanel({
           </div>
         </div>
         <p className="mt-2 text-xs text-gray-500">
-          公共题目可直接关联到本课程，无需复制。已有绑定请切换“已关联”查看或修改。已自动合并{" "}
-          {duplicateCount} 道相同题目，优先展示我的题目。
+          列表只显示本课程分类下的共享题目；重复题目会逐条保留。已有绑定请切换“已关联”查看或修改。
         </p>
         {showBound ? (
           <div className="mt-4 space-y-2">
@@ -266,11 +239,7 @@ export function BatchMappingPanel({
                 <div>
                   <strong>{question.title}</strong>
                   <p className="mt-1 text-xs text-gray-500">
-                    {QUESTION_TYPE_LABELS[question.type as QuestionType]} ·{" "}
-                    {question.isOwn ? "我的题库" : "公共题库"}
-                    {question.duplicateCount
-                      ? ` · 合并 ${question.duplicateCount} 道副本`
-                      : ""}
+                    {QUESTION_TYPE_LABELS[question.type as QuestionType]}
                   </p>
                 </div>
                 <Link
@@ -398,11 +367,7 @@ export function BatchMappingPanel({
                       <span className="text-sm">
                         <strong>{question.title}</strong> ·{" "}
                         {QUESTION_TYPE_LABELS[question.type as QuestionType]} ·
-                        难度 {question.difficulty} ·{" "}
-                        {question.isOwn ? "我的题库" : "公共题库"}
-                        {question.duplicateCount
-                          ? ` · 合并 ${question.duplicateCount} 道副本`
-                          : ""}
+                        难度 {question.difficulty}
                       </span>
                     </label>
                   ))}

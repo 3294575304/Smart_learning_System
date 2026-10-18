@@ -17,28 +17,32 @@ const base = {
     },
   ],
 };
-test("按课程导入无需兼容知识点，且必须提供有效课程", () => {
+test("题目导入必须选择有效的全局课程分类", () => {
   const result = questionImportCommitSchema.parse({
     ...base,
-    courseId: "c1234567890123456789012345",
+    categoryId: "c1234567890123456789012345",
   });
   assert.deepEqual(result.knowledgePointIds, []);
   assert.equal(questionImportCommitSchema.safeParse(base).success, false);
   assert.equal(
-    questionImportCommitSchema.safeParse({ ...base, courseId: "invalid" })
+    questionImportCommitSchema.safeParse({ ...base, categoryId: "invalid" })
       .success,
     false,
   );
 });
-test("历史知识点导入契约保留，重复知识点被拒绝", () => {
+test("导入可选择知识点，重复知识点被拒绝", () => {
   const id = "c1234567890123456789012345";
   assert.ok(
-    questionImportCommitSchema.safeParse({ ...base, knowledgePointIds: [id] })
-      .success,
+    questionImportCommitSchema.safeParse({
+      ...base,
+      categoryId: id,
+      knowledgePointIds: [id],
+    }).success,
   );
   assert.equal(
     questionImportCommitSchema.safeParse({
       ...base,
+      categoryId: id,
       knowledgePointIds: [id, id],
     }).success,
     false,

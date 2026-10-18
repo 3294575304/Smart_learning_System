@@ -58,6 +58,7 @@ export const courseTemplateIdSchema = z.string().cuid("课程模板 ID 格式无
 
 export const courseIdSchema = z.string().cuid("课程 ID 格式无效");
 export const classroomIdSchema = z.string().cuid("班级 ID 格式无效");
+export const questionCategoryIdSchema = z.string().cuid("课程分类 ID 格式无效");
 
 export const createCourseTemplateSchema = z
   .object({
@@ -79,6 +80,7 @@ export const updateCourseTemplateSchema = z
 export const createCourseSchema = z
   .object({
     templateId: courseTemplateIdSchema,
+    questionCategoryId: questionCategoryIdSchema,
     courseNo: courseNoSchema,
     term: termSchema,
     name: courseNameSchema,
@@ -88,6 +90,7 @@ export const createCourseSchema = z
 
 export const updateCourseSchema = z
   .object({
+    questionCategoryId: questionCategoryIdSchema,
     courseNo: courseNoSchema,
     term: termSchema,
     name: courseNameSchema,

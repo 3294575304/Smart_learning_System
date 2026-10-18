@@ -123,8 +123,17 @@ async function createImportContext(): Promise<ImportExecutionContext> {
   const courseNo = `SIE-${suffix}`;
   const course = await prisma.course.create({
     data: {
-      templateId: template.id,
-      teacherId: teacher.id,
+      questionCategory: {
+        connectOrCreate: {
+          where: { normalizedName: "automated-test-category" },
+          create: {
+            name: "自动化测试课程分类",
+            normalizedName: "automated-test-category",
+          },
+        },
+      },
+      template: { connect: { id: template.id } },
+      teacher: { connect: { id: teacher.id } },
       courseNo,
       term: "2026-2027-1",
       name: `学生正式导入测试 ${suffix}`,

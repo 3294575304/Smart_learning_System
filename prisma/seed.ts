@@ -2571,6 +2571,17 @@ async function main(): Promise<void> {
     },
   });
 
+  const pythonQuestionCategory = await prisma.questionCourseCategory.upsert({
+    where: { normalizedName: "python 程序设计" },
+    update: { name: "Python 程序设计", isActive: true },
+    create: {
+      name: "Python 程序设计",
+      normalizedName: "python 程序设计",
+      isActive: true,
+    },
+    select: { id: true },
+  });
+
   const existingPythonCourse = await prisma.course.findFirst({
     where: {
       teacherId: teacher.id,
@@ -2582,6 +2593,7 @@ async function main(): Promise<void> {
   });
   const pythonCourseData = {
     templateId: pythonCourseTemplate.id,
+    questionCategoryId: pythonQuestionCategory.id,
     name: "Python 程序设计",
     description: "V1.0 Python 课程模板示例课程。",
     status: CourseStatus.ACTIVE,

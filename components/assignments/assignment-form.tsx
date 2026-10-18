@@ -35,7 +35,8 @@ interface EditorQuestion {
   content?: string;
   type: QuestionType;
   difficulty: number;
-  isOwned: boolean;
+  questionCategoryId: string | null;
+  questionCategory?: { name: string } | null;
   graphBindings?: Array<{ courseId: string; conceptId: string }>;
 }
 
@@ -45,7 +46,12 @@ interface SelectedQuestion extends EditorQuestion {
 
 interface AssignmentFormProps {
   mode: "create" | "edit";
-  classrooms: Array<{ id: string; name: string; courseId?: string | null }>;
+  classrooms: Array<{
+    id: string;
+    name: string;
+    courseId?: string | null;
+    questionCategoryId?: string | null;
+  }>;
   courses?: Array<{
     id: string;
     name: string;
@@ -106,6 +112,12 @@ export function AssignmentForm({
   const [filterCourse, setFilterCourse] = useState(() =>
     courseForClassroom(assignment?.classroom.id ?? classrooms[0]?.id ?? ""),
   );
+  const [filterCategory, setFilterCategory] = useState(
+    () =>
+      classrooms.find(
+        (item) => item.id === (assignment?.classroom.id ?? classrooms[0]?.id),
+      )?.questionCategoryId ?? null,
+  );
   const [filterChapter, setFilterChapter] = useState("");
   const [filterConcept, setFilterConcept] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -124,6 +136,7 @@ export function AssignmentForm({
   );
   const available = questions.filter(
     (question) =>
+      (!filterCategory || question.questionCategoryId === filterCategory) &&
       (!keyword ||
         `${question.title} ${question.content ?? ""}`
           .toLowerCase()
@@ -155,7 +168,7 @@ export function AssignmentForm({
             title: item.title,
             type: item.type,
             difficulty: 1,
-            isOwned: true,
+            questionCategoryId: null,
           }),
           points: item.points,
         },
@@ -299,6 +312,10 @@ export function AssignmentForm({
               {...form.register("classroomId", {
                 onChange: (event: React.ChangeEvent<HTMLSelectElement>) => {
                   setFilterCourse(courseForClassroom(event.target.value));
+                  setFilterCategory(
+                    classrooms.find((item) => item.id === event.target.value)
+                      ?.questionCategoryId ?? null,
+                  );
                   setFilterChapter("");
                   setFilterConcept("");
                   setPage(1);
@@ -567,9 +584,9 @@ export function AssignmentForm({
                               {question.title}
                             </p>
                             <p className="text-xs text-gray-500">
+                              {question.questionCategory?.name ?? "课程题库"} ·{" "}
                               {QUESTION_TYPE_LABELS[question.type]} · 难度{" "}
-                              {question.difficulty} ·{" "}
-                              {question.isOwned ? "我的题目" : "公共题目"}
+                              {question.difficulty}
                             </p>
                           </div>
                           <button
