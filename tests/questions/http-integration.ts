@@ -163,6 +163,32 @@ async function main(): Promise<void> {
         sessionCookie(admin.id),
       ]);
 
+    assert.equal(
+      (await requestJson("/api/teacher/ai-question-batches")).status,
+      401,
+    );
+    assert.equal(
+      (await requestJson("/api/teacher/ai-question-batches", studentCookie))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await requestJson("/api/teacher/ai-question-batches", teacherCookie))
+        .status,
+      200,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          "/api/teacher/ai-question-batches",
+          teacherCookie,
+          "POST",
+          {},
+        )
+      ).status,
+      400,
+    );
+
     assert.equal((await requestJson("/api/teacher/questions")).status, 401);
     assert.equal(
       (

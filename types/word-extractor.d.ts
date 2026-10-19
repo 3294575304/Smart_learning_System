@@ -10,7 +10,7 @@ declare module "word-extractor" {
   export = WordExtractor;
 }
 
-declare module "word-extractor/lib/buffer-reader" {
+declare module "word-extractor/lib/buffer-reader.js" {
   class BufferReader {
     constructor(buffer: Buffer);
     open(): Promise<void>;
@@ -20,7 +20,7 @@ declare module "word-extractor/lib/buffer-reader" {
   export = BufferReader;
 }
 
-declare module "word-extractor/lib/ole-compound-doc" {
+declare module "word-extractor/lib/ole-compound-doc.js" {
   import type { Readable } from "node:stream";
 
   class OleCompoundDoc {
@@ -32,9 +32,9 @@ declare module "word-extractor/lib/ole-compound-doc" {
   export = OleCompoundDoc;
 }
 
-declare module "word-extractor/lib/open-office-extractor" {
+declare module "word-extractor/lib/open-office-extractor.js" {
   import type { Readable } from "node:stream";
-  import BufferReader from "word-extractor/lib/buffer-reader";
+  import BufferReader from "word-extractor/lib/buffer-reader.js";
   interface ArchiveEntry {
     uncompressedSize: number;
   }

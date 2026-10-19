@@ -1,5 +1,11 @@
 import { Role } from "@prisma/client";
-import { ChevronLeft, ChevronRight, FileUp, Plus } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  FileUp,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import Link from "next/link";
 
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -85,6 +91,13 @@ export default async function QuestionsPage({
             >
               <FileUp className="h-4 w-4" />
               批量导入
+            </Link>
+            <Link
+              className="flex items-center gap-2 rounded-md border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-800 transition hover:bg-violet-100"
+              href="/teacher/questions/ai"
+            >
+              <Sparkles className="h-4 w-4" />
+              AI 出题
             </Link>
             <Link
               className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"

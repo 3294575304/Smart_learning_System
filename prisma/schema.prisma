@@ -75,6 +75,10 @@ enum AuditAction {
   QUESTION_GRAPH_BINDINGS_CLEARED
   AI_QUESTION_MAPPING_BATCH_CREATED
   AI_QUESTION_MAPPING_BATCH_CONFIRMED
+  AI_QUESTION_BATCH_CREATED
+  AI_QUESTION_CANDIDATE_EDITED
+  AI_QUESTION_CANDIDATE_CONFIRMED
+  AI_QUESTION_CANDIDATE_DISCARDED
   COURSE_TEACHING_PROGRESS_UPDATED
   COURSE_RECOMMENDATION_POLICY_UPDATED
   PROGRAMMING_CONFIG_REVISION_CREATED
@@ -202,6 +206,7 @@ enum AuditTargetType {
   COURSE_SURVEY
   COURSE_SURVEY_RESPONSE
   COURSE_SURVEY_SUMMARY
+  AI_QUESTION_BATCH
 }
 
 enum OutcomeStudentStatus {
@@ -699,6 +704,7 @@ model User {
   createdProgrammingAttempts         ProgrammingAttempt[]                 @relation("ProgrammingAttemptCreatedBy")
   learnerProfileSnapshots            LearnerProfileSnapshot[]             @relation("LearnerProfileStudent")
   createdAIQuestionMappingBatches    AIQuestionMappingBatch[]             @relation("AIQuestionMappingBatchCreator")
+  createdAIQuestionGenerationBatches AIQuestionGenerationBatch[]          @relation("AIQuestionGenerationBatchCreator")
   createdTeachingProgressRevisions   CourseTeachingProgressRevision[]     @relation("CourseTeachingProgressCreatedBy")
   createdRecommendationPolicies      CourseRecommendationPolicyRevision[] @relation("CourseRecommendationPolicyCreatedBy")
   courseRecommendationCycles         CourseRecommendationCycle[]          @relation("CourseRecommendationStudent")
@@ -816,6 +822,7 @@ model BackgroundJob {
   syllabusParseDraft   SyllabusParseDraft?
   knowledgeGraphDraft  KnowledgeGraphDraft?
   questionMappingBatch AIQuestionMappingBatch?
+  aiQuestionBatch AIQuestionGenerationBatch?
 
   @@unique([type, idempotencyKey])
   @@index([status, nextAttemptAt, createdAt])
@@ -1042,6 +1049,7 @@ model Course {
   learningEvents                        LearningEvent[]
   learnerProfileSnapshots               LearnerProfileSnapshot[]
   aiQuestionMappingBatches              AIQuestionMappingBatch[]
+  aiQuestionGenerationBatches           AIQuestionGenerationBatch[]
   teachingProgressRevisions             CourseTeachingProgressRevision[]      @relation("CourseTeachingProgress")
   currentTeachingProgressRevision       CourseTeachingProgressRevision?       @relation("CurrentCourseTeachingProgress", fields: [currentTeachingProgressRevisionId], references: [id], onDelete: SetNull)
   recommendationPolicyRevisions         CourseRecommendationPolicyRevision[]  @relation("CourseRecommendationPolicies")
@@ -2382,6 +2390,71 @@ model KnowledgePoint {
   @@index([name])
 }
 
+model AIQuestionGenerationBatch {
+  id                    String   @id @default(cuid())
+  courseId              String
+  teacherId             String
+  jobId                 String?  @unique
+  idempotencyKey        String   @unique @db.VarChar(191)
+  questionCategoryId    String
+  graphVersionId        String?
+  syllabusStructureId   String?
+  mode                  String   @db.VarChar(20)
+  status                String   @default("PENDING") @db.VarChar(20)
+  request               Json
+  generationRevision    Int      @default(1)
+  requestedCount        Int
+  generatedCount        Int      @default(0)
+  failedCount           Int      @default(0)
+  errorCode             String?  @db.VarChar(100)
+  failureDetails        Json     @default("[]")
+  provider              String?  @db.VarChar(100)
+  model                 String?  @db.VarChar(191)
+  promptVersion         String   @db.VarChar(50)
+  ruleVersion           String   @db.VarChar(50)
+  sourceFileName        String?  @db.VarChar(255)
+  sourceFileFormat      String?  @db.VarChar(20)
+  sourceFileStorageKey  String?  @unique @db.VarChar(191)
+  sourceFileChecksum    String?  @db.Char(64)
+  sourceFileSizeBytes   Int?
+  sourceFileExpiresAt   DateTime?
+  sourceFileDeletedAt   DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  course     Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  teacher    User                            @relation("AIQuestionGenerationBatchCreator", fields: [teacherId], references: [id], onDelete: Restrict)
+  job        BackgroundJob?                  @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  candidates AIQuestionGenerationCandidate[]
+
+  @@index([teacherId, createdAt])
+  @@index([courseId, status, createdAt])
+  @@index([sourceFileExpiresAt, sourceFileDeletedAt])
+}
+
+model AIQuestionGenerationCandidate {
+  id                  String   @id @default(cuid())
+  batchId             String
+  ordinal             Int
+  status              String   @default("REVIEW") @db.VarChar(20)
+  revision            Int      @default(1)
+  questionJson        Json
+  primaryConceptId    String?
+  programmingConfig   Json?
+  sourceRefs          Json
+  qualityFlags        Json
+  reviewHistory       Json       @default("[]")
+  confirmedQuestionId String?  @unique
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  batch             AIQuestionGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  confirmedQuestion Question?                 @relation(fields: [confirmedQuestionId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, ordinal])
+  @@index([batchId, status, ordinal])
+}
+
 model Question {
   categoryCourseId   String?
   categoryCourse     Course?                 @relation("QuestionCategoryCourse", fields: [categoryCourseId], references: [id], onDelete: Restrict)
@@ -2427,6 +2500,7 @@ model Question {
   programmingConfigRevisions        ProgrammingQuestionConfigRevision[]
   recommendationProgrammingAttempts ProgrammingAttempt[]                  @relation("RecommendationProgrammingQuestion")
   aiQuestionMappingCandidates       AIQuestionMappingCandidate[]
+  aiGenerationCandidate             AIQuestionGenerationCandidate?
 
   @@index([categoryCourseId, status, deletedAt])
   @@index([questionCategoryId, status, deletedAt])

@@ -171,7 +171,8 @@ interface WriteGovernanceAuditInput {
     | typeof AuditTargetType.QUALITY_REPORT
     | typeof AuditTargetType.COURSE_SURVEY
     | typeof AuditTargetType.COURSE_SURVEY_RESPONSE
-    | typeof AuditTargetType.COURSE_SURVEY_SUMMARY;
+    | typeof AuditTargetType.COURSE_SURVEY_SUMMARY
+    | typeof AuditTargetType.AI_QUESTION_BATCH;
   targetId: string;
   summary: string;
   beforeData: AuditConfigSnapshot | null;

@@ -5,6 +5,10 @@ import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas
 import type { QuestionMappingAIInput } from "@/services/question-mapping/schemas";
 import type { SelfReflectionAIInput } from "@/services/self-reflections/schemas";
 import type { QualityReportAIInput } from "@/services/quality-reports/schemas";
+import type {
+  QuestionGenerationAIInput,
+  QuestionGenerationReviewInput,
+} from "@/services/ai-question-generation/schemas";
 
 export interface AIProviderOptions {
   signal: AbortSignal;
@@ -100,6 +104,16 @@ export interface AIProvider {
 
   writeQualityReportNarrative?(
     input: QualityReportAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  generateQuestions?(
+    input: QuestionGenerationAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  reviewGeneratedQuestions?(
+    input: QuestionGenerationReviewInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 }

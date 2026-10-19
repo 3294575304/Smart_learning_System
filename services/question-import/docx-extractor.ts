@@ -1,5 +1,5 @@
-import OpenOfficeExtractor from "word-extractor/lib/open-office-extractor";
-import BufferReader from "word-extractor/lib/buffer-reader";
+import OpenOfficeExtractor from "word-extractor/lib/open-office-extractor.js";
+import BufferReader from "word-extractor/lib/buffer-reader.js";
 
 // word-extractor 将 Buffer 分块直接交给 XML 解析器，会截断跨块 UTF-8 中文。
 // 在流边界解码，保留完整字符；不修改依赖包或旧 DOC 解析路径。

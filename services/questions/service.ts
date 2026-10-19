@@ -542,28 +542,38 @@ export async function createQuestion(
   input: QuestionUpsertData,
 ): Promise<QuestionDetail> {
   const questionId = await prisma.$transaction(async (transaction) => {
-    await requireActiveQuestionCourseCategory(
-      input.questionCategoryId,
-      transaction,
-    );
-    await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
-    const question = await transaction.question.create({
-      data: {
-        creatorId: teacherId,
-        ...persistenceFields(input),
-        options: { create: optionCreateData(input) },
-        knowledgePointLinks: {
-          create: input.knowledgePointIds.map((knowledgePointId) => ({
-            knowledgePointId,
-            weight: 1,
-          })),
-        },
-      },
-      select: { id: true },
-    });
-    return question.id;
+    return createQuestionInTransaction(transaction, teacherId, input);
   });
   return getTeacherQuestion(teacherId, questionId);
+}
+
+export async function createQuestionInTransaction(
+  transaction: Prisma.TransactionClient,
+  teacherId: string,
+  input: QuestionUpsertData,
+  status?: QuestionStatus,
+): Promise<string> {
+  await requireActiveQuestionCourseCategory(
+    input.questionCategoryId,
+    transaction,
+  );
+  await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
+  const question = await transaction.question.create({
+    data: {
+      creatorId: teacherId,
+      ...persistenceFields(input),
+      ...(status ? { status } : {}),
+      options: { create: optionCreateData(input) },
+      knowledgePointLinks: {
+        create: input.knowledgePointIds.map((knowledgePointId) => ({
+          knowledgePointId,
+          weight: 1,
+        })),
+      },
+    },
+    select: { id: true },
+  });
+  return question.id;
 }
 
 export async function createQuestionsInBulk(
