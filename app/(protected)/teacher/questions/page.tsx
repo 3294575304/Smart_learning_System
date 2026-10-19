@@ -96,7 +96,7 @@ export default async function QuestionsPage({
           </div>
         }
         description="教师共同维护的课程题库。按课程分类管理题目，课程知识点、题型、难度和标签可继续筛选。"
-        title="共享题库"
+        title="题库管理"
       />
       <QuestionFilters
         key={JSON.stringify(query)}

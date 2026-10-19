@@ -60,7 +60,7 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
         { href: "/teacher", label: "工作台", icon: Home },
         { href: "/teacher/courses", label: "课程管理", icon: BookOpenCheck },
         { href: "/teacher/classrooms", label: "班级管理", icon: School },
-        { href: "/teacher/questions", label: "共享题库", icon: BookOpenCheck },
+        { href: "/teacher/questions", label: "题库管理", icon: BookOpenCheck },
         {
           href: "/teacher/assignments",
           label: "作业管理",
