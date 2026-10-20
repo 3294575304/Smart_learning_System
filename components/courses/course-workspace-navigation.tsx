@@ -3,56 +3,19 @@
 import { useRememberedSelection } from "@/components/dashboard/navigation-memory";
 import {
   BarChart3,
-  BookOpenCheck,
   CalendarCheck,
   ChevronRight,
-  ClipboardCheck,
   ClipboardList,
   FileChartColumn,
-  FileText,
-  GitBranch,
-  ListChecks,
   MessageSquareText,
+  NotebookPen,
+  Shuffle,
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { withClassroomQuery } from "@/lib/course-classroom";
 
 const WORKSPACE_GROUPS = [
-  {
-    title: "课程建设",
-    items: [
-      {
-        title: "教学大纲",
-        description: "上传大纲，解析与审核课程内容",
-        path: "syllabus",
-        icon: FileText,
-      },
-      {
-        title: "知识图谱",
-        description: "构建知识结构，审核与发布图谱",
-        path: "knowledge-graph",
-        icon: GitBranch,
-      },
-      {
-        title: "考核方案",
-        description: "配置考核项目、权重与评分标准",
-        path: "assessment-scheme",
-        icon: ClipboardCheck,
-      },
-      {
-        title: "题目关联",
-        description: "批量匹配题目知识点并由教师确认",
-        path: "question-mapping",
-        icon: ListChecks,
-      },
-      {
-        title: "教学进度",
-        description: "维护课堂授课进度",
-        path: "teaching-progress",
-        icon: BookOpenCheck,
-      },
-    ],
-  },
   {
     title: "教学管理",
     items: [
@@ -70,7 +33,7 @@ const WORKSPACE_GROUPS = [
       },
       {
         title: "出勤台账",
-        description: "课堂签到、出勤记录与纠正",
+        description: "查看历次签到、纠正记录和学生汇总",
         path: "attendance",
         icon: CalendarCheck,
       },
@@ -79,6 +42,29 @@ const WORKSPACE_GROUPS = [
         description: "查看班级学情与学生学习证据",
         path: "profiles",
         icon: Users,
+      },
+    ],
+  },
+  {
+    title: "课堂活动",
+    items: [
+      {
+        title: "课堂签到",
+        description: "发布并查看当前班级的本次签到",
+        path: "check-in",
+        icon: CalendarCheck,
+      },
+      {
+        title: "发布作业",
+        description: "创建并发布当前班级的作业",
+        path: "/teacher/assignments/new",
+        icon: NotebookPen,
+      },
+      {
+        title: "随机选人",
+        description: "从当前班级的在读学生中随机抽取",
+        path: "random-picker",
+        icon: Shuffle,
       },
     ],
   },
@@ -107,61 +93,92 @@ const WORKSPACE_GROUPS = [
   },
 ];
 
-export function CourseWorkspaceNavigation({ courseId }: { courseId: string }) {
+export function CourseWorkspaceNavigation({
+  courseId,
+  classrooms,
+}: {
+  courseId: string;
+  classrooms: Array<{ id: string; name: string }>;
+}) {
   const [activeGroup, setActiveGroup] = useRememberedSelection<string>(
     "workspace-group",
     "教学管理",
-    ["教学管理", "课程建设", "评价分析"],
+    WORKSPACE_GROUPS.map((group) => group.title),
   );
-  const orderedGroups = [
-    WORKSPACE_GROUPS[1],
-    WORKSPACE_GROUPS[0],
-    WORKSPACE_GROUPS[2],
-  ];
+  const [rememberedClassroomId, setClassroomId] = useRememberedSelection(
+    "workspace-classroom",
+    classrooms[0]?.id ?? "",
+    classrooms.map((classroom) => classroom.id),
+  );
+  const classroomId = classrooms.some(
+    (item) => item.id === rememberedClassroomId,
+  )
+    ? rememberedClassroomId
+    : (classrooms[0]?.id ?? "");
   return (
     <nav aria-label="课程功能" className="bg-card rounded-xl border p-5 sm:p-6">
-      <div
-        role="tablist"
-        aria-label="课程管理分类"
-        className="mb-4 flex flex-wrap gap-2 border-b pb-3"
-      >
-        {orderedGroups.map((group) => (
-          <button
-            key={group.title}
-            type="button"
-            role="tab"
-            aria-selected={activeGroup === group.title}
-            aria-controls={`course-workspace-${group.title}`}
-            id={`course-workspace-tab-${group.title}`}
-            tabIndex={activeGroup === group.title ? 0 : -1}
-            onKeyDown={(event) => {
-              const index = orderedGroups.findIndex(
-                (item) => item.title === group.title,
-              );
-              const next =
-                event.key === "ArrowRight"
-                  ? (index + 1) % orderedGroups.length
-                  : event.key === "ArrowLeft"
-                    ? (index + orderedGroups.length - 1) % orderedGroups.length
-                    : event.key === "Home"
-                      ? 0
-                      : event.key === "End"
-                        ? orderedGroups.length - 1
-                        : null;
-              if (next === null) return;
-              event.preventDefault();
-              const target = orderedGroups[next];
-              setActiveGroup(target.title);
-              document
-                .getElementById(`course-workspace-tab-${target.title}`)
-                ?.focus();
-            }}
-            onClick={() => setActiveGroup(group.title)}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${activeGroup === group.title ? "bg-sky-600 text-white" : "bg-sky-50 text-slate-600 hover:bg-sky-100"}`}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+        <div
+          role="tablist"
+          aria-label="课程管理分类"
+          className="flex flex-wrap gap-2"
+        >
+          {WORKSPACE_GROUPS.map((group) => (
+            <button
+              key={group.title}
+              type="button"
+              role="tab"
+              aria-selected={activeGroup === group.title}
+              aria-controls={`course-workspace-${group.title}`}
+              id={`course-workspace-tab-${group.title}`}
+              tabIndex={activeGroup === group.title ? 0 : -1}
+              onKeyDown={(event) => {
+                const index = WORKSPACE_GROUPS.findIndex(
+                  (item) => item.title === group.title,
+                );
+                const next =
+                  event.key === "ArrowRight"
+                    ? (index + 1) % WORKSPACE_GROUPS.length
+                    : event.key === "ArrowLeft"
+                      ? (index + WORKSPACE_GROUPS.length - 1) %
+                        WORKSPACE_GROUPS.length
+                      : event.key === "Home"
+                        ? 0
+                        : event.key === "End"
+                          ? WORKSPACE_GROUPS.length - 1
+                          : null;
+                if (next === null) return;
+                event.preventDefault();
+                const target = WORKSPACE_GROUPS[next];
+                setActiveGroup(target.title);
+                document
+                  .getElementById(`course-workspace-tab-${target.title}`)
+                  ?.focus();
+              }}
+              onClick={() => setActiveGroup(group.title)}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${activeGroup === group.title ? "bg-sky-600 text-white" : "bg-sky-50 text-slate-600 hover:bg-sky-100"}`}
+            >
+              {group.title}
+            </button>
+          ))}
+        </div>
+        <label className="ml-auto flex items-center gap-2 text-sm text-slate-600">
+          <span>班级</span>
+          <select
+            aria-label="选择课程关联班级"
+            className="max-w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-slate-900 focus-visible:outline-sky-600 disabled:text-slate-400"
+            value={classroomId}
+            disabled={classrooms.length === 0}
+            onChange={(event) => setClassroomId(event.target.value)}
           >
-            {group.title}
-          </button>
-        ))}
+            {classrooms.length === 0 && <option value="">暂无关联班级</option>}
+            {classrooms.map((classroom) => (
+              <option key={classroom.id} value={classroom.id}>
+                {classroom.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       {WORKSPACE_GROUPS.map((group) => (
         <section
@@ -175,7 +192,16 @@ export function CourseWorkspaceNavigation({ courseId }: { courseId: string }) {
             {group.items.map(({ title, description, path, icon: Icon }) => (
               <Link
                 key={path}
-                href={`/teacher/courses/${courseId}/${path}`}
+                href={
+                  group.title === "课堂活动" && !classroomId
+                    ? `/teacher/courses/${courseId}#course-classrooms`
+                    : withClassroomQuery(
+                        path.startsWith("/")
+                          ? path
+                          : `/teacher/courses/${courseId}/${path}`,
+                        classroomId,
+                      )
+                }
                 className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
               >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 transition-colors group-hover:border-sky-100 group-hover:text-blue-600">
@@ -186,7 +212,9 @@ export function CourseWorkspaceNavigation({ courseId }: { courseId: string }) {
                     {title}
                   </h3>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {description}
+                    {group.title === "课堂活动" && !classroomId
+                      ? "请先关联启用中的班级"
+                      : description}
                   </p>
                 </div>
                 <ChevronRight

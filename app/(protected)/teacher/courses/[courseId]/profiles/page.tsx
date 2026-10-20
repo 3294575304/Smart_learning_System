@@ -7,6 +7,7 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { studentProfilePathSchema } from "@/services/learner-profiles/schemas";
 import { listTeacherCourseLearnerProfiles } from "@/services/learner-profiles/service";
+import { withClassroomQuery } from "@/lib/course-classroom";
 
 const stateLabels: Record<string, string> = {
   NO_EVIDENCE: "无证据",
@@ -107,7 +108,10 @@ export default async function TeacherCourseProfilesPage({
                 </p>
                 <a
                   className="mt-4 inline-flex rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white"
-                  href={`/teacher/courses/${path.data.courseId}/students/${item.student.id}/profile`}
+                  href={withClassroomQuery(
+                    `/teacher/courses/${path.data.courseId}/students/${item.student.id}/profile`,
+                    query.classroomId,
+                  )}
                 >
                   查看证据详情
                 </a>

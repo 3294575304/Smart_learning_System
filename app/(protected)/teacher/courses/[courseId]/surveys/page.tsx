@@ -9,19 +9,29 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
 import { getTeacherCourse } from "@/services/courses/service";
 import { listTeacherCourseSurveys } from "@/services/course-surveys/service";
+import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
 
 export default async function TeacherCourseSurveysPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ classroomId?: string }>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
   const courseId = courseIdSchema.safeParse((await params).courseId);
   if (!courseId.success) notFound();
+  const classroom = await getTeacherCourseClassroomForPage(
+    teacher.id,
+    courseId.data,
+    (await searchParams).classroomId,
+  );
   try {
     const [course, surveys] = await Promise.all([
       getTeacherCourse(teacher.id, courseId.data),
-      listTeacherCourseSurveys(teacher.id, courseId.data, {}),
+      listTeacherCourseSurveys(teacher.id, courseId.data, {
+        classroomId: classroom?.id,
+      }),
     ]);
     return (
       <section className="space-y-6">
@@ -35,6 +45,8 @@ export default async function TeacherCourseSurveysPage({
           title="结课教学质量问卷"
         />
         <SurveyListWorkspace
+          key={`${courseId.data}:${classroom?.id ?? "all"}`}
+          initialClassroomId={classroom?.id}
           classrooms={course.linkedClassrooms
             .filter((item) => item.status === "ACTIVE")
             .map((item) => ({ id: item.id, name: item.name }))}

@@ -20,6 +20,7 @@ import { GradebookOperationError } from "@/services/gradebook/errors";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { getTeacherCourseClassroom } from "@/services/courses/classroom-context";
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -981,10 +982,12 @@ export async function getTeacherGradebookWorkspace(
 export async function listTeacherCourseGradebooks(
   teacherId: string,
   courseId: string,
+  classroomId?: string,
 ) {
   await ownedCourseOrThrow(teacherId, courseId);
+  await getTeacherCourseClassroom(teacherId, courseId, classroomId);
   return prisma.courseGradebook.findMany({
-    where: { courseId },
+    where: { courseId, ...(classroomId ? { classroomId } : {}) },
     include: {
       classroom: { select: { id: true, name: true } },
       scheme: { select: { id: true, versionNumber: true } },
@@ -999,11 +1002,17 @@ export async function listTeacherCourseGradebooks(
 export async function getTeacherGradebookOverview(
   teacherId: string,
   courseId: string,
+  classroomId?: string,
 ) {
   const course = await ownedCourseOrThrow(teacherId, courseId);
+  await getTeacherCourseClassroom(teacherId, courseId, classroomId);
   const [classrooms, gradebooks, currentScheme] = await Promise.all([
     prisma.classroom.findMany({
-      where: { courseId, teacherId },
+      where: {
+        courseId,
+        teacherId,
+        ...(classroomId ? { id: classroomId } : {}),
+      },
       select: {
         id: true,
         name: true,
@@ -1016,7 +1025,11 @@ export async function getTeacherGradebookOverview(
       },
     }),
     prisma.courseGradebook.findMany({
-      where: { courseId, classroom: { teacherId } },
+      where: {
+        courseId,
+        classroom: { teacherId },
+        ...(classroomId ? { classroomId } : {}),
+      },
       select: {
         id: true,
         classroom: {

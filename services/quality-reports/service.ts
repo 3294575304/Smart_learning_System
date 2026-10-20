@@ -18,6 +18,7 @@ import { prisma } from "@/lib/prisma";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { getTeacherCourseClassroom } from "@/services/courses/classroom-context";
 import {
   claimBackgroundJobById,
   completeBackgroundJob,
@@ -1188,11 +1189,17 @@ export async function approveTeacherQualityReport(
 export async function getTeacherQualityReports(
   teacherId: string,
   courseId: string,
+  classroomId?: string,
 ) {
   const course = await ownedCourse(teacherId, courseId);
-  const [gradebooks, reports] = await Promise.all([
+  await getTeacherCourseClassroom(teacherId, courseId, classroomId);
+  const [gradebooks, reports, classrooms] = await Promise.all([
     prisma.courseGradebook.findMany({
-      where: { courseId, course: { teacherId } },
+      where: {
+        courseId,
+        course: { teacherId },
+        ...(classroomId ? { classroomId } : {}),
+      },
       include: {
         classroom: { select: { id: true, name: true } },
         currentPublication: {
@@ -1211,7 +1218,7 @@ export async function getTeacherQualityReports(
       orderBy: { createdAt: "desc" },
     }),
     prisma.courseQualityReport.findMany({
-      where: { courseId },
+      where: { courseId, ...(classroomId ? { classroomId } : {}) },
       orderBy: { versionNumber: "desc" },
       select: {
         id: true,
@@ -1231,10 +1238,20 @@ export async function getTeacherQualityReports(
         },
       },
     }),
+    prisma.classroom.findMany({
+      where: {
+        courseId,
+        teacherId,
+        ...(classroomId ? { id: classroomId } : { status: "ACTIVE" }),
+      },
+      select: { id: true, name: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    }),
   ]);
   const structure = parsedSyllabus(course.currentPublishedSyllabusStructure);
   return {
     gradebooks,
+    classrooms,
     reports: reports.map(({ sourceSnapshotJson, ...report }) => {
       const source =
         qualityReportSourceSnapshotSchema.safeParse(sourceSnapshotJson);

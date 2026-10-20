@@ -58,6 +58,9 @@ export const courseTemplateIdSchema = z.string().cuid("课程模板 ID 格式无
 
 export const courseIdSchema = z.string().cuid("课程 ID 格式无效");
 export const classroomIdSchema = z.string().cuid("班级 ID 格式无效");
+export const courseClassroomQuerySchema = z.object({
+  classroomId: classroomIdSchema.optional(),
+});
 
 export const createCourseTemplateSchema = z
   .object({

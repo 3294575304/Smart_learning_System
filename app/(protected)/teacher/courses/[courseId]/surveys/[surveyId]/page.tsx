@@ -9,6 +9,7 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
 import { courseSurveyIdSchema } from "@/services/course-surveys/schemas";
 import { getTeacherCourseSurvey } from "@/services/course-surveys/service";
+import { withClassroomQuery } from "@/lib/course-classroom";
 
 export default async function TeacherCourseSurveyDetailPage({
   params,
@@ -30,7 +31,12 @@ export default async function TeacherCourseSurveyDetailPage({
       <section className="space-y-6">
         <PageHeader
           actions={
-            <TeacherBackLink href={`/teacher/courses/${courseId.data}/surveys`}>
+            <TeacherBackLink
+              href={withClassroomQuery(
+                `/teacher/courses/${courseId.data}/surveys`,
+                survey.classroom.id,
+              )}
+            >
               返回问卷列表
             </TeacherBackLink>
           }

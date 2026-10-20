@@ -1,74 +1,33 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { correctAttendanceRecordSchema } from "@/services/attendance/schemas";
-const attendanceLabels: Record<string, string> = {
-  PRESENT: "正常出勤",
-  LATE: "迟到",
-  EARLY_LEAVE: "早退",
-  LEAVE: "请假",
-  ABSENT: "缺勤",
-  PENDING: "待确认",
-};
-const sessionLabels: Record<string, string> = {
-  SCHEDULED: "待开放",
-  OPEN: "签到中",
-  CLOSED: "已结算",
-  CANCELLED: "已取消",
-};
-type RecordRow = {
-  id: string;
-  studentId: string;
-  currentStatus: string;
-  currentRevisionNumber: number;
-  student: {
-    profile: { studentNo: string | null; displayName: string | null } | null;
-  };
-};
-type Session = {
-  id: string;
-  title: string;
-  status: string;
-  revision: number;
-  startsAt: string;
-  classroom: { name: string };
-  records: RecordRow[];
-};
-type Data = {
-  sessions: Session[];
-  summaries: Array<{
-    studentId: string;
-    studentNo: string | null;
-    displayName: string;
-    denominator: number;
-    rate: string | null;
-  }>;
-};
-async function json(url: string, init?: RequestInit) {
-  const response = await fetch(url, init);
-  const payload = (await response.json()) as {
-    success: boolean;
-    data?: unknown;
-    error?: string;
-  };
-  if (!response.ok || !payload.success)
-    throw new Error(payload.error ?? "请求失败。");
-  return payload.data;
-}
+import {
+  attendanceLabels,
+  requestAttendanceApi,
+  sessionLabels,
+  type AttendanceRecordRow,
+  type AttendanceSessionRow,
+  type AttendanceWorkspaceData,
+} from "@/components/courses/attendance-client";
 export function AttendanceWorkspace({
   courseId,
   classrooms,
+  initialClassroomId,
 }: {
   courseId: string;
   classrooms: Array<{ id: string; name: string }>;
+  initialClassroomId?: string;
 }) {
-  const [data, setData] = useState<Data | null>(null);
+  const [data, setData] = useState<AttendanceWorkspaceData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [classroomFilter, setClassroomFilter] = useState("");
+  const [classroomFilter, setClassroomFilter] = useState(
+    initialClassroomId ?? "",
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<{
-    session: Session;
-    record: RecordRow;
+    session: AttendanceSessionRow;
+    record: AttendanceRecordRow;
     status: string;
     reason: string;
   } | null>(null);
@@ -78,9 +37,9 @@ export function AttendanceWorkspace({
     setData(null);
     try {
       setError(null);
-      const result = (await json(
+      const result = await requestAttendanceApi<AttendanceWorkspaceData>(
         `/api/teacher/courses/${courseId}/attendance${classroomFilter ? `?classroomId=${classroomFilter}` : ""}`,
-      )) as Data;
+      );
       if (revision === loadRevision.current) setData(result);
     } catch (caught) {
       if (revision === loadRevision.current)
@@ -90,61 +49,7 @@ export function AttendanceWorkspace({
   useEffect(() => {
     void load();
   }, [load]);
-  async function create(form: FormData) {
-    if (busy) return;
-    setError(null);
-    setBusy(true);
-    try {
-      const startsAt = new Date(String(form.get("startsAt")));
-      const body = {
-        classroomId: String(form.get("classroomId")),
-        title: String(form.get("title")),
-        startsAt,
-        signInOpensAt: new Date(startsAt.getTime() - 10 * 60000),
-        lateAfter: new Date(startsAt.getTime() + 10 * 60000),
-        signInClosesAt: new Date(startsAt.getTime() + 20 * 60000),
-      };
-      await json(`/api/teacher/courses/${courseId}/attendance`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      await load();
-      setMessage("签到场次已创建。");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "创建失败。");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function update(session: Session, action: string) {
-    if (busy) return;
-    if (
-      ["CLOSE", "CANCEL"].includes(action) &&
-      !window.confirm(
-        action === "CLOSE"
-          ? "确认结束签到并结算未签到学生的缺勤记录？"
-          : "确认取消本次签到场次？",
-      )
-    )
-      return;
-    setError(null);
-    setBusy(true);
-    try {
-      await json(`/api/teacher/attendance-sessions/${session.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, expectedRevision: session.revision }),
-      });
-      await load();
-      setMessage("签到场次状态已更新。");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "操作失败。");
-    } finally {
-      setBusy(false);
-    }
-  }
-  function correct(session: Session, record: RecordRow) {
+  function correct(session: AttendanceSessionRow, record: AttendanceRecordRow) {
     setEditing({
       session,
       record,
@@ -169,7 +74,7 @@ export function AttendanceWorkspace({
     }
     setBusy(true);
     try {
-      await json(
+      await requestAttendanceApi(
         `/api/teacher/attendance-sessions/${session.id}/records/${record.id}`,
         {
           method: "PUT",
@@ -186,6 +91,8 @@ export function AttendanceWorkspace({
       setBusy(false);
     }
   }
+  const closedSessionCount =
+    data?.sessions.filter((session) => session.status === "CLOSED").length ?? 0;
   return (
     <div className="space-y-6">
       <label className="block rounded-xl border bg-white p-4 text-sm">
@@ -281,44 +188,6 @@ export function AttendanceWorkspace({
           </button>
         </div>
       ) : null}
-      <form
-        className="rounded-xl border bg-white p-5"
-        action={(form) => void create(form)}
-      >
-        <h2 className="font-semibold">创建签到场次</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <select
-            name="classroomId"
-            required
-            className="rounded-md border px-3 py-2 text-sm"
-          >
-            {classrooms.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          <input
-            name="title"
-            required
-            maxLength={120}
-            placeholder="场次名称"
-            className="rounded-md border px-3 py-2 text-sm"
-          />
-          <input
-            name="startsAt"
-            required
-            type="datetime-local"
-            className="rounded-md border px-3 py-2 text-sm"
-          />
-          <button
-            disabled={busy || !classrooms.length}
-            className="rounded-md bg-sky-600 px-3 py-2 text-sm text-white"
-          >
-            创建（前10分钟开放）
-          </button>
-        </div>
-      </form>
       <section className="rounded-xl border bg-white p-5">
         <h2 className="font-semibold">签到场次与明细</h2>
         {!data ? (
@@ -332,32 +201,6 @@ export function AttendanceWorkspace({
                 {session.title} · {session.classroom.name} ·{" "}
                 {sessionLabels[session.status] ?? session.status}
               </summary>
-              <div className="mt-3 flex gap-2">
-                {session.status === "SCHEDULED" ? (
-                  <button
-                    className="rounded border px-2 py-1 text-sm"
-                    onClick={() => void update(session, "OPEN")}
-                  >
-                    开放签到
-                  </button>
-                ) : null}
-                {session.status === "OPEN" ? (
-                  <button
-                    className="rounded border px-2 py-1 text-sm"
-                    onClick={() => void update(session, "CLOSE")}
-                  >
-                    结束并结算缺勤
-                  </button>
-                ) : null}
-                {!["CLOSED", "CANCELLED"].includes(session.status) ? (
-                  <button
-                    className="rounded border px-2 py-1 text-sm"
-                    onClick={() => void update(session, "CANCEL")}
-                  >
-                    取消场次
-                  </button>
-                ) : null}
-              </div>
               {session.records.map((record) => (
                 <div
                   className="mt-2 flex items-center justify-between border-t pt-2 text-sm"
@@ -382,16 +225,77 @@ export function AttendanceWorkspace({
           ))
         )}
       </section>
-      <section className="rounded-xl border bg-white p-5">
-        <h2 className="font-semibold">学生出勤汇总</h2>
-        {data?.summaries.map((row) => (
-          <p className="mt-2 text-sm" key={row.studentId}>
-            {row.studentNo ?? "—"} {row.displayName}：
-            {row.rate === null ? "暂无有效分母" : `${row.rate}%`}（
-            {row.denominator} 场）
+      <details className="group rounded-xl border bg-white">
+        <summary className="flex cursor-pointer list-none items-center gap-3 rounded-xl p-5 focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+          <span className="font-semibold">学生出勤汇总</span>
+          <span className="text-sm text-slate-500">
+            {data
+              ? `${data.summaries.length} 人 · 已结束签到 ${closedSessionCount} 场`
+              : "加载中…"}
+          </span>
+          <span className="ml-auto rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 group-open:hidden">
+            展开
+          </span>
+          <span className="ml-auto hidden rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 group-open:inline">
+            收起
+          </span>
+        </summary>
+        <div className="border-t p-5">
+          <p className="mb-4 text-xs leading-5 text-slate-500">
+            “计入出勤率场次”是每位学生计算出勤率时的分母。请假、待确认不计入；场次创建时尚未入班的学生也没有该场记录，因此同一班级的学生可能有不同的计入场次。
           </p>
-        ))}
-      </section>
+          {!data ? (
+            <p className="text-sm text-slate-500">正在加载出勤汇总…</p>
+          ) : data.summaries.length === 0 ? (
+            <p className="text-sm text-slate-500">暂无学生出勤记录。</p>
+          ) : (
+            <div className="max-h-[32rem] overflow-auto rounded-lg border">
+              <table className="w-full min-w-[36rem] text-sm">
+                <thead className="sticky top-0 bg-slate-50 text-slate-600">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">
+                      学号
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">
+                      姓名
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-4 py-3 text-right font-medium"
+                    >
+                      出勤率
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-4 py-3 text-right font-medium"
+                    >
+                      计入出勤率场次
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.summaries.map((row) => (
+                    <tr key={row.studentId} className="hover:bg-sky-50/50">
+                      <td className="px-4 py-3 whitespace-nowrap text-slate-700">
+                        {row.studentNo ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-900">
+                        {row.displayName}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">
+                        {row.rate === null ? "暂无有效分母" : `${row.rate}%`}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap text-slate-600 tabular-nums">
+                        {row.denominator} 场
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

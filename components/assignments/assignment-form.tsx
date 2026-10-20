@@ -61,6 +61,7 @@ interface AssignmentFormProps {
   questions: EditorQuestion[];
   assignment?: TeacherAssignmentView;
   defaultDueDays?: number;
+  initialClassroomId?: string;
 }
 
 function datetimeLocal(date: Date | null | undefined): string {
@@ -77,6 +78,7 @@ export function AssignmentForm({
   courses = [],
   assignment,
   defaultDueDays = 7,
+  initialClassroomId,
 }: AssignmentFormProps) {
   const router = useRouter();
   const [assignmentType, setAssignmentType] = useState(
@@ -103,8 +105,10 @@ export function AssignmentForm({
       )?.id ?? ""
     );
   }
+  const defaultClassroomId =
+    assignment?.classroom.id ?? initialClassroomId ?? classrooms[0]?.id ?? "";
   const [filterCourse, setFilterCourse] = useState(() =>
-    courseForClassroom(assignment?.classroom.id ?? classrooms[0]?.id ?? ""),
+    courseForClassroom(defaultClassroomId),
   );
   const [filterChapter, setFilterChapter] = useState("");
   const [filterConcept, setFilterConcept] = useState("");
@@ -179,7 +183,7 @@ export function AssignmentForm({
     defaultValues: {
       title: assignment?.title ?? "",
       description: assignment?.description ?? "",
-      classroomId: assignment?.classroom.id ?? classrooms[0]?.id ?? "",
+      classroomId: defaultClassroomId,
       publishedAt: datetimeLocal(defaultPublishedAt),
       dueAt: datetimeLocal(defaultDueAt),
       allowResubmission: assignment?.allowResubmission ?? false,

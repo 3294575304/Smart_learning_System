@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { withClassroomQuery } from "@/lib/course-classroom";
 import {
   groupCourseGradebooks,
   type GradebookClassroomSummary,
@@ -29,7 +30,13 @@ const statuses = [
 ];
 const secondary =
   "inline-flex items-center justify-center rounded-lg border bg-white px-4 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-600";
-export function CourseGradebooksWorkspace({ courseId }: { courseId: string }) {
+export function CourseGradebooksWorkspace({
+  courseId,
+  classroomId,
+}: {
+  courseId: string;
+  classroomId?: string;
+}) {
   const router = useRouter();
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,7 +51,10 @@ export function CourseGradebooksWorkspace({ courseId }: { courseId: string }) {
     try {
       setData(
         await json<Overview>(
-          `/api/teacher/courses/${courseId}/gradebooks?view=overview`,
+          withClassroomQuery(
+            `/api/teacher/courses/${courseId}/gradebooks?view=overview`,
+            classroomId,
+          ),
         ),
       );
     } catch (caught) {
@@ -52,7 +62,7 @@ export function CourseGradebooksWorkspace({ courseId }: { courseId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [courseId]);
+  }, [courseId, classroomId]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -72,7 +82,9 @@ export function CourseGradebooksWorkspace({ courseId }: { courseId: string }) {
           }),
         },
       );
-      router.push(`${base}/gradebook/${created.id}`);
+      router.push(
+        withClassroomQuery(`${base}/gradebook/${created.id}`, classroomId),
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "建立失败，请重试。");
       setBusy(null);
@@ -248,7 +260,10 @@ export function CourseGradebooksWorkspace({ courseId }: { courseId: string }) {
                         {row.primary && (
                           <Link
                             className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
-                            href={`${base}/gradebook/${row.primary.id}`}
+                            href={withClassroomQuery(
+                              `${base}/gradebook/${row.primary.id}`,
+                              classroomId,
+                            )}
                           >
                             进入台账 →
                           </Link>
@@ -287,7 +302,10 @@ export function CourseGradebooksWorkspace({ courseId }: { courseId: string }) {
                               </span>
                               <Link
                                 className={secondary}
-                                href={`${base}/gradebook/${book.id}`}
+                                href={withClassroomQuery(
+                                  `${base}/gradebook/${book.id}`,
+                                  classroomId,
+                                )}
                               >
                                 查看历史台账 →
                               </Link>
