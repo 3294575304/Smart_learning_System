@@ -54,13 +54,27 @@ test("teacher results overview query validates classroom pagination", () => {
     teacherResultsOverviewQuerySchema.safeParse({ pageSize: 31 }).success,
     false,
   );
+  assert.equal(
+    teacherResultsOverviewQuerySchema.safeParse({
+      courseId: studentId,
+      classroomId: studentId,
+    }).success,
+    true,
+  );
+  assert.equal(
+    teacherResultsOverviewQuerySchema.safeParse({ courseId: "invalid" })
+      .success,
+    false,
+  );
 });
 
 test("all classrooms selection preserves pagination", () => {
   const parsed = teacherResultsOverviewQuerySchema.parse({
     classroomId: "",
+    courseId: "",
     page: "2",
   });
   assert.equal(parsed.classroomId, undefined);
+  assert.equal(parsed.courseId, undefined);
   assert.equal(parsed.page, 2);
 });

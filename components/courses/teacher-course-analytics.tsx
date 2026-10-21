@@ -19,13 +19,6 @@ const assignmentStatusLabel: Record<string, string> = {
   CLOSED: "已结束",
 };
 
-const surveyStatusLabel: Record<string, string> = {
-  DRAFT: "草稿",
-  SCHEDULED: "待开始",
-  PUBLISHED: "收集中",
-  CLOSED: "已结束",
-};
-
 function displayPercent(value: number | null) {
   return value === null ? "证据不足" : value + "%";
 }
@@ -86,10 +79,18 @@ function DataCell({ label, value }: { label: string; value: string }) {
 
 export function TeacherCourseAnalyticsView({
   data,
+  classroomId,
 }: {
   data: TeacherCourseAnalytics;
+  classroomId?: string;
 }) {
   const courseBase = "/teacher/courses/" + data.course.id;
+  const profilesHref = classroomId
+    ? `${courseBase}/profiles?classroomId=${encodeURIComponent(classroomId)}`
+    : `${courseBase}/profiles`;
+  const assignmentParams = new URLSearchParams({ courseId: data.course.id });
+  if (classroomId) assignmentParams.set("classroomId", classroomId);
+  const assignmentsHref = `/teacher/assignments?${assignmentParams.toString()}`;
 
   return (
     <div className="space-y-6">
@@ -218,7 +219,7 @@ export function TeacherCourseAnalyticsView({
               </h2>
             </div>
             <Link
-              href={courseBase + "/profiles"}
+              href={profilesHref}
               className="text-sm font-medium text-sky-700 hover:text-sky-900"
             >
               查看课程画像 →
@@ -316,7 +317,7 @@ export function TeacherCourseAnalyticsView({
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-slate-900">近期作业</h2>
             <Link
-              href="/teacher/assignments"
+              href={assignmentsHref}
               className="text-sm font-medium text-sky-700 hover:text-sky-900"
             >
               全部作业 →
@@ -363,73 +364,58 @@ export function TeacherCourseAnalyticsView({
         </section>
 
         <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-violet-700">
-                课程评价闭环
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900">
-                成绩、问卷与质量报告
-              </h2>
-            </div>
-            <FileChartColumn
-              aria-hidden="true"
-              className="size-6 text-violet-500"
-            />
+          <div>
+            <p className="text-sm font-medium text-violet-700">课程评价闭环</p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-900">
+              问卷与教学质量报告
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              进入对应工作台发布问卷，或生成和审核教学质量报告。
+            </p>
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <DataCell
-              label="已发布成绩台账"
-              value={
-                data.overview.publishedGradebookCount +
-                "/" +
-                data.overview.gradebookCount
-              }
-            />
-            <DataCell
-              label="已结束问卷"
-              value={String(data.overview.completedSurveyCount)}
-            />
-            <DataCell
-              label="问卷答卷"
-              value={String(data.overview.surveyResponseCount)}
-            />
-          </div>
-          <div className="mt-4 space-y-3">
-            {data.recentSurveys.slice(0, 1).map((survey) => (
-              <Link
-                key={survey.id}
-                href={courseBase + "/surveys/" + survey.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-4 py-3"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate font-medium text-slate-800">
-                    {survey.title}
-                  </span>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    {survey.classroomName} · {survey.responseCount} 份答卷
-                  </span>
-                </span>
-                <span className="shrink-0 text-xs text-slate-500">
-                  {surveyStatusLabel[survey.status] ?? survey.status}
-                </span>
-              </Link>
-            ))}
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Link
-              href={courseBase + "/quality-report"}
-              className="flex items-center justify-between gap-3 rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3 text-sm"
+              href={courseBase + "/surveys"}
+              className="group flex min-h-32 items-center justify-between gap-4 rounded-xl border border-sky-100 bg-sky-50/60 p-4 transition-colors hover:border-sky-300 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
             >
-              <span className="text-violet-900">
-                {data.latestReport
-                  ? "最新质量报告：第 " +
-                    data.latestReport.versionNumber +
-                    " 版 · " +
-                    data.latestReport.reviewStatus
-                  : "尚未生成教学质量报告"}
+              <span className="flex items-center gap-3">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white text-sky-700 shadow-sm">
+                  <ClipboardCheck aria-hidden="true" className="size-5" />
+                </span>
+                <span>
+                  <span className="block font-semibold text-slate-900">
+                    问卷管理
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-600">
+                    发布结课问卷并汇总学生反馈
+                  </span>
+                </span>
               </span>
               <ArrowRight
                 aria-hidden="true"
-                className="size-4 text-violet-700"
+                className="size-5 shrink-0 text-sky-700 transition-transform group-hover:translate-x-0.5"
+              />
+            </Link>
+            <Link
+              href={courseBase + "/quality-report"}
+              className="group flex min-h-32 items-center justify-between gap-4 rounded-xl border border-violet-100 bg-violet-50/60 p-4 transition-colors hover:border-violet-300 hover:bg-violet-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white text-violet-700 shadow-sm">
+                  <FileChartColumn aria-hidden="true" className="size-5" />
+                </span>
+                <span>
+                  <span className="block font-semibold text-slate-900">
+                    教学质量报告
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-600">
+                    生成、审核并下载课程质量报告
+                  </span>
+                </span>
+              </span>
+              <ArrowRight
+                aria-hidden="true"
+                className="size-5 shrink-0 text-violet-700 transition-transform group-hover:translate-x-0.5"
               />
             </Link>
           </div>

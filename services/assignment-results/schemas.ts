@@ -19,6 +19,10 @@ export type AssignmentResultsQuery = z.output<
 export const teacherResultsOverviewQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(30).default(10),
+  courseId: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().cuid("课程 ID 格式无效").optional(),
+  ),
   classroomId: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.string().cuid("班级 ID 格式无效").optional(),

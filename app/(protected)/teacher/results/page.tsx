@@ -6,7 +6,9 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageIndex } from "@/components/dashboard/page-index";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { AutoSubmitSelect } from "@/components/filters/auto-submit-select";
+import { TeacherCourseAnalyticsView } from "@/components/courses/teacher-course-analytics";
 import { requirePageRole } from "@/services/auth/page-authorization";
+import { getTeacherCourseAnalytics } from "@/services/course-analytics/service";
 import {
   teacherResultsOverviewQuerySchema,
   type TeacherResultsOverviewQuery,
@@ -14,6 +16,7 @@ import {
 import { listTeacherResultsOverview } from "@/services/assignment-results/service";
 import { listTeacherClassrooms } from "@/services/classrooms/service";
 import { listTeacherCourses } from "@/services/courses/service";
+import { notFound } from "next/navigation";
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -28,6 +31,7 @@ function pageHref(query: TeacherResultsOverviewQuery, page: number): string {
     page: String(page),
     pageSize: String(query.pageSize),
   });
+  if (query.courseId) params.set("courseId", query.courseId);
   if (query.classroomId) params.set("classroomId", query.classroomId);
   return `/teacher/results?${params.toString()}`;
 }
@@ -39,25 +43,66 @@ function valueText(value: number | null, suffix = ""): string {
 export default async function TeacherResultsPage({ searchParams }: Props) {
   const teacher = await requirePageRole(Role.TEACHER);
   const rawQuery = await searchParams;
-  const parsed = teacherResultsOverviewQuerySchema.safeParse({
+  const filters = teacherResultsOverviewQuerySchema
+    .pick({ courseId: true, classroomId: true })
+    .safeParse({
+      courseId: rawQuery.courseId,
+      classroomId: rawQuery.classroomId,
+    });
+  if (!filters.success) notFound();
+  const paginationSchema = teacherResultsOverviewQuerySchema.pick({
+    page: true,
+    pageSize: true,
+  });
+  const pagination = paginationSchema.safeParse({
     page: firstValue(rawQuery.page),
     pageSize: firstValue(rawQuery.pageSize),
-    classroomId: firstValue(rawQuery.classroomId),
   });
-  const query = parsed.success
-    ? parsed.data
-    : teacherResultsOverviewQuerySchema.parse({});
-  const [results, classrooms, courses] = await Promise.all([
-    listTeacherResultsOverview(teacher.id, query),
+  const parsedQuery: TeacherResultsOverviewQuery = {
+    ...filters.data,
+    ...(pagination.success ? pagination.data : paginationSchema.parse({})),
+  };
+  const [classrooms, courses] = await Promise.all([
     listTeacherClassrooms(teacher.id),
     listTeacherCourses(teacher.id),
+  ]);
+  const selectedCourse = parsedQuery.courseId
+    ? (courses.find((course) => course.id === parsedQuery.courseId) ?? null)
+    : null;
+  if (parsedQuery.courseId && !selectedCourse) notFound();
+
+  const selectedClassroom = parsedQuery.classroomId
+    ? (classrooms.find(
+        (classroom) => classroom.id === parsedQuery.classroomId,
+      ) ?? null)
+    : null;
+  if (parsedQuery.classroomId && !selectedClassroom) notFound();
+
+  const filterClassrooms = selectedCourse
+    ? classrooms.filter(
+        (classroom) =>
+          classroom.course?.id === selectedCourse.id &&
+          classroom.status === "ACTIVE",
+      )
+    : classrooms;
+  const classroomId = filterClassrooms.some(
+    (classroom) => classroom.id === parsedQuery.classroomId,
+  )
+    ? parsedQuery.classroomId
+    : undefined;
+  const query: TeacherResultsOverviewQuery = { ...parsedQuery, classroomId };
+  const [results, analytics] = await Promise.all([
+    listTeacherResultsOverview(teacher.id, query),
+    selectedCourse
+      ? getTeacherCourseAnalytics(teacher.id, selectedCourse.id, classroomId)
+      : Promise.resolve(null),
   ]);
 
   return (
     <section className="space-y-6">
       <PageHeader
-        description="查看班级作业成绩，进入课程台账维护总评及课程目标达成度。"
-        title="成绩统计"
+        description="在同一页面查看作业成绩与课程学情；选择课程和班级可缩小分析范围。"
+        title="成绩统计与学情分析"
       />
       <details className="rounded-xl border bg-white p-4">
         <summary className="cursor-pointer font-medium">
@@ -89,14 +134,29 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
 
       <form className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4">
         <label className="w-full space-y-1 sm:max-w-xs">
+          <span className="text-xs font-medium">课程</span>
+          <AutoSubmitSelect
+            className="w-full rounded-md border px-3 py-2 text-sm"
+            defaultValue={selectedCourse?.id ?? ""}
+            name="courseId"
+          >
+            <option value="">全部课程</option>
+            {courses.map((course) => (
+              <option key={course.id} value={course.id}>
+                {course.name} · {course.term}
+              </option>
+            ))}
+          </AutoSubmitSelect>
+        </label>
+        <label className="w-full space-y-1 sm:max-w-xs">
           <span className="text-xs font-medium">班级</span>
           <AutoSubmitSelect
             className="w-full rounded-md border px-3 py-2 text-sm"
-            defaultValue={query.classroomId ?? ""}
+            defaultValue={classroomId ?? ""}
             name="classroomId"
           >
             <option value="">全部班级</option>
-            {classrooms.map((classroom) => (
+            {filterClassrooms.map((classroom) => (
               <option key={classroom.id} value={classroom.id}>
                 {classroom.name}
               </option>
@@ -111,6 +171,66 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
           重置
         </Link>
       </form>
+
+      {analytics ? (
+        <section
+          className="space-y-4"
+          aria-labelledby="course-learning-heading"
+        >
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2
+                id="course-learning-heading"
+                className="text-xl font-semibold text-slate-900"
+              >
+                {analytics.course.name} · 学情分析
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {analytics.course.courseNo} · {analytics.course.term}
+                {classroomId && selectedClassroom
+                  ? ` · ${selectedClassroom.name}`
+                  : " · 全部有效授课班级"}
+              </p>
+            </div>
+            <Link
+              className="rounded-md border px-4 py-2 text-sm text-sky-700 hover:bg-sky-50"
+              href={`/teacher/courses/${analytics.course.id}`}
+            >
+              返回课程管理
+            </Link>
+          </div>
+          <TeacherCourseAnalyticsView
+            data={analytics}
+            classroomId={classroomId}
+          />
+        </section>
+      ) : (
+        <section
+          aria-labelledby="course-learning-heading"
+          className="rounded-xl border border-dashed bg-white p-5"
+        >
+          <h2
+            id="course-learning-heading"
+            className="font-semibold text-slate-900"
+          >
+            课程学情分析
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            选择一门课程查看教学进度、学生画像、薄弱知识点和评价摘要。不同课程的知识点不会合并统计。
+            {selectedClassroom && !selectedClassroom.course
+              ? " 当前班级未关联课程，因此这里只显示该班作业成绩。"
+              : ""}
+          </p>
+          {!courses.length && (
+            <Link
+              className="mt-3 inline-block text-sm font-medium text-sky-700 hover:underline"
+              href="/teacher/courses"
+            >
+              创建或关联课程 →
+            </Link>
+          )}
+        </section>
+      )}
 
       {results.items.length === 0 ? (
         <EmptyState

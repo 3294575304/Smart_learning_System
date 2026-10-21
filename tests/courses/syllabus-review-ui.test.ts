@@ -74,7 +74,5 @@ test("教学大纲使用独立工作区并从课程详情提供入口", async ()
   );
   assert.match(navigation, /title: "教学大纲"/u);
   assert.match(navigation, /path: "syllabus"/u);
-  assert.ok(
-    navigation.includes("href={`/teacher/courses/${courseId}/${path}`}"),
-  );
+  assert.ok(navigation.includes("`/teacher/courses/${courseId}/${path}`"));
 });

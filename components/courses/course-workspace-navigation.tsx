@@ -175,7 +175,11 @@ export function CourseWorkspaceNavigation({ courseId }: { courseId: string }) {
             {group.items.map(({ title, description, path, icon: Icon }) => (
               <Link
                 key={path}
-                href={`/teacher/courses/${courseId}/${path}`}
+                href={
+                  group.title === "评价分析" && path === "analytics"
+                    ? `/teacher/results?courseId=${encodeURIComponent(courseId)}`
+                    : `/teacher/courses/${courseId}/${path}`
+                }
                 className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
               >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 transition-colors group-hover:border-sky-100 group-hover:text-blue-600">

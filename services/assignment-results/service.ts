@@ -54,6 +54,7 @@ export async function listTeacherResultsOverview(
     teacherId,
     status: { in: [AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED] },
     ...(query.classroomId ? { classroomId: query.classroomId } : {}),
+    ...(query.courseId ? { classroom: { courseId: query.courseId } } : {}),
   };
   const [total, assignments] = await prisma.$transaction([
     prisma.assignment.count({ where }),

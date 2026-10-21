@@ -36,7 +36,7 @@ test("筛选选择项立即生效且服务端页面不直接绑定事件", async
 
   assert.match(control, /form\?\.requestSubmit\(\)/u);
   assert.equal(assignments.match(/<AutoSubmitSelect/gu)?.length, 3);
-  assert.equal(results.match(/<AutoSubmitSelect/gu)?.length, 1);
+  assert.equal(results.match(/<AutoSubmitSelect/gu)?.length, 2);
   assert.doesNotMatch(assignments, /onChange=|应用筛选/u);
   assert.doesNotMatch(results, /onChange=|>\s*筛选\s*</u);
   assert.match(

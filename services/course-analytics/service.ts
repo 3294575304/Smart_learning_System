@@ -23,9 +23,20 @@ function percentage(part: number, total: number) {
   return total > 0 ? Math.round((part / total) * 100) : null;
 }
 
+function scopedCourseHref(
+  path: string,
+  courseId: string,
+  classroomId?: string,
+) {
+  const params = new URLSearchParams({ courseId });
+  if (classroomId) params.set("classroomId", classroomId);
+  return `${path}?${params.toString()}`;
+}
+
 export async function getTeacherCourseAnalytics(
   teacherId: string,
   courseId: string,
+  classroomId?: string,
 ) {
   const course = await prisma.course.findFirst({
     where: { id: courseId, teacherId },
@@ -35,7 +46,10 @@ export async function getTeacherCourseAnalytics(
       courseNo: true,
       term: true,
       classrooms: {
-        where: { status: "ACTIVE" },
+        where: {
+          status: "ACTIVE",
+          ...(classroomId ? { id: classroomId } : {}),
+        },
         orderBy: [{ name: "asc" }, { id: "asc" }],
         select: {
           id: true,
@@ -67,6 +81,9 @@ export async function getTeacherCourseAnalytics(
     },
   });
   if (!course) throw new ResourceNotFoundError("课程不存在");
+  if (classroomId && course.classrooms.length === 0) {
+    throw new ResourceNotFoundError("班级不存在");
+  }
 
   const studentIds = [
     ...new Set(
@@ -86,7 +103,13 @@ export async function getTeacherCourseAnalytics(
     gradebooks,
   ] = await Promise.all([
     prisma.assignment.findMany({
-      where: { teacherId, classroom: { courseId } },
+      where: {
+        teacherId,
+        classroom: {
+          courseId,
+          ...(classroomId ? { id: classroomId } : {}),
+        },
+      },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
@@ -108,6 +131,7 @@ export async function getTeacherCourseAnalytics(
         session: {
           courseId,
           teacherId,
+          ...(classroomId ? { classroomId } : {}),
           status: AttendanceSessionStatus.CLOSED,
         },
       },
@@ -117,6 +141,7 @@ export async function getTeacherCourseAnalytics(
       where: {
         courseId,
         teacherId,
+        ...(classroomId ? { classroomId } : {}),
         status: AttendanceSessionStatus.CLOSED,
       },
     }),
@@ -132,7 +157,11 @@ export async function getTeacherCourseAnalytics(
         })
       : Promise.resolve([]),
     prisma.courseSurvey.findMany({
-      where: { courseId, teacherId },
+      where: {
+        courseId,
+        teacherId,
+        ...(classroomId ? { classroomId } : {}),
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
@@ -157,7 +186,11 @@ export async function getTeacherCourseAnalytics(
       },
     }),
     prisma.courseGradebook.findMany({
-      where: { courseId, course: { teacherId } },
+      where: {
+        courseId,
+        course: { teacherId },
+        ...(classroomId ? { classroomId } : {}),
+      },
       select: { id: true, currentPublicationId: true },
     }),
   ]);
@@ -227,6 +260,14 @@ export async function getTeacherCourseAnalytics(
   const attendance = calculateAttendanceRate(
     attendanceRecords.map((record) => record.currentStatus),
   );
+  const assignmentsHref = scopedCourseHref(
+    "/teacher/assignments",
+    courseId,
+    classroomId,
+  );
+  const profilesHref = classroomId
+    ? `/teacher/courses/${courseId}/profiles?classroomId=${encodeURIComponent(classroomId)}`
+    : `/teacher/courses/${courseId}/profiles`;
   const completedSurveys = surveys.filter(
     (survey) => survey.status === CourseSurveyStatus.CLOSED,
   );
@@ -260,7 +301,7 @@ export async function getTeacherCourseAnalytics(
       key: "pending-review",
       title: `处理 ${pendingReviewCount} 份待批改提交`,
       detail: "完成批改后，成绩和课程画像才会形成新的正式证据。",
-      href: "/teacher/assignments",
+      href: assignmentsHref,
     });
   }
   if (studentIds.length > 0 && profileSummary.conclusiveCount === 0) {
@@ -269,7 +310,7 @@ export async function getTeacherCourseAnalytics(
       title: "关注画像证据积累",
       detail:
         "当前没有学生达到稳定结论门槛，可先检查作业知识点绑定和评分证据。",
-      href: `/teacher/courses/${courseId}/profiles`,
+      href: profilesHref,
     });
   }
   if (surveys.length === 0) {
