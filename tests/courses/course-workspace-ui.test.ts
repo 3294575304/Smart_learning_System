@@ -74,6 +74,13 @@ test("课程建设独立展示，大纲两项任务共用工作区，课程功�
   assert.equal(paths.length, 13);
   assert.equal(new Set(paths).size, 12);
   assert.equal(paths.filter((path) => path === "syllabus").length, 2);
+  assert.match(
+    construction,
+    /href="\/teacher\/questions\?courseId=course-a"[\s\S]*题库管理/u,
+  );
+  assert.ok(
+    construction.indexOf("题目关联") < construction.indexOf("题库管理"),
+  );
   assert.match(html, /请先关联启用中的班级/u);
   assert.doesNotMatch(html, /href="\/teacher\/assignments\/new"/u);
   for (const path of paths)
@@ -120,8 +127,8 @@ test("大纲上传与审核分别展示任务状态，下一步保留文字提�
   assert.match(html, /aria-valuemax="2"/u);
   assert.match(html, /role="progressbar"/u);
   const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(hrefs.length, 6);
-  assert.equal(new Set(hrefs).size, 5);
+  assert.equal(hrefs.length, 7);
+  assert.equal(new Set(hrefs).size, 6);
   const syllabusTasks = [
     ...html.matchAll(
       /<a\b[^>]*href="\/teacher\/courses\/course-a\/syllabus"[^>]*>[\s\S]*?<\/a>/g,

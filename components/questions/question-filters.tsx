@@ -12,6 +12,7 @@ interface QuestionFiltersProps {
   query: QuestionListQuery;
   courses: Array<{
     id: string;
+    courseIds: string[];
     name: string;
     term: string;
     courseNo: string;
@@ -28,7 +29,9 @@ interface QuestionFiltersProps {
 export function QuestionFilters({ query, courses }: QuestionFiltersProps) {
   const [keyword, setKeyword] = useState(query.keyword ?? "");
   const [pending, setPending] = useState(false);
-  const selectedCourse = courses.find((course) => course.id === query.courseId);
+  const selectedCourse = courses.find((course) =>
+    course.courseIds.includes(query.courseId ?? ""),
+  );
   const conceptGroups = new Map<
     string,
     NonNullable<typeof selectedCourse>["concepts"]
@@ -158,7 +161,7 @@ export function QuestionFilters({ query, courses }: QuestionFiltersProps) {
           <span className="text-xs font-medium">课程</span>
           <select
             className="w-full rounded-md border px-3 py-2"
-            value={query.courseId ?? ""}
+            value={selectedCourse?.id ?? ""}
             onChange={(event) => update("courseId", event.target.value)}
           >
             <option value="">全部课程</option>

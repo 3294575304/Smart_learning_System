@@ -111,6 +111,15 @@ export function CourseSetupChecklist({
     icon: ListChecks,
     steps: [],
   });
+  entries.set("question-bank", {
+    id: "question-bank",
+    title: "题库管理",
+    description: "查看和维护本课程的题目",
+    action: "进入题库管理",
+    href: `/teacher/questions?courseId=${encodeURIComponent(courseId)}`,
+    icon: BookOpenCheck,
+    steps: [],
+  });
   const entryPriority = new Map([
     [`/teacher/courses/${courseId}#course-basics`, 0],
     [`/teacher/courses/${courseId}#course-classrooms`, 1],
