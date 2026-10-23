@@ -68,6 +68,7 @@ export async function listTeacherResultsOverview(
         title: true,
         status: true,
         dueAt: true,
+        totalPoints: true,
         classroom: {
           select: {
             id: true,
@@ -137,6 +138,7 @@ export async function listTeacherResultsOverview(
           name: assignment.classroom.name,
         },
         dueAt: assignment.dueAt,
+        totalPoints: assignment.totalPoints.toNumber(),
         studentCount: assignment.classroom._count.memberships,
         submittedCount: latest.length,
         historicalSubmittedCount: allLatest.length - latest.length,

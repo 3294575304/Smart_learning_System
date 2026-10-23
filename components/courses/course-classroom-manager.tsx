@@ -1,14 +1,11 @@
 "use client";
 
-import { CheckCircle2, Link2, School, Trash2, Unlink } from "lucide-react";
+import { CheckCircle2, Link2, School, Unlink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import {
-  DissolveClassroomDialog,
-  type DissolvableClassroom,
-} from "@/components/classrooms/dissolve-classroom-dialog";
+import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import { requestApi } from "@/components/courses/request-api";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import type { TeacherCourseClassroomView } from "@/services/courses/types";
@@ -25,13 +22,14 @@ export function CourseClassroomManager({
   const router = useRouter();
   const linkedIds = new Set(linkedClassrooms.map((item) => item.id));
   const availableClassrooms = classrooms.filter(
-    (item) => !linkedIds.has(item.id) && item.currentCourse?.id !== courseId,
+    (item) =>
+      item.status === "ACTIVE" &&
+      !linkedIds.has(item.id) &&
+      item.currentCourse?.id !== courseId,
   );
   const [pendingClassroomId, setPendingClassroomId] = useState<string | null>(
     null,
   );
-  const [dissolvingClassroom, setDissolvingClassroom] =
-    useState<DissolvableClassroom | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -139,7 +137,7 @@ export function CourseClassroomManager({
                     </p>
                   </div>
                   <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
-                    已关联
+                    {CLASSROOM_STATUS_LABELS[classroom.status]}
                   </span>
                 </div>
                 <p className="text-muted-foreground mt-3 text-xs">
@@ -157,7 +155,7 @@ export function CourseClassroomManager({
                     学生画像
                   </Link>
                   <Link
-                    href={`/teacher/assignments?classroomId=${classroom.id}`}
+                    href={`/teacher/assignments?courseId=${courseId}&classroomId=${classroom.id}&section=${classroom.status === "ACTIVE" ? "CURRENT" : "HISTORY"}`}
                   >
                     班级作业
                   </Link>
@@ -178,21 +176,14 @@ export function CourseClassroomManager({
                       </>
                     )}
                   </button>
-                  <button
-                    className="text-destructive inline-flex items-center gap-2 text-sm font-medium"
-                    onClick={() =>
-                      setDissolvingClassroom({
-                        id: classroom.id,
-                        name: classroom.name,
-                        studentCount: classroom.studentCount,
-                        courseName: classroom.currentCourse?.name ?? null,
-                      })
-                    }
-                    type="button"
+                  <Link
+                    className="inline-flex items-center gap-2 text-sm font-medium text-sky-700 hover:underline"
+                    href={`/teacher/classrooms/${classroom.id}`}
                   >
-                    <Trash2 className="h-4 w-4" />
-                    解散班级
-                  </button>
+                    {classroom.status === "ACTIVE"
+                      ? "管理 / 确认结课"
+                      : "查看班级记录"}
+                  </Link>
                 </div>
               </article>
             ))}
@@ -309,20 +300,6 @@ export function CourseClassroomManager({
           </div>
         )}
       </section>
-      {dissolvingClassroom ? (
-        <DissolveClassroomDialog
-          classroom={dissolvingClassroom}
-          onClose={() => setDissolvingClassroom(null)}
-          onDissolved={(result) => {
-            setDissolvingClassroom(null);
-            setSuccessMessage(
-              `班级已解散，已通知 ${result.notifiedStudentCount} 名学生，历史教学数据已保留`,
-            );
-            router.refresh();
-          }}
-          open
-        />
-      ) : null}
     </div>
   );
 }

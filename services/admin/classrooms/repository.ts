@@ -14,6 +14,8 @@ const adminClassroomSelect = Prisma.validator<Prisma.ClassroomSelect>()({
   createdAt: true,
   updatedAt: true,
   closedAt: true,
+  completedAt: true,
+  closureReason: true,
   teacher: {
     select: {
       id: true,

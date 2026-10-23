@@ -50,16 +50,14 @@ def display_text(text):
 
 def font_path():
     candidates = [
-        os.environ.get("QUALITY_REPORT_CJK_FONT_PATH"),
         r"C:\Windows\Fonts\simsun.ttc",
         "/usr/share/fonts/truetype/msttcorefonts/simsun.ttc",
     ]
-    return next((path for path in candidates if path and os.path.exists(path)), None)
+    return next((path for path in candidates if os.path.exists(path)), None)
 
 
 def chart_font(size, bold=False, latin=False):
     candidates = [
-        os.environ.get("QUALITY_REPORT_LATIN_BOLD_FONT_PATH" if bold else "QUALITY_REPORT_LATIN_FONT_PATH"),
         r"C:\Windows\Fonts\timesbd.ttf" if bold else r"C:\Windows\Fonts\times.ttf",
         "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf",
     ] if latin else [font_path()]

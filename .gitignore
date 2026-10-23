@@ -50,11 +50,12 @@ prisma/*.db-journal
 !*.pub.key
 
 # local scratch and debug output
-/tmp
-.workbuddy/memory/
-/docs
+/tmp/
+/.workbuddy/memory/
+/docs/
+/output/
+/outputs/
 
 # Per-machine Windows startup configuration; keep the local copy out of GitHub.
 /start-all.ps1
-/outputs/
-stop-all.ps1
+/stop-all.ps1

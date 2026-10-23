@@ -1,3 +1,6 @@
+import { getAssignmentPublicationState } from "@/services/assignments/manual-grading";
+import { hundredPointScore } from "@/services/assignments/presentation";
+import { TeacherAssignmentNav } from "@/components/assignments/teacher-assignment-nav";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role, SubmissionStatus } from "@prisma/client";
 import { Eye } from "lucide-react";
@@ -27,7 +30,8 @@ function singleValue(value: string | string[] | undefined): string | undefined {
 }
 
 function scoreText(value: number | null, totalPoints: number): string {
-  return value === null ? "—" : `${value.toFixed(2)} / ${totalPoints}`;
+  const normalized = hundredPointScore(value, totalPoints);
+  return normalized === null ? "—" : `${normalized.toFixed(2)} / 100`;
 }
 
 function accuracyText(value: number | null): string {
@@ -79,6 +83,10 @@ export default async function AssignmentResultsPage({
       notFound();
     }
 
+    const publication = await getAssignmentPublicationState(
+      teacher.id,
+      parsedId.data,
+    );
     return (
       <section className="space-y-6">
         <header>
@@ -96,7 +104,10 @@ export default async function AssignmentResultsPage({
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">
-              <PublishResultsButton assignmentId={results.assignment.id} />
+              <PublishResultsButton
+                assignmentId={results.assignment.id}
+                publication={publication}
+              />
               <Link
                 className="text-sm underline"
                 href={`/teacher/assignments/${results.assignment.id}/submissions`}
@@ -109,6 +120,11 @@ export default async function AssignmentResultsPage({
             </div>
           </div>
         </header>
+        <TeacherAssignmentNav assignmentId={parsedId.data} active="results" />
+        <p className="text-xs leading-5 text-slate-500">
+          统计统一按百分制展示（原始得分÷原始满分×100）；题目分值及历史成绩保持原记录。原始满分为
+          {results.assignment.totalPoints}分。
+        </p>
 
         {results.summary.studentCount === 0 ? (
           <div className="text-muted-foreground rounded-xl border border-dashed bg-white p-10 text-center">
@@ -346,11 +362,18 @@ export default async function AssignmentResultsPage({
                         <td className="py-3 pr-4 font-medium">
                           {finalized &&
                           student.score !== null &&
-                          student.maxScore !== null
-                            ? `${student.score} / ${student.maxScore}（${student.percentage}%）`
-                            : student.status
-                              ? "待批改"
-                              : "—"}
+                          student.maxScore !== null ? (
+                            <span>
+                              {scoreText(student.score, student.maxScore)}
+                              <span className="mt-1 block text-xs font-normal text-slate-500">
+                                原始：{student.score} / {student.maxScore}
+                              </span>
+                            </span>
+                          ) : student.status ? (
+                            "待批改"
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         <td className="py-3 pr-4">
                           {student.submittedAt?.toLocaleString("zh-CN") ?? "—"}

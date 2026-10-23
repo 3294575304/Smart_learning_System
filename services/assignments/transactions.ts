@@ -13,11 +13,13 @@ function retryable(error: unknown): boolean {
 export async function runAssignmentSerializable<T>(
   operation: (transaction: Prisma.TransactionClient) => Promise<T>,
   conflictMessage: string,
+  timeoutMs = 5000,
 ): Promise<T> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await prisma.$transaction(operation, {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        timeout: timeoutMs,
       });
     } catch (error: unknown) {
       if (!retryable(error) || attempt === 2) {

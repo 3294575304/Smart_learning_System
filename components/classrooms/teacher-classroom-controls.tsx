@@ -21,6 +21,7 @@ export function TeacherClassroomControls({
   const [pendingAction, setPendingAction] = useState<"code" | "close" | null>(
     null,
   );
+  const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function regenerateCode() {
@@ -42,10 +43,10 @@ export function TeacherClassroomControls({
     router.refresh();
   }
 
-  async function closeCurrentClassroom() {
+  async function completeCurrentClassroom() {
     if (
       !window.confirm(
-        "关闭后学生不能再加入，教师也不能发布新作业。历史数据会保留，确定关闭吗？",
+        "确认结课后将停止学生作答、入班及新教学活动，作业转入历史。已有成员与数据保留，仍可完成批改、发布成绩和生成报告。确定结课吗？",
       )
     ) {
       return;
@@ -53,7 +54,7 @@ export function TeacherClassroomControls({
     setPendingAction("close");
     setError(null);
     const result = await requestApi<{ id: string }>(
-      `/api/teacher/classrooms/${classroomId}/close`,
+      `/api/teacher/classrooms/${classroomId}/complete`,
       { method: "POST" },
     );
     setPendingAction(null);
@@ -61,15 +62,22 @@ export function TeacherClassroomControls({
       setError(result.error);
       return;
     }
+    setSuccess(true);
     router.refresh();
   }
 
   return (
     <section className="bg-card rounded-xl border p-5">
-      <h2 className="font-semibold">班级邀请码</h2>
-      <p className="mt-3 font-mono text-2xl tracking-widest">{joinCode}</p>
+      <h2 className="font-semibold">
+        {isClosed ? "班级教学状态" : "班级邀请码"}
+      </h2>
+      {!isClosed ? (
+        <p className="mt-3 font-mono text-2xl tracking-widest">{joinCode}</p>
+      ) : null}
       <p className="text-muted-foreground mt-2 text-sm">
-        学生输入此邀请码即可加入当前开放班级。
+        {isClosed
+          ? "班级已停止新教学活动，成员和历史数据保留。可继续批改、发布成绩与生成报告。"
+          : "学生输入此邀请码即可加入授课中的班级。"}
       </p>
       {!isClosed ? (
         <div className="mt-4 flex flex-wrap gap-3">
@@ -82,14 +90,19 @@ export function TeacherClassroomControls({
             {pendingAction === "code" ? "正在生成…" : "重新生成邀请码"}
           </button>
           <button
-            className="bg-destructive rounded-md px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
             disabled={pendingAction !== null}
-            onClick={closeCurrentClassroom}
+            onClick={completeCurrentClassroom}
             type="button"
           >
-            {pendingAction === "close" ? "正在关闭…" : "关闭班级"}
+            {pendingAction === "close" ? "正在结课…" : "确认结课"}
           </button>
         </div>
+      ) : null}
+      {success ? (
+        <p role="status" className="mt-3 text-sm text-emerald-700">
+          已确认结课，作业已转入历史作业。
+        </p>
       ) : null}
       {error ? (
         <p

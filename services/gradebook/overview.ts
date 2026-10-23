@@ -27,6 +27,7 @@ export function groupCourseGradebooks(
     .filter(
       (classroom) =>
         classroom.status === "ACTIVE" ||
+        classroom.status === "COMPLETED" ||
         gradebooks.some((book) => book.classroom.id === classroom.id),
     )
     .map((classroom) => {
@@ -48,7 +49,7 @@ export function groupCourseGradebooks(
         history: books.filter((item) => item.id !== primary?.id),
         canCreate:
           linked &&
-          classroom.status === "ACTIVE" &&
+          (classroom.status === "ACTIVE" || classroom.status === "COMPLETED") &&
           !!currentSchemeId &&
           !current,
         usesPreviousScheme: !!primary && primary.scheme.id !== currentSchemeId,

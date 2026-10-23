@@ -1,3 +1,4 @@
+import { closeAdminClassroomSchema } from "./schemas";
 import "server-only";
 
 import { AuditAction, AuditTargetType, ClassroomStatus } from "@prisma/client";
@@ -28,6 +29,8 @@ function toView(record: AdminClassroomRecord): AdminClassroomView {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     closedAt: record.closedAt,
+    completedAt: record.completedAt,
+    closureReason: record.closureReason,
     teacher: {
       id: record.teacher.id,
       displayName: record.teacher.profile?.displayName ?? record.teacher.email,
@@ -69,15 +72,22 @@ export async function closeAdminClassroom(
   actorId: string,
   classroomId: string,
   context: AuditRequestContext,
+  reason: string,
 ): Promise<AdminClassroomView> {
+  const validatedReason = closeAdminClassroomSchema.parse({ reason }).reason;
   await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`SELECT "id" FROM "Classroom" WHERE "id" = ${classroomId} FOR UPDATE`;
     const before = await findAdminClassroomById(classroomId, transaction);
     if (!before) throw new ResourceNotFoundError("班级不存在");
     assertAdminCanCloseClassroom(before.status);
     const closedAt = new Date();
     await transaction.classroom.update({
       where: { id: classroomId },
-      data: { status: ClassroomStatus.CLOSED, closedAt },
+      data: {
+        status: ClassroomStatus.CLOSED,
+        closedAt,
+        closureReason: validatedReason,
+      },
     });
     await writeGovernanceAuditLog(transaction, {
       actorId,
@@ -96,6 +106,7 @@ export async function closeAdminClassroom(
       afterData: {
         status: ClassroomStatus.CLOSED,
         closedAt: closedAt.toISOString(),
+        closureReason: validatedReason,
         assignmentCount: before._count.assignments,
         submissionCount: before.assignments.reduce(
           (total, assignment) => total + assignment._count.submissions,

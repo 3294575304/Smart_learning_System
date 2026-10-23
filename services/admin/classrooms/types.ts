@@ -9,6 +9,8 @@ export interface AdminClassroomView {
   createdAt: Date;
   updatedAt: Date;
   closedAt: Date | null;
+  completedAt: Date | null;
+  closureReason: string | null;
   teacher: {
     id: string;
     displayName: string | null;

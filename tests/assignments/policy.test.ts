@@ -74,3 +74,38 @@ test("second attempt requires the assignment resubmission switch", () => {
   );
   assert.doesNotThrow(() => assertCanStartAttempt(true, 1));
 });
+
+test("结课与管理员关闭都阻止作答，授课中允许正常提交", () => {
+  const now = new Date();
+  const assignment = {
+    status: AssignmentStatus.PUBLISHED,
+    publishedAt: new Date(now.getTime() - 1000),
+    dueAt: new Date(now.getTime() + 10000),
+  };
+  assert.doesNotThrow(() =>
+    assertAssignmentAcceptsWork(
+      { ...assignment, classroom: { status: ClassroomStatus.ACTIVE } },
+      now,
+    ),
+  );
+  for (const status of [
+    ClassroomStatus.COMPLETED,
+    ClassroomStatus.CLOSED,
+    ClassroomStatus.ARCHIVED,
+  ]) {
+    assert.throws(
+      () =>
+        assertAssignmentAcceptsWork(
+          { ...assignment, classroom: { status } },
+          now,
+        ),
+      /班级已结课或已关闭/,
+    );
+    assert.throws(() =>
+      assertTeacherOwnsClassroom("teacher-1", {
+        teacherId: "teacher-1",
+        status,
+      }),
+    );
+  }
+});

@@ -43,7 +43,7 @@ async function ownedSession(
     },
     include: {
       course: { select: { id: true, name: true } },
-      classroom: { select: { id: true, name: true } },
+      classroom: { select: { id: true, name: true, status: true } },
     },
   });
   if (!session) throw new ResourceNotFoundError("签到场次不存在。");
@@ -119,7 +119,7 @@ export async function createTeacherAttendanceSession(
     async (transaction) => {
       await ownedCourse(teacherId, courseId, transaction);
       const classroom = await transaction.classroom.findFirst({
-        where: { id: input.classroomId, courseId, teacherId },
+        where: { id: input.classroomId, courseId, teacherId, status: "ACTIVE" },
         select: { id: true, name: true },
       });
       if (!classroom) throw new ResourceNotFoundError("班级不存在。");
@@ -193,6 +193,11 @@ export async function updateTeacherAttendanceSession(
           "已结束或取消的签到场次不能再次修改。",
           409,
         );
+      if (input.action === "OPEN" && session.classroom.status !== "ACTIVE")
+        throw new AttendanceOperationError(
+          "已结课或已关闭的班级不能开放签到。",
+          409,
+        );
       const next =
         input.action === "OPEN"
           ? AttendanceSessionStatus.OPEN
@@ -258,10 +263,26 @@ export async function signStudentAttendance(
   return prisma.$transaction(async (transaction) => {
     const session = await transaction.attendanceSession.findUnique({
       where: { id: sessionId },
-      include: { records: { where: { studentId }, take: 1 } },
+      include: {
+        classroom: {
+          select: {
+            status: true,
+            memberships: {
+              where: { studentId, status: "ACTIVE" },
+              select: { id: true },
+            },
+          },
+        },
+        records: { where: { studentId }, take: 1 },
+      },
     });
     if (!session || session.records.length === 0)
       throw new ResourceNotFoundError("签到场次不存在。");
+    if (
+      session.classroom.status !== "ACTIVE" ||
+      !session.classroom.memberships.length
+    )
+      throw new ResourceNotFoundError("当前班级无法签到。");
     if (
       session.status !== AttendanceSessionStatus.OPEN ||
       now < session.signInOpensAt ||
@@ -362,7 +383,7 @@ export async function getTeacherCourseAttendance(
     where: { courseId, teacherId, ...(classroomId ? { classroomId } : {}) },
     orderBy: { startsAt: "desc" },
     include: {
-      classroom: { select: { id: true, name: true } },
+      classroom: { select: { id: true, name: true, status: true } },
       records: {
         include: {
           student: {
@@ -432,7 +453,7 @@ export async function getStudentAttendance(
       session: {
         include: {
           course: { select: { id: true, name: true, courseNo: true } },
-          classroom: { select: { id: true, name: true } },
+          classroom: { select: { id: true, name: true, status: true } },
         },
       },
       revisions: { orderBy: { revisionNumber: "desc" } },

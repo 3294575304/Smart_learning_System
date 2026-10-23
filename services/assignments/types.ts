@@ -1,5 +1,6 @@
 import type {
   AssignmentStatus,
+  ClassroomStatus,
   GradingStatus,
   QuestionType,
   SubmissionStatus,
@@ -20,12 +21,14 @@ export interface TeacherAssignmentView {
     prompt: string;
     referenceAnswer: string;
     points: number;
+    resourceFileIds?: string[];
   } | null;
+  resourceFiles?: Array<{ id: string; name: string; sizeBytes: number }>;
   id: string;
   title: string;
   description: string;
   status: AssignmentStatus;
-  classroom: { id: string; name: string };
+  classroom: { id: string; name: string; status: ClassroomStatus };
   totalPoints: number;
   allowResubmission: boolean;
   publishedAt: Date | null;
@@ -127,6 +130,7 @@ export interface TeacherSubmissionListItem {
 }
 
 export interface TeacherSubmissionListResult {
+  totalSubmitted: number;
   assignment: {
     id: string;
     title: string;

@@ -39,10 +39,9 @@ test("筛选选择项立即生效且服务端页面不直接绑定事件", async
   assert.equal(results.match(/<AutoSubmitSelect/gu)?.length, 2);
   assert.doesNotMatch(assignments, /onChange=|应用筛选/u);
   assert.doesNotMatch(results, /onChange=|>\s*筛选\s*</u);
-  assert.match(
-    assignments,
-    /xl:grid-cols-\[minmax\([\d.]+rem,[\d.]+fr\)_repeat\(3,minmax\([\d.]+rem,1fr\)\)_auto\]/u,
-  );
+  assert.match(assignments, /aria-label="作业列表筛选"/u);
+  assert.match(assignments, /flex min-w-0 flex-col gap-1\.5/u);
+  assert.match(assignments, /type="submit"/u);
   assert.match(assignments, /xl:items-end/u);
   assert.match(assignments, /RotateCcw/u);
   assert.doesNotMatch(assignments, /xl:col-start-5/u);

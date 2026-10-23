@@ -8,7 +8,7 @@ export function assertClassroomCanAcceptStudents(input: {
   now?: Date;
 }): void {
   if (input.status !== ClassroomStatus.ACTIVE) {
-    throw new ClassroomOperationError("该班级已经关闭，无法加入");
+    throw new ClassroomOperationError("该班级已结课或已关闭，无法加入");
   }
 
   if (

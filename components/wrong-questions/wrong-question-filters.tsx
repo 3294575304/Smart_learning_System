@@ -128,9 +128,9 @@ export function WrongQuestionFilters({
           key={`${query.courseId ?? "all"}:${Boolean(query.type || query.chapterId || query.knowledgePointId || query.recentDays)}`}
           open={Boolean(
             query.type ||
-            query.chapterId ||
-            query.knowledgePointId ||
-            query.recentDays,
+              query.chapterId ||
+              query.knowledgePointId ||
+              query.recentDays,
           )}
         >
           <summary className="w-fit cursor-pointer text-sm text-sky-700">
@@ -221,90 +221,45 @@ export function WrongQuestionFilters({
         </details>
       </fieldset>
       {active ? (
-        <div
-          className="mt-3 flex flex-wrap items-center gap-2"
-          aria-label="已选筛选条件"
-        >
+        <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="已选筛选条件">
           <span className="text-xs text-slate-500">已选条件</span>
           {query.courseId ? (
-            <button
-              type="button"
-              className="rounded-full border px-2.5 py-1 text-xs text-slate-700"
-              onClick={() => update("courseId", "")}
-            >
-              {filterOptions.courses.find((item) => item.id === query.courseId)
-                ?.name ?? "课程"}{" "}
-              ×
+            <button type="button" className="rounded-full border px-2.5 py-1 text-xs text-slate-700" onClick={() => update("courseId", "")}>
+              {filterOptions.courses.find((item) => item.id === query.courseId)?.name ?? "课程"} ×
             </button>
           ) : null}
           {query.classroomId ? (
-            <button
-              type="button"
-              className="rounded-full border px-2.5 py-1 text-xs text-slate-700"
-              onClick={() => update("classroomId", "")}
-            >
-              {filterOptions.classrooms.find(
-                (item) => item.id === query.classroomId,
-              )?.name ?? "班级"}{" "}
-              ×
+            <button type="button" className="rounded-full border px-2.5 py-1 text-xs text-slate-700" onClick={() => update("classroomId", "")}>
+              {filterOptions.classrooms.find((item) => item.id === query.classroomId)?.name ?? "班级"} ×
             </button>
           ) : null}
           {query.isMastered !== undefined ? (
-            <button
-              type="button"
-              className="rounded-full border px-2.5 py-1 text-xs text-slate-700"
-              onClick={() => update("isMastered", "")}
-            >
+            <button type="button" className="rounded-full border px-2.5 py-1 text-xs text-slate-700" onClick={() => update("isMastered", "")}>
               {query.isMastered ? "已掌握" : "待巩固"} ×
             </button>
           ) : null}
           {query.keyword ? (
-            <button
-              type="button"
-              className="max-w-48 truncate rounded-full border px-2.5 py-1 text-xs text-slate-700"
-              onClick={() => update("keyword", "")}
-            >
+            <button type="button" className="max-w-48 truncate rounded-full border px-2.5 py-1 text-xs text-slate-700" onClick={() => update("keyword", "")}>
               关键词：{query.keyword} ×
             </button>
           ) : null}
           {query.type ? (
-            <button
-              type="button"
-              className="rounded-full border px-2.5 py-1 text-xs text-slate-700"
-              onClick={() => update("type", "")}
-            >
+            <button type="button" className="rounded-full border px-2.5 py-1 text-xs text-slate-700" onClick={() => update("type", "")}>
               {QUESTION_TYPE_LABELS[query.type]} ×
             </button>
           ) : null}
           {query.chapterId ? (
-            <button
-              type="button"
-              className="rounded-full border px-2.5 py-1 text-xs text-slate-700"
-              onClick={() => update("chapterId", "")}
-            >
-              {chapters.find((item) => item.id === query.chapterId)?.name ??
-                "章节"}{" "}
-              ×
+            <button type="button" className="rounded-full border px-2.5 py-1 text-xs text-slate-700" onClick={() => update("chapterId", "")}>
+              {chapters.find((item) => item.id === query.chapterId)?.name ?? "章节"} ×
             </button>
           ) : null}
           {query.knowledgePointId ? (
-            <button
-              type="button"
-              className="max-w-48 truncate rounded-full border px-2.5 py-1 text-xs text-slate-700"
-              onClick={() => update("knowledgePointId", "")}
-            >
-              {filterOptions.knowledgePoints.find(
-                (item) => item.id === query.knowledgePointId,
-              )?.name ?? "知识点"}{" "}
-              ×
+            <button type="button" className="max-w-48 truncate rounded-full border px-2.5 py-1 text-xs text-slate-700" onClick={() => update("knowledgePointId", "")}>
+              {filterOptions.knowledgePoints.find((item) => item.id === query.knowledgePointId)?.name ?? "知识点"} ×
             </button>
           ) : null}
           {query.recentDays ? (
-            <button
-              type="button"
-              className="rounded-full border px-2.5 py-1 text-xs text-slate-700"
-              onClick={() => update("recentDays", "")}
-            >
+            <button type="button" className="rounded-full border px-2.5 py-1 text-xs text-slate-700" onClick={() => update("recentDays", "")}>
               最近 {query.recentDays} 天 ×
             </button>
           ) : null}

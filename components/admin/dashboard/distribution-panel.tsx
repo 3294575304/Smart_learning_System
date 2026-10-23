@@ -17,7 +17,8 @@ const ROLE_LABELS: Record<string, string> = {
 const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
   DRAFT: "草稿",
   PUBLISHED: "已发布",
-  CLOSED: "已结束",
+  CLOSED: "已关闭",
+  COMPLETED: "已结课",
   ARCHIVED: "已归档",
 };
 

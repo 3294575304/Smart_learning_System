@@ -153,7 +153,12 @@ export async function createCourseSurveyDraft(
   }
   const publishedSyllabus = course.currentPublishedSyllabusStructure;
   const classroom = await prisma.classroom.findFirst({
-    where: { id: input.classroomId, courseId, teacherId, status: "ACTIVE" },
+    where: {
+      id: input.classroomId,
+      courseId,
+      teacherId,
+      status: { in: ["ACTIVE", "COMPLETED"] },
+    },
     select: { id: true },
   });
   if (!classroom) throw new ResourceNotFoundError("班级不存在。");
@@ -338,7 +343,10 @@ export async function publishCourseSurvey(
     if (survey.version !== expectedVersion) {
       throw new CourseSurveyOperationError("问卷已更新，请刷新后重试。", 409);
     }
-    if (survey.classroom.status !== "ACTIVE") {
+    if (
+      survey.classroom.status !== "ACTIVE" &&
+      survey.classroom.status !== "COMPLETED"
+    ) {
       throw new CourseSurveyOperationError("目标班级当前不可发布问卷。", 409);
     }
     if (survey.dueAt <= new Date()) {
@@ -465,7 +473,7 @@ async function studentSurvey(studentId: string, surveyId: string) {
         in: [CourseSurveyStatus.PUBLISHED, CourseSurveyStatus.CLOSED],
       },
       classroom: {
-        status: "ACTIVE",
+        status: { in: ["ACTIVE", "COMPLETED"] },
         memberships: { some: { studentId, status: MembershipStatus.ACTIVE } },
       },
     },
@@ -610,7 +618,7 @@ export async function submitCourseSurveyResponse(
             opensAt: { lte: new Date() },
             dueAt: { gt: new Date() },
             classroom: {
-              status: "ACTIVE",
+              status: { in: ["ACTIVE", "COMPLETED"] },
               memberships: {
                 some: { studentId, status: MembershipStatus.ACTIVE },
               },
