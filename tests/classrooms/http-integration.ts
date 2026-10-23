@@ -197,7 +197,7 @@ async function main(): Promise<void> {
           { reason: "HTTP 跨教师测试" },
         )
       ).status,
-      404,
+      409,
     );
     assert.equal(
       (
@@ -208,7 +208,7 @@ async function main(): Promise<void> {
           { reason: " " },
         )
       ).status,
-      400,
+      409,
     );
     assert.equal(
       (
@@ -219,25 +219,14 @@ async function main(): Promise<void> {
           { reason: "HTTP 集成测试结束" },
         )
       ).status,
-      200,
+      409,
     );
-    const dissolvedClassroom = await prisma.classroom.findUniqueOrThrow({
+    const retainedClassroom = await prisma.classroom.findUniqueOrThrow({
       where: { id: dissolvable.id },
       select: { status: true, dissolutionReason: true },
     });
-    assert.equal(dissolvedClassroom.status, "ARCHIVED");
-    assert.equal(dissolvedClassroom.dissolutionReason, "HTTP 集成测试结束");
-    assert.equal(
-      (
-        await requestJson(
-          `/api/teacher/classrooms/${dissolvable.id}`,
-          teacherCookie,
-          "DELETE",
-          { reason: "重复解散测试" },
-        )
-      ).status,
-      409,
-    );
+    assert.equal(retainedClassroom.status, "ACTIVE");
+    assert.equal(retainedClassroom.dissolutionReason, null);
 
     const invalidCreate = await requestJson(
       "/api/teacher/classrooms",
@@ -391,7 +380,21 @@ async function main(): Promise<void> {
       teacherCookie,
       "POST",
     );
-    assert.equal(close.status, 200);
+    assert.equal(close.status, 409);
+    const complete = await requestJson(
+      `/api/teacher/classrooms/${classroom.id}/complete`,
+      teacherCookie,
+      "POST",
+    );
+    assert.equal(complete.status, 200);
+    assert.equal(
+      (
+        await prisma.classroom.findUniqueOrThrow({
+          where: { id: classroom.id },
+        })
+      ).status,
+      "COMPLETED",
+    );
     const closedJoin = await requestJson(
       "/api/student/classrooms/join",
       studentThreeCookie,
@@ -428,7 +431,7 @@ async function main(): Promise<void> {
     );
 
     console.info(
-      "Classroom HTTP integration checks passed: validation, RBAC, ownership, invite rotation, join/leave, removal history, and closure.",
+      "Classroom HTTP integration checks passed: validation, RBAC, ownership, invite rotation, join/leave, removal history, and completion.",
     );
   } finally {
     if (createdClassroomIds.length > 0) {
