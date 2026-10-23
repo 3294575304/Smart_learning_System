@@ -22,13 +22,15 @@ const labels: Record<string, string> = {
 export function CourseRosterManager({
   courseId,
   initialData,
+  initialClassroomId,
 }: {
   courseId: string;
   initialData: Data;
+  initialClassroomId?: string;
 }) {
   const [data, setData] = useState(initialData),
     [filter, setFilter] = useState<Filter>({
-      classroomId: "",
+      classroomId: initialClassroomId ?? "",
       keyword: "",
       status: "ACTIVE",
       page: 1,

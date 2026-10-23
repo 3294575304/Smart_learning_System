@@ -6,15 +6,23 @@ import { CourseGradebooksWorkspace } from "@/components/courses/course-gradebook
 import { PageHeader } from "@/components/dashboard/page-header";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
+import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
 
 export default async function GradebooksPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ classroomId?: string }>;
 }) {
-  await requirePageRole(Role.TEACHER);
+  const teacher = await requirePageRole(Role.TEACHER);
   const id = courseIdSchema.safeParse((await params).courseId);
   if (!id.success) notFound();
+  const classroom = await getTeacherCourseClassroomForPage(
+    teacher.id,
+    id.data,
+    (await searchParams).classroomId,
+  );
   return (
     <section className="space-y-6">
       <PageHeader
@@ -26,7 +34,11 @@ export default async function GradebooksPage({
           </TeacherBackLink>
         }
       />
-      <CourseGradebooksWorkspace key={id.data} courseId={id.data} />
+      <CourseGradebooksWorkspace
+        key={`${id.data}:${classroom?.id ?? "all"}`}
+        courseId={id.data}
+        classroomId={classroom?.id}
+      />
     </section>
   );
 }

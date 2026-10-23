@@ -39,10 +39,12 @@ export function SurveyListWorkspace({
   courseId,
   classrooms,
   initialSurveys,
+  initialClassroomId,
 }: {
   courseId: string;
   classrooms: Array<{ id: string; name: string }>;
   initialSurveys: SurveyItem[];
+  initialClassroomId?: string;
 }) {
   const router = useRouter();
   const defaults = useMemo(() => {
@@ -106,6 +108,7 @@ export function SurveyListWorkspace({
             <select
               className="w-full rounded-md border px-3 py-2"
               name="classroomId"
+              defaultValue={initialClassroomId ?? ""}
               required
             >
               <option value="">请选择</option>

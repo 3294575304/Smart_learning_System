@@ -9,18 +9,32 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { getTeacherCourseAnalytics } from "@/services/course-analytics/service";
 import { courseIdSchema } from "@/services/courses/schemas";
+import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
+import { withClassroomQuery } from "@/lib/course-classroom";
 
-type Props = { params: Promise<{ courseId: string }> };
+type Props = {
+  params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ classroomId?: string }>;
+};
 
-export default async function TeacherCourseAnalyticsPage({ params }: Props) {
+export default async function TeacherCourseAnalyticsPage({
+  params,
+  searchParams,
+}: Props) {
   const teacher = await requirePageRole(Role.TEACHER);
   const parsedCourseId = courseIdSchema.safeParse((await params).courseId);
   if (!parsedCourseId.success) notFound();
+  const classroom = await getTeacherCourseClassroomForPage(
+    teacher.id,
+    parsedCourseId.data,
+    (await searchParams).classroomId,
+  );
 
   try {
     const data = await getTeacherCourseAnalytics(
       teacher.id,
       parsedCourseId.data,
+      classroom?.id,
     );
     return (
       <section className="space-y-6">
@@ -37,6 +51,11 @@ export default async function TeacherCourseAnalyticsPage({ params }: Props) {
             <div>
               <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
                 {data.course.name}
+                {classroom && (
+                  <span className="ml-3 text-xl text-slate-600">
+                    {classroom.name}
+                  </span>
+                )}
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
                 按“课程建设—教学实施—学情证据—结课评价”的顺序查看进展，并直接处理当前最需要关注的事项。
@@ -47,14 +66,20 @@ export default async function TeacherCourseAnalyticsPage({ params }: Props) {
                 返回课程
               </TeacherBackLink>
               <Link
-                href={`/teacher/courses/${data.course.id}/profiles`}
+                href={withClassroomQuery(
+                  `/teacher/courses/${data.course.id}/profiles`,
+                  classroom?.id,
+                )}
                 className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-sky-700"
               >
                 <Users aria-hidden="true" className="size-4" />
                 学生画像
               </Link>
               <Link
-                href={`/teacher/courses/${data.course.id}/quality-report`}
+                href={withClassroomQuery(
+                  `/teacher/courses/${data.course.id}/quality-report`,
+                  classroom?.id,
+                )}
                 className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
               >
                 <FileChartColumn aria-hidden="true" className="size-4" />
@@ -64,7 +89,7 @@ export default async function TeacherCourseAnalyticsPage({ params }: Props) {
           </div>
         </header>
 
-        <TeacherCourseAnalyticsView data={data} />
+        <TeacherCourseAnalyticsView data={data} classroomId={classroom?.id} />
       </section>
     );
   } catch (error) {

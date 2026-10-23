@@ -137,17 +137,21 @@ if (Test-Path -LiteralPath $configPath) {
 $workerSecret = if ($existingSecret.Length -ge 32) { $existingSecret } else { New-RandomSecret }
 
 $ErrorActionPreference = "Continue"
-$executorApiKey = (& $sshExecutable `
+$executorApiKeyOutput = @(& $sshExecutable `
   -i $SshKeyPath `
   -o IdentitiesOnly=yes `
   -o BatchMode=yes `
   -o StrictHostKeyChecking=yes `
   -o "UserKnownHostsFile=$KnownHostsPath" `
   "root@$SandboxHost" `
-  "sed -n 's/^SANDBOX_EXECUTOR_API_KEY=//p' /etc/zhixue-sandbox-executor.env").Trim()
+  "sed -n 's/^SANDBOX_EXECUTOR_API_KEY=//p' /etc/zhixue-sandbox-executor.env")
 $sshExitCode = $LASTEXITCODE
 $ErrorActionPreference = "Stop"
-if ($sshExitCode -ne 0 -or $executorApiKey.Length -lt 32) {
+if ($sshExitCode -ne 0) {
+  throw "SSH authentication or remote credential retrieval failed for root@$SandboxHost. Verify that the selected private key is authorized on the remote host."
+}
+$executorApiKey = ($executorApiKeyOutput -join "`n").Trim()
+if ($executorApiKey.Length -lt 32) {
   throw "Unable to retrieve the remote executor credential"
 }
 

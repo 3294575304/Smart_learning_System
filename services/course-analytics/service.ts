@@ -12,6 +12,8 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { withClassroomQuery } from "@/lib/course-classroom";
+import { getTeacherCourseClassroom } from "@/services/courses/classroom-context";
 import { calculateAttendanceRate } from "@/services/attendance/calculation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import {
@@ -26,7 +28,10 @@ function percentage(part: number, total: number) {
 export async function getTeacherCourseAnalytics(
   teacherId: string,
   courseId: string,
+  classroomId?: string,
 ) {
+  await getTeacherCourseClassroom(teacherId, courseId, classroomId);
+  const classroomScope = classroomId ? { classroomId } : {};
   const course = await prisma.course.findFirst({
     where: { id: courseId, teacherId },
     select: {
@@ -35,7 +40,10 @@ export async function getTeacherCourseAnalytics(
       courseNo: true,
       term: true,
       classrooms: {
-        where: { status: "ACTIVE" },
+        where: {
+          status: "ACTIVE",
+          ...(classroomId ? { id: classroomId } : {}),
+        },
         orderBy: [{ name: "asc" }, { id: "asc" }],
         select: {
           id: true,
@@ -67,6 +75,18 @@ export async function getTeacherCourseAnalytics(
     },
   });
   if (!course) throw new ResourceNotFoundError("课程不存在");
+  const classroomProgress = classroomId
+    ? await prisma.courseTeachingProgressRevision.findFirst({
+        where: { courseId, classroomId },
+        orderBy: { revisionNumber: "desc" },
+        select: {
+          revisionNumber: true,
+          concepts: { select: { conceptId: true } },
+        },
+      })
+    : null;
+  const teachingProgress =
+    classroomProgress ?? course.currentTeachingProgressRevision;
 
   const studentIds = [
     ...new Set(
@@ -86,7 +106,7 @@ export async function getTeacherCourseAnalytics(
     gradebooks,
   ] = await Promise.all([
     prisma.assignment.findMany({
-      where: { teacherId, classroom: { courseId } },
+      where: { teacherId, classroom: { courseId }, ...classroomScope },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
@@ -108,6 +128,7 @@ export async function getTeacherCourseAnalytics(
         session: {
           courseId,
           teacherId,
+          ...classroomScope,
           status: AttendanceSessionStatus.CLOSED,
         },
       },
@@ -117,6 +138,7 @@ export async function getTeacherCourseAnalytics(
       where: {
         courseId,
         teacherId,
+        ...classroomScope,
         status: AttendanceSessionStatus.CLOSED,
       },
     }),
@@ -132,7 +154,7 @@ export async function getTeacherCourseAnalytics(
         })
       : Promise.resolve([]),
     prisma.courseSurvey.findMany({
-      where: { courseId, teacherId },
+      where: { courseId, teacherId, ...classroomScope },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
@@ -145,7 +167,7 @@ export async function getTeacherCourseAnalytics(
       },
     }),
     prisma.courseQualityReport.findMany({
-      where: { courseId, course: { teacherId } },
+      where: { courseId, course: { teacherId }, ...classroomScope },
       orderBy: [{ versionNumber: "desc" }, { createdAt: "desc" }],
       take: 5,
       select: {
@@ -157,7 +179,7 @@ export async function getTeacherCourseAnalytics(
       },
     }),
     prisma.courseGradebook.findMany({
-      where: { courseId, course: { teacherId } },
+      where: { courseId, course: { teacherId }, ...classroomScope },
       select: { id: true, currentPublicationId: true },
     }),
   ]);
@@ -217,8 +239,7 @@ export async function getTeacherCourseAnalytics(
     }),
   );
 
-  const taughtConceptCount =
-    course.currentTeachingProgressRevision?.concepts.length ?? 0;
+  const taughtConceptCount = teachingProgress?.concepts.length ?? 0;
   const totalConceptCount = currentGraph?.nodes.length ?? 0;
   const pendingReviewCount = assignments.reduce(
     (sum, assignment) => sum + assignment._count.submissions,
@@ -312,8 +333,7 @@ export async function getTeacherCourseAnalytics(
       taughtConceptCount,
       teachingProgressRate: percentage(taughtConceptCount, totalConceptCount),
       graphVersion: currentGraph?.versionNumber ?? null,
-      progressRevision:
-        course.currentTeachingProgressRevision?.revisionNumber ?? null,
+      progressRevision: teachingProgress?.revisionNumber ?? null,
       publishedAssignmentCount: assignments.filter(
         (assignment) =>
           assignment.status === AssignmentStatus.PUBLISHED ||
@@ -354,7 +374,10 @@ export async function getTeacherCourseAnalytics(
       dueAt: survey.dueAt,
     })),
     latestReport,
-    nextActions: nextActions.slice(0, 5),
+    nextActions: nextActions.slice(0, 5).map((action) => ({
+      ...action,
+      href: withClassroomQuery(action.href, classroomId),
+    })),
   };
 }
 

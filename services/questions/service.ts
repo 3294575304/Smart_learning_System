@@ -296,6 +296,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
     string,
     {
       id: string;
+      courseIds: string[];
       name: string;
       courseNo: string;
       term: string;
@@ -317,6 +318,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
     if (!group) {
       group = {
         id: course.id,
+        courseIds: [],
         name: course.name,
         courseNo: course.courseNo,
         term: course.term,
@@ -325,6 +327,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
       };
       groups.set(key, group);
     }
+    group.courseIds.push(course.id);
     group.classrooms.push(
       ...course.classrooms.map((classroom) => classroom.name),
     );
@@ -347,6 +350,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
   }
   return [...groups.values()].map((group) => ({
     ...group,
+    courseIds: [...group.courseIds],
     classrooms: [...group.classrooms],
     concepts: [...group.concepts.values()].sort(
       (a, b) =>

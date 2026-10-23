@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 
 import type { TeacherCourseAnalytics } from "@/services/course-analytics/service";
+import { withClassroomQuery } from "@/lib/course-classroom";
 
 const assignmentStatusLabel: Record<string, string> = {
   DRAFT: "草稿",
@@ -86,8 +87,10 @@ function DataCell({ label, value }: { label: string; value: string }) {
 
 export function TeacherCourseAnalyticsView({
   data,
+  classroomId,
 }: {
   data: TeacherCourseAnalytics;
+  classroomId?: string;
 }) {
   const courseBase = "/teacher/courses/" + data.course.id;
 
@@ -218,7 +221,7 @@ export function TeacherCourseAnalyticsView({
               </h2>
             </div>
             <Link
-              href={courseBase + "/profiles"}
+              href={withClassroomQuery(courseBase + "/profiles", classroomId)}
               className="text-sm font-medium text-sky-700 hover:text-sky-900"
             >
               查看课程画像 →
@@ -316,7 +319,10 @@ export function TeacherCourseAnalyticsView({
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-slate-900">近期作业</h2>
             <Link
-              href="/teacher/assignments"
+              href={withClassroomQuery(
+                `/teacher/assignments?courseId=${data.course.id}`,
+                classroomId,
+              )}
               className="text-sm font-medium text-sky-700 hover:text-sky-900"
             >
               全部作业 →
@@ -416,7 +422,10 @@ export function TeacherCourseAnalyticsView({
               </Link>
             ))}
             <Link
-              href={courseBase + "/quality-report"}
+              href={withClassroomQuery(
+                courseBase + "/quality-report",
+                classroomId,
+              )}
               className="flex items-center justify-between gap-3 rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3 text-sm"
             >
               <span className="text-violet-900">

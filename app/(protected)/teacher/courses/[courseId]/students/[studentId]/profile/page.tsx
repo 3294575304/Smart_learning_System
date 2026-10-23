@@ -7,13 +7,26 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { teacherProfilePathSchema } from "@/services/learner-profiles/schemas";
 import { getTeacherStudentLearnerProfile } from "@/services/learner-profiles/service";
+import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
+import { withClassroomQuery } from "@/lib/course-classroom";
 
-type Props = { params: Promise<{ courseId: string; studentId: string }> };
+type Props = {
+  params: Promise<{ courseId: string; studentId: string }>;
+  searchParams: Promise<{ classroomId?: string }>;
+};
 
-export default async function TeacherStudentProfilePage({ params }: Props) {
+export default async function TeacherStudentProfilePage({
+  params,
+  searchParams,
+}: Props) {
   const teacher = await requirePageRole(Role.TEACHER);
   const path = teacherProfilePathSchema.safeParse(await params);
   if (!path.success) notFound();
+  const classroom = await getTeacherCourseClassroomForPage(
+    teacher.id,
+    path.data.courseId,
+    (await searchParams).classroomId,
+  );
   try {
     const profile = await getTeacherStudentLearnerProfile(
       teacher.id,
@@ -24,7 +37,10 @@ export default async function TeacherStudentProfilePage({ params }: Props) {
       <section className="space-y-6">
         <header>
           <TeacherBackLink
-            href={`/teacher/courses/${path.data.courseId}/profiles`}
+            href={withClassroomQuery(
+              `/teacher/courses/${path.data.courseId}/profiles`,
+              classroom?.id,
+            )}
           >
             返回班级画像
           </TeacherBackLink>

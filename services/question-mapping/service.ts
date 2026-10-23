@@ -164,7 +164,7 @@ async function generateCandidates(
   }
 }
 
-async function ownedCourse(teacherId: string, courseId: string) {
+async function findOwnedCourse(teacherId: string, courseId: string) {
   const course = await prisma.course.findFirst({
     where: { id: courseId, teacherId },
     select: {
@@ -174,6 +174,11 @@ async function ownedCourse(teacherId: string, courseId: string) {
     },
   });
   if (!course) throw new ResourceNotFoundError("课程不存在");
+  return course;
+}
+
+async function ownedCourse(teacherId: string, courseId: string) {
+  const course = await findOwnedCourse(teacherId, courseId);
   if (!course.currentPublishedKnowledgeGraphVersionId) {
     throw new QuestionGraphBindingError("该课程尚未发布正式知识图谱", 409);
   }
@@ -941,7 +946,10 @@ export async function listUnboundTeacherQuestions(
   teacherId: string,
   courseId: string,
 ) {
-  const course = await ownedCourse(teacherId, courseId);
+  const course = await findOwnedCourse(teacherId, courseId);
+  if (!course.currentPublishedKnowledgeGraphVersionId) {
+    return { ready: false as const, course };
+  }
   const where = {
     OR: [{ creatorId: teacherId }, { visibility: QuestionVisibility.PUBLIC }],
     deletedAt: null,
@@ -976,6 +984,7 @@ export async function listUnboundTeacherQuestions(
   const catalog = buildMappingQuestionCatalog(teacherId, rows);
   const unbound = catalog.filter((question) => !question.isBound);
   return {
+    ready: true as const,
     course,
     questions: unbound.slice(0, 500),
     total: unbound.length,

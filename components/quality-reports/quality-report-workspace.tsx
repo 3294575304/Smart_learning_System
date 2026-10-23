@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { QualityReportTemplatePicker } from "./quality-report-template-picker";
 import { courseSummaryCoverage } from "@/services/quality-reports/summary-coverage";
 import type { TemplateSelection } from "@/services/quality-reports/template-schema";
+import { withClassroomQuery } from "@/lib/course-classroom";
 
 interface GradebookOption {
   id: string;
@@ -31,6 +32,7 @@ interface ReportItem {
   backgroundJob: { progress: number; errorCode: string | null } | null;
 }
 interface Workspace {
+  classrooms: Array<{ id: string; name: string }>;
   gradebooks: GradebookOption[];
   reports: ReportItem[];
   metadataDefaults: {
@@ -375,7 +377,13 @@ function ReviewEditor({
   );
 }
 
-export function QualityReportWorkspace({ courseId }: { courseId: string }) {
+export function QualityReportWorkspace({
+  courseId,
+  classroomId,
+}: {
+  courseId: string;
+  classroomId?: string;
+}) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [reportFilter, setReportFilter] = useState("ALL");
@@ -383,7 +391,7 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
     "PLATFORM",
   );
   const [gradebookId, setGradebookId] = useState("");
-  const [uploadClassroomId, setUploadClassroomId] = useState("");
+  const [uploadClassroomId, setUploadClassroomId] = useState(classroomId ?? "");
   const [metadata, setMetadata] = useState<ReportMetadata | null>(null);
   const [templateBusy, setTemplateBusy] = useState(false);
   const [templateSelection, setTemplateSelection] = useState<TemplateSelection>(
@@ -396,7 +404,10 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const load = useCallback(async () => {
     const response = await fetch(
-      `/api/teacher/courses/${courseId}/quality-reports`,
+      withClassroomQuery(
+        `/api/teacher/courses/${courseId}/quality-reports`,
+        classroomId,
+      ),
       { cache: "no-store" },
     );
     const payload = (await response.json()) as ApiEnvelope<Workspace>;
@@ -419,6 +430,8 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
             ? String(payload.data!.metadataDefaults.credits)
             : "",
           majorClass:
+            payload.data!.classrooms.find((item) => item.id === classroomId)
+              ?.name ||
             payload.data!.metadataDefaults.majorClass ||
             defaultGradebook?.classroom.name ||
             "",
@@ -429,7 +442,7 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
           scoringCriteria: payload.data!.metadataDefaults.scoringCriteria,
         },
     );
-  }, [courseId]);
+  }, [courseId, classroomId]);
   useEffect(() => {
     void load().catch((reason: unknown) =>
       setError(reason instanceof Error ? reason.message : "报告工作区加载失败"),
@@ -457,13 +470,13 @@ export function QualityReportWorkspace({ courseId }: { courseId: string }) {
     () =>
       Array.from(
         new Map(
-          (workspace?.gradebooks ?? []).map((item) => [
-            item.classroom.id,
-            item.classroom,
-          ]),
+          [
+            ...(workspace?.classrooms ?? []),
+            ...(workspace?.gradebooks ?? []).map((item) => item.classroom),
+          ].map((item) => [item.id, item]),
         ).values(),
       ),
-    [workspace?.gradebooks],
+    [workspace?.gradebooks, workspace?.classrooms],
   );
   async function submit(form: HTMLFormElement) {
     setBusy(true);

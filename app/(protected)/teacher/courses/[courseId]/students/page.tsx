@@ -8,18 +8,29 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { courseIdSchema } from "@/services/courses/schemas";
 import { listCourseRoster } from "@/services/course-rosters/service";
+import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
+import { withClassroomQuery } from "@/lib/course-classroom";
 
 export default async function CourseStudentsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ classroomId?: string }>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER),
     id = courseIdSchema.safeParse((await params).courseId);
   if (!id.success) notFound();
+  const classroom = await getTeacherCourseClassroomForPage(
+    teacher.id,
+    id.data,
+    (await searchParams).classroomId,
+  );
   let data;
   try {
-    data = await listCourseRoster(teacher.id, id.data, {});
+    data = await listCourseRoster(teacher.id, id.data, {
+      classroomId: classroom?.id,
+    });
   } catch (error) {
     if (error instanceof ResourceNotFoundError) notFound();
     throw error;
@@ -36,7 +47,10 @@ export default async function CourseStudentsPage({
             </TeacherBackLink>
             <Link
               className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white"
-              href={`/teacher/courses/${id.data}/students/import`}
+              href={withClassroomQuery(
+                `/teacher/courses/${id.data}/students/import`,
+                classroom?.id,
+              )}
             >
               批量导入名单
             </Link>
@@ -44,8 +58,9 @@ export default async function CourseStudentsPage({
         }
       />
       <CourseRosterManager
-        key={id.data}
+        key={`${id.data}:${classroom?.id ?? "all"}`}
         courseId={id.data}
+        initialClassroomId={classroom?.id}
         initialData={data}
       />
     </section>

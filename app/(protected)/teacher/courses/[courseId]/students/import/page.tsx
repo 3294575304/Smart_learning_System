@@ -9,18 +9,27 @@ import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
 import { getTeacherCourse } from "@/services/courses/service";
+import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
+import { withClassroomQuery } from "@/lib/course-classroom";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ classroomId?: string }>;
 }
 
 export default async function TeacherCourseRosterImportPage({
   params,
+  searchParams,
 }: PageProps) {
   const teacher = await requirePageRole(Role.TEACHER);
   const { courseId } = await params;
   const parsedId = courseIdSchema.safeParse(courseId);
   if (!parsedId.success) notFound();
+  const classroom = await getTeacherCourseClassroomForPage(
+    teacher.id,
+    parsedId.data,
+    (await searchParams).classroomId,
+  );
 
   let course;
   try {
@@ -34,7 +43,12 @@ export default async function TeacherCourseRosterImportPage({
     <section className="space-y-6">
       <PageHeader
         actions={
-          <TeacherBackLink href={`/teacher/courses/${course.id}/students`}>
+          <TeacherBackLink
+            href={withClassroomQuery(
+              `/teacher/courses/${course.id}/students`,
+              classroom?.id,
+            )}
+          >
             返回名单管理
           </TeacherBackLink>
         }
@@ -50,6 +64,8 @@ export default async function TeacherCourseRosterImportPage({
       </div>
 
       <CourseRosterImportWizard
+        key={`${course.id}:${classroom?.id ?? "all"}`}
+        initialClassroomId={classroom?.id}
         courseId={course.id}
         courseName={course.name}
         courseNo={course.courseNo}

@@ -33,12 +33,14 @@ function render(element: React.ReactNode) {
 
 test("course filters explain unavailable concepts and retain course selection", () => {
   const courseId = "ccourse00000000000000001";
+  const linkedCourseId = "ccourse00000000000000002";
   const html = render(
     React.createElement(QuestionFilters, {
-      query: questionListQuerySchema.parse({ courseId }),
+      query: questionListQuerySchema.parse({ courseId: linkedCourseId }),
       courses: [
         {
           id: courseId,
+          courseIds: [courseId, linkedCourseId],
           name: "英语",
           term: "2026",
           courseNo: "EN",

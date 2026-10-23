@@ -5,7 +5,10 @@ import { qualityReportApiError } from "@/lib/quality-report-api";
 import { auditRequestContext } from "@/services/audit/request-context";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
 import { scheduleBackgroundWorkerWakeup } from "@/services/background-jobs/wakeup";
-import { courseIdSchema } from "@/services/courses/schemas";
+import {
+  courseClassroomQuerySchema,
+  courseIdSchema,
+} from "@/services/courses/schemas";
 import {
   getTeacherQualityReports,
   queuePlatformQualityReport,
@@ -19,8 +22,17 @@ export async function GET(_request: Request, context: Context) {
   if (!courseId.success) return apiError("课程 ID 格式无效", 400);
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
+    const query = courseClassroomQuerySchema.safeParse({
+      classroomId:
+        new URL(_request.url).searchParams.get("classroomId") ?? undefined,
+    });
+    if (!query.success) return apiError("班级筛选参数无效", 400);
     return apiSuccess(
-      await getTeacherQualityReports(teacher.id, courseId.data),
+      await getTeacherQualityReports(
+        teacher.id,
+        courseId.data,
+        query.data.classroomId,
+      ),
     );
   } catch (error) {
     return qualityReportApiError(error);

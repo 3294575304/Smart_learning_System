@@ -374,19 +374,21 @@ export function CourseRosterImportWizard({
   courseNo,
   term,
   linkedClassrooms,
+  initialClassroomId,
 }: {
   courseId: string;
   courseName: string;
   courseNo: string;
   term: string;
   linkedClassrooms: TeacherCourseClassroomView[];
+  initialClassroomId?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [files, setFiles] = useState<CourseFileVersionClientView[]>([]);
   const [selectedFileId, setSelectedFileId] = useState("");
   const [selectedClassroomId, setSelectedClassroomId] = useState(
-    linkedClassrooms[0]?.id ?? "",
+    initialClassroomId ?? linkedClassrooms[0]?.id ?? "",
   );
   const [preview, setPreview] = useState<StudentImportPreviewPage | null>(null);
   const [execution, setExecution] =

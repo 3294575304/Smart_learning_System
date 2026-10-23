@@ -64,7 +64,7 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
         title={course.name}
       />
 
-      <CourseSetupChecklist progress={setupProgress} />
+      <CourseSetupChecklist courseId={course.id} progress={setupProgress} />
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-1 text-sm text-slate-600">
         <span
@@ -86,7 +86,12 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
         </span>
         <span>{course.term}</span>
       </div>
-      <CourseWorkspaceNavigation courseId={course.id} />
+      <CourseWorkspaceNavigation
+        courseId={course.id}
+        classrooms={course.linkedClassrooms
+          .filter((classroom) => classroom.status === "ACTIVE")
+          .map(({ id, name }) => ({ id, name }))}
+      />
       <CourseDetailDisclosure
         id="course-classrooms"
         title="授课班级"

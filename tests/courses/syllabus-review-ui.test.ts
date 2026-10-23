@@ -63,18 +63,14 @@ test("教学大纲使用独立工作区并从课程详情提供入口", async ()
   assert.match(courseDetail, /CourseWorkspaceNavigation/u);
   const navigation = await readFile(
     new URL(
-      "../../components/courses/course-workspace-navigation.tsx",
+      "../../components/courses/course-setup-checklist.tsx",
       import.meta.url,
     ),
     "utf8",
   );
-  assert.match(
-    courseDetail,
-    /<CourseWorkspaceNavigation courseId=\{course\.id\}/u,
-  );
-  assert.match(navigation, /title: "教学大纲"/u);
+  assert.match(courseDetail, /<CourseSetupChecklist courseId=\{course\.id\}/u);
+  assert.match(navigation, /title: "上传教学大纲"/u);
+  assert.match(navigation, /title: "审核并发布大纲"/u);
   assert.match(navigation, /path: "syllabus"/u);
-  assert.ok(
-    navigation.includes("href={`/teacher/courses/${courseId}/${path}`}"),
-  );
+  assert.ok(navigation.includes("`/teacher/courses/${courseId}/${path}`"));
 });

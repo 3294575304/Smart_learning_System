@@ -4,7 +4,10 @@ import { apiError, apiSuccess } from "@/lib/api-response";
 import { gradebookApiError } from "@/lib/gradebook-api";
 import { auditRequestContext } from "@/services/audit/request-context";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
-import { courseIdSchema } from "@/services/courses/schemas";
+import {
+  courseClassroomQuerySchema,
+  courseIdSchema,
+} from "@/services/courses/schemas";
 import { createGradebookSchema } from "@/services/gradebook/schemas";
 import {
   createTeacherCourseGradebook,
@@ -21,10 +24,23 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!courseId.success) return apiError("课程 ID 格式无效", 400);
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
+    const query = courseClassroomQuerySchema.safeParse({
+      classroomId:
+        new URL(_request.url).searchParams.get("classroomId") ?? undefined,
+    });
+    if (!query.success) return apiError("班级筛选参数无效", 400);
     return apiSuccess(
       new URL(_request.url).searchParams.get("view") === "overview"
-        ? await getTeacherGradebookOverview(teacher.id, courseId.data)
-        : await listTeacherCourseGradebooks(teacher.id, courseId.data),
+        ? await getTeacherGradebookOverview(
+            teacher.id,
+            courseId.data,
+            query.data.classroomId,
+          )
+        : await listTeacherCourseGradebooks(
+            teacher.id,
+            courseId.data,
+            query.data.classroomId,
+          ),
     );
   } catch (error: unknown) {
     return gradebookApiError(error);

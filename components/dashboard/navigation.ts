@@ -127,6 +127,7 @@ export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   "assessment-scheme": "考核方案",
   gradebook: "成绩台账",
   attendance: "出勤台账",
+  "check-in": "课堂签到",
   "quality-report": "教学质量分析",
   profiles: "课程画像",
   "knowledge-graph": "知识图谱",
