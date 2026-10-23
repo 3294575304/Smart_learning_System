@@ -65,19 +65,37 @@ test("统一成绩统计中心复用课程学情并保留课程权限范围", as
     resultsPage,
     /params\.set\("classroomId", query\.classroomId\)/u,
   );
-  assert.match(resultsPage, /不同课程的知识点不会合并统计/u);
+  assert.match(resultsPage, /选择一门课程查看该课程已发布作业的完成率/u);
   assert.match(service, /where: \{ id: courseId, teacherId \}/u);
-  assert.match(service, /classroomId \? \{ id: classroomId \} : \{\}/u);
-  assert.match(service, /classroomId \? \{ classroomId \} : \{\}/u);
-  assert.match(service, /AttendanceSessionStatus\.CLOSED/u);
-  assert.match(service, /currentPublishedKnowledgeGraphVersion/u);
-  assert.match(service, /currentTeachingProgressRevision/u);
+  assert.match(
+    service,
+    /status: "ACTIVE"[\s\S]*?classroomId \? \{ id: classroomId \} : \{\}/u,
+  );
+  assert.match(service, /status: MembershipStatus\.ACTIVE/u);
+  assert.match(service, /teacherId,[\s\S]*?classroom: \{[\s\S]*?courseId/u);
+  assert.match(
+    service,
+    /AssignmentStatus\.PUBLISHED[\s\S]*?AssignmentStatus\.CLOSED/u,
+  );
+  assert.match(service, /SubmissionStatus\.SUBMITTED/u);
+  assert.match(service, /SubmissionStatus\.PENDING_REVIEW/u);
+  assert.match(service, /SubmissionStatus\.GRADED/u);
+  assert.match(service, /SubmissionStatus\.PUBLISHED/u);
   assert.match(assignmentService, /query\.courseId/u);
   assert.match(assignmentService, /query\.classroomId/u);
-  assert.match(service, /nextActions/u);
-  assert.match(view, /本阶段教学待办/u);
-  assert.match(view, /掌握情况与需要关注的知识点/u);
-  assert.match(view, /课程评价闭环/u);
+  assert.match(resultsPage, /results\.items\.map/u);
+  assert.match(
+    resultsPage,
+    /hrefForPage=\{\(page\) => pageHref\(query, page\)\}/u,
+  );
+  assert.match(resultsPage, /完成率、得分率与分数段/u);
+  assert.match(view, /aria-labelledby="course-assignment-statistics-heading"/u);
+  assert.match(view, /作业统计/u);
+  assert.match(view, /作业完成率/u);
+  assert.match(view, /作业得分率/u);
+  assert.match(view, /学生分数段分布/u);
+  assert.match(view, /未评分/u);
+  assert.doesNotMatch(view, /本阶段教学待办|掌握情况与需要关注的知识点/u);
   assert.match(view, /href=\{courseBase \+ "\/surveys"\}/u);
   assert.match(view, /href=\{courseBase \+ "\/quality-report"\}/u);
   assert.match(view, /问卷管理/u);

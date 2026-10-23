@@ -1,0 +1,249 @@
+export type CourseAssignmentStatus =
+  "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
+
+export type CourseSubmissionStatus =
+  | "IN_PROGRESS"
+  | "SUBMITTED"
+  | "PENDING_REVIEW"
+  | "GRADED"
+  | "PUBLISHED"
+  | "WITHDRAWN";
+
+export interface CourseAssignmentStatisticsInput {
+  assignments: Array<{
+    id: string;
+    classroomId: string;
+    status: CourseAssignmentStatus;
+  }>;
+  activeStudentIdsByClassroom: Map<string, Set<string>>;
+  submissions: Array<{
+    id: string;
+    assignmentId: string;
+    studentId: string;
+    attemptNumber: number;
+    status: CourseSubmissionStatus;
+    submittedAt: Date | null;
+    score: number | null;
+    maxScore: number | null;
+  }>;
+}
+
+export type AssignmentScoreBandKey =
+  "0-59" | "60-69" | "70-79" | "80-89" | "90-100" | "ungraded";
+
+export interface AssignmentScoreBand {
+  key: AssignmentScoreBandKey;
+  label: string;
+  count: number;
+  ratio: number | null;
+}
+
+export interface CourseAssignmentStatistics {
+  assignmentCount: number;
+  studentCount: number;
+  eligibleSubmissionCount: number;
+  completedSubmissionCount: number;
+  completionRate: number | null;
+  finalizedSubmissionCount: number;
+  scoreRate: number | null;
+  scoredStudentCount: number;
+  unscoredStudentCount: number;
+  scoreDistribution: AssignmentScoreBand[];
+}
+
+const COMPLETE_STATUSES = new Set<CourseSubmissionStatus>([
+  "SUBMITTED",
+  "PENDING_REVIEW",
+  "GRADED",
+  "PUBLISHED",
+]);
+
+const FINAL_SCORE_STATUSES = new Set<CourseSubmissionStatus>([
+  "GRADED",
+  "PUBLISHED",
+]);
+
+const SCORE_BANDS = [
+  { key: "0-59", label: "0–59", minimum: 0, maximum: 60 },
+  { key: "60-69", label: "60–69", minimum: 60, maximum: 70 },
+  { key: "70-79", label: "70–79", minimum: 70, maximum: 80 },
+  { key: "80-89", label: "80–89", minimum: 80, maximum: 90 },
+  {
+    key: "90-100",
+    label: "90–100",
+    minimum: 90,
+    maximum: Number.POSITIVE_INFINITY,
+  },
+] as const;
+
+function roundedPercent(part: number, total: number): number | null {
+  return total > 0 ? Number(((part / total) * 100).toFixed(1)) : null;
+}
+
+function isLaterSubmission(
+  candidate: CourseAssignmentStatisticsInput["submissions"][number],
+  current: CourseAssignmentStatisticsInput["submissions"][number],
+) {
+  if (candidate.attemptNumber !== current.attemptNumber) {
+    return candidate.attemptNumber > current.attemptNumber;
+  }
+  const candidateTime =
+    candidate.submittedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const currentTime =
+    current.submittedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  if (candidateTime !== currentTime) return candidateTime > currentTime;
+  return candidate.id.localeCompare(current.id) > 0;
+}
+
+function findScoreBand(score: number) {
+  return SCORE_BANDS.find(
+    (band) => score >= band.minimum && score < band.maximum,
+  );
+}
+
+function distributionRatios(counts: number[], total: number) {
+  if (total === 0) return counts.map(() => null);
+
+  const tenths = counts.map((count) => (count / total) * 1000);
+  const roundedTenths = tenths.map(Math.floor);
+  const remainingTenths =
+    1000 - roundedTenths.reduce((sum, value) => sum + value, 0);
+  const remainderOrder = tenths
+    .map((value, index) => ({ index, remainder: value - roundedTenths[index] }))
+    .sort((left, right) => right.remainder - left.remainder);
+
+  for (const { index } of remainderOrder.slice(0, remainingTenths)) {
+    roundedTenths[index] += 1;
+  }
+
+  return roundedTenths.map((value) => value / 10);
+}
+
+export function calculateCourseAssignmentStatistics(
+  input: CourseAssignmentStatisticsInput,
+): CourseAssignmentStatistics {
+  const assignments = input.assignments.filter(
+    (assignment) =>
+      assignment.status === "PUBLISHED" || assignment.status === "CLOSED",
+  );
+  const assignmentsById = new Map(
+    assignments.map((assignment) => [assignment.id, assignment]),
+  );
+  const activeStudentIds = new Set(
+    [...input.activeStudentIdsByClassroom.values()].flatMap((studentIds) => [
+      ...studentIds,
+    ]),
+  );
+  const latestSubmissionByAssignment = new Map<
+    string,
+    Map<string, CourseAssignmentStatisticsInput["submissions"][number]>
+  >();
+
+  for (const submission of input.submissions) {
+    const assignment = assignmentsById.get(submission.assignmentId);
+    if (!assignment || !COMPLETE_STATUSES.has(submission.status)) continue;
+    const assignmentStudents = input.activeStudentIdsByClassroom.get(
+      assignment.classroomId,
+    );
+    if (!assignmentStudents?.has(submission.studentId)) continue;
+
+    let latestByStudent = latestSubmissionByAssignment.get(assignment.id);
+    if (!latestByStudent) {
+      latestByStudent = new Map();
+      latestSubmissionByAssignment.set(assignment.id, latestByStudent);
+    }
+    const current = latestByStudent.get(submission.studentId);
+    if (!current || isLaterSubmission(submission, current)) {
+      latestByStudent.set(submission.studentId, submission);
+    }
+  }
+
+  let eligibleSubmissionCount = 0;
+  let completedSubmissionCount = 0;
+  let finalizedSubmissionCount = 0;
+  let totalScore = 0;
+  let totalMaxScore = 0;
+  const scorePercentagesByStudent = new Map<string, number[]>();
+
+  for (const assignment of assignments) {
+    const assignmentStudents =
+      input.activeStudentIdsByClassroom.get(assignment.classroomId) ??
+      new Set<string>();
+    eligibleSubmissionCount += assignmentStudents.size;
+    const latestByStudent = latestSubmissionByAssignment.get(assignment.id);
+    if (!latestByStudent) continue;
+
+    for (const [studentId, submission] of latestByStudent) {
+      completedSubmissionCount += 1;
+      if (
+        !FINAL_SCORE_STATUSES.has(submission.status) ||
+        submission.score === null ||
+        submission.maxScore === null ||
+        submission.maxScore <= 0
+      ) {
+        continue;
+      }
+
+      finalizedSubmissionCount += 1;
+      totalScore += submission.score;
+      totalMaxScore += submission.maxScore;
+      const studentScores = scorePercentagesByStudent.get(studentId) ?? [];
+      studentScores.push((submission.score / submission.maxScore) * 100);
+      scorePercentagesByStudent.set(studentId, studentScores);
+    }
+  }
+
+  const scoreCounts = new Map<AssignmentScoreBandKey, number>(
+    SCORE_BANDS.map((band) => [band.key, 0]),
+  );
+  for (const scorePercentages of scorePercentagesByStudent.values()) {
+    const averageScore =
+      scorePercentages.reduce((sum, value) => sum + value, 0) /
+      scorePercentages.length;
+    const band = findScoreBand(Math.max(0, Math.min(100, averageScore)));
+    if (band) scoreCounts.set(band.key, (scoreCounts.get(band.key) ?? 0) + 1);
+  }
+
+  const scoredStudentCount = scorePercentagesByStudent.size;
+  const unscoredStudentCount = activeStudentIds.size - scoredStudentCount;
+  scoreCounts.set("ungraded", unscoredStudentCount);
+
+  const distributionCounts = [
+    ...SCORE_BANDS.map((band) => scoreCounts.get(band.key) ?? 0),
+    unscoredStudentCount,
+  ];
+  const distributionPercentages = distributionRatios(
+    distributionCounts,
+    activeStudentIds.size,
+  );
+  const scoreDistribution: AssignmentScoreBand[] = [
+    ...SCORE_BANDS.map((band, index) => ({
+      key: band.key,
+      label: band.label,
+      count: distributionCounts[index],
+      ratio: distributionPercentages[index],
+    })),
+    {
+      key: "ungraded",
+      label: "未评分",
+      count: unscoredStudentCount,
+      ratio: distributionPercentages.at(-1) ?? null,
+    },
+  ];
+
+  return {
+    assignmentCount: assignments.length,
+    studentCount: activeStudentIds.size,
+    eligibleSubmissionCount,
+    completedSubmissionCount,
+    completionRate: roundedPercent(
+      completedSubmissionCount,
+      eligibleSubmissionCount,
+    ),
+    finalizedSubmissionCount,
+    scoreRate: roundedPercent(totalScore, totalMaxScore),
+    scoredStudentCount,
+    unscoredStudentCount,
+    scoreDistribution,
+  };
+}

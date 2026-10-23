@@ -101,7 +101,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
   return (
     <section className="space-y-6">
       <PageHeader
-        description="在同一页面查看作业成绩与课程学情；选择课程和班级可缩小分析范围。"
+        description="在同一页面查看作业成绩；选择课程和班级可查看对应的完成率、得分率与分数段。"
         title="成绩统计与学情分析"
       />
       <details className="rounded-xl border bg-white p-4">
@@ -183,7 +183,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                 id="course-learning-heading"
                 className="text-xl font-semibold text-slate-900"
               >
-                {analytics.course.name} · 学情分析
+                {analytics.course.name} · 作业统计
               </h2>
               <p className="mt-1 text-sm text-slate-500">
                 {analytics.course.courseNo} · {analytics.course.term}
@@ -213,10 +213,10 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
             id="course-learning-heading"
             className="font-semibold text-slate-900"
           >
-            课程学情分析
+            课程作业统计
           </h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            选择一门课程查看教学进度、学生画像、薄弱知识点和评价摘要。不同课程的知识点不会合并统计。
+            选择一门课程查看该课程已发布作业的完成率、得分率和学生分数段。
             {selectedClassroom && !selectedClassroom.course
               ? " 当前班级未关联课程，因此这里只显示该班作业成绩。"
               : ""}
