@@ -1,3 +1,5 @@
+import { getAssignmentPublicationState } from "@/services/assignments/manual-grading";
+import { TeacherAssignmentNav } from "@/components/assignments/teacher-assignment-nav";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role, SubmissionStatus } from "@prisma/client";
 import { ClipboardCheck, Eye } from "lucide-react";
@@ -73,6 +75,10 @@ export default async function TeacherSubmissionsPage({
     ) {
       notFound();
     }
+    const publication = await getAssignmentPublicationState(
+      teacher.id,
+      assignmentId.data,
+    );
     return (
       <section className="space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
@@ -86,44 +92,71 @@ export default async function TeacherSubmissionsPage({
               满分 {result.assignment.totalPoints}
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <PublishResultsButton assignmentId={assignmentId.data} />
-            <Link
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
-              href={`/teacher/assignments/${assignmentId.data}/results`}
-            >
-              <Eye aria-hidden="true" className="size-4" />
-              查看成绩统计
-            </Link>
-          </div>
+          {result.totalSubmitted > 0 ? (
+            <div className="flex flex-col items-end gap-2">
+              <PublishResultsButton
+                assignmentId={assignmentId.data}
+                publication={publication}
+              />
+            </div>
+          ) : null}
         </header>
 
-        <nav aria-label="提交状态筛选" className="flex flex-wrap gap-2">
-          {filters.map((filter) => {
-            const active = filter.status === query.data.status;
-            const href = filter.status
-              ? `/teacher/assignments/${assignmentId.data}/submissions?status=${filter.status}`
-              : `/teacher/assignments/${assignmentId.data}/submissions`;
-            return (
-              <Link
-                aria-current={active ? "page" : undefined}
-                className={
-                  active
-                    ? "rounded-full bg-sky-600 px-4 py-2 text-sm text-white"
-                    : "rounded-full border bg-white px-4 py-2 text-sm"
-                }
-                href={href}
-                key={filter.label}
-              >
-                {filter.label}
-              </Link>
-            );
-          })}
-        </nav>
+        <TeacherAssignmentNav
+          assignmentId={assignmentId.data}
+          active="submissions"
+        />
+        {result.totalSubmitted > 0 ? (
+          <nav
+            aria-label="提交状态筛选"
+            className="flex flex-wrap items-center gap-2"
+          >
+            <span className="mr-1 text-xs text-slate-500">提交状态</span>
+            {filters.map((filter) => {
+              const active = filter.status === query.data.status;
+              const href = filter.status
+                ? `/teacher/assignments/${assignmentId.data}/submissions?status=${filter.status}`
+                : `/teacher/assignments/${assignmentId.data}/submissions`;
+              return (
+                <Link
+                  aria-current={active ? "page" : undefined}
+                  className={
+                    active
+                      ? "rounded-full bg-sky-600 px-4 py-2 text-sm text-white"
+                      : "rounded-full border bg-white px-4 py-2 text-sm"
+                  }
+                  href={href}
+                  key={filter.label}
+                >
+                  {filter.label}
+                </Link>
+              );
+            })}
+          </nav>
+        ) : null}
 
         {result.items.length === 0 ? (
-          <div className="text-muted-foreground rounded-xl border border-dashed bg-white p-10 text-center">
-            当前筛选条件下没有提交记录。
+          <div className="rounded-xl border border-dashed bg-white p-8 text-center">
+            <h2 className="font-medium text-slate-800">
+              {result.totalSubmitted === 0
+                ? "学生尚未提交作业"
+                : "该状态下暂无提交记录"}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              {result.totalSubmitted === 0
+                ? "这里展示学生提交后的作答与批改记录。作业题目和任务要求可在“作业内容”中查看。"
+                : "可切换其他提交状态，或查看全部提交记录。"}
+            </p>
+            <Link
+              className="mt-4 inline-flex rounded-lg border border-sky-200 px-4 py-2 text-sm text-sky-800"
+              href={
+                result.totalSubmitted === 0
+                  ? `/teacher/assignments/${assignmentId.data}`
+                  : `/teacher/assignments/${assignmentId.data}/submissions`
+              }
+            >
+              {result.totalSubmitted === 0 ? "查看作业内容" : "查看全部提交"}
+            </Link>
           </div>
         ) : (
           <div className="overflow-x-auto rounded-xl border bg-white">

@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 
 import { apiError, apiSuccess } from "@/lib/api-response";
@@ -18,13 +19,17 @@ export async function POST(request: Request, context: Context) {
       (await context.params).assignmentId,
     );
     if (!assignmentId.success) return apiError("作业 ID 格式无效", 400);
-    return apiSuccess(
-      await publishAssignmentResults(
-        teacher.id,
-        assignmentId.data,
-        auditRequestContext(request),
-      ),
+    const result = await publishAssignmentResults(
+      teacher.id,
+      assignmentId.data,
+      auditRequestContext(request),
     );
+    revalidatePath("/teacher");
+    revalidatePath("/teacher/assignments");
+    revalidatePath(`/teacher/assignments/${assignmentId.data}/results`);
+    revalidatePath(`/teacher/assignments/${assignmentId.data}/submissions`);
+    revalidatePath("/student/results");
+    return apiSuccess(result);
   } catch (error: unknown) {
     return assignmentApiError(error);
   }

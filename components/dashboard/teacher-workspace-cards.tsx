@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -13,12 +13,14 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { TeacherClassMastery } from "@/components/dashboard/teacher-class-mastery";
+import { TeacherAssignmentProgress } from "@/components/dashboard/teacher-assignment-progress";
 import { TeacherCardClassroomFilter } from "@/components/dashboard/teacher-card-classroom-filter";
 import { filterDashboardClassroomItems } from "@/services/dashboard/teacher-dashboard-view";
 import type { TeacherDashboardData } from "@/services/dashboard/teacher-dashboard";
 
 import styles from "./teacher-workspace.module.css";
+
+import { TEACHER_WORKSPACE_DIRTY } from "./teacher-workspace-refresh";
 
 type Workspace = NonNullable<TeacherDashboardData["workspace"]>;
 export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
@@ -27,6 +29,29 @@ export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
   const [overviewClass, setOverviewClass] = useState("");
   const router = useRouter();
   const [refreshing, refresh] = useTransition();
+  useEffect(() => {
+    const check = () => {
+      try {
+        if (!localStorage.getItem(TEACHER_WORKSPACE_DIRTY)) return;
+        localStorage.removeItem(TEACHER_WORKSPACE_DIRTY);
+        refresh(() => router.refresh());
+      } catch {
+        /* Optional cross-page refresh marker. */
+      }
+    };
+    check();
+    window.addEventListener("focus", check);
+    window.addEventListener("pageshow", check);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === TEACHER_WORKSPACE_DIRTY && event.newValue) check();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("focus", check);
+      window.removeEventListener("pageshow", check);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [router]);
   const todo = filterDashboardClassroomItems(workspace.todo, todoClass, true);
   const recentAssignments = filterDashboardClassroomItems(
     workspace.recentAssignments,
@@ -115,76 +140,6 @@ export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
   ];
   return (
     <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-      <div className="contents min-w-0 xl:grid xl:gap-4">
-        <TeacherClassMastery workspace={workspace} />
-        <section
-          aria-labelledby="teaching-activity-title"
-          className={`${styles.card} order-5 min-w-0 rounded-xl border bg-white p-4 xl:order-none`}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <h2
-              id="teaching-activity-title"
-              className={`${styles.heading} font-semibold`}
-            >
-              近期作业动态
-            </h2>
-            <Link
-              className="text-xs font-medium text-sky-700 hover:underline"
-              href={scopedAssignmentsHref(activityClass)}
-            >
-              全部作业 →
-            </Link>
-          </div>
-          <div className="mt-3">
-            <TeacherCardClassroomFilter
-              label="作业动态班级"
-              classrooms={workspace.classrooms}
-              value={activityClass}
-              onChange={setActivityClass}
-            />
-          </div>
-          {!recentAssignments.length ? (
-            <p className="py-5 text-center text-sm text-slate-500">
-              当前范围暂无作业。
-            </p>
-          ) : (
-            <div
-              className={`${styles.scrollArea} mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto`}
-            >
-              {recentAssignments.map((item) => (
-                <Link
-                  key={item.id}
-                  href={
-                    item.status === "DRAFT"
-                      ? `/teacher/assignments/${item.id}/edit`
-                      : `/teacher/assignments/${item.id}/results`
-                  }
-                  className="group flex items-center justify-between gap-3 rounded-lg px-2 py-3 hover:bg-slate-50 hover:text-teal-700"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{item.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {item.classroomName} · {item.submissionCount} 人已提交
-                      {item.dueAt
-                        ? ` · ${item.dueAt.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })} 截止`
-                        : ""}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
-                    {item.status === "DRAFT"
-                      ? "草稿"
-                      : item.status === "CLOSED"
-                        ? "已关闭"
-                        : item.dueAt && item.dueAt <= new Date()
-                          ? "已截止"
-                          : "已发布"}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
       <aside className="contents min-w-0 xl:grid xl:gap-4">
         <section
           aria-labelledby="quick-actions-title"
@@ -319,6 +274,72 @@ export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
           )}
         </section>
         <section
+          aria-labelledby="teaching-activity-title"
+          className={`${styles.card} order-5 min-w-0 rounded-xl border bg-white p-4 xl:order-none`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h2
+              id="teaching-activity-title"
+              className={`${styles.heading} font-semibold`}
+            >
+              近期作业动态
+            </h2>
+            <Link
+              className="text-xs font-medium text-sky-700 hover:underline"
+              href={scopedAssignmentsHref(activityClass)}
+            >
+              全部作业 →
+            </Link>
+          </div>
+          <div className="mt-3">
+            <TeacherCardClassroomFilter
+              label="作业动态班级"
+              classrooms={workspace.classrooms}
+              value={activityClass}
+              onChange={setActivityClass}
+            />
+          </div>
+          {!recentAssignments.length ? (
+            <p className="py-5 text-center text-sm text-slate-500">
+              当前范围暂无作业。
+            </p>
+          ) : (
+            <div
+              className={`${styles.scrollArea} mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto`}
+            >
+              {recentAssignments.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/teacher/assignments/${item.id}`}
+                  className="group flex items-center justify-between gap-3 rounded-lg px-2 py-3 hover:bg-slate-50 hover:text-teal-700"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{item.title}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {item.classroomName} · {item.submissionCount} 人已提交
+                      {item.dueAt
+                        ? ` · ${item.dueAt.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })} 截止`
+                        : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
+                    {item.status === "DRAFT"
+                      ? "草稿"
+                      : item.status === "CLOSED"
+                        ? "已关闭"
+                        : item.dueAt && item.dueAt <= new Date()
+                          ? "已截止"
+                          : "已发布"}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+      </aside>
+      <div className="contents min-w-0 xl:grid xl:gap-4">
+        <TeacherAssignmentProgress workspace={workspace} />
+        <section
           aria-labelledby="course-overview-title"
           className={`${styles.card} order-4 min-w-0 rounded-xl border bg-white p-4 xl:order-none`}
         >
@@ -362,7 +383,7 @@ export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
             题目与知识点为课程共用资源；人数按当前班级范围去重，作业按发布班次统计。
           </p>
         </section>
-      </aside>
+      </div>
     </div>
   );
 }

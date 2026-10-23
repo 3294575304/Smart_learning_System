@@ -1,3 +1,4 @@
+import { assertClassroomWorkAllowed } from "@/services/assignments/classroom-work";
 import "server-only";
 
 import {
@@ -206,6 +207,7 @@ export async function createPublicProgrammingRun(
         assignment: {
           status: "PUBLISHED",
           classroom: {
+            status: "ACTIVE",
             memberships: { some: { studentId, status: "ACTIVE" } },
           },
         },
@@ -213,10 +215,19 @@ export async function createPublicProgrammingRun(
       select: {
         id: true,
         assignmentId: true,
-        assignment: { select: { classroom: { select: { courseId: true } } } },
+        assignment: {
+          select: {
+            classroomId: true,
+            classroom: { select: { courseId: true } },
+          },
+        },
       },
     });
     if (!submission) throw new ResourceNotFoundError("作答记录不存在");
+    await assertClassroomWorkAllowed(
+      transaction,
+      submission.assignment.classroomId,
+    );
     const question = await transaction.assignmentQuestion.findFirst({
       where: {
         id: input.assignmentQuestionId,

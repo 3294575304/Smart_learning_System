@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-workspace-refresh";
 import { useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
@@ -8,8 +9,15 @@ import type { PublishAssignmentResultsResult } from "@/services/assignments/type
 
 export function PublishResultsButton({
   assignmentId,
+  publication,
 }: {
   assignmentId: string;
+  publication: {
+    canPublish: boolean;
+    pendingCount: number;
+    gradedCount: number;
+    publishedCount: number;
+  };
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -21,7 +29,7 @@ export function PublishResultsButton({
   async function publish() {
     if (
       !window.confirm(
-        "确认正式发布本作业所有已完成批改的成绩？发布后学生将看到总分、逐题结果、正确答案、解析和教师反馈。",
+        "确认公布每名学生最新有效提交的成绩？发布后学生将看到总分、逐题结果、正确答案、解析和教师反馈。",
       )
     ) {
       return;
@@ -44,19 +52,34 @@ export function PublishResultsButton({
           ? `已正式发布 ${result.data.publishedCount} 份成绩`
           : "该作业成绩已经全部发布",
     });
+    markTeacherWorkspaceDirty();
     router.refresh();
   }
 
   return (
     <div className="space-y-2 text-right">
       <button
-        className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        disabled={pending}
+        className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        disabled={pending || !publication.canPublish}
         onClick={() => void publish()}
         type="button"
       >
-        {pending ? "发布中…" : "正式发布成绩"}
+        {pending
+          ? "公布中…"
+          : publication.canPublish
+            ? `公布给学生（${publication.gradedCount}份）`
+            : publication.pendingCount
+              ? "尚有提交待批改"
+              : publication.publishedCount
+                ? "成绩已全部公布"
+                : "暂无可公布成绩"}
       </button>
+      <p className="max-w-sm text-xs leading-5 text-slate-500">
+        公布后学生可见分数、答案、解析和反馈；完成的待公布事项会从工作台移除。
+        {publication.pendingCount
+          ? ` 还有${publication.pendingCount}份最新提交未完成批改。`
+          : ""}
+      </p>
       {message ? (
         <p
           className={

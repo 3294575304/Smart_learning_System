@@ -35,9 +35,10 @@ export function ClassroomGovernanceFilters({
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
         <option value="">全部状态</option>
-        <option value={ClassroomStatus.ACTIVE}>开启</option>
-        <option value={ClassroomStatus.CLOSED}>关闭</option>
-        <option value={ClassroomStatus.ARCHIVED}>归档</option>
+        <option value={ClassroomStatus.ACTIVE}>授课中</option>
+        <option value={ClassroomStatus.COMPLETED}>已结课</option>
+        <option value={ClassroomStatus.CLOSED}>已关闭</option>
+        <option value={ClassroomStatus.ARCHIVED}>历史解散</option>
       </select>
       <div className="flex gap-2">
         <Link

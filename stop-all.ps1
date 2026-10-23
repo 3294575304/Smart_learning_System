@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$RepoRoot = $PSScriptRoot,
   [string]$SandboxHost = "8.133.167.139"
 )
@@ -38,10 +38,12 @@ $deploymentProcesses = Get-CimInstance Win32_Process | Where-Object {
 foreach ($process in $deploymentProcesses) {
   # A process may have exited with its wrapper. Other failures must abort
   # startup instead of continuing into a misleading Prisma EPERM error.
-  if (Get-Process -Id $process.ProcessId -ErrorAction SilentlyContinue) {
+  $runningProcess = Get-Process -Id $process.ProcessId -ErrorAction SilentlyContinue
+  if ($null -ne $runningProcess -and -not $runningProcess.HasExited) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
-    Wait-Process -Id $process.ProcessId -Timeout 15 -ErrorAction SilentlyContinue
-    if (Get-Process -Id $process.ProcessId -ErrorAction SilentlyContinue) {
+    Wait-Process -Id $process.ProcessId -Timeout 30 -ErrorAction SilentlyContinue
+    $remainingProcess = Get-Process -Id $process.ProcessId -ErrorAction SilentlyContinue
+    if ($null -ne $remainingProcess -and -not $remainingProcess.HasExited) {
       throw "Repository process $($process.ProcessId) is still running; Prisma preparation cannot safely continue."
     }
   }

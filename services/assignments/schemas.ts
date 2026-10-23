@@ -1,4 +1,4 @@
-import { AssignmentStatus, SubmissionStatus } from "@prisma/client";
+import { SubmissionStatus } from "@prisma/client";
 import { z } from "zod";
 
 const assignmentQuestionSchema = z.object({
@@ -6,6 +6,22 @@ const assignmentQuestionSchema = z.object({
   sortOrder: z.number().int().min(1).max(200),
   points: z.number().positive("题目分值必须大于 0").max(10000),
 });
+
+export const assignmentTaskSchema = z
+  .object({
+    prompt: z.string().trim().min(2, "请输入任务要求").max(10000),
+    referenceAnswer: z.string().trim().max(10000).default(""),
+    points: z.number().positive().max(10000),
+    resourceFileIds: z
+      .array(z.string().cuid())
+      .max(5, "教师附件最多5个")
+      .default([]),
+  })
+  .refine(
+    (value) =>
+      new Set(value.resourceFileIds).size === value.resourceFileIds.length,
+    "附件不能重复",
+  );
 
 export const assignmentUpsertSchema = z
   .object({
@@ -16,13 +32,7 @@ export const assignmentUpsertSchema = z
     dueAt: z.coerce.date().optional(),
     allowResubmission: z.boolean().default(false),
     allowAttachments: z.boolean().optional(),
-    submissionTask: z
-      .object({
-        prompt: z.string().trim().min(2, "请输入任务要求").max(10000),
-        referenceAnswer: z.string().trim().max(10000).default(""),
-        points: z.number().positive().max(10000),
-      })
-      .optional(),
+    submissionTask: assignmentTaskSchema.optional(),
     questions: z.array(assignmentQuestionSchema).max(200),
   })
   .superRefine((value, context) => {
@@ -93,30 +103,49 @@ export const teacherSubmissionListQuerySchema = z
   })
   .strict();
 
-export const assignmentListQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(50).default(20),
-  courseId: z.preprocess(
-    (value) => (value === "" ? undefined : value),
-    z.string().cuid("课程 ID 格式无效").optional(),
-  ),
-  status: z.preprocess(
-    (value) => (value === "" ? undefined : value),
-    z.nativeEnum(AssignmentStatus).optional(),
-  ),
-  classroomId: z.preprocess(
-    (value) => (value === "" ? undefined : value),
-    z.string().cuid("班级 ID 格式无效").optional(),
-  ),
-  keyword: z
-    .string()
-    .trim()
-    .max(120, "搜索关键词不能超过 120 个字符")
-    .optional(),
-  sort: z
-    .enum(["CREATED_DESC", "PUBLISHED_DESC", "DUE_ASC", "DUE_DESC"])
-    .default("CREATED_DESC"),
-});
+export const assignmentListQuerySchema = z
+  .object({
+    section: z.enum(["CURRENT", "HISTORY"]).default("CURRENT"),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(20),
+    courseId: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.string().cuid("课程 ID 格式无效").optional(),
+    ),
+    status: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z
+        .enum([
+          "DRAFT",
+          "UPCOMING",
+          "IN_PROGRESS",
+          "EXPIRED",
+          "PUBLISHED",
+          "CLOSED",
+          "ARCHIVED",
+        ])
+        .optional(),
+    ),
+    classroomId: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.string().cuid("班级 ID 格式无效").optional(),
+    ),
+    keyword: z
+      .string()
+      .trim()
+      .max(120, "搜索关键词不能超过 120 个字符")
+      .optional(),
+    sort: z
+      .enum(["CREATED_DESC", "PUBLISHED_DESC", "DUE_ASC", "DUE_DESC"])
+      .default("CREATED_DESC"),
+  })
+  .transform((query) => ({
+    ...query,
+    section:
+      query.status === "ARCHIVED" || query.status === "CLOSED"
+        ? ("HISTORY" as const)
+        : query.section,
+  }));
 
 export const studentResultsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -178,3 +207,20 @@ export type ManualGradeAnswerData = z.output<typeof manualGradeAnswerSchema>;
 export type TeacherSubmissionListQuery = z.output<
   typeof teacherSubmissionListQuerySchema
 >;
+
+export const assignmentBatchSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    classroomIds: z
+      .array(z.string().cuid())
+      .min(1, "至少选择一个班级")
+      .max(20, "一次最多20个班级")
+      .refine((ids) => new Set(ids).size === ids.length, "班级不能重复"),
+    publish: z.boolean(),
+    assignment: assignmentUpsertSchema,
+  })
+  .refine(
+    (value) => value.classroomIds.includes(value.assignment.classroomId),
+    "主班级须包含在发布班级中",
+  );
+export type AssignmentBatchData = z.output<typeof assignmentBatchSchema>;

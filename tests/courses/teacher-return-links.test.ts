@@ -64,20 +64,32 @@ test("every unified teacher return target resolves to an existing teacher page",
           attribute && ts.isJsxAttribute(attribute) && attribute.initializer,
           file,
         );
-        const target = attribute.initializer
-          .getText(tree)
-          .replace(/^\{?['"`]|['"`]\}?$/g, "")
-          .replace(/\$\{[^}]+\}/g, "resource-id")
-          .split(/[?#]/)[0];
-        assert.ok(
-          routes.some((route) =>
-            new RegExp(
-              "^" + route.replace(/\[[^\]]+\]/g, "[^/]+") + "$",
-              "u",
-            ).test(target),
-          ),
-          `${file}: invalid return target ${target}`,
-        );
+        const initializer = attribute.initializer;
+        const candidates =
+          ts.isJsxExpression(initializer) &&
+          initializer.expression &&
+          ts.isConditionalExpression(initializer.expression)
+            ? [
+                initializer.expression.whenTrue,
+                initializer.expression.whenFalse,
+              ]
+            : [initializer];
+        for (const candidate of candidates) {
+          const target = candidate
+            .getText(tree)
+            .replace(/^\{?['"`]|['"`]\}?$/g, "")
+            .replace(/\$\{[^}]+\}/g, "resource-id")
+            .split(/[?#]/)[0];
+          assert.ok(
+            routes.some((route) =>
+              new RegExp(
+                "^" + route.replace(/\[[^\]]+\]/g, "[^/]+") + "$",
+                "u",
+              ).test(target),
+            ),
+            `${file}: invalid return target ${target}`,
+          );
+        }
         checked++;
       }
       ts.forEachChild(node, visit);

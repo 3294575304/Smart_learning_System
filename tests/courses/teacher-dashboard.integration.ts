@@ -1,3 +1,5 @@
+import { verifyClassroomCompletion } from "../classrooms/completion.integration-module";
+import { verifyAssignmentManagement } from "../assignments/management.integration-module";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
@@ -113,10 +115,60 @@ async function main() {
       gradedAt: new Date(),
     },
   });
+  const sourceQuestion = await prisma.question.findFirstOrThrow();
+  const questionSnapshot = await prisma.assignmentQuestion.create({
+    data: {
+      assignmentId: assignment.id,
+      questionId: sourceQuestion.id,
+      sortOrder: 1,
+      points: 100,
+      titleSnapshot: "统计验收题",
+      contentSnapshot: "仅测试数据",
+      typeSnapshot: "TRUE_FALSE",
+      difficultySnapshot: 1,
+      explanationSnapshot: "测试解析",
+      correctBooleanSnapshot: true,
+    },
+  });
+  await prisma.studentAnswer.create({
+    data: {
+      submissionId: submission.id,
+      assignmentQuestionId: questionSnapshot.id,
+      gradingStatus: "AUTO_GRADED",
+      score: 100,
+      maxScore: 100,
+      isCorrect: true,
+    },
+  });
   const before = await getTeacherDashboard(teacher.id, { courseId: course.id });
   assert.ok(before.workspace);
   assert.equal(before.workspace.metrics.publishedAssignmentCount, 2);
   assert.equal(before.workspace.metrics.studentCount, 2);
+  assert.equal(before.workspace.assignmentProgress.length, 2);
+  assert.deepEqual(
+    before.workspace.assignmentProgress.find(
+      (item) => item.id === assignment.id,
+    ) && {
+      expected: before.workspace.assignmentProgress.find(
+        (item) => item.id === assignment.id,
+      )?.expectedCount,
+      completed: before.workspace.assignmentProgress.find(
+        (item) => item.id === assignment.id,
+      )?.completedCount,
+      judged: before.workspace.assignmentProgress.find(
+        (item) => item.id === assignment.id,
+      )?.judgedCount,
+      correct: before.workspace.assignmentProgress.find(
+        (item) => item.id === assignment.id,
+      )?.correctCount,
+    },
+    { expected: 1, completed: 1, judged: 1, correct: 1 },
+  );
+  assert.equal(
+    before.workspace.assignmentProgress.find((item) => item.id === future.id)
+      ?.completedCount,
+    0,
+  );
   assert.equal(
     before.workspace.classroomMetrics.find(
       (item) => item.classroomId === class1.id,
@@ -218,6 +270,21 @@ async function main() {
   await publishAssignmentResults(teacher.id, assignment.id, {
     ipAddress: null,
     userAgent: "dashboard-test",
+  });
+  await verifyAssignmentManagement({
+    teacherId: teacher.id,
+    otherTeacherId: other.id,
+    studentId: student.id,
+    courseId: course.id,
+    class1Id: class1.id,
+    class2Id: class2.id,
+    otherClassId: otherClass.id,
+  });
+  await verifyClassroomCompletion({
+    teacherId: teacher.id,
+    otherTeacherId: other.id,
+    studentId: student.id,
+    courseId: course.id,
   });
   const emptyTeacher = await prisma.user.create({
     data: {

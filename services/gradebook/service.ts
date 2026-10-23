@@ -121,7 +121,12 @@ export async function createTeacherCourseGradebook(
         );
       }
       const classroom = await transaction.classroom.findFirst({
-        where: { id: classroomId, teacherId, courseId, status: "ACTIVE" },
+        where: {
+          id: classroomId,
+          teacherId,
+          courseId,
+          status: { in: ["ACTIVE", "COMPLETED"] },
+        },
         select: { id: true, name: true },
       });
       if (!classroom) throw new ResourceNotFoundError("班级不存在。");

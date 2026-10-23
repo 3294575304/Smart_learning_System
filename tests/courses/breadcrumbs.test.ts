@@ -65,8 +65,8 @@ test("作业提交页可通过动态面包屑返回真实作业详情", () => {
   );
 
   assert.deepEqual(breadcrumbs[2], {
-    href: "/teacher/assignments/assignment-123/edit",
-    label: "作业设置",
+    href: "/teacher/assignments/assignment-123",
+    label: "作业详情",
     linkable: true,
   });
 });

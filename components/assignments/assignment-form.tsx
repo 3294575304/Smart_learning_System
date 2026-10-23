@@ -4,11 +4,16 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { QuestionType } from "@prisma/client";
 import { ListOrdered } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
+import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-workspace-refresh";
+import {
+  distributeAssignmentPoints,
+  selectAssignmentQuestions,
+} from "@/services/assignments/editor-helpers";
 import { assignmentUpsertSchema } from "@/services/assignments/schemas";
 import type { TeacherAssignmentView } from "@/services/assignments/types";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
@@ -79,6 +84,24 @@ export function AssignmentForm({
   defaultDueDays = 7,
 }: AssignmentFormProps) {
   const router = useRouter();
+  const initialClassroom = assignment?.classroom.id ?? classrooms[0]?.id ?? "";
+  const [selectedClassroomIds, setSelectedClassroomIds] = useState<string[]>(
+    initialClassroom ? [initialClassroom] : [],
+  );
+  const [publishCourseId, setPublishCourseId] = useState(
+    classrooms.find((item) => item.id === initialClassroom)?.courseId ?? "",
+  );
+  const [resourceFiles, setResourceFiles] = useState(
+    assignment?.resourceFiles ?? [],
+  );
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [pickCount, setPickCount] = useState(10);
+  const [targetPoints, setTargetPoints] = useState(100);
+  const [defaultHundredPoints, setDefaultHundredPoints] = useState(
+    mode === "create",
+  );
+  const requestVersion = useRef<{ signature: string; id: string } | null>(null);
+
   const [assignmentType, setAssignmentType] = useState(
     assignment?.submissionTask ? "task" : "bank",
   );
@@ -186,6 +209,14 @@ export function AssignmentForm({
     },
   });
 
+  useEffect(() => {
+    if (!defaultHundredPoints || selected.length === 0) return;
+    setSelected((items) => {
+      const points = distributeAssignmentPoints(items.length, 100);
+      return items.map((item, index) => ({ ...item, points: points[index] }));
+    });
+  }, [defaultHundredPoints, selected.length]);
+
   function addQuestion(question: EditorQuestion) {
     if (selected.some((item) => item.id === question.id)) return;
     setOrderFeedback(null);
@@ -213,7 +244,93 @@ export function AssignmentForm({
     });
   }
 
+  async function uploadResourceFiles(files: FileList | null) {
+    if (!files) return;
+    const courseId = classrooms.find(
+      (item) => item.id === form.getValues("classroomId"),
+    )?.courseId;
+    if (!courseId) {
+      setServerError("请先选择已关联课程的班级，再上传教师附件");
+      return;
+    }
+    if (resourceFiles.length + files.length > 5) {
+      setServerError("教师任务附件最多5个");
+      return;
+    }
+    setServerError(null);
+    try {
+      for (const file of Array.from(files)) {
+        if (file.size > 5 * 1024 * 1024) {
+          setServerError(`${file.name} 超过5MB，请压缩后重试`);
+          return;
+        }
+        setUploading(file.name);
+        const data = new FormData();
+        data.set("courseId", courseId);
+        data.set("file", file);
+        const response = await requestAssignmentApi<{
+          id: string;
+          name: string;
+          sizeBytes: number;
+        }>("/api/teacher/assignment-resources", { method: "POST", body: data });
+        if (!response.success) {
+          setServerError(response.error);
+          return;
+        }
+        setResourceFiles((items) => [...items, response.data]);
+      }
+    } finally {
+      setUploading(null);
+    }
+  }
+  function autoPickQuestions() {
+    try {
+      if (selected.length + pickCount > 200)
+        throw new Error("每份作业最多200题");
+      const chosen = selectAssignmentQuestions(
+        available,
+        selected.map((item) => item.id),
+        pickCount,
+      ).map((item) => ({ ...item, points: 10 }));
+      setSelected((items) =>
+        autoOrganize
+          ? organizeAssignmentQuestions([...items, ...chosen])
+          : [...items, ...chosen],
+      );
+      setOrderFeedback(
+        `已按当前筛选条件加入${chosen.length}道题，请核对题目和分值后发布。`,
+      );
+    } catch (error) {
+      setOrderFeedback(
+        error instanceof Error ? error.message : "选题失败，请调整条件",
+      );
+    }
+  }
+  function organizePoints() {
+    try {
+      setDefaultHundredPoints(false);
+      const points = distributeAssignmentPoints(selected.length, targetPoints);
+      setSelected((items) =>
+        items.map((item, index) => ({ ...item, points: points[index] })),
+      );
+      setOrderFeedback(
+        `已将总分整理为${targetPoints}分，按题序均分至0.01分；仍可逐题修改。`,
+      );
+    } catch (error) {
+      setOrderFeedback(
+        error instanceof Error ? error.message : "请检查目标总分",
+      );
+    }
+  }
   async function persist(values: FormValues, publish: boolean) {
+    if (
+      publish &&
+      !window.confirm(
+        `确认向${mode === "create" ? selectedClassroomIds.length : 1}个班级发布？发布后题目、分值及教师附件冻结，各班分别记录提交和成绩。`,
+      )
+    )
+      return;
+
     setServerError(null);
     setSubmittingAction(publish ? "publish" : "save");
     const parsed = assignmentUpsertSchema.safeParse({
@@ -221,7 +338,10 @@ export function AssignmentForm({
       publishedAt: new Date(values.publishedAt),
       dueAt: new Date(values.dueAt),
       allowAttachments: assignmentType === "task" && allowAttachments,
-      submissionTask: assignmentType === "task" ? task : undefined,
+      submissionTask:
+        assignmentType === "task"
+          ? { ...task, resourceFileIds: resourceFiles.map((file) => file.id) }
+          : undefined,
       questions: (assignmentType === "task"
         ? []
         : autoOrganize
@@ -239,12 +359,45 @@ export function AssignmentForm({
       return;
     }
 
+    if (mode === "create") {
+      const signature = JSON.stringify({
+        assignment: parsed.data,
+        classroomIds: [...selectedClassroomIds].sort(),
+        publish,
+      });
+      if (requestVersion.current?.signature !== signature)
+        requestVersion.current = { signature, id: crypto.randomUUID() };
+      const response = await requestAssignmentApi<{
+        assignments: TeacherAssignmentView[];
+        reused: boolean;
+      }>("/api/teacher/assignments/batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          requestId: requestVersion.current.id,
+          classroomIds: selectedClassroomIds,
+          publish,
+          assignment: parsed.data,
+        }),
+      });
+      if (!response.success) {
+        setServerError(response.error);
+        setSubmittingAction(null);
+        return;
+      }
+      markTeacherWorkspaceDirty();
+      router.push(
+        publishCourseId
+          ? `/teacher/assignments?courseId=${publishCourseId}`
+          : "/teacher/assignments",
+      );
+      router.refresh();
+      return;
+    }
     const response = await requestAssignmentApi<TeacherAssignmentView>(
-      mode === "create"
-        ? "/api/teacher/assignments"
-        : `/api/teacher/assignments/${assignment?.id}`,
+      `/api/teacher/assignments/${assignment?.id}`,
       {
-        method: mode === "create" ? "POST" : "PATCH",
+        method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(parsed.data),
       },
@@ -263,18 +416,16 @@ export function AssignmentForm({
       if (!published.success) {
         setServerError(`草稿已保存，但发布失败：${published.error}`);
         setSubmittingAction(null);
-        if (mode === "create") {
-          router.replace(`/teacher/assignments/${response.data.id}/edit`);
-        }
         return;
       }
     }
 
+    markTeacherWorkspaceDirty();
     router.push("/teacher/assignments");
     router.refresh();
   }
 
-  const busy = submittingAction !== null;
+  const busy = submittingAction !== null || uploading !== null;
   return (
     <form
       className="space-y-6"
@@ -292,30 +443,125 @@ export function AssignmentForm({
               {form.formState.errors.title?.message}
             </span>
           </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">发布班级</span>
-            <select
-              className="w-full rounded-md border px-3 py-2"
-              {...form.register("classroomId", {
-                onChange: (event: React.ChangeEvent<HTMLSelectElement>) => {
-                  setFilterCourse(courseForClassroom(event.target.value));
+          {mode === "create" ? (
+            <fieldset className="min-w-0 rounded-lg border border-slate-200 p-3 md:row-span-2">
+              <legend className="px-1 text-sm font-medium">
+                发布班级（可多选）
+              </legend>
+              <input type="hidden" {...form.register("classroomId")} />
+              <select
+                aria-label="发布所属课程"
+                className="mb-2 w-full rounded-lg border px-2 py-2 text-sm"
+                value={publishCourseId}
+                onChange={(event) => {
+                  const nextCourseId = event.target.value;
+                  setPublishCourseId(nextCourseId);
+                  const first =
+                    classrooms.find(
+                      (item) => (item.courseId ?? "") === nextCourseId,
+                    )?.id ?? "";
+                  setSelectedClassroomIds(first ? [first] : []);
+                  form.setValue("classroomId", first, { shouldValidate: true });
+                  setFilterCourse(courseForClassroom(first));
                   setFilterChapter("");
                   setFilterConcept("");
                   setPage(1);
-                },
-              })}
-            >
-              {classrooms.map((classroom) => (
-                <option key={classroom.id} value={classroom.id}>
-                  {classroom.name}
-                </option>
-              ))}
-            </select>
-            <span className="text-red-600">
-              {form.formState.errors.classroomId?.message}
-            </span>
-          </label>
-          <label className="space-y-1 text-sm md:col-span-2">
+                  if (resourceFiles.length) {
+                    setResourceFiles([]);
+                    setOrderFeedback(
+                      "已切换课程，请重新上传本课程的教师附件。",
+                    );
+                  }
+                }}
+              >
+                {[
+                  ...new Set(classrooms.map((item) => item.courseId ?? "")),
+                ].map((id) => (
+                  <option key={id || "unassigned"} value={id}>
+                    {courses.find(
+                      (item) => item.id === id || item.courseIds?.includes(id),
+                    )?.name ?? "未关联课程"}
+                    {courses.find(
+                      (item) => item.id === id || item.courseIds?.includes(id),
+                    )?.term
+                      ? ` · ${courses.find((item) => item.id === id || item.courseIds?.includes(id))?.term}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="grid max-h-36 gap-2 overflow-y-auto sm:grid-cols-2">
+                {classrooms
+                  .filter((item) => (item.courseId ?? "") === publishCourseId)
+                  .map((item) => (
+                    <label
+                      key={item.id}
+                      className="flex min-w-0 items-center gap-2 rounded-md border border-slate-100 px-2 py-2 text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedClassroomIds.includes(item.id)}
+                        disabled={
+                          !publishCourseId &&
+                          selectedClassroomIds.length > 0 &&
+                          !selectedClassroomIds.includes(item.id)
+                        }
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? [...selectedClassroomIds, item.id]
+                            : selectedClassroomIds.filter(
+                                (id) => id !== item.id,
+                              );
+                          setSelectedClassroomIds(next);
+                          form.setValue("classroomId", next[0] ?? "", {
+                            shouldValidate: true,
+                          });
+                        }}
+                      />
+                      <span className="truncate" title={item.name}>
+                        {item.name}
+                      </span>
+                    </label>
+                  ))}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                已选{selectedClassroomIds.length}
+                个班级；分别生成作业，各班独立批改和公布成绩。
+              </p>
+              <span className="text-xs text-red-600">
+                {form.formState.errors.classroomId?.message}
+              </span>
+            </fieldset>
+          ) : (
+            <>
+              {" "}
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">发布班级</span>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  {...form.register("classroomId", {
+                    onChange: (event: React.ChangeEvent<HTMLSelectElement>) => {
+                      setFilterCourse(courseForClassroom(event.target.value));
+                      setFilterChapter("");
+                      setFilterConcept("");
+                      setPage(1);
+                    },
+                  })}
+                >
+                  {classrooms.map((classroom) => (
+                    <option key={classroom.id} value={classroom.id}>
+                      {classroom.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-red-600">
+                  {form.formState.errors.classroomId?.message}
+                </span>
+              </label>
+            </>
+          )}
+          <label
+            className={`space-y-1 text-sm ${mode === "create" ? "md:col-start-1 md:row-start-2" : "md:col-span-2"}`}
+          >
             <span className="font-medium">作业说明</span>
             <textarea
               className="min-h-24 w-full rounded-md border px-3 py-2"
@@ -418,13 +664,67 @@ export function AssignmentForm({
                 />
               </label>
             </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+              <label className="block text-sm font-medium">
+                教师任务附件（发给学生的材料）
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.docx,.png,.jpg,.jpeg,.txt,.py"
+                  className="mt-2 block w-full text-xs"
+                  onChange={(event) => {
+                    void uploadResourceFiles(event.target.files);
+                    event.target.value = "";
+                  }}
+                  disabled={busy || resourceFiles.length >= 5}
+                />
+              </label>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                支持PDF、Word(docx)、图片、UTF-8文本及Python文件，最多5个，每个5MB。发布后学生可下载，附件内容随作业冻结。
+              </p>
+              {uploading ? (
+                <p role="status" className="mt-2 text-xs text-sky-700">
+                  正在上传：{uploading}
+                </p>
+              ) : null}
+              <ul className="mt-2 space-y-2">
+                {resourceFiles.map((file) => (
+                  <li
+                    key={file.id}
+                    className="flex min-w-0 items-center gap-2 rounded-md bg-white px-2 py-2 text-xs"
+                  >
+                    <a
+                      className="min-w-0 flex-1 truncate text-sky-700 underline"
+                      href={`/api/teacher/course-files/${file.id}/download`}
+                      title={file.name}
+                    >
+                      {file.name}
+                    </a>
+                    <span className="shrink-0 text-slate-500">
+                      {Math.ceil(file.sizeBytes / 1024)}KB
+                    </span>
+                    <button
+                      type="button"
+                      className="shrink-0 text-red-600"
+                      onClick={() =>
+                        setResourceFiles((items) =>
+                          items.filter((item) => item.id !== file.id),
+                        )
+                      }
+                    >
+                      移除
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={allowAttachments}
                 onChange={(e) => setAllowAttachments(e.target.checked)}
               />
-              允许上传截图与 PDF（每题最多 5 个，每个 5 MB）
+              允许学生上传作答附件：截图与 PDF（每题最多 5 个，每个 5 MB）
             </label>
             <p className="text-xs text-slate-500">
               学生可填写文字答案并附材料；提交后进入人工批改，成绩发布后学生可见。
@@ -434,6 +734,32 @@ export function AssignmentForm({
           <div className="grid gap-6 lg:grid-cols-2">
             <section className="rounded-xl border bg-white p-5">
               <h2 className="font-semibold">从题库选择题目</h2>
+              <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg bg-sky-50 p-3">
+                <label className="text-xs text-slate-600">
+                  新增题量
+                  <input
+                    aria-label="一键出题数量"
+                    className="mt-1 block w-20 rounded-md border bg-white px-2 py-2"
+                    type="number"
+                    min="1"
+                    max="200"
+                    value={pickCount}
+                    onChange={(event) =>
+                      setPickCount(Number(event.target.value))
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-medium text-sky-700"
+                  onClick={autoPickQuestions}
+                >
+                  一键出题（题库组卷）
+                </button>
+                <p className="w-full text-xs leading-5 text-slate-500">
+                  按下方筛选条件从可用题库中随机加入未选题；请核对后发布。
+                </p>
+              </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <select
                   aria-label="按课程选题"
@@ -616,9 +942,22 @@ export function AssignmentForm({
                 <h2 className="font-semibold">作业题目与顺序</h2>
                 <span className="text-sm text-gray-500">
                   {selected.length} 道题 · 总分{" "}
-                  {selected.reduce((sum, item) => sum + item.points, 0)}
+                  {Math.round(
+                    selected.reduce((sum, item) => sum + item.points, 0) * 100,
+                  ) / 100}
                 </span>
               </div>
+              <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-600">
+                <input
+                  type="checkbox"
+                  className="mt-1 accent-sky-600"
+                  checked={defaultHundredPoints}
+                  onChange={(event) =>
+                    setDefaultHundredPoints(event.target.checked)
+                  }
+                />
+                默认总分100分：增减题目时自动均分。修改单题分值或整理其他总分后，切换为自定义分值。
+              </label>
               <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50/60 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
@@ -646,6 +985,29 @@ export function AssignmentForm({
                   >
                     <ListOrdered aria-hidden="true" className="size-4" />
                     一键整理题序
+                  </button>
+                  <label className="flex items-center gap-1 text-xs text-slate-600">
+                    目标总分
+                    <input
+                      aria-label="整理分值目标总分"
+                      className="w-20 rounded-md border bg-white px-2 py-2"
+                      type="number"
+                      min="0.01"
+                      max="10000"
+                      step="0.01"
+                      value={targetPoints}
+                      onChange={(event) =>
+                        setTargetPoints(Number(event.target.value))
+                      }
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!selected.length}
+                    onClick={organizePoints}
+                    className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs text-sky-700 disabled:opacity-50"
+                  >
+                    一键整理分值
                   </button>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-600">
@@ -712,7 +1074,8 @@ export function AssignmentForm({
                           <input
                             className="w-20 rounded border px-2 py-1"
                             min="0.01"
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              setDefaultHundredPoints(false);
                               setSelected((items) =>
                                 items.map((item) =>
                                   item.id === question.id
@@ -722,8 +1085,8 @@ export function AssignmentForm({
                                       }
                                     : item,
                                 ),
-                              )
-                            }
+                              );
+                            }}
                             step="0.01"
                             type="number"
                             value={question.points}
@@ -757,7 +1120,11 @@ export function AssignmentForm({
             onClick={form.handleSubmit((v) => persist(v, true))}
             type="button"
           >
-            {submittingAction === "publish" ? "发布中…" : "发布作业"}
+            {submittingAction === "publish"
+              ? "发布中…"
+              : mode === "create" && selectedClassroomIds.length > 1
+                ? `发布到${selectedClassroomIds.length}个班级`
+                : "发布作业"}
           </button>
         </div>
       </fieldset>

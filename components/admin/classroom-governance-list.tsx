@@ -1,3 +1,4 @@
+import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import { Eye, School } from "lucide-react";
 import Link from "next/link";
 
@@ -54,11 +55,7 @@ export function ClassroomGovernanceList({
                 {classroom.createdAt.toLocaleString("zh-CN")}
               </td>
               <td className="px-4 py-3">
-                {classroom.status === "ACTIVE"
-                  ? "开启"
-                  : classroom.status === "CLOSED"
-                    ? "关闭"
-                    : "归档"}
+                {CLASSROOM_STATUS_LABELS[classroom.status]}
               </td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">

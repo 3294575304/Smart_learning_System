@@ -1,3 +1,4 @@
+import { listAssignmentResourceFiles } from "@/services/assignments/resources";
 import { Role, SubmissionStatus } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -16,6 +17,10 @@ export default async function StudentAssignmentPage({ params }: Props) {
     const assignment = await getStudentAssignment(
       student.id,
       (await params).assignmentId,
+    );
+    const resourceFiles = await listAssignmentResourceFiles(
+      student,
+      assignment.id,
     );
     const inProgress = assignment.attempts.find(
       (item) => item.status === SubmissionStatus.IN_PROGRESS,
@@ -47,6 +52,26 @@ export default async function StudentAssignmentPage({ params }: Props) {
             截止：{assignment.dueAt?.toLocaleString("zh-CN") ?? "未设置"}
           </p>
         </div>
+        {resourceFiles.length ? (
+          <section className="rounded-xl border bg-white p-4">
+            <h2 className="font-semibold">教师任务附件</h2>
+            <ul className="mt-2 space-y-2">
+              {resourceFiles.map((file) => (
+                <li key={file.id}>
+                  <a
+                    className="text-sm text-sky-700 underline"
+                    href={`/api/assignments/${assignment.id}/resources/${file.id}`}
+                  >
+                    {file.name}
+                  </a>
+                  <span className="ml-2 text-xs text-slate-500">
+                    {Math.ceil(file.sizeBytes / 1024)} KB
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <div className="flex flex-wrap gap-3">
           {inProgress ? (
             <Link

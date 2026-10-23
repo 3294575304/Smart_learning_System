@@ -1,3 +1,4 @@
+import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import { Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -32,16 +33,17 @@ export default async function AdminClassroomDetailPage({ params }: PageProps) {
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">{classroom.name}</h1>
           <p className="mt-2 text-sm text-gray-500">
-            {classroom.status === "ACTIVE"
-              ? "开启"
-              : classroom.status === "CLOSED"
-                ? "关闭"
-                : "归档"}{" "}
-            · 创建于 {classroom.createdAt.toLocaleString("zh-CN")}
+            {CLASSROOM_STATUS_LABELS[classroom.status]} · 创建于{" "}
+            {classroom.createdAt.toLocaleString("zh-CN")}
           </p>
         </div>
         <ClassroomGovernanceAction classroom={classroom} />
       </div>
+      {classroom.closureReason ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          关闭原因：{classroom.closureReason}
+        </p>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border bg-white p-5">
           <p className="text-sm text-gray-500">教师</p>

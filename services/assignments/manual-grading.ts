@@ -1,4 +1,5 @@
 import "server-only";
+import { latestEffectiveSubmissions } from "./latest-submissions";
 
 import {
   AuditAction,
@@ -210,6 +211,11 @@ export async function listTeacherAssignmentSubmissions(
       title: true,
       totalPoints: true,
       classroom: { select: { name: true } },
+      _count: {
+        select: {
+          submissions: { where: { status: { in: submittedStatuses } } },
+        },
+      },
     },
   });
   if (!assignment) throw new ResourceNotFoundError("作业不存在");
@@ -253,6 +259,7 @@ export async function listTeacherAssignmentSubmissions(
   ]);
 
   return {
+    totalSubmitted: assignment._count.submissions,
     assignment: {
       id: assignment.id,
       title: assignment.title,
@@ -665,11 +672,22 @@ export async function publishAssignmentResults(
         select: {
           id: true,
           title: true,
+          status: true,
+          classroom: {
+            select: {
+              memberships: {
+                where: { status: "ACTIVE" },
+                select: { studentId: true },
+              },
+            },
+          },
           submissions: {
             where: { status: { in: submittedStatuses } },
             select: {
               id: true,
               studentId: true,
+              attemptNumber: true,
+              submittedAt: true,
               status: true,
               score: true,
               maxScore: true,
@@ -686,10 +704,18 @@ export async function publishAssignmentResults(
         },
       });
       if (!assignment) throw new ResourceNotFoundError("作业不存在");
-      if (assignment.submissions.length === 0) {
+      if (!["PUBLISHED", "CLOSED"].includes(assignment.status))
+        throw new AssignmentOperationError("仅已发布作业可以公布成绩", 409);
+      const members = new Set(
+        assignment.classroom.memberships.map((member) => member.studentId),
+      );
+      const latest = latestEffectiveSubmissions(
+        assignment.submissions.filter((item) => members.has(item.studentId)),
+      );
+      if (latest.length === 0) {
         throw new AssignmentOperationError("当前作业暂无可发布的提交");
       }
-      const unfinished = assignment.submissions.filter(
+      const unfinished = latest.filter(
         (submission) =>
           submission.status === SubmissionStatus.SUBMITTED ||
           submission.status === SubmissionStatus.PENDING_REVIEW ||
@@ -700,7 +726,7 @@ export async function publishAssignmentResults(
           `仍有 ${unfinished.length} 份提交未完成全部人工批改`,
         );
       }
-      const invalidGraded = assignment.submissions.filter(
+      const invalidGraded = latest.filter(
         (submission) =>
           submission.status === SubmissionStatus.GRADED &&
           (submission.score === null ||
@@ -713,10 +739,10 @@ export async function publishAssignmentResults(
         );
       }
 
-      const alreadyPublished = assignment.submissions.filter(
+      const alreadyPublished = latest.filter(
         (submission) => submission.status === SubmissionStatus.PUBLISHED,
       );
-      const publishable = assignment.submissions.filter(
+      const publishable = latest.filter(
         (submission) => submission.status === SubmissionStatus.GRADED,
       );
       if (publishable.length === 0) {
@@ -799,5 +825,69 @@ export async function publishAssignmentResults(
     publishedCount: result.publishedCount,
     alreadyPublishedCount: result.alreadyPublishedCount,
     publishedAt: result.publishedAt,
+  };
+}
+
+export async function getAssignmentPublicationState(
+  teacherId: string,
+  assignmentId: string,
+) {
+  const assignment = await prisma.assignment.findFirst({
+    where: { id: assignmentId, teacherId },
+    select: {
+      status: true,
+      classroom: {
+        select: {
+          memberships: {
+            where: { status: "ACTIVE" },
+            select: { studentId: true },
+          },
+        },
+      },
+      submissions: {
+        where: { status: { in: submittedStatuses } },
+        select: {
+          id: true,
+          studentId: true,
+          attemptNumber: true,
+          submittedAt: true,
+          status: true,
+          score: true,
+          maxScore: true,
+          gradedAt: true,
+          _count: {
+            select: {
+              answers: { where: { gradingStatus: "MANUAL_REVIEW_REQUIRED" } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!assignment) throw new ResourceNotFoundError("作业不存在");
+  const members = new Set(
+    assignment.classroom.memberships.map((item) => item.studentId),
+  );
+  const latest = latestEffectiveSubmissions(
+    assignment.submissions.filter((item) => members.has(item.studentId)),
+  );
+  const pendingCount = latest.filter(
+    (item) =>
+      item.status === "SUBMITTED" ||
+      item.status === "PENDING_REVIEW" ||
+      item._count.answers > 0 ||
+      (item.status === "GRADED" &&
+        (item.score === null ||
+          item.maxScore === null ||
+          item.gradedAt === null)),
+  ).length;
+  return {
+    pendingCount,
+    gradedCount: latest.filter((item) => item.status === "GRADED").length,
+    publishedCount: latest.filter((item) => item.status === "PUBLISHED").length,
+    canPublish:
+      ["PUBLISHED", "CLOSED"].includes(assignment.status) &&
+      pendingCount === 0 &&
+      latest.some((item) => item.status === "GRADED"),
   };
 }

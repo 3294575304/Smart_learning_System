@@ -1,3 +1,4 @@
+import { assertClassroomWorkAllowed } from "./classroom-work";
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -37,6 +38,7 @@ async function access(
         include: {
           classroom: {
             select: {
+              status: true,
               memberships: {
                 where: { studentId: actor.id, status: "ACTIVE" },
                 select: { id: true },
@@ -61,6 +63,7 @@ async function access(
     )
       throw new AssignmentOperationError("已提交作答不能修改附件", 409);
     assertAssignmentAcceptsWork(submission.assignment, new Date());
+    await assertClassroomWorkAllowed(tx, submission.assignment.classroomId);
     if (!submission.assignment.allowAttachments)
       throw new AssignmentOperationError("此作业不接收附件", 400);
   }
@@ -85,7 +88,9 @@ export async function listSubmissionAttachments(
   });
 }
 
-async function fileType(data: Buffer): Promise<string> {
+export async function validateAssignmentAttachmentData(
+  data: Buffer,
+): Promise<string> {
   if (data.length > 5 * 1024 * 1024 || !data.length)
     throw new AssignmentOperationError("附件大小须在 1 字节至 5 MB 之间", 400);
   let imageType: string | null = null;
@@ -140,7 +145,7 @@ export async function uploadSubmissionAttachment(
   if (file.size > 5 * 1024 * 1024)
     throw new AssignmentOperationError("单个附件不能超过 5 MB", 400);
   const data = Buffer.from(await file.arrayBuffer());
-  const mimeType = await fileType(data);
+  const mimeType = await validateAssignmentAttachmentData(data);
   const sha256 = createHash("sha256").update(data).digest("hex");
   const storageKey = `assignment-attachments/${randomUUID()}`;
   const storage = getStorageService();

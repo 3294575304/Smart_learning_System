@@ -1,4 +1,5 @@
 "use client";
+import { classroomStatusLabel } from "@/services/classrooms/presentation";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -209,7 +210,7 @@ export function CourseGradebooksWorkspace({ courseId }: { courseId: string }) {
                           )}
                           {row.classroom.status !== "ACTIVE" && (
                             <span className="text-xs text-slate-500">
-                              班级已停用
+                              {classroomStatusLabel(row.classroom.status)}
                             </span>
                           )}
                         </div>

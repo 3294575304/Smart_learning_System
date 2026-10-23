@@ -1,5 +1,7 @@
 import "server-only";
+import { latestEffectiveSubmissions } from "@/services/assignments/latest-submissions";
 
+import { summarizeAssignmentParticipation } from "@/services/dashboard/teacher-assignment-metrics";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { groupKnowledgeChapters } from "@/services/knowledge-graph/chapter-groups";
@@ -51,7 +53,7 @@ export async function getTeacherDashboard(
       courseNo: true,
       currentPublishedSyllabusStructureId: true,
       classrooms: {
-        where: { teacherId, status: "ACTIVE" },
+        where: { teacherId, status: { in: ["ACTIVE", "COMPLETED"] } },
         orderBy: [{ name: "asc" }, { id: "asc" }],
         select: {
           id: true,
@@ -155,6 +157,8 @@ export async function getTeacherDashboard(
           status: true,
           dueAt: true,
           updatedAt: true,
+          publishedAt: true,
+          createdAt: true,
           classroom: { select: { id: true, name: true } },
           submissions: {
             where: {
@@ -163,6 +167,9 @@ export async function getTeacherDashboard(
               },
             },
             select: {
+              id: true,
+              attemptNumber: true,
+              submittedAt: true,
               status: true,
               studentId: true,
               score: true,
@@ -238,6 +245,62 @@ export async function getTeacherDashboard(
         select: { status: true },
       }),
     ]);
+  const answerCounts = await prisma.studentAnswer.groupBy({
+    by: ["submissionId", "isCorrect"],
+    where: {
+      submissionId: {
+        in: assignments.flatMap((item) =>
+          item.submissions.map((submission) => submission.id),
+        ),
+      },
+      gradingStatus: { in: ["AUTO_GRADED", "GRADED"] },
+      isCorrect: { not: null },
+    },
+    _count: { _all: true },
+  });
+  const countsBySubmission = new Map<
+    string,
+    { judgedCount: number; correctCount: number }
+  >();
+  for (const count of answerCounts) {
+    const totals = countsBySubmission.get(count.submissionId) ?? {
+      judgedCount: 0,
+      correctCount: 0,
+    };
+    totals.judgedCount += count._count._all;
+    if (count.isCorrect) totals.correctCount += count._count._all;
+    countsBySubmission.set(count.submissionId, totals);
+  }
+  const membersByClass = new Map(
+    classrooms.map((item) => [
+      item.id,
+      item.memberships.map((member) => member.studentId),
+    ]),
+  );
+  const assignmentProgress = assignments
+    .filter((item) => item.status === "PUBLISHED" || item.status === "CLOSED")
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      classroomId: item.classroom.id,
+      classroomName: item.classroom.name,
+      publishedAt: (item.publishedAt ?? item.createdAt).toISOString(),
+      ...summarizeAssignmentParticipation(
+        membersByClass.get(item.classroom.id) ?? [],
+        item.submissions.map((submission) => ({
+          ...submission,
+          ...(countsBySubmission.get(submission.id) ?? {
+            judgedCount: 0,
+            correctCount: 0,
+          }),
+        })),
+      ),
+    }))
+    .sort(
+      (left, right) =>
+        left.publishedAt.localeCompare(right.publishedAt) ||
+        left.id.localeCompare(right.id),
+    );
   const entries = masteryStates.flatMap((state) =>
     (state.revisions[0]?.entries ?? []).map((entry) => ({
       studentId: state.studentId,
@@ -255,7 +318,13 @@ export async function getTeacherDashboard(
     if (assignment.status !== "PUBLISHED" && assignment.status !== "CLOSED")
       continue;
     const state = summarizeDashboardAssignmentTodo(
-      assignment.submissions.map((submission) => ({
+      latestEffectiveSubmissions(
+        assignment.submissions.filter((item) =>
+          (membersByClass.get(assignment.classroom.id) ?? []).includes(
+            item.studentId,
+          ),
+        ),
+      ).map((submission) => ({
         ...submission,
         manualAnswerCount: submission._count.answers,
       })),
@@ -383,7 +452,13 @@ export async function getTeacherDashboard(
         );
         const states = published.map((item) =>
           summarizeDashboardAssignmentTodo(
-            item.submissions.map((submission) => ({
+            latestEffectiveSubmissions(
+              item.submissions.filter((submission) =>
+                (membersByClass.get(item.classroom.id) ?? []).includes(
+                  submission.studentId,
+                ),
+              ),
+            ).map((submission) => ({
               ...submission,
               manualAnswerCount: submission._count.answers,
             })),
@@ -406,6 +481,7 @@ export async function getTeacherDashboard(
       selectedClassroomId: selectedClassroom?.id ?? null,
       scopeName: selectedClassroom?.name ?? "全部班级",
       todo,
+      assignmentProgress,
       metrics: {
         classroomCount: classrooms.length,
         studentCount: studentIds.length,

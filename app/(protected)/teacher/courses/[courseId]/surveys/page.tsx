@@ -36,7 +36,9 @@ export default async function TeacherCourseSurveysPage({
         />
         <SurveyListWorkspace
           classrooms={course.linkedClassrooms
-            .filter((item) => item.status === "ACTIVE")
+            .filter(
+              (item) => item.status === "ACTIVE" || item.status === "COMPLETED",
+            )
             .map((item) => ({ id: item.id, name: item.name }))}
           courseId={courseId.data}
           initialSurveys={surveys}

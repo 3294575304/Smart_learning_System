@@ -1,3 +1,4 @@
+import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { PageIndex } from "@/components/dashboard/page-index";
 import { Role } from "@prisma/client";
@@ -55,7 +56,7 @@ export default async function TeacherClassroomPage({
           <div>
             <dt className="text-muted-foreground text-sm">班级状态</dt>
             <dd className="mt-1 font-medium">
-              {classroom.status === "ACTIVE" ? "开放" : "已关闭"}
+              {CLASSROOM_STATUS_LABELS[classroom.status]}
             </dd>
           </div>
           <div>
@@ -125,16 +126,22 @@ export default async function TeacherClassroomPage({
                         {student.joinedAt.toLocaleDateString("zh-CN")}
                       </td>
                       <td className="py-3">
-                        <RemoveStudentButton
-                          classroomId={classroom.id}
-                          membershipId={student.membershipId}
-                          studentName={
-                            student.displayName ??
-                            student.email ??
-                            student.studentNo ??
-                            student.studentId
-                          }
-                        />
+                        {classroom.status === "ACTIVE" ? (
+                          <RemoveStudentButton
+                            classroomId={classroom.id}
+                            membershipId={student.membershipId}
+                            studentName={
+                              student.displayName ??
+                              student.email ??
+                              student.studentNo ??
+                              student.studentId
+                            }
+                          />
+                        ) : (
+                          <span className="text-xs text-slate-500">
+                            历史名单
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

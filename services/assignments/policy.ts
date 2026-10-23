@@ -70,9 +70,18 @@ export function assertAssignmentAcceptsWork(
     status: AssignmentStatus;
     publishedAt: Date | null;
     dueAt: Date | null;
+    classroom?: { status: ClassroomStatus };
   },
   now: Date,
 ): void {
+  if (
+    assignment.classroom &&
+    assignment.classroom.status !== ClassroomStatus.ACTIVE
+  ) {
+    throw new AssignmentOperationError(
+      "班级已结课或已关闭，不能继续作答；已提交记录和成绩仍可查看",
+    );
+  }
   assertAssignmentIsVisible(assignment, now);
   if (!assignment.dueAt || assignment.dueAt <= now) {
     throw new AssignmentOperationError("作业已截止，不能继续保存或提交");

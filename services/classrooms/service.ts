@@ -47,6 +47,7 @@ export interface ClassroomStudent {
 export interface TeacherClassroomDetail extends TeacherClassroomListItem {
   joinCodeExpiresAt: Date | null;
   closedAt: Date | null;
+  completedAt: Date | null;
   students: ClassroomStudent[];
   studentPage?: { page: number; pageSize: number; totalPages: number };
 }
@@ -94,9 +95,13 @@ async function requireTeacherClassroom(
 
 export async function listTeacherClassrooms(
   teacherId: string,
+  includeLegacy = false,
 ): Promise<TeacherClassroomListItem[]> {
   const classrooms = await prisma.classroom.findMany({
-    where: { teacherId, status: { not: ClassroomStatus.ARCHIVED } },
+    where: {
+      teacherId,
+      ...(includeLegacy ? {} : { status: { not: ClassroomStatus.ARCHIVED } }),
+    },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -137,7 +142,8 @@ export interface ClassroomDissolutionDependencies {
 function isTransactionConflict(error: unknown): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2034"
+    (error.code === "P2034" ||
+      (error.code === "P2010" && error.meta?.code === "40001"))
   );
 }
 
@@ -316,6 +322,7 @@ export async function getTeacherClassroom(
       status: true,
       allowStudentLeave: true,
       closedAt: true,
+      completedAt: true,
       createdAt: true,
       course: { select: { id: true, name: true } },
       _count: {
@@ -453,22 +460,62 @@ export async function regenerateClassroomJoinCode(
   throw new ClassroomOperationError("邀请码生成失败，请稍后重试");
 }
 
+/** Normal teaching completion preserves memberships and every assignment snapshot. */
+export async function completeClassroom(
+  teacherId: string,
+  classroomId: string,
+  context: AuditRequestContext,
+): Promise<TeacherClassroomDetail> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await prisma.$transaction(
+        async (transaction) => {
+          await transaction.$queryRaw`SELECT "id" FROM "Classroom" WHERE "id" = ${classroomId} AND "teacherId" = ${teacherId} FOR UPDATE`;
+          const classroom = await transaction.classroom.findFirst({
+            where: { id: classroomId, teacherId },
+          });
+          if (!classroom) throw new ResourceNotFoundError("班级不存在");
+          if (classroom.status === ClassroomStatus.COMPLETED) return;
+          if (classroom.status !== ClassroomStatus.ACTIVE)
+            throw new ClassroomOperationError("仅授课中的班级可以确认结课");
+          const completedAt = new Date();
+          await transaction.classroom.update({
+            where: { id: classroomId },
+            data: { status: ClassroomStatus.COMPLETED, completedAt },
+          });
+          await writeGovernanceAuditLog(transaction, {
+            actorId: teacherId,
+            action: AuditAction.CLASSROOM_COMPLETED,
+            targetType: AuditTargetType.CLASSROOM,
+            targetId: classroomId,
+            summary: `教师确认班级结课：${classroom.name}`,
+            beforeData: { status: classroom.status },
+            afterData: {
+              status: ClassroomStatus.COMPLETED,
+              completedAt: completedAt.toISOString(),
+            },
+            context,
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      break;
+    } catch (error: unknown) {
+      if (!isTransactionConflict(error) || attempt === 2) throw error;
+    }
+  }
+  return getTeacherClassroom(teacherId, classroomId);
+}
+
+/** Retired teacher closure action; administrative closure belongs to ADMIN. */
 export async function closeClassroom(
   teacherId: string,
   classroomId: string,
 ): Promise<TeacherClassroomDetail> {
-  const classroom = await requireTeacherClassroom(teacherId, classroomId);
-
-  if (classroom.status !== ClassroomStatus.ACTIVE) {
-    throw new ClassroomOperationError("该班级已经关闭");
-  }
-
-  await prisma.classroom.update({
-    where: { id: classroomId },
-    data: { status: ClassroomStatus.CLOSED, closedAt: new Date() },
-  });
-
-  return getTeacherClassroom(teacherId, classroomId);
+  await requireTeacherClassroom(teacherId, classroomId);
+  throw new ClassroomOperationError(
+    "教师关闭班级入口已停用，请使用确认结课；异常关闭请联系管理员",
+  );
 }
 
 export async function removeClassroomStudent(
@@ -476,7 +523,11 @@ export async function removeClassroomStudent(
   classroomId: string,
   membershipId: string,
 ): Promise<{ membershipId: string }> {
-  await requireTeacherClassroom(teacherId, classroomId);
+  const classroom = await requireTeacherClassroom(teacherId, classroomId);
+  if (classroom.status !== ClassroomStatus.ACTIVE)
+    throw new ClassroomOperationError(
+      "已结课或已关闭的班级保留历史名单，不能移除成员",
+    );
   const result = await prisma.classMembership.updateMany({
     where: {
       id: membershipId,
@@ -602,7 +653,7 @@ export async function leaveClassroom(
     select: {
       id: true,
       status: true,
-      classroom: { select: { allowStudentLeave: true } },
+      classroom: { select: { allowStudentLeave: true, status: true } },
     },
   });
 
@@ -610,6 +661,10 @@ export async function leaveClassroom(
     throw new ResourceNotFoundError("班级不存在");
   }
 
+  if (membership.classroom.status !== ClassroomStatus.ACTIVE)
+    throw new ClassroomOperationError(
+      "已结课或已关闭的班级保留历史名单，不能主动退出",
+    );
   assertStudentCanLeave({
     membershipStatus: membership.status,
     allowStudentLeave: membership.classroom.allowStudentLeave,

@@ -1,4 +1,17 @@
+import { assertClassroomWorkAllowed } from "./classroom-work";
+import { assignmentSectionWhere } from "@/services/assignments/presentation";
 import "server-only";
+import { assignmentStatusWhere } from "./presentation";
+import { createHash } from "node:crypto";
+import {
+  validateAssignmentResourceFiles,
+  listAssignmentResourceFiles,
+} from "@/services/assignments/resources";
+import {
+  assignmentTaskSchema,
+  assignmentBatchSchema,
+  type AssignmentBatchData,
+} from "@/services/assignments/schemas";
 import { buildEditorCourseOptions } from "@/services/assignments/editor-course-options";
 
 import {
@@ -51,7 +64,7 @@ import { notifyAssignmentPublished } from "@/services/notifications/events/assig
 import { getStudentCourseContext } from "@/services/courses/student-access";
 
 const teacherAssignmentInclude = {
-  classroom: { select: { id: true, name: true } },
+  classroom: { select: { id: true, name: true, status: true } },
   questions: {
     orderBy: { sortOrder: "asc" as const },
     select: {
@@ -126,9 +139,15 @@ async function assertAssignmentResources(
 ) {
   const classroom = await transaction.classroom.findUnique({
     where: { id: input.classroomId },
-    select: { teacherId: true, status: true },
+    select: { teacherId: true, status: true, courseId: true },
   });
   assertTeacherOwnsClassroom(teacherId, classroom);
+  await validateAssignmentResourceFiles(
+    transaction,
+    teacherId,
+    classroom?.courseId ?? null,
+    input.submissionTask?.resourceFileIds ?? [],
+  );
 
   const questionIds = input.questions.map((item) => item.questionId);
   const questions = await transaction.question.findMany({
@@ -380,9 +399,10 @@ export async function listTeacherAssignments(
     ...(query.courseId
       ? { classroom: { courseId: query.courseId, teacherId } }
       : {}),
-    ...(query.status
-      ? { status: query.status }
-      : { status: { not: AssignmentStatus.ARCHIVED } }),
+    AND: [
+      assignmentSectionWhere(query.section),
+      query.status ? assignmentStatusWhere(query.status) : {},
+    ],
     ...(query.classroomId ? { classroomId: query.classroomId } : {}),
     ...(query.keyword
       ? { title: { contains: query.keyword, mode: "insensitive" } }
@@ -396,18 +416,45 @@ export async function listTeacherAssignments(
         : query.sort === "DUE_DESC"
           ? [{ dueAt: "desc" }, { id: "desc" }]
           : [{ createdAt: "desc" }, { id: "desc" }];
-  const [total, assignments] = await prisma.$transaction([
-    prisma.assignment.count({ where }),
-    prisma.assignment.findMany({
-      where,
-      include: teacherAssignmentInclude,
-      orderBy,
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-    }),
-  ]);
+  const [total, assignments, historyStatuses, classroomGroups] =
+    await prisma.$transaction([
+      prisma.assignment.count({ where }),
+      prisma.assignment.findMany({
+        where,
+        include: teacherAssignmentInclude,
+        orderBy,
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+      prisma.assignment.groupBy({
+        by: ["status"],
+        orderBy: { status: "asc" },
+        where: {
+          teacherId,
+          AND: [assignmentSectionWhere(query.section)],
+          status: { in: ["CLOSED", "ARCHIVED"] },
+          ...(query.courseId
+            ? { classroom: { courseId: query.courseId, teacherId } }
+            : {}),
+          ...(query.classroomId ? { classroomId: query.classroomId } : {}),
+        },
+      }),
+      prisma.assignment.groupBy({
+        by: ["classroomId"],
+        orderBy: { classroomId: "asc" },
+        where: {
+          teacherId,
+          AND: [assignmentSectionWhere(query.section)],
+          ...(query.courseId
+            ? { classroom: { courseId: query.courseId, teacherId } }
+            : {}),
+        },
+      }),
+    ]);
   return {
     items: assignments.map(teacherView),
+    availableClassroomIds: classroomGroups.map((item) => item.classroomId),
+    availableHistoryStatuses: historyStatuses.map((item) => item.status),
     pagination: {
       page: query.page,
       pageSize: query.pageSize,
@@ -426,41 +473,57 @@ export async function getTeacherAssignment(
     include: teacherAssignmentInclude,
   });
   if (!assignment) throw new ResourceNotFoundError("作业不存在");
-  return teacherView(assignment);
+  return {
+    ...teacherView(assignment),
+    resourceFiles: await listAssignmentResourceFiles(
+      { id: teacherId, role: Role.TEACHER },
+      assignmentId,
+    ),
+  };
+}
+
+async function createDraftInTransaction(
+  transaction: Prisma.TransactionClient,
+  teacherId: string,
+  input: AssignmentUpsertData,
+  fixedId?: string,
+): Promise<string> {
+  await assertAssignmentResources(transaction, teacherId, input);
+  const assignment = await transaction.assignment.create({
+    data: {
+      ...(fixedId ? { id: fixedId } : {}),
+      classroomId: input.classroomId,
+      teacherId,
+      title: input.title,
+      description: input.description || null,
+      allowResubmission: input.allowResubmission,
+      allowAttachments: input.allowAttachments ?? false,
+      submissionTask: input.submissionTask ?? Prisma.DbNull,
+      publishedAt: input.publishedAt,
+      dueAt: input.dueAt,
+    },
+    select: { id: true },
+  });
+  const totalPoints = await replaceQuestionSnapshots(
+    transaction,
+    assignment.id,
+    teacherId,
+    input,
+  );
+  await transaction.assignment.update({
+    where: { id: assignment.id },
+    data: { totalPoints },
+  });
+  return assignment.id;
 }
 
 export async function createDraftAssignment(
   teacherId: string,
   input: AssignmentUpsertData,
 ): Promise<TeacherAssignmentView> {
-  const assignmentId = await prisma.$transaction(async (transaction) => {
-    await assertAssignmentResources(transaction, teacherId, input);
-    const assignment = await transaction.assignment.create({
-      data: {
-        classroomId: input.classroomId,
-        teacherId,
-        title: input.title,
-        description: input.description || null,
-        allowResubmission: input.allowResubmission,
-        allowAttachments: input.allowAttachments ?? false,
-        submissionTask: input.submissionTask ?? Prisma.DbNull,
-        publishedAt: input.publishedAt,
-        dueAt: input.dueAt,
-      },
-      select: { id: true },
-    });
-    const totalPoints = await replaceQuestionSnapshots(
-      transaction,
-      assignment.id,
-      teacherId,
-      input,
-    );
-    await transaction.assignment.update({
-      where: { id: assignment.id },
-      data: { totalPoints },
-    });
-    return assignment.id;
-  });
+  const assignmentId = await prisma.$transaction((transaction) =>
+    createDraftInTransaction(transaction, teacherId, input),
+  );
   return getTeacherAssignment(teacherId, assignmentId);
 }
 
@@ -499,104 +562,124 @@ export async function updateDraftAssignment(
   return getTeacherAssignment(teacherId, assignmentId);
 }
 
+async function publishInTransaction(
+  transaction: Prisma.TransactionClient,
+  teacherId: string,
+  assignmentId: string,
+) {
+  const now = new Date();
+
+  const assignment = await transaction.assignment.findUnique({
+    where: { id: assignmentId },
+    include: {
+      teacher: {
+        select: {
+          email: true,
+          profile: { select: { displayName: true } },
+        },
+      },
+      classroom: {
+        select: {
+          status: true,
+          courseId: true,
+          memberships: {
+            where: {
+              status: MembershipStatus.ACTIVE,
+              student: {
+                role: Role.STUDENT,
+                status: UserStatus.ACTIVE,
+              },
+            },
+            select: { studentId: true },
+          },
+        },
+      },
+      questions: {
+        orderBy: { sortOrder: "asc" },
+        select: { questionId: true, sortOrder: true, points: true },
+      },
+    },
+  });
+  if (!assignment || assignment.teacherId !== teacherId) {
+    throw new ResourceNotFoundError("作业不存在");
+  }
+  if (assignment.status === AssignmentStatus.PUBLISHED) return;
+  assertDraftAssignment(teacherId, assignment);
+  if (assignment.questions.length === 0) {
+    throw new AssignmentOperationError("发布作业前至少需要选择一道题", 400);
+  }
+  if (!assignment.publishedAt || !assignment.dueAt) {
+    throw new AssignmentOperationError("发布时间和截止时间不能为空", 400);
+  }
+  if (assignment.dueAt <= assignment.publishedAt || assignment.dueAt <= now) {
+    throw new AssignmentOperationError(
+      "截止时间必须晚于发布时间和当前时间",
+      400,
+    );
+  }
+  const task = assignment.submissionTask
+    ? assignmentTaskSchema.parse(assignment.submissionTask)
+    : undefined;
+  await validateAssignmentResourceFiles(
+    transaction,
+    teacherId,
+    assignment.classroom.courseId,
+    task?.resourceFileIds ?? [],
+  );
+  const snapshotInput: AssignmentUpsertData = {
+    title: assignment.title,
+    description: assignment.description ?? "",
+    classroomId: assignment.classroomId,
+    publishedAt: assignment.publishedAt,
+    dueAt: assignment.dueAt,
+    allowResubmission: assignment.allowResubmission,
+    questions: assignment.questions.map((question) => ({
+      questionId: question.questionId,
+      sortOrder: question.sortOrder,
+      points: question.points.toNumber(),
+    })),
+  };
+  const totalPoints = await replaceQuestionSnapshots(
+    transaction,
+    assignmentId,
+    teacherId,
+    snapshotInput,
+  );
+  await freezeAssignmentQuestionConcepts(
+    transaction,
+    assignmentId,
+    assignment.classroom.courseId,
+  );
+  await freezeAssignmentProgrammingConfigs(transaction, assignmentId);
+  await transaction.assignment.update({
+    where: { id: assignmentId },
+    data: { status: AssignmentStatus.PUBLISHED, totalPoints },
+  });
+  await notifyAssignmentPublished(
+    {
+      assignmentId: assignment.id,
+      assignmentTitle: assignment.title,
+      teacherName:
+        assignment.teacher.profile?.displayName ??
+        assignment.teacher.email ??
+        "",
+      dueAt: assignment.dueAt,
+      recipientIds: assignment.classroom.memberships.map(
+        (membership) => membership.studentId,
+      ),
+    },
+    transaction,
+  );
+}
+
 export async function publishAssignment(
   teacherId: string,
   assignmentId: string,
 ): Promise<TeacherAssignmentView> {
-  const now = new Date();
-  await runAssignmentSerializable(async (transaction) => {
-    const assignment = await transaction.assignment.findUnique({
-      where: { id: assignmentId },
-      include: {
-        teacher: {
-          select: {
-            email: true,
-            profile: { select: { displayName: true } },
-          },
-        },
-        classroom: {
-          select: {
-            courseId: true,
-            memberships: {
-              where: {
-                status: MembershipStatus.ACTIVE,
-                student: {
-                  role: Role.STUDENT,
-                  status: UserStatus.ACTIVE,
-                },
-              },
-              select: { studentId: true },
-            },
-          },
-        },
-        questions: {
-          orderBy: { sortOrder: "asc" },
-          select: { questionId: true, sortOrder: true, points: true },
-        },
-      },
-    });
-    if (!assignment || assignment.teacherId !== teacherId) {
-      throw new ResourceNotFoundError("作业不存在");
-    }
-    if (assignment.status === AssignmentStatus.PUBLISHED) return;
-    assertDraftAssignment(teacherId, assignment);
-    if (assignment.questions.length === 0) {
-      throw new AssignmentOperationError("发布作业前至少需要选择一道题", 400);
-    }
-    if (!assignment.publishedAt || !assignment.dueAt) {
-      throw new AssignmentOperationError("发布时间和截止时间不能为空", 400);
-    }
-    if (assignment.dueAt <= assignment.publishedAt || assignment.dueAt <= now) {
-      throw new AssignmentOperationError(
-        "截止时间必须晚于发布时间和当前时间",
-        400,
-      );
-    }
-    const snapshotInput: AssignmentUpsertData = {
-      title: assignment.title,
-      description: assignment.description ?? "",
-      classroomId: assignment.classroomId,
-      publishedAt: assignment.publishedAt,
-      dueAt: assignment.dueAt,
-      allowResubmission: assignment.allowResubmission,
-      questions: assignment.questions.map((question) => ({
-        questionId: question.questionId,
-        sortOrder: question.sortOrder,
-        points: question.points.toNumber(),
-      })),
-    };
-    const totalPoints = await replaceQuestionSnapshots(
-      transaction,
-      assignmentId,
-      teacherId,
-      snapshotInput,
-    );
-    await freezeAssignmentQuestionConcepts(
-      transaction,
-      assignmentId,
-      assignment.classroom.courseId,
-    );
-    await freezeAssignmentProgrammingConfigs(transaction, assignmentId);
-    await transaction.assignment.update({
-      where: { id: assignmentId },
-      data: { status: AssignmentStatus.PUBLISHED, totalPoints },
-    });
-    await notifyAssignmentPublished(
-      {
-        assignmentId: assignment.id,
-        assignmentTitle: assignment.title,
-        teacherName:
-          assignment.teacher.profile?.displayName ??
-          assignment.teacher.email ??
-          "",
-        dueAt: assignment.dueAt,
-        recipientIds: assignment.classroom.memberships.map(
-          (membership) => membership.studentId,
-        ),
-      },
-      transaction,
-    );
-  }, "作业发布状态已发生变化，请刷新后重试");
+  await runAssignmentSerializable(
+    (transaction) => publishInTransaction(transaction, teacherId, assignmentId),
+    "作业发布状态已发生变化，请刷新后重试",
+  );
   return getTeacherAssignment(teacherId, assignmentId);
 }
 
@@ -643,8 +726,8 @@ export async function listStudentAssignments(
     include: {
       classroom: {
         select: {
-          name: true,
           status: true,
+          name: true,
           memberships: { where: { studentId }, select: { status: true } },
         },
       },
@@ -707,6 +790,7 @@ async function requireStudentAssignment(
     include: {
       classroom: {
         select: {
+          status: true,
           name: true,
           memberships: {
             where: { studentId },
@@ -775,20 +859,12 @@ async function createAttempt(
         where: { idempotencyKey },
         select: { id: true, studentId: true, assignmentId: true },
       });
-      if (keyed) {
-        if (
-          keyed.studentId !== studentId ||
-          keyed.assignmentId !== assignmentId
-        ) {
-          throw new AssignmentOperationError("幂等键已被其他作答使用", 409);
-        }
-        return keyed.id;
-      }
       const assignment = await transaction.assignment.findUnique({
         where: { id: assignmentId },
         include: {
           classroom: {
             select: {
+              status: true,
               memberships: {
                 where: { studentId },
                 select: { status: true },
@@ -805,6 +881,17 @@ async function createAttempt(
       if (!assignment) throw new ResourceNotFoundError("作业不存在");
       assertActiveMembership(assignment.classroom.memberships[0] ?? null);
       assertAssignmentAcceptsWork(assignment, new Date());
+      await assertClassroomWorkAllowed(transaction, assignment.classroomId);
+      if (keyed) {
+        if (
+          keyed.studentId !== studentId ||
+          keyed.assignmentId !== assignmentId
+        ) {
+          throw new AssignmentOperationError("幂等键已被其他作答使用", 409);
+        }
+        return keyed.id;
+      }
+
       const inProgress = assignment.submissions.find(
         (submission) => submission.status === SubmissionStatus.IN_PROGRESS,
       );
@@ -867,6 +954,7 @@ const submissionDraftInclude = {
     include: {
       classroom: {
         select: {
+          status: true,
           courseId: true,
           memberships: {
             select: { studentId: true, status: true },
@@ -901,6 +989,10 @@ export async function getStudentSubmissionDraft(
     (item) => item.studentId === studentId,
   );
   assertActiveMembership(membership ?? null);
+  if (submission.assignment.classroom.status !== "ACTIVE")
+    throw new AssignmentOperationError(
+      "班级已结课或已关闭，请返回作业页面查看历史提交与成绩",
+    );
   assertAssignmentIsVisible(submission.assignment, new Date());
   return {
     id: submission.id,
@@ -989,6 +1081,7 @@ export async function saveStudentAnswers(
           include: {
             classroom: {
               select: {
+                status: true,
                 memberships: {
                   where: { studentId },
                   select: { status: true },
@@ -1004,6 +1097,10 @@ export async function saveStudentAnswers(
       submission.assignment.classroom.memberships[0] ?? null,
     );
     assertAssignmentAcceptsWork(submission.assignment, now);
+    await assertClassroomWorkAllowed(
+      transaction,
+      submission.assignment.classroomId,
+    );
     if (submission.status !== SubmissionStatus.IN_PROGRESS) {
       throw new AssignmentOperationError("该作答已经提交，不能继续修改");
     }
@@ -1146,6 +1243,7 @@ const gradingSubmissionInclude = {
     include: {
       classroom: {
         select: {
+          status: true,
           courseId: true,
           memberships: {
             select: { studentId: true, status: true },
@@ -1188,6 +1286,10 @@ export async function submitStudentAssignment(
     assertActiveMembership(membership ?? null);
     const now = new Date();
     assertAssignmentAcceptsWork(submission.assignment, now);
+    await assertClassroomWorkAllowed(
+      transaction,
+      submission.assignment.classroomId,
+    );
     const claimed = await transaction.submission.updateMany({
       where: {
         id: submissionId,
@@ -1416,4 +1518,94 @@ export async function getStudentSubmissionResult(
         }))
       : [],
   };
+}
+
+/** Each classroom gets a separate frozen assignment; identical retried requests reuse the same IDs. */
+export async function createAssignmentBatch(
+  teacherId: string,
+  raw: AssignmentBatchData,
+) {
+  const input = assignmentBatchSchema.parse(raw);
+  const classroomIds = [...input.classroomIds].sort();
+  if (
+    classroomIds.length * Math.max(1, input.assignment.questions.length) >
+    400
+  )
+    throw new AssignmentOperationError(
+      "单次最多复制400题次，请减少班级或题目后分批发布",
+      400,
+    );
+  const signature = createHash("sha256")
+    .update(JSON.stringify({ teacherId, ...input, classroomIds }))
+    .digest("hex");
+  const ids = classroomIds.map(
+    (id) =>
+      "c" +
+      createHash("sha256")
+        .update(`${signature}:${id}`)
+        .digest("hex")
+        .slice(0, 24),
+  );
+  return runAssignmentSerializable(
+    async (tx) => {
+      const classrooms = await tx.classroom.findMany({
+        where: { id: { in: classroomIds }, teacherId, status: "ACTIVE" },
+        select: {
+          id: true,
+          courseId: true,
+          course: { select: { teacherId: true, status: true } },
+        },
+      });
+      if (classrooms.length !== classroomIds.length)
+        throw new ResourceNotFoundError("班级不存在");
+      if (
+        classrooms.some(
+          (item) =>
+            item.courseId &&
+            (item.course?.teacherId !== teacherId ||
+              item.course.status === "ARCHIVED"),
+        )
+      )
+        throw new ResourceNotFoundError("课程或班级不存在");
+      if (
+        classroomIds.length > 1 &&
+        (new Set(classrooms.map((item) => item.courseId)).size !== 1 ||
+          classrooms.some(
+            (item) =>
+              !item.courseId ||
+              item.course?.teacherId !== teacherId ||
+              item.course.status === "ARCHIVED",
+          ))
+      )
+        throw new AssignmentOperationError(
+          "批量发布仅支持本人同一课程下的有效班级",
+          400,
+        );
+      const existing = await tx.assignment.findMany({
+        where: { id: { in: ids }, teacherId },
+        include: teacherAssignmentInclude,
+      });
+      if (existing.length === ids.length)
+        return { assignments: existing.map(teacherView), reused: true };
+      if (existing.length)
+        throw new AssignmentOperationError("批次状态异常，请刷新后重试", 409);
+      for (let index = 0; index < classroomIds.length; index++) {
+        await createDraftInTransaction(
+          tx,
+          teacherId,
+          { ...input.assignment, classroomId: classroomIds[index] },
+          ids[index],
+        );
+        if (input.publish)
+          await publishInTransaction(tx, teacherId, ids[index]);
+      }
+      const saved = await tx.assignment.findMany({
+        where: { id: { in: ids }, teacherId },
+        include: teacherAssignmentInclude,
+      });
+      return { assignments: saved.map(teacherView), reused: false };
+    },
+    "多班作业正在保存，请使用原请求重试",
+    30000,
+  );
 }

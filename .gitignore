@@ -50,9 +50,10 @@ prisma/*.db-journal
 !*.pub.key
 
 # local scratch and debug output
-/tmp
-.workbuddy/memory/
-/docs
+/tmp/
+/.workbuddy/memory/
+/docs/
+/output/
 /outputs/
-start-all.ps1
-stop-all.ps1
+/start-all.ps1
+/stop-all.ps1

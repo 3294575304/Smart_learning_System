@@ -1,4 +1,5 @@
 import { Role } from "@prisma/client";
+import { hundredPointScore } from "@/services/assignments/presentation";
 import { BarChart3, Eye } from "lucide-react";
 import Link from "next/link";
 
@@ -133,9 +134,9 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
               <tr>
                 <th className="px-5 py-3 font-medium">作业</th>
                 <th className="px-4 py-3 font-medium">提交进度</th>
-                <th className="px-4 py-3 font-medium">平均分</th>
-                <th className="px-4 py-3 font-medium">平均得分率</th>
-                <th className="px-4 py-3 font-medium">最高 / 最低</th>
+                <th className="px-4 py-3 font-medium">平均分（百分制）</th>
+                <th className="px-4 py-3 font-medium">原始平均分 / 满分</th>
+                <th className="px-4 py-3 font-medium">最高 / 最低（百分制）</th>
                 <th className="px-4 py-3 font-medium">待处理</th>
                 <th className="px-5 py-3 font-medium">操作</th>
               </tr>
@@ -161,13 +162,20 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                       </p>
                     )}
                   </td>
-                  <td className="px-4 py-4">{valueText(item.averageScore)}</td>
                   <td className="px-4 py-4">
-                    {valueText(item.averagePercentage, "%")}
+                    {valueText(item.averagePercentage)}
                   </td>
                   <td className="px-4 py-4">
-                    {valueText(item.highestScore)} /{" "}
-                    {valueText(item.lowestScore)}
+                    {valueText(item.averageScore)} / {item.totalPoints}
+                  </td>
+                  <td className="px-4 py-4">
+                    {valueText(
+                      hundredPointScore(item.highestScore, item.totalPoints),
+                    )}{" "}
+                    /{" "}
+                    {valueText(
+                      hundredPointScore(item.lowestScore, item.totalPoints),
+                    )}
                   </td>
                   <td className="px-4 py-4">
                     {item.pendingReviewCount > 0 ? (

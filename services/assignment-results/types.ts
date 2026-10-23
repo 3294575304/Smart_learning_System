@@ -6,6 +6,7 @@ import type {
 } from "@prisma/client";
 
 export interface TeacherResultOverviewItem {
+  totalPoints: number;
   id: string;
   title: string;
   status: AssignmentStatus;

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { hundredPointScore } from "@/services/assignments/presentation";
 import { SubmissionStatus } from "@prisma/client";
 
 import {
@@ -30,7 +31,10 @@ function formatAttemptScore(attempt: {
   ) {
     return "待批改";
   }
-  return formatScore(attempt.score, attempt.maxScore);
+  const normalized = hundredPointScore(attempt.score, attempt.maxScore);
+  return normalized === null
+    ? "待批改"
+    : `${normalized.toFixed(2)} / 100（原始 ${attempt.score} / ${attempt.maxScore}）`;
 }
 
 function attemptHref(

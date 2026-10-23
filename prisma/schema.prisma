@@ -42,6 +42,7 @@ enum AuditAction {
   QUESTION_MADE_PRIVATE
   QUESTION_DISABLED
   QUESTION_BULK_IMPORTED
+  CLASSROOM_COMPLETED
   CLASSROOM_CLOSED_BY_ADMIN
   CLASSROOM_DISSOLVED
   COURSE_TEMPLATE_CREATED
@@ -332,6 +333,7 @@ enum NotificationJobStatus {
 }
 
 enum ClassroomStatus {
+  COMPLETED
   ACTIVE
   CLOSED
   ARCHIVED
@@ -2126,6 +2128,8 @@ model Classroom {
   joinCodeExpiresAt DateTime?
   allowStudentLeave Boolean         @default(false)
   status            ClassroomStatus @default(ACTIVE)
+  completedAt DateTime?
+  closureReason String? @db.Text
   closedAt          DateTime?
   dissolvedAt       DateTime?
   dissolutionReason String?         @db.Text

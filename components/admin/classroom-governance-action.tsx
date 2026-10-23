@@ -15,7 +15,11 @@ export function ClassroomGovernanceAction({
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
-  if (classroom.status !== ClassroomStatus.ACTIVE) return null;
+  if (
+    classroom.status !== ClassroomStatus.ACTIVE &&
+    classroom.status !== ClassroomStatus.COMPLETED
+  )
+    return null;
 
   async function closeClassroom() {
     if (
@@ -24,10 +28,22 @@ export function ClassroomGovernanceAction({
       )
     )
       return;
+    const reason = window.prompt(
+      "请填写关闭原因（2–500字，将记录到审计日志）：",
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 2 || reason.trim().length > 500) {
+      window.alert("请填写2–500字的关闭原因");
+      return;
+    }
     setPending(true);
     const result = await requestAdminApi<AdminClassroomView>(
       `/api/admin/classrooms/${classroom.id}/close`,
-      { method: "POST" },
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() }),
+      },
     );
     setPending(false);
     if (!result.success) {

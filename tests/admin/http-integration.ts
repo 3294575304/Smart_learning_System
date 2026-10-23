@@ -933,6 +933,7 @@ async function main(): Promise<void> {
           `/api/admin/classrooms/${governanceClassroom.id}/close`,
           adminCookie,
           "POST",
+          { reason: "集成测试行政关闭" },
         )
       ).status,
       200,

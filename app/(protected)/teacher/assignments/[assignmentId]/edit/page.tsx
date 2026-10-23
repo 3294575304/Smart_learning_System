@@ -1,6 +1,6 @@
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { AssignmentForm } from "@/components/assignments/assignment-form";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -18,11 +18,13 @@ export default async function EditAssignmentPage({ params }: Props) {
   const teacher = await requirePageRole(Role.TEACHER);
   const { assignmentId } = await params;
   try {
-    const [assignment, options] = await Promise.all([
-      getTeacherAssignment(teacher.id, assignmentId),
-      getTeacherAssignmentEditorOptions(teacher.id),
-    ]);
-    if (assignment.status !== "DRAFT") notFound();
+    const assignment = await getTeacherAssignment(teacher.id, assignmentId);
+    if (
+      assignment.status !== "DRAFT" ||
+      assignment.classroom.status !== "ACTIVE"
+    )
+      redirect(`/teacher/assignments/${assignment.id}`);
+    const options = await getTeacherAssignmentEditorOptions(teacher.id);
     return (
       <section className="space-y-6">
         <div>

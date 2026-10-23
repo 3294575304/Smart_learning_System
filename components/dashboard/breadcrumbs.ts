@@ -58,9 +58,7 @@ export function buildBreadcrumbs(
             : "/student/recommendations"
         : isStudentCourse
           ? `${href}/learning-center`
-          : isTeacherAssignment
-            ? `${href}/edit`
-            : href;
+          : href;
       return {
         href: targetHref,
         label: isTeacherCourseDetail
@@ -68,7 +66,7 @@ export function buildBreadcrumbs(
           : isStudentCourse
             ? "课程学习中心"
             : isTeacherAssignment
-              ? "作业设置"
+              ? "作业详情"
               : isResourceDetail
                 ? `${labels[segments[index - 1]] ?? "资源"}详情`
                 : (labels[segment] ?? "详情"),

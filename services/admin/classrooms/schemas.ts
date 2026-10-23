@@ -21,3 +21,13 @@ export const adminClassroomListQuerySchema = z
 export type AdminClassroomListQuery = z.output<
   typeof adminClassroomListQuerySchema
 >;
+
+export const closeAdminClassroomSchema = z
+  .object({
+    reason: z
+      .string()
+      .trim()
+      .min(2, "关闭原因至少填写2个字")
+      .max(500, "关闭原因最多500字"),
+  })
+  .strict();
