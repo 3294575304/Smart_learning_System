@@ -98,7 +98,7 @@ export default async function StudentCoursesPage() {
         <EmptyState
           icon={BookOpenCheck}
           title="暂未加入课程"
-          description="使用教师提供的邀请码加入教学班后，课程会显示在这里。"
+          description="从右上角个人中心输入教师提供的邀请码加入教学班后，课程会显示在这里。"
         />
       )}
     </section>
