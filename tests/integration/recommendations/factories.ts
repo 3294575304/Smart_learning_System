@@ -52,6 +52,7 @@ export class RecommendationTestFactory {
   private readonly questionIds: string[] = [];
   private readonly knowledgePointIds: string[] = [];
   private readonly assignmentIds: string[] = [];
+  private questionCategoryPromise: Promise<{ id: string }> | null = null;
 
   constructor(label: string) {
     this.prefix = testPrefix(label);
@@ -60,6 +61,18 @@ export class RecommendationTestFactory {
   private next(label: string): string {
     this.sequence += 1;
     return `${this.prefix}_${label}_${this.sequence}`;
+  }
+
+  private async questionCategoryId(): Promise<string> {
+    this.questionCategoryPromise ??=
+      integrationPrisma.questionCourseCategory.create({
+        data: {
+          name: this.prefix,
+          normalizedName: this.prefix,
+        },
+        select: { id: true },
+      });
+    return (await this.questionCategoryPromise).id;
   }
 
   async user(
@@ -168,9 +181,11 @@ export class RecommendationTestFactory {
   ): Promise<QuestionRecord> {
     const key = this.next("question");
     const type = overrides.type ?? QuestionType.SINGLE_CHOICE;
+    const questionCategoryId = await this.questionCategoryId();
     const question = await integrationPrisma.question.create({
       data: {
         creatorId,
+        questionCategoryId,
         title: overrides.title ?? key,
         content: `Content for ${key}`,
         type,
@@ -228,9 +243,11 @@ export class RecommendationTestFactory {
     count: number,
   ): Promise<QuestionRecord[]> {
     const batch = this.next("bulk");
+    const questionCategoryId = await this.questionCategoryId();
     await integrationPrisma.question.createMany({
       data: Array.from({ length: count }, (_, index) => ({
         creatorId,
+        questionCategoryId,
         title: `${batch}_${String(index).padStart(4, "0")}`,
         content: `Bulk question ${index}`,
         type: QuestionType.FILL_BLANK,
@@ -452,6 +469,11 @@ export class RecommendationTestFactory {
     await integrationPrisma.question.deleteMany({
       where: { id: { in: this.questionIds } },
     });
+    if (this.questionCategoryPromise) {
+      await integrationPrisma.questionCourseCategory.delete({
+        where: { id: (await this.questionCategoryPromise).id },
+      });
+    }
     await integrationPrisma.classMembership.deleteMany({
       where: { classroomId: { in: this.classroomIds } },
     });
