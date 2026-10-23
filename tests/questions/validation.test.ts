@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QuestionType, QuestionVisibility } from "@prisma/client";
+import { QuestionType } from "@prisma/client";
 
 import {
   questionListQuerySchema,
@@ -14,6 +14,7 @@ function baseInput() {
     title: "基础选择题",
     content: "2 + 3 等于多少？",
     type: QuestionType.SINGLE_CHOICE,
+    questionCategoryId: "ccategory00000000000000001",
     difficulty: 2,
     options: [
       { label: "A", content: "4", sortOrder: 1 },
@@ -23,7 +24,6 @@ function baseInput() {
     explanation: "2 与 3 相加等于 5。",
     knowledgePointIds: [knowledgePointId],
     tags: ["计算"],
-    visibility: QuestionVisibility.PRIVATE,
   };
 }
 

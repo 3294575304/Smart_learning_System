@@ -193,14 +193,19 @@ export function CourseWorkspaceNavigation({
               <Link
                 key={path}
                 href={
-                  group.title === "课堂活动" && !classroomId
-                    ? `/teacher/courses/${courseId}#course-classrooms`
-                    : withClassroomQuery(
-                        path.startsWith("/")
-                          ? path
-                          : `/teacher/courses/${courseId}/${path}`,
+                  group.title === "评价分析" && path === "analytics"
+                    ? withClassroomQuery(
+                        `/teacher/results?courseId=${encodeURIComponent(courseId)}`,
                         classroomId,
                       )
+                    : group.title === "课堂活动" && !classroomId
+                      ? `/teacher/courses/${courseId}#course-classrooms`
+                      : withClassroomQuery(
+                          path.startsWith("/")
+                            ? path
+                            : `/teacher/courses/${courseId}/${path}`,
+                          classroomId,
+                        )
                 }
                 className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
               >

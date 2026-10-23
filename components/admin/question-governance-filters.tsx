@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  QuestionStatus,
-  QuestionType,
-  QuestionVisibility,
-} from "@prisma/client";
+import { QuestionStatus, QuestionType } from "@prisma/client";
 import Link from "next/link";
 
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
@@ -65,14 +61,14 @@ export function QuestionGovernanceFilters({
             <span className="text-xs font-medium text-gray-600">课程分类</span>
             <select
               className="w-full rounded-md border bg-white px-3 py-2 text-sm"
-              defaultValue={query.courseId ?? ""}
-              name="courseId"
+              defaultValue={query.categoryId ?? ""}
+              name="categoryId"
               onChange={(event) => event.currentTarget.form?.requestSubmit()}
             >
-              <option value="">全部课程</option>
+              <option value="">全部课程分类</option>
               {courses.map((point) => (
                 <option key={point.id} value={point.id}>
-                  {point.name}（{point.courseNo}）
+                  {point.name}
                 </option>
               ))}
             </select>
@@ -102,19 +98,6 @@ export function QuestionGovernanceFilters({
           治理状态
         </legend>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-gray-600">可见性</span>
-            <select
-              className="w-full rounded-md border bg-white px-3 py-2 text-sm"
-              defaultValue={query.visibility ?? ""}
-              name="visibility"
-              onChange={(event) => event.currentTarget.form?.requestSubmit()}
-            >
-              <option value="">全部可见性</option>
-              <option value={QuestionVisibility.PUBLIC}>公共</option>
-              <option value={QuestionVisibility.PRIVATE}>私有</option>
-            </select>
-          </label>
           <label className="space-y-1">
             <span className="text-xs font-medium text-gray-600">状态</span>
             <select

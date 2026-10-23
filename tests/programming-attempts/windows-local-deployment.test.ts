@@ -10,8 +10,8 @@ test("Windows local tasks only start and stop through explicit commands", async 
     ),
     "utf8",
   );
-  const stopScript = await readFile(
-    new URL("../../stop-all.ps1", import.meta.url),
+  const deploymentGuide = await readFile(
+    new URL("../../deploy/windows-local/README.md", import.meta.url),
     "utf8",
   );
 
@@ -20,8 +20,8 @@ test("Windows local tasks only start and stop through explicit commands", async 
   assert.match(installer, /-MultipleInstances IgnoreNew/u);
   assert.doesNotMatch(installer, /New-ScheduledTaskTrigger/u);
   assert.doesNotMatch(installer, /-RestartCount/u);
-  assert.match(stopScript, /Stop-ScheduledTask/u);
-  assert.match(stopScript, /MANUAL_SERVICES_STOPPED=1/u);
+  assert.match(deploymentGuide, /stop-all\.ps1.*已从 Git 跟踪中移除/u);
+  assert.match(deploymentGuide, /Windows 任务计划程序中手动停止/u);
 });
 
 test("Windows wrappers keep native stderr from terminating services", async () => {

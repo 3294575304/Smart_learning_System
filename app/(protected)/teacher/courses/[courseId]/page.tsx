@@ -11,7 +11,10 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
-import { getTeacherCourse } from "@/services/courses/service";
+import {
+  getTeacherCourse,
+  listTeacherQuestionCourseCategories,
+} from "@/services/courses/service";
 import { getTeacherCourseSetupProgress } from "@/services/courses/setup-service";
 
 interface PageProps {
@@ -40,10 +43,12 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
 
   let course;
   let setupProgress;
+  let categories;
   try {
-    [course, setupProgress] = await Promise.all([
+    [course, setupProgress, categories] = await Promise.all([
       getTeacherCourse(teacher.id, parsedId.data),
       getTeacherCourseSetupProgress(teacher.id, parsedId.data),
+      listTeacherQuestionCourseCategories(),
     ]);
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) {
@@ -162,11 +167,13 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
             courseId={course.id}
             defaultValues={{
               courseNo: course.courseNo,
+              questionCategoryId: course.questionCategoryId,
               term: course.term,
               name: course.name,
               description: course.description ?? "",
             }}
             mode="edit"
+            categories={categories}
             template={course.template}
           />
         </details>

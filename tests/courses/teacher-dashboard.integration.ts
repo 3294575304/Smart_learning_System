@@ -30,9 +30,18 @@ async function main() {
   const createCourse = (teacherId: string, name: string) =>
     prisma.course.create({
       data: {
-        teacherId,
+        questionCategory: {
+          connectOrCreate: {
+            where: { normalizedName: "automated-test-category" },
+            create: {
+              name: "自动化测试课程分类",
+              normalizedName: "automated-test-category",
+            },
+          },
+        },
+        teacher: { connect: { id: teacherId } },
         name,
-        templateId: template.id,
+        template: { connect: { id: template.id } },
         courseNo: randomUUID(),
         term: "2026",
         status: "ACTIVE",

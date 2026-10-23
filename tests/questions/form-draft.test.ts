@@ -25,12 +25,12 @@ test("六种题型使用匹配的答案契约，并要求教师完善答案", ()
       title: "创建验收",
       content: "题干",
       type,
+      questionCategoryId: "ccategory00000000000000001",
       difficulty: 3,
       ...draft,
       explanation: "解析",
       tags: ["知识点"],
       knowledgePointIds: [],
-      visibility: "PRIVATE",
     };
     assert.equal(questionUpsertSchema.safeParse(input).success, true, type);
     assert.equal(

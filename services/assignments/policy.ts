@@ -3,7 +3,6 @@ import {
   ClassroomStatus,
   MembershipStatus,
   QuestionStatus,
-  QuestionVisibility,
 } from "@prisma/client";
 
 import {
@@ -24,20 +23,12 @@ export function assertTeacherOwnsClassroom(
   }
 }
 
-export function canTeacherUseQuestion(
-  teacherId: string,
-  question: {
-    creatorId: string;
-    visibility: QuestionVisibility;
-    status: QuestionStatus;
-    deletedAt: Date | null;
-  },
-): boolean {
+export function canTeacherUseQuestion(question: {
+  status: QuestionStatus;
+  deletedAt: Date | null;
+}): boolean {
   return (
-    question.status === QuestionStatus.ACTIVE &&
-    question.deletedAt === null &&
-    (question.creatorId === teacherId ||
-      question.visibility === QuestionVisibility.PUBLIC)
+    question.status === QuestionStatus.ACTIVE && question.deletedAt === null
   );
 }
 

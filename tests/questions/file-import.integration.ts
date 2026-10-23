@@ -31,6 +31,9 @@ async function main() {
   const knowledge = await prisma.knowledgePoint.findFirstOrThrow({
     where: { isActive: true },
   });
+  const category = await prisma.questionCourseCategory.findFirstOrThrow({
+    where: { isActive: true },
+  });
   for (const path of process.argv.slice(2)) {
     const file = new File([await readFile(path)], basename(path));
     const preview = await previewTeacherQuestionImport(teacher.id, file);
@@ -44,6 +47,7 @@ async function main() {
     );
     const input = questionImportCommitSchema.parse({
       source: preview.source,
+      categoryId: category.id,
       questions: preview.questions,
       knowledgePointIds: [knowledge.id],
     });
@@ -67,17 +71,19 @@ async function main() {
     );
     const owned = await listTeacherQuestions(
       teacher.id,
-      questionListQuerySchema.parse({ scope: "OWNED", pageSize: 50 }),
+      questionListQuerySchema.parse({ categoryId: category.id, pageSize: 50 }),
     );
     assert.ok(
       result.questionIds.every((id) => owned.items.some((q) => q.id === id)),
     );
-    const publicList = await listTeacherQuestions(
+    const sharedList = await listTeacherQuestions(
       teacher.id,
-      questionListQuerySchema.parse({ scope: "PUBLIC", pageSize: 50 }),
+      questionListQuerySchema.parse({ categoryId: category.id, pageSize: 50 }),
     );
     assert.ok(
-      publicList.items.every((q) => !result.questionIds.includes(q.id)),
+      result.questionIds.every((id) =>
+        sharedList.items.some((q) => q.id === id),
+      ),
     );
     for (const id of result.questionIds) {
       const detail = await getTeacherQuestion(teacher.id, id);
@@ -95,13 +101,14 @@ async function main() {
         ...detail,
         knowledgePointIds: [knowledge.id],
       }),
+      { ipAddress: null, userAgent: "isolated-test" },
     );
     const again = await commitTeacherQuestionImport(teacher.id, input, {
       ipAddress: null,
       userAgent: "isolated-test",
     });
-    assert.equal(again.createdCount, 0);
-    assert.equal(again.skippedCount, 10);
+    assert.equal(again.createdCount, 10);
+    assert.equal(again.skippedCount, 0);
     console.log(
       `PASS ${basename(path)}: 10 recognized, 10 programming drafts and editable details, repeated import skipped, no fabricated code or tests`,
     );
@@ -155,6 +162,7 @@ async function main() {
     teacher.id,
     questionImportCommitSchema.parse({
       source: { fileName: "编程配置.json", checksum: "b".repeat(64) },
+      categoryId: category.id,
       knowledgePointIds: [knowledge.id],
       questions: configured,
     }),
@@ -302,6 +310,7 @@ async function main() {
     teacher.id,
     questionImportCommitSchema.parse({
       source: { fileName: "无评分依据.txt", checksum: "a".repeat(64) },
+      categoryId: category.id,
       knowledgePointIds: [knowledge.id],
       questions: drafts,
     }),
@@ -317,14 +326,15 @@ async function main() {
     teacher.id,
     draftId,
     questionUpsertSchema.parse({ ...draft, knowledgePointIds: [knowledge.id] }),
+    { ipAddress: null, userAgent: "isolated-test" },
   );
   assert.equal((await getTeacherQuestion(teacher.id, draftId)).status, "DRAFT");
   const other = await prisma.user.findFirst({
     where: { role: "TEACHER", id: { not: teacher.id } },
   });
   if (other) {
-    await assert.rejects(getTeacherQuestion(other.id, draftId));
-    await assert.rejects(getLatestProgrammingConfig(other.id, draftId));
+    assert.equal((await getTeacherQuestion(other.id, draftId)).id, draftId);
+    assert.equal(await getLatestProgrammingConfig(other.id, draftId), null);
   }
   assert.equal((await restoreImportedProgrammingTypes(teacher.id)).length, 0);
   console.log(

@@ -1,15 +1,9 @@
 import "server-only";
 
-import {
-  AuditAction,
-  AuditTargetType,
-  QuestionStatus,
-  QuestionVisibility,
-} from "@prisma/client";
+import { AuditAction, AuditTargetType, QuestionStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { GovernanceOperationError } from "@/services/admin/governance-errors";
-import { assertQuestionVisibilityCanChange } from "@/services/admin/questions/policy";
 import {
   findAdminQuestionById,
   loadAdminQuestionPage,
@@ -39,7 +33,9 @@ function toView(record: AdminQuestionRecord): AdminQuestionView {
     acceptableAnswers: record.acceptableAnswers,
     isCaseSensitive: record.isCaseSensitive,
     status: record.status,
-    visibility: record.visibility,
+    questionCategoryId: record.questionCategoryId,
+    questionCategoryName: record.questionCategory?.name ?? null,
+    archivedFromStatus: record.archivedFromStatus,
     tags: record.tags,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -92,50 +88,6 @@ export async function listAdminQuestionCreators(): Promise<
   }));
 }
 
-export async function setAdminQuestionVisibility(
-  actorId: string,
-  questionId: string,
-  visibility: QuestionVisibility,
-  context: AuditRequestContext,
-): Promise<AdminQuestionView> {
-  await prisma.$transaction(async (transaction) => {
-    const before = await findAdminQuestionById(questionId, transaction);
-    if (!before) throw new ResourceNotFoundError("题目不存在");
-    assertQuestionVisibilityCanChange({
-      currentVisibility: before.visibility,
-      nextVisibility: visibility,
-      status: before.status,
-      knowledgePointCount: before.knowledgePointLinks.length,
-    });
-    await transaction.question.update({
-      where: { id: questionId },
-      data: { visibility },
-    });
-    await writeGovernanceAuditLog(transaction, {
-      actorId,
-      action:
-        visibility === QuestionVisibility.PUBLIC
-          ? AuditAction.QUESTION_MADE_PUBLIC
-          : AuditAction.QUESTION_MADE_PRIVATE,
-      targetType: AuditTargetType.QUESTION,
-      targetId: questionId,
-      summary: `${visibility === QuestionVisibility.PUBLIC ? "设为公共题目" : "撤销公共状态"}：${before.title}`,
-      beforeData: {
-        visibility: before.visibility,
-        status: before.status,
-        assignmentReferenceCount: before._count.assignmentQuestions,
-      },
-      afterData: {
-        visibility,
-        status: before.status,
-        assignmentReferenceCount: before._count.assignmentQuestions,
-      },
-      context,
-    });
-  });
-  return getAdminQuestion(questionId);
-}
-
 export async function disableAdminQuestion(
   actorId: string,
   questionId: string,
@@ -158,14 +110,55 @@ export async function disableAdminQuestion(
       targetId: questionId,
       summary: `停用题目：${before.title}`,
       beforeData: {
-        visibility: before.visibility,
         status: before.status,
         assignmentReferenceCount: before._count.assignmentQuestions,
       },
       afterData: {
-        visibility: before.visibility,
         status: QuestionStatus.INACTIVE,
         assignmentReferenceCount: before._count.assignmentQuestions,
+      },
+      context,
+    });
+  });
+  return getAdminQuestion(questionId);
+}
+
+export async function restoreAdminQuestion(
+  actorId: string,
+  questionId: string,
+  context: AuditRequestContext,
+): Promise<AdminQuestionView> {
+  await prisma.$transaction(async (transaction) => {
+    const before = await findAdminQuestionById(questionId, transaction);
+    if (!before) throw new ResourceNotFoundError("题目不存在");
+    if (
+      before.status !== QuestionStatus.ARCHIVED ||
+      !before.archivedFromStatus
+    ) {
+      throw new GovernanceOperationError("该题目当前不处于可恢复的归档状态");
+    }
+    await transaction.question.update({
+      where: { id: questionId },
+      data: {
+        status: before.archivedFromStatus,
+        archivedFromStatus: null,
+        revision: { increment: 1 },
+      },
+    });
+    await writeGovernanceAuditLog(transaction, {
+      actorId,
+      action: AuditAction.QUESTION_RESTORED,
+      targetType: AuditTargetType.QUESTION,
+      targetId: questionId,
+      summary: `恢复共享题目：${before.title}`,
+      beforeData: {
+        status: before.status,
+        restoredStatus: before.archivedFromStatus,
+        questionCategoryId: before.questionCategoryId,
+      },
+      afterData: {
+        status: before.archivedFromStatus,
+        questionCategoryId: before.questionCategoryId,
       },
       context,
     });

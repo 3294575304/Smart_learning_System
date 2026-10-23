@@ -19,7 +19,7 @@ export default async function AdminQuestionImportPage() {
             href="/admin/questions"
           >
             <ArrowLeft aria-hidden="true" className="size-4" />
-            返回公共题库管理
+            返回共享题库管理
           </Link>
           <div className="mt-4 flex items-start gap-3">
             <div className="hidden size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-md shadow-sky-200 sm:flex">
@@ -37,7 +37,7 @@ export default async function AdminQuestionImportPage() {
               </div>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
                 上传已有 Word、PDF、文本或 JSON
-                题库，系统会拆分题目、识别答案并生成知识点标签。所有内容先进入审核预览，确认后才写入公共题库。
+                题库，系统会拆分题目、识别答案并生成知识点标签。所有内容先进入审核预览，确认后写入教师共同维护的共享题库。
               </p>
             </div>
           </div>

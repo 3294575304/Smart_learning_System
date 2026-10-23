@@ -429,9 +429,7 @@ function KnowledgeStatus({ data }: { data: StudentCourseLearningCenter }) {
                                     {question.bindingType === "PRIMARY"
                                       ? "主要考查"
                                       : "次要涉及"}
-                                    {question.fromCourseTeacher
-                                      ? " · 任课教师题目"
-                                      : " · 公共题库"}
+                                    {" · 课程题库"}
                                   </p>
                                 </li>
                               ))}

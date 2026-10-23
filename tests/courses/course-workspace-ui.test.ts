@@ -22,11 +22,18 @@ test("班级选择器仅显示关联班级，三个分类的入口都携带默�
   assert.match(html, /<option value="class-b" selected="">Python 二班/u);
   assert.match(html, /<option value="class-a">Python 一班/u);
   const links = [...html.matchAll(/href="([^"]+)"/g)].map(
-    (match) => new URL(match[1], "http://localhost"),
+    (match) => new URL(match[1].replaceAll("&amp;", "&"), "http://localhost"),
   );
   assert.equal(links.length, 10);
   assert.ok(
     links.every((url) => url.searchParams.get("classroomId") === "class-b"),
+  );
+  assert.ok(
+    links.some(
+      (url) =>
+        url.pathname === "/teacher/results" &&
+        url.searchParams.get("courseId") === "course-a",
+    ),
   );
   assert.match(html, /教学管理[\s\S]*课堂活动[\s\S]*评价分析/u);
   assert.ok(
@@ -71,8 +78,7 @@ test("课程建设独立展示，大纲两项任务共用工作区，课程功�
       /href="\/teacher\/courses\/course-a\/([a-z-]+)(?:#[^"]*)?"/g,
     ),
   ].map((match) => match[1]);
-  assert.equal(paths.length, 13);
-  assert.equal(new Set(paths).size, 12);
+  assert.equal(paths.length, new Set(paths).size + 1);
   assert.equal(paths.filter((path) => path === "syllabus").length, 2);
   assert.match(
     construction,
@@ -83,6 +89,10 @@ test("课程建设独立展示，大纲两项任务共用工作区，课程功�
   );
   assert.match(html, /请先关联启用中的班级/u);
   assert.doesNotMatch(html, /href="\/teacher\/assignments\/new"/u);
+  const analyticsLink = [...html.matchAll(/href="([^"]+)"/g)]
+    .map((match) => new URL(match[1], "http://localhost"))
+    .find((url) => url.pathname === "/teacher/results");
+  assert.equal(analyticsLink?.searchParams.get("courseId"), "course-a");
   for (const path of paths)
     await access(`app/(protected)/teacher/courses/[courseId]/${path}/page.tsx`);
 });

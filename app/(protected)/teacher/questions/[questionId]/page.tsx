@@ -44,26 +44,16 @@ export default async function QuestionDetailPage({
           <h1 className="mt-2 text-2xl font-semibold">{question.title}</h1>
           <p className="mt-2 text-sm text-gray-500">
             {QUESTION_TYPE_LABELS[question.type]} · 难度 {question.difficulty} ·{" "}
-            {question.visibility === "PUBLIC" ? "公开" : "私有"} · 创建者{" "}
+            {question.questionCategoryName ?? "待补课程分类"} · 创建者{" "}
             {question.creator.displayName}
           </p>
         </div>
-        <QuestionActions
-          canCopy={question.canCopy}
-          canDelete={question.canDelete}
-          canEdit={question.canEdit}
-          questionId={question.id}
-        />
+        <QuestionActions questionId={question.id} />
       </div>
-      {!question.canEdit ? (
-        <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-800">
-          公共题目的内容由题库维护者管理；你可以直接维护它在自己课程中的知识点关联。需要修改题干时，可复制到我的题库。
-        </div>
-      ) : null}
       {question.assignmentReferenceCount > 0 ? (
         <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">
           该题已被 {question.assignmentReferenceCount}{" "}
-          份作业引用。编辑不会改变历史作业快照，删除时将进行归档。
+          份作业引用。编辑不会改变历史作业快照，归档后题目不再进入新作业和推荐。
         </div>
       ) : null}
       <div className="space-y-6 rounded-xl border bg-white p-6">

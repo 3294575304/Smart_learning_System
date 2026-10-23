@@ -42,6 +42,7 @@ import {
   getTeacherSyllabusParses,
   isRetryableSyllabusParseFailure,
 } from "@/services/syllabus-parsing/service";
+import { ensureTestQuestionCategory } from "@/tests/helpers/question-course-category";
 
 const prisma = new PrismaClient();
 const auditContext = {
@@ -850,6 +851,7 @@ test("parse drafts are version-isolated, idempotent and preserve existing data",
       teacher.id,
       {
         templateId: template.id,
+        questionCategoryId: (await ensureTestQuestionCategory(prisma)).id,
         courseNo: `PARSE-${suffix}`,
         term: "2026-2027-1",
         name: "Python Programming",

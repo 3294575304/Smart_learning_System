@@ -5,19 +5,11 @@ import { QuestionActions } from "@/components/questions/question-actions";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import type { QuestionListItem } from "@/services/questions/types";
 
-export function QuestionList({
-  items,
-  scope,
-}: {
-  items: QuestionListItem[];
-  scope: "OWNED" | "PUBLIC";
-}) {
+export function QuestionList({ items }: { items: QuestionListItem[] }) {
   if (items.length === 0) {
     return (
       <div className="text-muted-foreground rounded-xl border border-dashed p-10 text-center">
-        {scope === "PUBLIC"
-          ? "公共题库中暂无符合条件的可复制题目。可以清除搜索或题型筛选，或联系管理员维护公共题库。"
-          : "没有符合条件的题目。可以调整筛选条件，或批量导入题目。"}
+        没有符合条件的题目。可以调整筛选条件，或批量导入题目。
       </div>
     );
   }
@@ -30,9 +22,7 @@ export function QuestionList({
               <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
                 <span>{QUESTION_TYPE_LABELS[question.type]}</span>
                 <span>难度 {question.difficulty}</span>
-                <span>
-                  {question.visibility === "PUBLIC" ? "公开" : "私有"}
-                </span>
+                <span>{question.questionCategoryName ?? "待补课程分类"}</span>
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
                   {question.status === "ACTIVE"
                     ? "使用中"
@@ -92,13 +82,7 @@ export function QuestionList({
                 </p>
               ) : null}
             </div>
-            <QuestionActions
-              compact
-              canCopy={question.canCopy}
-              canDelete={question.canDelete}
-              canEdit={question.canEdit}
-              questionId={question.id}
-            />
+            <QuestionActions compact questionId={question.id} />
           </div>
         </article>
       ))}

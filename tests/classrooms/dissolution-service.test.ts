@@ -26,8 +26,17 @@ test("教师可解散已有学生和已发布作业的班级并通知学生、�
   ]);
   const course = await prisma.course.create({
     data: {
-      templateId: template.id,
-      teacherId: teacher.id,
+      questionCategory: {
+        connectOrCreate: {
+          where: { normalizedName: "automated-test-category" },
+          create: {
+            name: "自动化测试课程分类",
+            normalizedName: "automated-test-category",
+          },
+        },
+      },
+      template: { connect: { id: template.id } },
+      teacher: { connect: { id: teacher.id } },
       courseNo: `DISSOLVE-${suffix}`,
       term: "2026-2027-1",
       name: "解散测试课程",

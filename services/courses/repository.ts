@@ -31,6 +31,7 @@ export type CourseTemplateRecord = Prisma.CourseTemplateGetPayload<{
 const teacherCourseSelect = Prisma.validator<Prisma.CourseSelect>()({
   id: true,
   templateId: true,
+  questionCategoryId: true,
   teacherId: true,
   courseNo: true,
   term: true,
@@ -50,6 +51,7 @@ const teacherCourseSelect = Prisma.validator<Prisma.CourseSelect>()({
       isBuiltin: true,
     },
   },
+  questionCategory: { select: { name: true } },
   classrooms: {
     where: { status: { not: ClassroomStatus.ARCHIVED } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],

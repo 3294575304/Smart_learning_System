@@ -300,8 +300,17 @@ async function main(): Promise<void> {
 
     const course = await prisma.course.create({
       data: {
-        templateId: template.id,
-        teacherId: teacher.id,
+        questionCategory: {
+          connectOrCreate: {
+            where: { normalizedName: "automated-test-category" },
+            create: {
+              name: "自动化测试课程分类",
+              normalizedName: "automated-test-category",
+            },
+          },
+        },
+        template: { connect: { id: template.id } },
+        teacher: { connect: { id: teacher.id } },
         courseNo: `CM-${suffix}`,
         term: "2026-test",
         name: "Concept mastery integration course",
@@ -359,6 +368,7 @@ async function main(): Promise<void> {
         prisma.question.create({
           data: {
             creatorId: teacher.id,
+            questionCategoryId: course.questionCategoryId,
             title: "Concept objective",
             content: "Python variables can be reassigned.",
             type: QuestionType.TRUE_FALSE,
@@ -372,6 +382,7 @@ async function main(): Promise<void> {
         prisma.question.create({
           data: {
             creatorId: teacher.id,
+            questionCategoryId: course.questionCategoryId,
             title: "Concept subjective",
             content: "Explain assignment.",
             type: QuestionType.SHORT_ANSWER,
@@ -385,6 +396,7 @@ async function main(): Promise<void> {
         prisma.question.create({
           data: {
             creatorId: teacher.id,
+            questionCategoryId: course.questionCategoryId,
             title: "Unbound objective",
             content: "Python is dynamically typed.",
             type: QuestionType.TRUE_FALSE,

@@ -1,4 +1,4 @@
-import { QuestionType, QuestionVisibility } from "@prisma/client";
+import { QuestionType } from "@prisma/client";
 import { z } from "zod";
 
 const optionSchema = z.object({
@@ -71,6 +71,8 @@ export const questionUpsertSchema = z
       .min(1, "题干不能为空")
       .max(5000, "题干不能超过 5000 个字符"),
     type: z.nativeEnum(QuestionType),
+    questionCategoryId: z.string().cuid("课程分类 ID 格式无效"),
+    revision: z.number().int().min(1).optional(),
     difficulty: z.number().int().min(1, "难度最低为 1").max(5, "难度最高为 5"),
     options: z.array(optionSchema).max(20, "选项不能超过 20 个"),
     answer: questionAnswerSchema,
@@ -91,7 +93,6 @@ export const questionUpsertSchema = z
           .max(30, "标签不能超过 30 个字符"),
       )
       .max(10, "标签不能超过 10 个"),
-    visibility: z.nativeEnum(QuestionVisibility),
   })
   .superRefine((value, context) => {
     if (!value.knowledgePointIds.length && !value.tags.length)
@@ -257,7 +258,7 @@ export const questionIdSchema = z.string().cuid("题目 ID 格式无效");
 export const questionListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
-  scope: z.enum(["OWNED", "PUBLIC"]).default("OWNED"),
+  categoryId: z.string().cuid("课程分类 ID 格式无效").optional(),
   keyword: z
     .string()
     .trim()

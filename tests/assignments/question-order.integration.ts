@@ -31,8 +31,17 @@ async function main() {
   const template = await prisma.courseTemplate.findFirstOrThrow();
   const course = await prisma.course.create({
     data: {
-      teacherId: teacher.id,
-      templateId: template.id,
+      questionCategory: {
+        connectOrCreate: {
+          where: { normalizedName: "automated-test-category" },
+          create: {
+            name: "自动化测试课程分类",
+            normalizedName: "automated-test-category",
+          },
+        },
+      },
+      teacher: { connect: { id: teacher.id } },
+      template: { connect: { id: template.id } },
       name: "题序测试",
       courseNo: "ORDER-TEST",
       term: "2026",

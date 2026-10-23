@@ -1,6 +1,8 @@
 import "server-only";
 
 import {
+  AuditAction,
+  AuditTargetType,
   Prisma,
   QuestionStatus,
   QuestionType,
@@ -9,16 +11,15 @@ import {
 
 import { prisma } from "@/lib/prisma";
 import { orderedCourseConceptOptions } from "@/services/questions/course-concept-options";
-import {
-  AuthorizationError,
-  ResourceNotFoundError,
-} from "@/services/auth/policy";
+import { ResourceNotFoundError } from "@/services/auth/policy";
 import { QuestionOperationError } from "@/services/questions/errors";
+import { teacherQuestionAccessWhere } from "@/services/questions/access";
 import {
-  canTeacherCopyQuestion,
-  assertTeacherCanEditQuestion,
-  assertTeacherQuestionIsPrivate,
-} from "@/services/questions/policy";
+  listQuestionCourseCategories,
+  requireActiveQuestionCourseCategory,
+} from "@/services/question-course-categories/service";
+import { writeGovernanceAuditLog } from "@/services/audit/repository";
+import type { AuditRequestContext } from "@/services/audit/types";
 import type {
   DeleteQuestionResult,
   KnowledgePointOption,
@@ -50,6 +51,7 @@ const questionInclude = {
     },
   },
   _count: { select: { assignmentQuestions: true } },
+  questionCategory: { select: { name: true } },
 } satisfies Prisma.QuestionInclude;
 
 type QuestionRecord = Prisma.QuestionGetPayload<{
@@ -91,10 +93,9 @@ function answerFromRecord(question: QuestionRecord): QuestionAnswer {
 }
 
 function listItemFromRecord(
-  teacherId: string,
+  _teacherId: string,
   question: QuestionRecord,
 ): QuestionListItem {
-  const isOwner = question.creatorId === teacherId;
   return {
     id: question.id,
     title: question.title,
@@ -102,7 +103,9 @@ function listItemFromRecord(
     type: question.type,
     difficulty: question.difficulty,
     status: question.status,
-    visibility: question.visibility,
+    questionCategoryId: question.questionCategoryId,
+    questionCategoryName: question.questionCategory?.name ?? null,
+    revision: question.revision,
     tags: question.tags,
     creator: {
       id: question.creator.id,
@@ -113,9 +116,8 @@ function listItemFromRecord(
       ({ knowledgePoint }) => knowledgePoint,
     ),
     assignmentReferenceCount: question._count.assignmentQuestions,
-    canEdit: isOwner && question.visibility === QuestionVisibility.PRIVATE,
-    canDelete: isOwner && question.visibility === QuestionVisibility.PRIVATE,
-    canCopy: canTeacherCopyQuestion(teacherId, question),
+    canEdit: true,
+    canDelete: true,
     createdAt: question.createdAt,
     updatedAt: question.updatedAt,
   };
@@ -140,11 +142,12 @@ function detailFromRecord(
 
 function persistenceFields(input: QuestionUpsertData) {
   const base = {
+    questionCategoryId: input.questionCategoryId,
     title: input.title,
     content: input.content,
     type: input.type,
     difficulty: input.difficulty,
-    visibility: input.visibility,
+    visibility: QuestionVisibility.PUBLIC,
     status: QuestionStatus.ACTIVE,
     isAssignmentOnly: false,
     explanation: input.explanation,
@@ -216,34 +219,19 @@ async function assertKnowledgePointsExist(
 }
 
 async function findQuestionRecord(
+  teacherId: string,
   questionId: string,
 ): Promise<QuestionRecord | null> {
   return prisma.question.findFirst({
     where: {
       id: questionId,
+      ...teacherQuestionAccessWhere(teacherId),
       deletedAt: null,
       status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
       isAssignmentOnly: false,
     },
     include: questionInclude,
   });
-}
-
-async function requireOwnedQuestion(
-  teacherId: string,
-  questionId: string,
-): Promise<QuestionRecord> {
-  const question = await findQuestionRecord(questionId);
-  if (!question) {
-    throw new ResourceNotFoundError("题目不存在");
-  }
-  if (question.creatorId !== teacherId) {
-    if (question.visibility === QuestionVisibility.PUBLIC) {
-      throw new AuthorizationError("公共题目只能查看或复制，不能直接修改");
-    }
-    throw new ResourceNotFoundError("题目不存在");
-  }
-  return question;
 }
 
 export async function listKnowledgePointOptions(): Promise<
@@ -256,6 +244,13 @@ export async function listKnowledgePointOptions(): Promise<
   });
 }
 
+export async function listTeacherQuestionCategoryOptions() {
+  return (await listQuestionCourseCategories(true)).map(({ id, name }) => ({
+    id,
+    name,
+  }));
+}
+
 export async function listTeacherQuestionCourseOptions(teacherId: string) {
   const courses = await prisma.course.findMany({
     where: {
@@ -265,6 +260,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
     orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     select: {
       id: true,
+      questionCategoryId: true,
       templateId: true,
       name: true,
       courseNo: true,
@@ -297,6 +293,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
     {
       id: string;
       courseIds: string[];
+      questionCategoryId: string;
       name: string;
       courseNo: string;
       term: string;
@@ -309,6 +306,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
   >();
   for (const course of courses) {
     const key = [
+      course.questionCategoryId,
       course.templateId,
       course.courseNo,
       course.name,
@@ -319,6 +317,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
       group = {
         id: course.id,
         courseIds: [],
+        questionCategoryId: course.questionCategoryId,
         name: course.name,
         courseNo: course.courseNo,
         term: course.term,
@@ -367,6 +366,7 @@ export async function listTeacherQuestions(
 ): Promise<QuestionListResult> {
   let courseGraphConceptIds: string[] | undefined;
   let courseIds: string[] = [];
+  let courseQuestionCategoryId: string | undefined;
   if (query.courseId) {
     const selectedCourse = await prisma.course.findFirst({
       where: {
@@ -374,14 +374,25 @@ export async function listTeacherQuestions(
         teacherId,
         status: { not: "ARCHIVED" },
       },
-      select: { templateId: true, courseNo: true, name: true, term: true },
+      select: {
+        templateId: true,
+        questionCategoryId: true,
+        courseNo: true,
+        name: true,
+        term: true,
+      },
     });
     if (!selectedCourse)
       throw new ResourceNotFoundError("课程不存在或无权访问");
+    courseQuestionCategoryId = selectedCourse.questionCategoryId;
+    if (query.categoryId && query.categoryId !== courseQuestionCategoryId) {
+      throw new ResourceNotFoundError("所选课程与课程分类不匹配");
+    }
     const courseGroup = await prisma.course.findMany({
       where: {
         teacherId,
         templateId: selectedCourse.templateId,
+        questionCategoryId: selectedCourse.questionCategoryId,
         courseNo: selectedCourse.courseNo,
         name: selectedCourse.name,
         term: selectedCourse.term,
@@ -424,15 +435,13 @@ export async function listTeacherQuestions(
     throw new ResourceNotFoundError("请选择课程后再筛选课程知识点");
   }
   const where: Prisma.QuestionWhereInput = {
+    ...teacherQuestionAccessWhere(teacherId),
     deletedAt: null,
-    status:
-      query.scope === "OWNED"
-        ? { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] }
-        : QuestionStatus.ACTIVE,
+    status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
     isAssignmentOnly: false,
-    ...(query.scope === "OWNED"
-      ? { creatorId: teacherId }
-      : { visibility: QuestionVisibility.PUBLIC }),
+    ...((courseQuestionCategoryId ?? query.categoryId)
+      ? { questionCategoryId: courseQuestionCategoryId ?? query.categoryId }
+      : {}),
     ...(query.keyword
       ? {
           OR: [
@@ -451,27 +460,14 @@ export async function listTeacherQuestions(
           },
         }
       : {}),
-    ...(query.courseId
+    ...(query.courseId && query.courseConceptId
       ? {
-          AND: [
-            {
-              OR: [
-                ...(!query.courseConceptId
-                  ? [{ categoryCourseId: { in: courseIds } }]
-                  : []),
-                {
-                  graphBindings: {
-                    some: {
-                      courseId: { in: courseIds },
-                      ...(query.courseConceptId
-                        ? { conceptId: { in: courseGraphConceptIds } }
-                        : {}),
-                    },
-                  },
-                },
-              ],
+          graphBindings: {
+            some: {
+              courseId: { in: courseIds },
+              conceptId: { in: courseGraphConceptIds },
             },
-          ],
+          },
         }
       : {}),
   };
@@ -544,15 +540,8 @@ export async function getTeacherQuestion(
   teacherId: string,
   questionId: string,
 ): Promise<QuestionDetail> {
-  const question = await findQuestionRecord(questionId);
-  if (
-    !question ||
-    (question.creatorId !== teacherId &&
-      (question.visibility !== QuestionVisibility.PUBLIC ||
-        question.status !== QuestionStatus.ACTIVE))
-  ) {
-    throw new ResourceNotFoundError("题目不存在");
-  }
+  const question = await findQuestionRecord(teacherId, questionId);
+  if (!question) throw new ResourceNotFoundError("题目不存在");
   return detailFromRecord(teacherId, question);
 }
 
@@ -560,37 +549,52 @@ export async function createQuestion(
   teacherId: string,
   input: QuestionUpsertData,
 ): Promise<QuestionDetail> {
-  assertTeacherQuestionIsPrivate(input.visibility);
   const questionId = await prisma.$transaction(async (transaction) => {
-    await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
-    const question = await transaction.question.create({
-      data: {
-        creatorId: teacherId,
-        ...persistenceFields(input),
-        options: { create: optionCreateData(input) },
-        knowledgePointLinks: {
-          create: input.knowledgePointIds.map((knowledgePointId) => ({
-            knowledgePointId,
-            weight: 1,
-          })),
-        },
-      },
-      select: { id: true },
-    });
-    return question.id;
+    return createQuestionInTransaction(transaction, teacherId, input);
   });
   return getTeacherQuestion(teacherId, questionId);
+}
+
+export async function createQuestionInTransaction(
+  transaction: Prisma.TransactionClient,
+  teacherId: string,
+  input: QuestionUpsertData,
+  status?: QuestionStatus,
+): Promise<string> {
+  await requireActiveQuestionCourseCategory(
+    input.questionCategoryId,
+    transaction,
+  );
+  await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
+  const question = await transaction.question.create({
+    data: {
+      creatorId: teacherId,
+      ...persistenceFields(input),
+      ...(status ? { status } : {}),
+      options: { create: optionCreateData(input) },
+      knowledgePointLinks: {
+        create: input.knowledgePointIds.map((knowledgePointId) => ({
+          knowledgePointId,
+          weight: 1,
+        })),
+      },
+    },
+    select: { id: true },
+  });
+  return question.id;
 }
 
 export async function createQuestionsInBulk(
   teacherId: string,
   questions: QuestionUpsertData[],
 ): Promise<string[]> {
-  for (const question of questions)
-    assertTeacherQuestionIsPrivate(question.visibility);
   return prisma.$transaction(async (transaction) => {
     const ids: string[] = [];
     for (const input of questions) {
+      await requireActiveQuestionCourseCategory(
+        input.questionCategoryId,
+        transaction,
+      );
       await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
       const created = await transaction.question.create({
         data: {
@@ -616,143 +620,98 @@ export async function updateQuestion(
   teacherId: string,
   questionId: string,
   input: QuestionUpsertData,
+  context: AuditRequestContext,
 ): Promise<QuestionDetail> {
-  assertTeacherQuestionIsPrivate(input.visibility);
-  const ownedQuestion = await requireOwnedQuestion(teacherId, questionId);
-  assertTeacherCanEditQuestion(ownedQuestion, teacherId);
+  if (!input.revision) {
+    throw new QuestionOperationError("缺少题目修订号，请刷新后重试", 409);
+  }
   await prisma.$transaction(async (transaction) => {
+    const before = await transaction.question.findFirst({
+      where: {
+        id: questionId,
+        ...teacherQuestionAccessWhere(teacherId),
+        deletedAt: null,
+        status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
+        isAssignmentOnly: false,
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        questionCategoryId: true,
+        revision: true,
+      },
+    });
+    if (!before) throw new ResourceNotFoundError("题目不存在");
+    if (before.revision !== input.revision) {
+      throw new QuestionOperationError(
+        "题目已被其他教师修改，请刷新后重试",
+        409,
+      );
+    }
+    await requireActiveQuestionCourseCategory(
+      input.questionCategoryId,
+      transaction,
+    );
     await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
+    const updated = await transaction.question.updateMany({
+      where: {
+        id: questionId,
+        revision: input.revision,
+        deletedAt: null,
+        status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
+      },
+      data: {
+        ...persistenceFields(input),
+        status: before.status,
+        revision: { increment: 1 },
+      },
+    });
+    if (updated.count !== 1) {
+      throw new QuestionOperationError(
+        "题目已被其他教师修改，请刷新后重试",
+        409,
+      );
+    }
     await transaction.questionOption.deleteMany({ where: { questionId } });
     await transaction.questionKnowledgePoint.deleteMany({
       where: { questionId },
     });
-    await transaction.question.update({
-      where: { id: questionId },
-      data: {
-        ...persistenceFields(input),
-        ...(ownedQuestion.status === QuestionStatus.DRAFT &&
-        input.type === QuestionType.PYTHON_PROGRAMMING
-          ? { status: QuestionStatus.DRAFT }
-          : {}),
-        options: { create: optionCreateData(input) },
-        knowledgePointLinks: {
-          create: input.knowledgePointIds.map((knowledgePointId) => ({
-            knowledgePointId,
-            weight: 1,
-          })),
-        },
+    await transaction.questionOption.createMany({
+      data: optionCreateData(input).map((option) => ({
+        ...option,
+        questionId,
+      })),
+    });
+    await transaction.questionKnowledgePoint.createMany({
+      data: input.knowledgePointIds.map((knowledgePointId) => ({
+        questionId,
+        knowledgePointId,
+        weight: 1,
+      })),
+    });
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: AuditAction.QUESTION_UPDATED,
+      targetType: AuditTargetType.QUESTION,
+      targetId: questionId,
+      summary: `编辑共享题目：${input.title}`,
+      beforeData: {
+        title: before.title,
+        status: before.status,
+        questionCategoryId: before.questionCategoryId,
+        revision: before.revision,
       },
+      afterData: {
+        title: input.title,
+        status: before.status,
+        questionCategoryId: input.questionCategoryId,
+        revision: input.revision + 1,
+      },
+      context,
     });
   });
   return getTeacherQuestion(teacherId, questionId);
-}
-
-export async function copyQuestion(
-  teacherId: string,
-  sourceQuestionId: string,
-): Promise<QuestionDetail> {
-  const copiedId = await prisma.$transaction(async (transaction) => {
-    const source = await transaction.question.findFirst({
-      where: {
-        id: sourceQuestionId,
-        deletedAt: null,
-        status: QuestionStatus.ACTIVE,
-      },
-      include: questionInclude,
-    });
-    if (!source || !canTeacherCopyQuestion(teacherId, source)) {
-      throw new ResourceNotFoundError("题目不存在");
-    }
-
-    const programmingConfig =
-      source.type === QuestionType.PYTHON_PROGRAMMING
-        ? await transaction.programmingQuestionConfigRevision.findFirst({
-            where: { questionId: source.id },
-            orderBy: [{ revisionNumber: "desc" }, { id: "desc" }],
-            include: {
-              testCases: {
-                orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-              },
-            },
-          })
-        : null;
-    if (source.type === QuestionType.PYTHON_PROGRAMMING && !programmingConfig) {
-      throw new QuestionOperationError("公共编程题缺少判题配置，暂时无法复制");
-    }
-
-    const copy = await transaction.question.create({
-      data: {
-        creatorId: teacherId,
-        title: `${source.title}（副本）`,
-        content: source.content,
-        type: source.type,
-        difficulty: source.difficulty,
-        visibility: QuestionVisibility.PRIVATE,
-        status: QuestionStatus.ACTIVE,
-        isAssignmentOnly: false,
-        explanation: source.explanation,
-        tags: source.tags,
-        correctBoolean: source.correctBoolean,
-        referenceAnswer: source.referenceAnswer,
-        acceptableAnswers: source.acceptableAnswers,
-        isCaseSensitive: source.isCaseSensitive,
-        gradingConfig:
-          source.gradingConfig === null
-            ? Prisma.JsonNull
-            : source.gradingConfig,
-        options: {
-          create: source.options.map((option) => ({
-            label: option.label,
-            content: option.content,
-            isCorrect: option.isCorrect,
-            sortOrder: option.sortOrder,
-          })),
-        },
-        knowledgePointLinks: {
-          create: source.knowledgePointLinks.map(
-            ({ knowledgePoint, weight }) => ({
-              knowledgePointId: knowledgePoint.id,
-              weight,
-            }),
-          ),
-        },
-        ...(programmingConfig
-          ? {
-              programmingConfigRevisions: {
-                create: {
-                  revisionNumber: 1,
-                  standardCode: programmingConfig.standardCode,
-                  starterCode: programmingConfig.starterCode,
-                  totalPoints: programmingConfig.totalPoints,
-                  cpuTimeMs: programmingConfig.cpuTimeMs,
-                  wallTimeMs: programmingConfig.wallTimeMs,
-                  memoryBytes: programmingConfig.memoryBytes,
-                  outputBytes: programmingConfig.outputBytes,
-                  processCount: programmingConfig.processCount,
-                  testCasesHash: programmingConfig.testCasesHash,
-                  configurationHash: programmingConfig.configurationHash,
-                  executorRuleVersion: programmingConfig.executorRuleVersion,
-                  createdById: teacherId,
-                  testCases: {
-                    create: programmingConfig.testCases.map((testCase) => ({
-                      visibility: testCase.visibility,
-                      name: testCase.name,
-                      stdin: testCase.stdin,
-                      expectedOutput: testCase.expectedOutput,
-                      points: testCase.points,
-                      sortOrder: testCase.sortOrder,
-                    })),
-                  },
-                },
-              },
-            }
-          : {}),
-      },
-      select: { id: true },
-    });
-    return copy.id;
-  });
-  return getTeacherQuestion(teacherId, copiedId);
 }
 
 async function referenceCounts(
@@ -767,43 +726,63 @@ async function referenceCounts(
   return { assignments, recommendations, tutoringRecords };
 }
 
-function hasReferences(references: QuestionReferenceCounts): boolean {
-  return Object.values(references).some((count) => count > 0);
-}
-
 export async function deleteQuestion(
   teacherId: string,
   questionId: string,
+  context: AuditRequestContext,
 ): Promise<DeleteQuestionResult> {
-  const ownedQuestion = await requireOwnedQuestion(teacherId, questionId);
-  assertTeacherCanEditQuestion(ownedQuestion, teacherId);
-  try {
-    return await prisma.$transaction(async (transaction) => {
-      const references = await referenceCounts(transaction, questionId);
-      if (hasReferences(references)) {
-        await transaction.question.update({
-          where: { id: questionId },
-          data: { status: QuestionStatus.ARCHIVED, deletedAt: new Date() },
-        });
-        return { questionId, mode: "ARCHIVED", references };
-      }
-      await transaction.question.delete({ where: { id: questionId } });
-      return { questionId, mode: "PHYSICAL", references };
+  return prisma.$transaction(async (transaction) => {
+    const before = await transaction.question.findFirst({
+      where: {
+        id: questionId,
+        ...teacherQuestionAccessWhere(teacherId),
+        deletedAt: null,
+        status: { not: QuestionStatus.ARCHIVED },
+        isAssignmentOnly: false,
+      },
+      select: {
+        title: true,
+        status: true,
+        questionCategoryId: true,
+        revision: true,
+      },
     });
-  } catch (error: unknown) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2003"
-    ) {
-      const references = await prisma.$transaction((transaction) =>
-        referenceCounts(transaction, questionId),
-      );
-      await prisma.question.update({
-        where: { id: questionId },
-        data: { status: QuestionStatus.ARCHIVED, deletedAt: new Date() },
-      });
-      return { questionId, mode: "ARCHIVED", references };
+    if (!before) throw new ResourceNotFoundError("题目不存在");
+    const archived = await transaction.question.updateMany({
+      where: { id: questionId, revision: before.revision, deletedAt: null },
+      data: {
+        status: QuestionStatus.ARCHIVED,
+        archivedFromStatus: before.status,
+        revision: { increment: 1 },
+      },
+    });
+    if (archived.count !== 1) {
+      throw new QuestionOperationError("题目状态已变化，请刷新后重试", 409);
     }
-    throw error;
-  }
+    const references = await referenceCounts(transaction, questionId);
+    await writeGovernanceAuditLog(transaction, {
+      actorId: teacherId,
+      action: AuditAction.QUESTION_ARCHIVED,
+      targetType: AuditTargetType.QUESTION,
+      targetId: questionId,
+      summary: `归档共享题目：${before.title}`,
+      beforeData: {
+        title: before.title,
+        status: before.status,
+        questionCategoryId: before.questionCategoryId,
+        revision: before.revision,
+      },
+      afterData: {
+        title: before.title,
+        status: QuestionStatus.ARCHIVED,
+        references: Object.values(references).reduce(
+          (sum, count) => sum + count,
+          0,
+        ),
+        revision: before.revision + 1,
+      },
+      context,
+    });
+    return { questionId, mode: "ARCHIVED", references };
+  });
 }

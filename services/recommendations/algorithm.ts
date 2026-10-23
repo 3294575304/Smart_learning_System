@@ -1,4 +1,4 @@
-import { QuestionStatus, QuestionVisibility } from "@prisma/client";
+import { QuestionStatus } from "@prisma/client";
 
 import type {
   MatchedKnowledgePoint,
@@ -89,13 +89,6 @@ function filterCandidates(input: RecommendationAlgorithmInput): {
       candidate.deletedAt !== null
     ) {
       excludedCounts.UNAVAILABLE += 1;
-      continue;
-    }
-    if (
-      candidate.creatorId !== input.teacherScope.teacherId &&
-      candidate.visibility !== QuestionVisibility.PUBLIC
-    ) {
-      excludedCounts.UNAUTHORIZED += 1;
       continue;
     }
     if (!isInsideTeacherScope(candidate, input)) {

@@ -60,9 +60,15 @@ export function QuestionGovernanceList({
                 </p>
               </td>
               <td className="px-4 py-3">
-                <p>{question.visibility === "PUBLIC" ? "公共" : "私有"}</p>
+                <p>{question.questionCategoryName ?? "待补课程分类"}</p>
                 <p className="text-muted-foreground text-xs">
-                  {question.status === "ACTIVE" ? "正常" : "非活动"}
+                  {question.status === "ACTIVE"
+                    ? "正常"
+                    : question.status === "ARCHIVED"
+                      ? "已归档"
+                      : question.status === "DRAFT"
+                        ? "草稿"
+                        : "已停用"}
                 </p>
               </td>
               <td className="px-4 py-3">

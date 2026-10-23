@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { questionApiError } from "@/lib/question-api";
 import { definedFieldErrors } from "@/lib/zod-errors";
+import { auditRequestContext } from "@/services/audit/request-context";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
 import {
   questionIdSchema,
@@ -53,7 +54,12 @@ export async function PATCH(request: Request, context: QuestionRouteContext) {
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
     return apiSuccess(
-      await updateQuestion(teacher.id, parsedId.data, parsedInput.data),
+      await updateQuestion(
+        teacher.id,
+        parsedId.data,
+        parsedInput.data,
+        auditRequestContext(request),
+      ),
     );
   } catch (error: unknown) {
     return questionApiError(error);
@@ -67,7 +73,13 @@ export async function DELETE(_request: Request, context: QuestionRouteContext) {
   }
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
-    return apiSuccess(await deleteQuestion(teacher.id, parsedId.data));
+    return apiSuccess(
+      await deleteQuestion(
+        teacher.id,
+        parsedId.data,
+        auditRequestContext(_request),
+      ),
+    );
   } catch (error: unknown) {
     return questionApiError(error);
   }

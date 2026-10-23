@@ -61,6 +61,7 @@ export const classroomIdSchema = z.string().cuid("班级 ID 格式无效");
 export const courseClassroomQuerySchema = z.object({
   classroomId: classroomIdSchema.optional(),
 });
+export const questionCategoryIdSchema = z.string().cuid("课程分类 ID 格式无效");
 
 export const createCourseTemplateSchema = z
   .object({
@@ -82,6 +83,7 @@ export const updateCourseTemplateSchema = z
 export const createCourseSchema = z
   .object({
     templateId: courseTemplateIdSchema,
+    questionCategoryId: questionCategoryIdSchema,
     courseNo: courseNoSchema,
     term: termSchema,
     name: courseNameSchema,
@@ -91,6 +93,7 @@ export const createCourseSchema = z
 
 export const updateCourseSchema = z
   .object({
+    questionCategoryId: questionCategoryIdSchema,
     courseNo: courseNoSchema,
     term: termSchema,
     name: courseNameSchema,

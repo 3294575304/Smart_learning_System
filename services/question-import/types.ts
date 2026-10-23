@@ -7,8 +7,6 @@ export type QuestionImportFormat = "DOC" | "DOCX" | "PDF" | "TXT" | "JSON";
 export interface QuestionImportCourseOption {
   id: string;
   name: string;
-  courseNo: string;
-  term: string;
 }
 
 export interface QuestionImportOption {

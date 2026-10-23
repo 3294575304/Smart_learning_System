@@ -24,6 +24,7 @@ import {
   updateTeacherCourse,
   unlinkTeacherClassroomFromCourse,
 } from "@/services/courses/service";
+import { ensureTestQuestionCategory } from "@/tests/helpers/question-course-category";
 const prisma = new PrismaClient();
 
 const auditContext = {
@@ -120,12 +121,14 @@ test("教师课程可以按模板创建、避免重复并关联班级", async ()
     (template) => template.code === "python-programming-v1",
   );
   assert.ok(pythonTemplate);
+  const questionCategory = await ensureTestQuestionCategory(prisma);
 
   const courseNo = `IT-COURSE-${suffix.toUpperCase()}`;
   const created = await createTeacherCourse(
     teacher.id,
     {
       templateId: pythonTemplate.id,
+      questionCategoryId: questionCategory.id,
       courseNo,
       term: "2026-2027-1",
       name: "课程服务测试",
@@ -143,6 +146,7 @@ test("教师课程可以按模板创建、避免重复并关联班级", async ()
         teacher.id,
         {
           templateId: pythonTemplate.id,
+          questionCategoryId: questionCategory.id,
           courseNo,
           term: "2026-2027-1",
           name: "课程服务测试重复",
@@ -183,6 +187,7 @@ test("教师课程可以按模板创建、避免重复并关联班级", async ()
     teacher.id,
     created.id,
     {
+      questionCategoryId: questionCategory.id,
       courseNo,
       term: "2026-2027-1",
       name: "课程服务测试（更新）",
@@ -241,8 +246,17 @@ test("教师可以软删除课程并保留班级、名单、文件、成员和�
   ]);
   const course = await prisma.course.create({
     data: {
-      templateId: template.id,
-      teacherId: teacher.id,
+      questionCategory: {
+        connectOrCreate: {
+          where: { normalizedName: "automated-test-category" },
+          create: {
+            name: "自动化测试课程分类",
+            normalizedName: "automated-test-category",
+          },
+        },
+      },
+      template: { connect: { id: template.id } },
+      teacher: { connect: { id: teacher.id } },
       courseNo: `DELETE-${suffix.toUpperCase()}`,
       term: "2026-2027-1",
       name: "待删除空草稿课程",
@@ -348,8 +362,17 @@ test("教师可以软删除课程并保留班级、名单、文件、成员和�
 
   const replacementCourse = await prisma.course.create({
     data: {
-      templateId: template.id,
-      teacherId: teacher.id,
+      questionCategory: {
+        connectOrCreate: {
+          where: { normalizedName: "automated-test-category" },
+          create: {
+            name: "自动化测试课程分类",
+            normalizedName: "automated-test-category",
+          },
+        },
+      },
+      template: { connect: { id: template.id } },
+      teacher: { connect: { id: teacher.id } },
       courseNo: course.courseNo,
       term: course.term,
       name: "删除后重建课程",
@@ -422,8 +445,17 @@ test("课程可在已有正式教学数据时删除，跨教师访问受限且�
   const createDraft = (label: string) =>
     prisma.course.create({
       data: {
-        templateId: template.id,
-        teacherId: teacher.id,
+        questionCategory: {
+          connectOrCreate: {
+            where: { normalizedName: "automated-test-category" },
+            create: {
+              name: "自动化测试课程分类",
+              normalizedName: "automated-test-category",
+            },
+          },
+        },
+        template: { connect: { id: template.id } },
+        teacher: { connect: { id: teacher.id } },
         courseNo: `DELETE-${label}-${suffix.toUpperCase()}`,
         term: "2026-2027-1",
         name: `删除测试-${label}`,
@@ -547,8 +579,17 @@ test("课程删除不清理已上传文件", async () => {
   ]);
   const course = await prisma.course.create({
     data: {
-      templateId: template.id,
-      teacherId: teacher.id,
+      questionCategory: {
+        connectOrCreate: {
+          where: { normalizedName: "automated-test-category" },
+          create: {
+            name: "自动化测试课程分类",
+            normalizedName: "automated-test-category",
+          },
+        },
+      },
+      template: { connect: { id: template.id } },
+      teacher: { connect: { id: teacher.id } },
       courseNo: `DELETE-FILE-${suffix.toUpperCase()}`,
       term: "2026-2027-1",
       name: "文件清理失败草稿",
@@ -601,8 +642,17 @@ test("课程软删除保留已执行的空导入批次", async () => {
   ]);
   const course = await prisma.course.create({
     data: {
-      templateId: template.id,
-      teacherId: teacher.id,
+      questionCategory: {
+        connectOrCreate: {
+          where: { normalizedName: "automated-test-category" },
+          create: {
+            name: "自动化测试课程分类",
+            normalizedName: "automated-test-category",
+          },
+        },
+      },
+      template: { connect: { id: template.id } },
+      teacher: { connect: { id: teacher.id } },
       courseNo: `EMPTY-IMPORT-${suffix.toUpperCase()}`,
       term: "2026-2027-1",
       name: "空导入批次删除测试",

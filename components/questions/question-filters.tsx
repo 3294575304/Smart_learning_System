@@ -10,9 +10,11 @@ import type { QuestionListQuery } from "@/services/questions/schemas";
 
 interface QuestionFiltersProps {
   query: QuestionListQuery;
+  categories: Array<{ id: string; name: string }>;
   courses: Array<{
     id: string;
     courseIds: string[];
+    questionCategoryId: string;
     name: string;
     term: string;
     courseNo: string;
@@ -26,7 +28,11 @@ interface QuestionFiltersProps {
   }>;
 }
 
-export function QuestionFilters({ query, courses }: QuestionFiltersProps) {
+export function QuestionFilters({
+  query,
+  courses,
+  categories,
+}: QuestionFiltersProps) {
   const [keyword, setKeyword] = useState(query.keyword ?? "");
   const [pending, setPending] = useState(false);
   const selectedCourse = courses.find((course) =>
@@ -46,16 +52,24 @@ export function QuestionFilters({ query, courses }: QuestionFiltersProps) {
 
   function update(name: string, value: string) {
     const params = new URLSearchParams();
-    params.set("scope", query.scope);
     params.set("pageSize", String(query.pageSize));
     if (keyword.trim()) params.set("keyword", keyword.trim());
     if (query.type) params.set("type", query.type);
     if (query.difficulty) params.set("difficulty", String(query.difficulty));
     if (query.courseId) params.set("courseId", query.courseId);
+    if (query.categoryId) params.set("categoryId", query.categoryId);
     if (query.courseConceptId)
       params.set("courseConceptId", query.courseConceptId);
     params.set(name, value);
-    if (name === "courseId") params.delete("courseConceptId");
+    if (name === "courseId") {
+      params.delete("courseConceptId");
+      const course = courses.find((item) => item.id === value);
+      if (course) params.set("categoryId", course.questionCategoryId);
+    }
+    if (name === "categoryId") {
+      params.delete("courseId");
+      params.delete("courseConceptId");
+    }
     params.delete("knowledgePointId");
     params.set("page", "1");
     if (!value) params.delete(name);
@@ -66,21 +80,6 @@ export function QuestionFilters({ query, courses }: QuestionFiltersProps) {
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     update("keyword", keyword.trim());
-  }
-
-  function scopeHref(scope: "OWNED" | "PUBLIC") {
-    const params = new URLSearchParams({
-      scope,
-      page: "1",
-      pageSize: String(query.pageSize),
-    });
-    if (keyword.trim()) params.set("keyword", keyword.trim());
-    if (query.type) params.set("type", query.type);
-    if (query.difficulty) params.set("difficulty", String(query.difficulty));
-    if (query.courseId) params.set("courseId", query.courseId);
-    if (query.courseConceptId)
-      params.set("courseConceptId", query.courseConceptId);
-    return `/teacher/questions?${params.toString()}`;
   }
 
   return (
@@ -110,33 +109,21 @@ export function QuestionFilters({ query, courses }: QuestionFiltersProps) {
           搜索
         </button>
       </form>
-      <fieldset className="space-y-1">
-        <legend className="text-xs font-medium">题库范围</legend>
-        <div
-          className="flex rounded-md border p-1"
-          role="group"
-          aria-label="题库范围"
+      <label className="space-y-1">
+        <span className="text-xs font-medium">课程分类</span>
+        <select
+          className="w-full rounded-md border px-3 py-2"
+          value={query.categoryId ?? ""}
+          onChange={(event) => update("categoryId", event.target.value)}
         >
-          {(
-            [
-              ["OWNED", "我的题目"],
-              ["PUBLIC", "公共题库"],
-            ] as const
-          ).map(([scope, label]) => (
-            <button
-              aria-current={query.scope === scope ? "page" : undefined}
-              className={`flex-1 rounded px-3 py-2 text-sm transition-colors ${query.scope === scope ? "bg-sky-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}
-              key={scope}
-              onClick={() => {
-                window.location.assign(scopeHref(scope));
-              }}
-              type="button"
-            >
-              {label}
-            </button>
+          <option value="">全部课程分类</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
           ))}
-        </div>
-      </fieldset>
+        </select>
+      </label>
       <label className="space-y-1">
         <span className="text-xs font-medium">题型</span>
         <select
@@ -242,7 +229,7 @@ export function QuestionFilters({ query, courses }: QuestionFiltersProps) {
           onClick={() => {
             setKeyword("");
             setPending(true);
-            window.location.assign(`/teacher/questions?scope=${query.scope}`);
+            window.location.assign("/teacher/questions");
           }}
         >
           重置筛选

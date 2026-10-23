@@ -5,8 +5,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import WordExtractor from "word-extractor";
-import BufferReader from "word-extractor/lib/buffer-reader";
-import OleCompoundDoc from "word-extractor/lib/ole-compound-doc";
+import BufferReader from "word-extractor/lib/buffer-reader.js";
+import OleCompoundDoc from "word-extractor/lib/ole-compound-doc.js";
 import {
   getDocument,
   GlobalWorkerOptions,

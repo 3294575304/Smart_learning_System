@@ -11,6 +11,7 @@ import { questionIdSchema } from "@/services/questions/schemas";
 import {
   getTeacherQuestion,
   listKnowledgePointOptions,
+  listTeacherQuestionCategoryOptions,
 } from "@/services/questions/service";
 import { listTeacherBindingCourses } from "@/services/question-graph-bindings/service";
 
@@ -25,9 +26,10 @@ export default async function EditQuestionPage({
   const parsedId = questionIdSchema.safeParse((await params).questionId);
   if (!parsedId.success) notFound();
   try {
-    const [question, knowledgePoints, courses] = await Promise.all([
+    const [question, knowledgePoints, categories, courses] = await Promise.all([
       getTeacherQuestion(teacher.id, parsedId.data),
       listKnowledgePointOptions(),
+      listTeacherQuestionCategoryOptions(),
       listTeacherBindingCourses(teacher.id),
     ]);
     if (!question.canEdit) notFound();
@@ -50,6 +52,7 @@ export default async function EditQuestionPage({
           </p>
         ) : null}
         <QuestionForm
+          categories={categories}
           knowledgePoints={knowledgePoints}
           mode="edit"
           question={question}

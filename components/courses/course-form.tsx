@@ -16,9 +16,12 @@ import {
 } from "@/services/courses/schemas";
 import type { TeacherCourseTemplateOption } from "@/services/courses/types";
 
+type QuestionCategoryOption = { id: string; name: string };
+
 interface CreateCourseFormProps {
   mode: "create";
   templates: TeacherCourseTemplateOption[];
+  categories: QuestionCategoryOption[];
   defaultTemplateId?: string;
   defaultValues?: CreateCourseInput;
 }
@@ -27,6 +30,7 @@ interface EditCourseFormProps {
   mode: "edit";
   courseId: string;
   template: TeacherCourseTemplateOption;
+  categories: QuestionCategoryOption[];
   defaultValues: UpdateCourseInput;
 }
 
@@ -34,6 +38,7 @@ type Props = CreateCourseFormProps | EditCourseFormProps;
 
 function buildTemplateDefaults(
   templates: TeacherCourseTemplateOption[],
+  categories: QuestionCategoryOption[],
   defaultTemplateId?: string,
 ) {
   const selected =
@@ -42,6 +47,7 @@ function buildTemplateDefaults(
     null;
   return {
     templateId: selected?.id ?? "",
+    questionCategoryId: categories[0]?.id ?? "",
     courseNo: "",
     term: "",
     name: selected?.name ?? "",
@@ -51,6 +57,7 @@ function buildTemplateDefaults(
 
 function CreateCourseForm({
   templates,
+  categories,
   defaultTemplateId,
   defaultValues,
 }: CreateCourseFormProps) {
@@ -64,7 +71,8 @@ function CreateCourseForm({
   } = useForm<CreateCourseInput, unknown, CreateCourseData>({
     resolver: zodResolver(createCourseSchema),
     defaultValues:
-      defaultValues ?? buildTemplateDefaults(templates, defaultTemplateId),
+      defaultValues ??
+      buildTemplateDefaults(templates, categories, defaultTemplateId),
   });
 
   const onSubmit = handleSubmit(async (input) => {
@@ -79,6 +87,7 @@ function CreateCourseForm({
       setServerError(result.error);
       for (const field of [
         "templateId",
+        "questionCategoryId",
         "courseNo",
         "term",
         "name",
@@ -116,6 +125,28 @@ function CreateCourseForm({
         {errors.templateId ? (
           <p className="text-destructive mt-1 text-sm">
             {errors.templateId.message}
+          </p>
+        ) : null}
+      </div>
+      <div>
+        <label className="text-sm font-medium" htmlFor="course-category">
+          题库课程分类
+        </label>
+        <select
+          {...register("questionCategoryId")}
+          className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2"
+          id="course-category"
+        >
+          <option value="">请选择课程分类</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+        {errors.questionCategoryId ? (
+          <p className="text-destructive mt-1 text-sm">
+            {errors.questionCategoryId.message}
           </p>
         ) : null}
       </div>
@@ -200,6 +231,7 @@ function CreateCourseForm({
 function EditCourseForm({
   courseId,
   template,
+  categories,
   defaultValues,
 }: EditCourseFormProps) {
   const router = useRouter();
@@ -229,6 +261,7 @@ function EditCourseForm({
       setServerError(result.error);
       for (const field of [
         "courseNo",
+        "questionCategoryId",
         "term",
         "name",
         "description",
@@ -253,6 +286,27 @@ function EditCourseForm({
         <p className="text-muted-foreground mt-1">
           {template.isBuiltin ? "内置模板" : "自定义模板"}
         </p>
+      </div>
+      <div>
+        <label className="text-sm font-medium" htmlFor="course-category">
+          题库课程分类
+        </label>
+        <select
+          {...register("questionCategoryId")}
+          className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2"
+          id="course-category"
+        >
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+        {errors.questionCategoryId ? (
+          <p className="text-destructive mt-1 text-sm">
+            {errors.questionCategoryId.message}
+          </p>
+        ) : null}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

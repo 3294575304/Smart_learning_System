@@ -37,9 +37,8 @@ function pageHref(query: AdminQuestionListQuery, page: number): string {
     "keyword",
     "type",
     "knowledgePointId",
-    "courseId",
+    "categoryId",
     "creatorId",
-    "visibility",
     "status",
   ] as const) {
     const value = query[key];
@@ -73,8 +72,8 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
             批量导入题库
           </Link>
         }
-        description="治理公共题目、识别历史教师来源，并确保状态变更可审计。"
-        title="公共题库管理"
+        description="管理教师共同维护的共享题库状态，恢复已归档题目并按课程分类治理。"
+        title="共享题库管理"
       />
       <QuestionGovernanceFilters
         creators={creators}
@@ -91,7 +90,7 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
       <QuestionGovernanceList questions={questions.items} />
       {questions.pagination.totalPages > 1 ? (
         <PageIndex
-          ariaLabel="公共题库分页"
+          ariaLabel="共享题库分页"
           hrefForPage={(page) => pageHref(query, page)}
           page={questions.pagination.page}
           totalPages={questions.pagination.totalPages}

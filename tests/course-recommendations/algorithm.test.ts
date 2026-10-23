@@ -86,7 +86,7 @@ test("insufficient evidence creates a diagnostic reason instead of a weak label"
   assert.doesNotMatch(result.reason, /未掌握/u);
 });
 
-test("course teacher and core-concept questions receive explicit priority", () => {
+test("shared questions follow the same ranking while core concepts receive priority", () => {
   const result = rankCourseRecommendationCandidates({
     candidates: [
       {
@@ -110,7 +110,6 @@ test("course teacher and core-concept questions receive explicit priority", () =
           },
         ],
         coreImportance: true,
-        ownedByCourseTeacher: true,
       },
     ],
     profiles: [],
@@ -120,9 +119,8 @@ test("course teacher and core-concept questions receive explicit priority", () =
   });
   assert.deepEqual(
     result.map((item) => item.question.id),
-    ["teacher", "public"],
+    ["public", "teacher"],
   );
   assert.ok(result[0].reasonCodes.includes("CORE_CONCEPT"));
-  assert.ok(result[0].reasonCodes.includes("COURSE_TEACHER_QUESTION"));
   assert.match(result[0].reason, /课程核心内容/u);
 });

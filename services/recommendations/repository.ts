@@ -8,7 +8,6 @@ import {
   MembershipStatus,
   Prisma,
   QuestionStatus,
-  QuestionVisibility,
   RecommendationSource,
   RecommendationStatus,
   Role,
@@ -154,6 +153,7 @@ export async function buildRecommendationRequest(
   const selectForStudent = {
     teacherId: true,
     status: true,
+    course: { select: { questionCategoryId: true } },
     memberships: {
       where: { studentId: input.studentId },
       take: 1,
@@ -165,6 +165,7 @@ export async function buildRecommendationRequest(
     id: string;
     teacherId: string;
     status: ClassroomStatus;
+    course: { questionCategoryId: string } | null;
     memberships: Array<{ status: MembershipStatus }>;
   } | null;
 
@@ -217,10 +218,9 @@ export async function buildRecommendationRequest(
       isAssignmentOnly: false,
       deletedAt: null,
       type: { in: AUTO_GRADABLE_QUESTION_TYPES },
-      OR: [
-        { creatorId: classroom.teacherId },
-        { visibility: QuestionVisibility.PUBLIC },
-      ],
+      questionCategoryId: classroom.course?.questionCategoryId ?? {
+        not: null,
+      },
     },
     orderBy: { id: "asc" },
     take: MAX_RECOMMENDATION_CANDIDATE_IDS,
@@ -491,7 +491,6 @@ export async function loadEligibleRecommendationCandidates(
       deletedAt: null,
       type: { in: allowedTypes },
       difficulty: { gte: minimumDifficulty, lte: maximumDifficulty },
-      OR: [{ creatorId: teacherId }, { visibility: QuestionVisibility.PUBLIC }],
       ...(request.teacherScope.knowledgePointIds.length > 0
         ? {
             knowledgePointLinks: {
@@ -511,11 +510,9 @@ export async function loadEligibleRecommendationCandidates(
     orderBy: { id: "asc" },
     select: {
       id: true,
-      creatorId: true,
       title: true,
       type: true,
       difficulty: true,
-      visibility: true,
       status: true,
       deletedAt: true,
       tags: true,
@@ -532,11 +529,9 @@ export async function loadEligibleRecommendationCandidates(
 
   return questions.map((question) => ({
     id: question.id,
-    creatorId: question.creatorId,
     title: question.title,
     type: question.type,
     difficulty: question.difficulty,
-    visibility: question.visibility,
     status: question.status,
     deletedAt: question.deletedAt,
     tags: question.tags,

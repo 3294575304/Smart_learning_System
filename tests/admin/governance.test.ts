@@ -1,70 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  ClassroomStatus,
-  QuestionStatus,
-  QuestionVisibility,
-  Role,
-} from "@prisma/client";
+import { ClassroomStatus, QuestionStatus, Role } from "@prisma/client";
 
 import { assertAdminCanCloseClassroom } from "@/services/admin/classrooms/policy";
 import { adminClassroomListQuerySchema } from "@/services/admin/classrooms/schemas";
-import { assertQuestionVisibilityCanChange } from "@/services/admin/questions/policy";
 import {
   adminQuestionListQuerySchema,
   disableAdminQuestionSchema,
-  updateAdminQuestionVisibilitySchema,
 } from "@/services/admin/questions/schemas";
 import { assertRole, AuthorizationError } from "@/services/auth/policy";
 import type { AuthenticatedUser } from "@/services/auth/types";
 
-test("管理员题库筛选支持关键词、题型、知识点、创建者和分页", () => {
+test("管理员共享题库筛选支持关键词、课程分类、知识点、创建者和分页", () => {
   const parsed = adminQuestionListQuerySchema.parse({
     page: "2",
     pageSize: "10",
     keyword: " 方程 ",
+    categoryId: "ccategory00000000000000001",
     knowledgePointId: "cmath00000000000000000001",
     creatorId: "cteach000000000000000001",
   });
   assert.equal(parsed.page, 2);
   assert.equal(parsed.pageSize, 10);
   assert.equal(parsed.keyword, "方程");
-});
-
-test("管理员可以设置和撤销公共题目，异常题目不能公开", () => {
-  assert.doesNotThrow(() =>
-    assertQuestionVisibilityCanChange({
-      currentVisibility: QuestionVisibility.PRIVATE,
-      nextVisibility: QuestionVisibility.PUBLIC,
-      status: QuestionStatus.ACTIVE,
-      knowledgePointCount: 1,
-    }),
-  );
-  assert.doesNotThrow(() =>
-    assertQuestionVisibilityCanChange({
-      currentVisibility: QuestionVisibility.PUBLIC,
-      nextVisibility: QuestionVisibility.PRIVATE,
-      status: QuestionStatus.INACTIVE,
-      knowledgePointCount: 1,
-    }),
-  );
-  assert.throws(() =>
-    assertQuestionVisibilityCanChange({
-      currentVisibility: QuestionVisibility.PRIVATE,
-      nextVisibility: QuestionVisibility.PUBLIC,
-      status: QuestionStatus.INACTIVE,
-      knowledgePointCount: 1,
-    }),
-  );
+  assert.equal(parsed.categoryId, "ccategory00000000000000001");
 });
 
 test("治理状态接口只接受明确的白名单状态", () => {
-  assert.equal(
-    updateAdminQuestionVisibilitySchema.safeParse({
-      visibility: QuestionVisibility.PUBLIC,
-    }).success,
-    true,
-  );
   assert.equal(
     disableAdminQuestionSchema.safeParse({
       status: QuestionStatus.ARCHIVED,

@@ -433,8 +433,17 @@ async function main(): Promise<void> {
       ]);
     const course = await prisma.course.create({
       data: {
-        templateId: template.id,
-        teacherId: teacher.id,
+        questionCategory: {
+          connectOrCreate: {
+            where: { normalizedName: "automated-test-category" },
+            create: {
+              name: "自动化测试课程分类",
+              normalizedName: "automated-test-category",
+            },
+          },
+        },
+        template: { connect: { id: template.id } },
+        teacher: { connect: { id: teacher.id } },
         courseNo: `PR-${suffix}`,
         term: "2026-test",
         name: "Programming runtime integration course",
@@ -471,6 +480,7 @@ async function main(): Promise<void> {
         content: "读取一个整数并输出它的平方。",
         type: QuestionType.PYTHON_PROGRAMMING,
         difficulty: 2,
+        questionCategoryId: course.questionCategoryId,
         options: [],
         answer: { kind: "PROGRAMMING" },
         explanation: "读取整数后输出 n * n。",

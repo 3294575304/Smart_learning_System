@@ -36,7 +36,12 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
       items: [
         { href: "/admin", label: "平台概览", icon: ShieldCheck },
         { href: "/admin/users", label: "用户管理", icon: Users },
-        { href: "/admin/questions", label: "公共题库", icon: BookOpenCheck },
+        { href: "/admin/questions", label: "共享题库", icon: BookOpenCheck },
+        {
+          href: "/admin/question-course-categories",
+          label: "题库课程分类",
+          icon: BookOpenCheck,
+        },
         { href: "/admin/classrooms", label: "班级治理", icon: School },
         {
           href: "/admin/course-templates",

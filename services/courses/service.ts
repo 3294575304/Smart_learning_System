@@ -51,6 +51,10 @@ import type {
 } from "@/services/courses/types";
 import { getStorageService } from "@/services/storage";
 import type { StorageService } from "@/services/storage/types";
+import {
+  listQuestionCourseCategories,
+  requireActiveQuestionCourseCategory,
+} from "@/services/question-course-categories/service";
 
 function isKnownPrismaError(error: unknown, code: string): boolean {
   return (
@@ -173,6 +177,8 @@ function templateSnapshot(template: CourseTemplateRecord): AuditConfigSnapshot {
 
 function courseSnapshot(item: TeacherCourseListItem): AuditConfigSnapshot {
   return {
+    questionCategoryId: item.questionCategoryId,
+    questionCategoryName: item.questionCategoryName,
     templateCode: item.template.code,
     templateName: item.template.name,
     courseNo: item.courseNo,
@@ -275,6 +281,8 @@ function courseItemFromRecord(
       version: record.template.version,
       isBuiltin: record.template.isBuiltin,
     },
+    questionCategoryId: record.questionCategoryId,
+    questionCategoryName: record.questionCategory.name,
     courseNo: record.courseNo,
     term: record.term,
     name: record.name,
@@ -543,6 +551,10 @@ export async function listTeacherCourseTemplates(): Promise<
   return (await loadCourseTemplates(prisma, true)).map(templateViewFromRecord);
 }
 
+export async function listTeacherQuestionCourseCategories() {
+  return listQuestionCourseCategories(true);
+}
+
 export async function listTeacherCourses(
   teacherId: string,
 ): Promise<TeacherCourseListItem[]> {
@@ -715,12 +727,14 @@ export async function createTeacherCourse(
   if (!template) {
     throw new ResourceNotFoundError("课程模板不存在或已停用");
   }
+  await requireActiveQuestionCourseCategory(input.questionCategoryId);
 
   try {
     const course = await prisma.$transaction(async (transaction) => {
       const created = await transaction.course.create({
         data: {
           templateId: template.id,
+          questionCategoryId: input.questionCategoryId,
           teacherId,
           courseNo: input.courseNo,
           term: input.term,
@@ -731,6 +745,7 @@ export async function createTeacherCourse(
         select: {
           id: true,
           templateId: true,
+          questionCategoryId: true,
           teacherId: true,
           courseNo: true,
           term: true,
@@ -750,6 +765,7 @@ export async function createTeacherCourse(
               isBuiltin: true,
             },
           },
+          questionCategory: { select: { name: true } },
           classrooms: {
             select: {
               id: true,
@@ -811,6 +827,7 @@ export async function updateTeacherCourse(
     const beforeView = courseItemFromRecord(before);
     const changed =
       input.courseNo !== before.courseNo ||
+      input.questionCategoryId !== before.questionCategoryId ||
       input.term !== before.term ||
       input.name !== before.name ||
       input.description !== before.description;
@@ -823,11 +840,17 @@ export async function updateTeacherCourse(
       return courseDetailFromRecords(before, classrooms);
     }
 
+    await requireActiveQuestionCourseCategory(
+      input.questionCategoryId,
+      transaction,
+    );
+
     try {
       await transaction.course.update({
         where: { id: courseId },
         data: {
           courseNo: input.courseNo,
+          questionCategoryId: input.questionCategoryId,
           term: input.term,
           name: input.name,
           description: input.description,

@@ -1,8 +1,4 @@
-import {
-  QuestionStatus,
-  QuestionType,
-  QuestionVisibility,
-} from "@prisma/client";
+import { QuestionStatus, QuestionType } from "@prisma/client";
 import { z } from "zod";
 
 const optionalQueryValue = (value: unknown) =>
@@ -22,9 +18,9 @@ export const adminQuestionListQuerySchema = z
       optionalQueryValue,
       z.nativeEnum(QuestionType).optional(),
     ),
-    courseId: z.preprocess(
+    categoryId: z.preprocess(
       optionalQueryValue,
-      z.string().cuid("课程 ID 格式无效").optional(),
+      z.string().cuid("课程分类 ID 格式无效").optional(),
     ),
     knowledgePointId: z.preprocess(
       optionalQueryValue,
@@ -34,19 +30,11 @@ export const adminQuestionListQuerySchema = z
       optionalQueryValue,
       z.string().cuid("创建者 ID 格式无效").optional(),
     ),
-    visibility: z.preprocess(
-      optionalQueryValue,
-      z.nativeEnum(QuestionVisibility).optional(),
-    ),
     status: z.preprocess(
       optionalQueryValue,
       z.nativeEnum(QuestionStatus).optional(),
     ),
   })
-  .strict();
-
-export const updateAdminQuestionVisibilitySchema = z
-  .object({ visibility: z.nativeEnum(QuestionVisibility) })
   .strict();
 
 export const disableAdminQuestionSchema = z

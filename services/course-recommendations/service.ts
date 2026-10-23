@@ -609,6 +609,7 @@ export async function createCourseRecommendations(
     select: {
       id: true,
       teacherId: true,
+      questionCategoryId: true,
       currentPublishedKnowledgeGraphVersion: {
         select: { id: true, versionNumber: true },
       },
@@ -925,7 +926,7 @@ export async function createCourseRecommendations(
           status: QuestionStatus.ACTIVE,
           isAssignmentOnly: false,
           deletedAt: null,
-          OR: [{ creatorId: context.teacherId }, { visibility: "PUBLIC" }],
+          questionCategoryId: context.questionCategoryId,
           explanation: { not: "" },
           type: { in: allowedTypes },
           difficulty: { gte: minimumDifficulty, lte: maximumDifficulty },
@@ -1021,7 +1022,6 @@ export async function createCourseRecommendations(
             ),
           ),
           teacherPriority: question.tags.includes("teacher-priority"),
-          ownedByCourseTeacher: question.creatorId === context.teacherId,
           coreImportance: question.graphBindings.some((binding) =>
             binding.concept.nodes.some((node) => node.importance === "CORE"),
           ),
@@ -1062,7 +1062,7 @@ export async function createCourseRecommendations(
           .filter((item): item is string => item !== null)
           .join("、");
         throw new RecommendationOperationError(
-          `当前章节的已审核教师/公共题库题目不足以组成完整试卷（${selectedQuestions.length}/${targetCount}）；${missing}`,
+          `当前章节的本课程分类共享题库题目不足以组成完整试卷（${selectedQuestions.length}/${targetCount}）；${missing}`,
           422,
         );
       }

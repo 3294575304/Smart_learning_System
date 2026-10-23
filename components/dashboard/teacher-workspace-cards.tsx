@@ -51,6 +51,8 @@ export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
 
   const assignmentsHref = `/teacher/assignments?${assignmentParams.toString()}`;
   const profilesHref = `${base}/profiles${overviewClass ? `?classroomId=${overviewClass}` : ""}`;
+  const resultsParams = new URLSearchParams({ courseId: workspace.course.id });
+  if (overviewClass) resultsParams.set("classroomId", overviewClass);
   const quickLinks = [
     {
       label: "作业管理",
@@ -74,9 +76,9 @@ export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
       accent: "bg-teal-50 text-teal-700 ring-teal-100",
     },
     {
-      label: "统计分析",
-      description: "进入课程分析中心",
-      href: `${base}/analytics`,
+      label: "成绩与学情",
+      description: "查看课程成绩与学情分析",
+      href: `/teacher/results?${resultsParams.toString()}`,
       icon: BarChart3,
       accent: "bg-amber-50 text-amber-700 ring-amber-100",
     },

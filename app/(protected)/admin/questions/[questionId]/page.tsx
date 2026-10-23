@@ -29,13 +29,19 @@ export default async function AdminQuestionDetailPage({ params }: PageProps) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link className="text-sm text-gray-500" href="/admin/questions">
-            ← 返回公共题库管理
+            ← 返回共享题库管理
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">{question.title}</h1>
           <p className="mt-2 text-sm text-gray-500">
             {QUESTION_TYPE_LABELS[question.type]} · 难度 {question.difficulty} ·{" "}
-            {question.visibility === "PUBLIC" ? "公共" : "私有"} ·{" "}
-            {question.status === "ACTIVE" ? "正常" : "非活动"}
+            {question.questionCategoryName ?? "待补课程分类"} ·{" "}
+            {question.status === "ACTIVE"
+              ? "正常"
+              : question.status === "ARCHIVED"
+                ? "已归档"
+                : question.status === "DRAFT"
+                  ? "草稿"
+                  : "已停用"}
           </p>
         </div>
         <QuestionGovernanceAction question={question} />

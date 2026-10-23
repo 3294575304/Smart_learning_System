@@ -29,6 +29,12 @@ import { QUALITY_REPORT_JOB_TYPE } from "@/services/quality-reports/constants";
 import { executeClaimedQualityReportJob } from "@/services/quality-reports/service";
 import { QUESTION_MAPPING_JOB_TYPE } from "@/services/question-mapping/schemas";
 import { executeClaimedQuestionMappingJob } from "@/services/question-mapping/service";
+import {
+  AI_QUESTION_JOB_TYPE,
+  questionGenerationJobInputSchema,
+} from "@/services/ai-question-generation/schemas";
+import { deleteExpiredQuestionSourceFiles } from "@/services/ai-question-generation/service";
+import { executeClaimedAIQuestionGenerationJob } from "@/services/ai-question-generation/worker";
 import { SYLLABUS_PARSE_JOB_TYPE } from "@/services/syllabus-parsing/constants";
 import { executeClaimedSyllabusParseJob } from "@/services/syllabus-parsing/service";
 
@@ -39,6 +45,7 @@ const ACCEPTED_TYPES = [
   KNOWLEDGE_GRAPH_AI_ENHANCEMENT_JOB_TYPE,
   SYLLABUS_PARSE_JOB_TYPE,
   QUESTION_MAPPING_JOB_TYPE,
+  AI_QUESTION_JOB_TYPE,
 ];
 
 function authorized(value: string | undefined, expected: string) {
@@ -80,6 +87,7 @@ export class PersistentLongTaskWorker {
           this.config.recoveryIntervalMs
         ) {
           await recoverExpiredBackgroundJobs();
+          await deleteExpiredQuestionSourceFiles();
           this.lastRecoveryAt = Date.now();
         }
         const job = await claimNextBackgroundJob({
@@ -212,6 +220,16 @@ export class PersistentLongTaskWorker {
         job.id,
         leaseId,
         questionMappingJobInputSchema.parse(job.input),
+      );
+      return;
+    }
+    if (job.type === AI_QUESTION_JOB_TYPE) {
+      const input = questionGenerationJobInputSchema.parse(job.input);
+      await executeClaimedAIQuestionGenerationJob(
+        job.id,
+        leaseId,
+        input.batchId,
+        input.generationRevision,
       );
       return;
     }

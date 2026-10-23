@@ -34,6 +34,9 @@ async function main() {
     const other = await prisma.user.create({
       data: { role: "TEACHER", passwordHash: "isolated-test-no-login" },
     });
+    const category = await prisma.questionCourseCategory.create({
+      data: { name: "题型创建测试", normalizedName: "question-create-test" },
+    });
     for (const type of Object.values(QuestionType)) {
       const draft = defaultAnswerDraft(type);
       draft.options.forEach((option) => {
@@ -50,28 +53,50 @@ async function main() {
         title: `创建验收 ${type}`,
         content: "测试题干",
         type,
+        questionCategoryId: category.id,
         difficulty: 3,
         ...draft,
         explanation: "解析",
         tags: ["验收知识点"],
         knowledgePointIds: [],
-        visibility: "PRIVATE",
       });
       const created = await createQuestion(teacher.id, input);
       assert.equal(created.type, type);
       assert.deepEqual(created.answer, input.answer);
       assert.equal(created.options.length, input.options.length);
-      await assert.rejects(getTeacherQuestion(other.id, created.id));
-      const updated = await updateQuestion(teacher.id, created.id, {
-        ...input,
-        title: `更新验收 ${type}`,
-      });
+      assert.equal(
+        (await getTeacherQuestion(other.id, created.id)).id,
+        created.id,
+      );
+      const updated = await updateQuestion(
+        teacher.id,
+        created.id,
+        {
+          ...input,
+          title: `更新验收 ${type}`,
+          revision: created.revision,
+        },
+        { ipAddress: null, userAgent: "question-create-test" },
+      );
       assert.equal(updated.title, `更新验收 ${type}`);
       assert.deepEqual(updated.answer, input.answer);
+      await assert.rejects(
+        updateQuestion(
+          teacher.id,
+          created.id,
+          {
+            ...input,
+            title: `过期验收 ${type}`,
+            revision: created.revision,
+          },
+          { ipAddress: null, userAgent: "question-create-test" },
+        ),
+        /题目已被其他教师修改/u,
+      );
     }
     assert.equal(await prisma.question.count(), 6);
     console.log(
-      "PASS: six question types create/read/update; private ownership isolation; isolated migrations",
+      "PASS: six shared question types create/read/update, optimistic edit conflicts, isolated migrations",
     );
   } finally {
     await disconnect();

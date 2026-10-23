@@ -181,8 +181,8 @@ export function KnowledgePointQuestionPanel({
               {search
                 ? "没有找到匹配题目，请换一个关键词。"
                 : mode === "BOUND"
-                  ? "该知识点尚未关联题目，可从我的题库或公共题库直接添加。"
-                  : "暂无可添加的题目。可先维护题库，公共题目无需复制即可关联。"}
+                  ? "该知识点尚未关联题目，可从本课程分类的共享题库添加。"
+                  : "暂无可添加的题目。可先维护共享题库，再按课程知识图谱确认关联。"}
             </p>
           ) : (
             <ul className="max-h-96 space-y-2 overflow-y-auto">

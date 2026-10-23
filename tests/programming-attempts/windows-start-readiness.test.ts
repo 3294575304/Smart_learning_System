@@ -3,10 +3,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-for (const file of [
-  "start-all.ps1",
-  "deploy/windows-local/install-local-deployment.ps1",
-]) {
+for (const file of ["deploy/windows-local/install-local-deployment.ps1"]) {
   test(
     `启动端口检测及时发现监听并明确报告超时：${file}`,
     { skip: process.platform !== "win32" },

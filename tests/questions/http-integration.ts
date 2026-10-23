@@ -8,7 +8,6 @@ import {
   PrismaClient,
   ProgrammingTestVisibility,
   QuestionType,
-  QuestionVisibility,
 } from "@prisma/client";
 
 import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
@@ -22,12 +21,13 @@ interface ApiSuccess<T> {
 interface QuestionResponse {
   id: string;
   title: string;
-  visibility: QuestionVisibility;
+  questionCategoryId: string | null;
+  revision: number;
 }
 
 interface DeleteResponse {
   questionId: string;
-  mode: "PHYSICAL" | "ARCHIVED";
+  mode: "ARCHIVED";
 }
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
@@ -69,7 +69,7 @@ async function waitForServer(): Promise<void> {
     try {
       if ((await fetch(`${baseUrl}/login`)).ok) return;
     } catch {
-      // Production server is still starting.
+      // The production server is still starting.
     }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
   }
@@ -105,14 +105,12 @@ async function requestJson(
   });
 }
 
-function questionInput(
-  knowledgePointId: string,
-  visibility: QuestionVisibility = QuestionVisibility.PRIVATE,
-) {
+function questionInput(knowledgePointId: string, questionCategoryId: string) {
   return {
-    title: `集成测试题-${randomBytes(3).toString("hex")}`,
+    title: `共享题库集成题-${randomBytes(3).toString("hex")}`,
     content: "下列哪一项等于 2 + 3？",
     type: QuestionType.SINGLE_CHOICE,
+    questionCategoryId,
     difficulty: 2,
     options: [
       { label: "A", content: "4", sortOrder: 1 },
@@ -121,35 +119,98 @@ function questionInput(
     answer: { kind: "CHOICE", correctOptionLabels: ["B"] },
     explanation: "2 + 3 = 5。",
     knowledgePointIds: [knowledgePointId],
-    tags: ["集成测试"],
-    visibility,
+    tags: ["共享题库集成测试"],
   };
 }
 
 async function main(): Promise<void> {
   try {
     await waitForServer();
-    const [teacher, teacherTwo, student, knowledgePoint, classroom] =
-      await Promise.all([
-        prisma.user.findUniqueOrThrow({
-          where: { email: "teacher@example.com" },
-        }),
-        prisma.user.findUniqueOrThrow({
-          where: { email: "teacher2@example.com" },
-        }),
-        prisma.user.findUniqueOrThrow({
-          where: { email: "student@example.com" },
-        }),
-        prisma.knowledgePoint.findFirstOrThrow({ where: { isActive: true } }),
-        prisma.classroom.findFirstOrThrow({
-          where: { teacher: { email: "teacher@example.com" } },
-        }),
-      ]);
-    const [teacherCookie, teacherTwoCookie, studentCookie] = await Promise.all([
-      sessionCookie(teacher.id),
-      sessionCookie(teacherTwo.id),
-      sessionCookie(student.id),
+    const [
+      teacher,
+      teacherTwo,
+      student,
+      admin,
+      knowledgePoint,
+      classroom,
+      courseTemplate,
+    ] = await Promise.all([
+      prisma.user.findUniqueOrThrow({
+        where: { email: "teacher@example.com" },
+      }),
+      prisma.user.findUniqueOrThrow({
+        where: { email: "teacher2@example.com" },
+      }),
+      prisma.user.findUniqueOrThrow({
+        where: { email: "student@example.com" },
+      }),
+      prisma.user.findUniqueOrThrow({
+        where: { email: "admin@example.com" },
+      }),
+      prisma.knowledgePoint.findFirstOrThrow({ where: { isActive: true } }),
+      prisma.classroom.findFirstOrThrow({
+        where: { teacher: { email: "teacher@example.com" } },
+        include: { course: { select: { questionCategoryId: true } } },
+      }),
+      prisma.courseTemplate.findFirstOrThrow({
+        where: { isActive: true },
+        select: { id: true },
+      }),
     ]);
+    const category = classroom.course
+      ? await prisma.questionCourseCategory.findUniqueOrThrow({
+          where: { id: classroom.course.questionCategoryId },
+          select: { id: true },
+        })
+      : await prisma.questionCourseCategory.findFirstOrThrow({
+          where: { isActive: true },
+          select: { id: true },
+        });
+    await prisma.course.create({
+      data: {
+        templateId: courseTemplate.id,
+        questionCategoryId: category.id,
+        teacherId: teacherTwo.id,
+        courseNo: `SHARED-${randomBytes(4).toString("hex")}`,
+        term: "2026-test",
+        name: "共享题库集成测试课程",
+        status: "ACTIVE",
+        publishedAt: new Date(),
+      },
+    });
+    const [teacherCookie, teacherTwoCookie, studentCookie, adminCookie] =
+      await Promise.all([
+        sessionCookie(teacher.id),
+        sessionCookie(teacherTwo.id),
+        sessionCookie(student.id),
+        sessionCookie(admin.id),
+      ]);
+
+    assert.equal(
+      (await requestJson("/api/teacher/ai-question-batches")).status,
+      401,
+    );
+    assert.equal(
+      (await requestJson("/api/teacher/ai-question-batches", studentCookie))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await requestJson("/api/teacher/ai-question-batches", teacherCookie))
+        .status,
+      200,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          "/api/teacher/ai-question-batches",
+          teacherCookie,
+          "POST",
+          {},
+        )
+      ).status,
+      400,
+    );
 
     assert.equal((await requestJson("/api/teacher/questions")).status, 401);
     assert.equal(
@@ -158,15 +219,29 @@ async function main(): Promise<void> {
           "/api/teacher/questions",
           studentCookie,
           "POST",
-          questionInput(knowledgePoint.id),
+          questionInput(knowledgePoint.id, category.id),
         )
       ).status,
       403,
     );
+    const missingCategory = questionInput(knowledgePoint.id, category.id);
+    delete (missingCategory as Partial<typeof missingCategory>)
+      .questionCategoryId;
+    assert.equal(
+      (
+        await requestJson(
+          "/api/teacher/questions",
+          teacherCookie,
+          "POST",
+          missingCategory,
+        )
+      ).status,
+      400,
+    );
     assert.equal(
       (
         await requestJson("/api/teacher/questions", teacherCookie, "POST", {
-          ...questionInput(knowledgePoint.id),
+          ...questionInput(knowledgePoint.id, category.id),
           difficulty: 9,
         })
       ).status,
@@ -177,73 +252,14 @@ async function main(): Promise<void> {
       "/api/teacher/questions",
       teacherCookie,
       "POST",
-      questionInput(knowledgePoint.id),
+      questionInput(knowledgePoint.id, category.id),
     );
     assert.equal(createResponse.status, 201);
     const created =
       (await createResponse.json()) as ApiSuccess<QuestionResponse>;
     questionIds.push(created.data.id);
+    assert.equal(created.data.questionCategoryId, category.id);
 
-    assert.equal(
-      (
-        await requestJson(
-          "/api/teacher/questions",
-          teacherCookie,
-          "POST",
-          questionInput(knowledgePoint.id, QuestionVisibility.PUBLIC),
-        )
-      ).status,
-      403,
-    );
-
-    assert.equal(
-      (
-        await requestJson(
-          `/api/teacher/questions/${created.data.id}`,
-          teacherTwoCookie,
-        )
-      ).status,
-      404,
-    );
-
-    const publicInput = questionInput(
-      knowledgePoint.id,
-      QuestionVisibility.PUBLIC,
-    );
-    const updateResponse = await requestJson(
-      `/api/teacher/questions/${created.data.id}`,
-      teacherCookie,
-      "PATCH",
-      { ...publicInput, title: created.data.title },
-    );
-    assert.equal(updateResponse.status, 403);
-    assert.equal(
-      (
-        await prisma.question.findUniqueOrThrow({
-          where: { id: created.data.id },
-          select: { visibility: true },
-        })
-      ).visibility,
-      QuestionVisibility.PRIVATE,
-    );
-    await prisma.question.update({
-      where: { id: created.data.id },
-      data: { visibility: QuestionVisibility.PUBLIC },
-    });
-    await prisma.questionKnowledgePoint.updateMany({
-      where: { questionId: created.data.id },
-      data: { weight: new Prisma.Decimal("0.375") },
-    });
-    assert.equal(
-      (
-        await requestJson(
-          `/api/teacher/questions/${created.data.id}/copy`,
-          teacherCookie,
-          "POST",
-        )
-      ).status,
-      404,
-    );
     assert.equal(
       (
         await requestJson(
@@ -257,45 +273,76 @@ async function main(): Promise<void> {
       (
         await requestJson(
           `/api/teacher/questions/${created.data.id}`,
-          teacherTwoCookie,
-          "PATCH",
-          publicInput,
+          studentCookie,
         )
       ).status,
       403,
     );
 
-    const copyResponse = await requestJson(
-      `/api/teacher/questions/${created.data.id}/copy`,
+    const sharedEdit = {
+      ...questionInput(knowledgePoint.id, category.id),
+      title: created.data.title,
+      revision: created.data.revision,
+    };
+    const updateResponse = await requestJson(
+      `/api/teacher/questions/${created.data.id}`,
       teacherTwoCookie,
-      "POST",
+      "PATCH",
+      sharedEdit,
     );
-    assert.equal(copyResponse.status, 201);
-    const copied = (await copyResponse.json()) as ApiSuccess<QuestionResponse>;
-    questionIds.push(copied.data.id);
-    assert.equal(copied.data.visibility, QuestionVisibility.PRIVATE);
-    const copiedKnowledgePoint =
-      await prisma.questionKnowledgePoint.findFirstOrThrow({
-        where: { questionId: copied.data.id },
-      });
-    assert.equal(copiedKnowledgePoint.weight.toString(), "0.375");
+    assert.equal(updateResponse.status, 200);
+    const updated =
+      (await updateResponse.json()) as ApiSuccess<QuestionResponse>;
+    assert.equal(updated.data.revision, created.data.revision + 1);
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/questions/${created.data.id}`,
+          teacherCookie,
+          "PATCH",
+          sharedEdit,
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/questions/${created.data.id}/copy`,
+          teacherCookie,
+          "POST",
+        )
+      ).status,
+      404,
+    );
 
-    const programmingSource = await prisma.question.create({
+    const listResponse = await requestJson(
+      `/api/teacher/questions?scope=OWNED&categoryId=${category.id}&type=SINGLE_CHOICE&difficulty=2`,
+      teacherTwoCookie,
+    );
+    assert.equal(listResponse.status, 200);
+    const listed = (await listResponse.json()) as ApiSuccess<{
+      items: Array<{ id: string }>;
+    }>;
+    assert.ok(listed.data.items.some((item) => item.id === created.data.id));
+
+    const programmingQuestion = await prisma.question.create({
       data: {
         creatorId: teacher.id,
-        title: `集成测试编程题-${randomBytes(3).toString("hex")}`,
+        questionCategoryId: category.id,
+        title: `共享编程题-${randomBytes(3).toString("hex")}`,
         content: "实现两个整数相加。",
         type: QuestionType.PYTHON_PROGRAMMING,
         difficulty: 2,
-        visibility: QuestionVisibility.PUBLIC,
         status: "ACTIVE",
         explanation: "读取两个整数并输出其和。",
+        gradingConfig: { mode: "ASYNC_PROGRAMMING" },
       },
     });
-    questionIds.push(programmingSource.id);
+    questionIds.push(programmingQuestion.id);
     const programmingConfigResponse = await requestJson(
-      `/api/teacher/questions/${programmingSource.id}/programming-config`,
-      teacherCookie,
+      `/api/teacher/questions/${programmingQuestion.id}/programming-config`,
+      teacherTwoCookie,
       "POST",
       {
         standardCode: "a, b = map(int, input().split())\nprint(a + b)",
@@ -329,61 +376,30 @@ async function main(): Promise<void> {
       },
     );
     assert.equal(programmingConfigResponse.status, 201);
-    const programmingCopyResponse = await requestJson(
-      `/api/teacher/questions/${programmingSource.id}/copy`,
-      teacherTwoCookie,
-      "POST",
-    );
-    assert.equal(programmingCopyResponse.status, 201);
-    const programmingCopy =
-      (await programmingCopyResponse.json()) as ApiSuccess<QuestionResponse>;
-    questionIds.push(programmingCopy.data.id);
-    const copiedProgrammingConfig =
-      await prisma.programmingQuestionConfigRevision.findFirstOrThrow({
-        where: { questionId: programmingCopy.data.id },
-        include: { testCases: { orderBy: { sortOrder: "asc" } } },
-      });
-    assert.equal(copiedProgrammingConfig.createdById, teacherTwo.id);
-    assert.equal(copiedProgrammingConfig.testCases.length, 2);
     assert.equal(
-      copiedProgrammingConfig.testCases[1]?.visibility,
-      ProgrammingTestVisibility.HIDDEN,
+      (
+        await requestJson(
+          `/api/teacher/questions/${programmingQuestion.id}/programming-config`,
+          teacherCookie,
+        )
+      ).status,
+      200,
     );
-    assert.equal(copiedProgrammingConfig.testCases[1]?.expectedOutput, "17\n");
-
-    const copiedDelete = await requestJson(
-      `/api/teacher/questions/${copied.data.id}`,
-      teacherTwoCookie,
-      "DELETE",
-    );
-    assert.equal(copiedDelete.status, 200);
     assert.equal(
-      ((await copiedDelete.json()) as ApiSuccess<DeleteResponse>).data.mode,
-      "PHYSICAL",
+      await prisma.programmingTestCase.count({
+        where: {
+          configRevision: { questionId: programmingQuestion.id },
+          visibility: ProgrammingTestVisibility.HIDDEN,
+        },
+      }),
+      1,
     );
 
-    const listResponse = await requestJson(
-      `/api/teacher/questions?scope=PUBLIC&type=SINGLE_CHOICE&difficulty=2&knowledgePointId=${knowledgePoint.id}`,
-      teacherTwoCookie,
-    );
-    assert.equal(listResponse.status, 200);
-    const listed = (await listResponse.json()) as ApiSuccess<{
-      items: Array<{ id: string }>;
-    }>;
-    assert.equal(
-      listed.data.items.some((item) => item.id === created.data.id),
-      true,
-    );
-
-    await prisma.question.update({
-      where: { id: created.data.id },
-      data: { visibility: QuestionVisibility.PRIVATE },
-    });
     const assignment = await prisma.assignment.create({
       data: {
         classroomId: classroom.id,
         teacherId: teacher.id,
-        title: "题库删除引用测试",
+        title: "共享题目历史快照测试",
       },
     });
     assignmentIds.push(assignment.id);
@@ -394,38 +410,68 @@ async function main(): Promise<void> {
         sortOrder: 1,
         points: new Prisma.Decimal(5),
         titleSnapshot: created.data.title,
-        contentSnapshot: publicInput.content,
+        contentSnapshot: sharedEdit.content,
         typeSnapshot: QuestionType.SINGLE_CHOICE,
         difficultySnapshot: 2,
-        explanationSnapshot: publicInput.explanation,
+        explanationSnapshot: sharedEdit.explanation,
         acceptableAnswersSnapshot: [],
         isCaseSensitiveSnapshot: false,
         gradingConfigSnapshot: { mode: "EXACT_SET" },
       },
     });
-    const referencedDelete = await requestJson(
+    const snapshotBeforeArchive =
+      await prisma.assignmentQuestion.findFirstOrThrow({
+        where: { assignmentId: assignment.id, questionId: created.data.id },
+      });
+
+    const archivedResponse = await requestJson(
       `/api/teacher/questions/${created.data.id}`,
       teacherCookie,
       "DELETE",
     );
-    assert.equal(referencedDelete.status, 200);
+    assert.equal(archivedResponse.status, 200);
     assert.equal(
-      ((await referencedDelete.json()) as ApiSuccess<DeleteResponse>).data.mode,
+      ((await archivedResponse.json()) as ApiSuccess<DeleteResponse>).data.mode,
       "ARCHIVED",
     );
     const archived = await prisma.question.findUniqueOrThrow({
       where: { id: created.data.id },
     });
-    assert.ok(archived.deletedAt);
+    assert.equal(archived.status, "ARCHIVED");
+    assert.equal(archived.deletedAt, null);
     assert.equal(
       await prisma.assignmentQuestion.count({
-        where: { questionId: created.data.id },
+        where: { assignmentId: assignment.id, questionId: created.data.id },
       }),
       1,
     );
+    const snapshotAfterArchive =
+      await prisma.assignmentQuestion.findUniqueOrThrow({
+        where: { id: snapshotBeforeArchive.id },
+      });
+    assert.equal(
+      snapshotAfterArchive.titleSnapshot,
+      snapshotBeforeArchive.titleSnapshot,
+    );
+    assert.equal(
+      snapshotAfterArchive.contentSnapshot,
+      snapshotBeforeArchive.contentSnapshot,
+    );
+
+    const restoreResponse = await requestJson(
+      `/api/admin/questions/${created.data.id}/restore`,
+      adminCookie,
+      "POST",
+    );
+    assert.equal(restoreResponse.status, 200);
+    const restored = await prisma.question.findUniqueOrThrow({
+      where: { id: created.data.id },
+    });
+    assert.equal(restored.status, "ACTIVE");
+    assert.equal(restored.archivedFromStatus, null);
 
     console.info(
-      "Question HTTP integration checks passed: auth, RBAC, ownership, public copy, filtering, physical deletion, and referenced archival.",
+      "Question HTTP integration checks passed: category required, shared teacher editing, revision conflicts, student isolation, copy removal, shared Python configuration, soft archive, admin restore, and frozen assignment snapshots.",
     );
   } finally {
     if (assignmentIds.length > 0) {
@@ -438,9 +484,7 @@ async function main(): Promise<void> {
     }
     if (questionIds.length > 0) {
       await prisma.programmingTestCase.deleteMany({
-        where: {
-          configRevision: { questionId: { in: questionIds } },
-        },
+        where: { configRevision: { questionId: { in: questionIds } } },
       });
       await prisma.programmingQuestionConfigRevision.deleteMany({
         where: { questionId: { in: questionIds } },
