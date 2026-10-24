@@ -117,3 +117,27 @@ test("课程学习中心路径只显示主页、我的课程和当前页，链�
   ]);
   assert.equal(new Set(crumbs.map((item) => item.href)).size, crumbs.length);
 });
+
+test("学生作业明细的虚拟根指向真实查询入口，个人作答不误标整班成绩", () => {
+  const crumbs = buildBreadcrumbs("/teacher/assignments/students/student-a");
+  assert.equal(
+    crumbs.find((item) => item.label === "学生作业查询")?.href,
+    "/teacher/assignments?view=STUDENTS",
+  );
+  assert.equal(crumbs.at(-1)?.label, "学生作业明细");
+  assert.ok(
+    !crumbs.some(
+      (item) => item.linkable && item.href === "/teacher/assignments/students",
+    ),
+  );
+  assert.equal(
+    buildBreadcrumbs("/teacher/assignments/task-a/results", undefined, {
+      studentId: "student-a",
+    }).at(-1)?.label,
+    "个人作答",
+  );
+  assert.equal(
+    buildBreadcrumbs("/teacher/assignments/task-a/results").at(-1)?.label,
+    "成绩统计",
+  );
+});

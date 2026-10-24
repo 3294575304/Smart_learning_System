@@ -33,10 +33,10 @@ async function main() {
     data: {
       questionCategory: {
         connectOrCreate: {
-          where: { normalizedName: "automated-test-category" },
+          where: { normalizedName: "question-order-isolated-category" },
           create: {
-            name: "自动化测试课程分类",
-            normalizedName: "automated-test-category",
+            name: "题序专项隔离分类",
+            normalizedName: "question-order-isolated-category",
           },
         },
       },
@@ -71,6 +71,7 @@ async function main() {
     const question = await prisma.question.create({
       data: {
         creatorId: teacher.id,
+        questionCategoryId: course.questionCategoryId,
         title: `题序测试${index}`,
         content: "题序集成测试题干",
         explanation: "测试解析",

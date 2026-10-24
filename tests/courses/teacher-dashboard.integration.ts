@@ -1,3 +1,5 @@
+import { verifyAssignmentMakeup } from "../assignments/makeup.integration-module";
+import { verifyAssignmentLifecycle } from "../assignments/lifecycle.integration-module";
 import { verifyClassroomCompletion } from "../classrooms/completion.integration-module";
 import { verifyAssignmentReporting } from "../assignment-results/reporting.integration-module";
 import { verifyAssignmentManagement } from "../assignments/management.integration-module";
@@ -105,12 +107,17 @@ async function main() {
         title,
         status: "PUBLISHED",
         totalPoints: 100,
-        dueAt: new Date(Date.now() + 86400000),
+        publishedAt: new Date(Date.now() - 86400000),
+        dueAt: new Date(Date.now() - 1000),
       },
     });
   const assignment = await makeAssignment(class1.id, "待公布作业");
   await makeAssignment(otherClass.id, "其他课程作业");
   const future = await makeAssignment(class2.id, "未截止无提交作业");
+  await prisma.assignment.update({
+    where: { id: future.id },
+    data: { dueAt: new Date(Date.now() + 86400000) },
+  });
   const submission = await prisma.submission.create({
     data: {
       assignmentId: assignment.id,
@@ -303,6 +310,19 @@ async function main() {
     lateStudentId: student2.id,
     courseId: course.id,
     otherCourseId: another.id,
+  });
+  await verifyAssignmentLifecycle({
+    teacherId: teacher.id,
+    otherTeacherId: other.id,
+    studentId: student.id,
+    courseId: course.id,
+  });
+  await verifyAssignmentMakeup({
+    teacherId: teacher.id,
+    otherTeacherId: other.id,
+    studentId: student.id,
+    lateStudentId: student2.id,
+    courseId: course.id,
   });
   const emptyTeacher = await prisma.user.create({
     data: {

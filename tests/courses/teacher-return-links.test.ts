@@ -74,6 +74,15 @@ function resolveHrefTargets(
   }
   if (
     ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+  ) {
+    return [
+      ...resolveHrefTargets(expression.left, tree, visited),
+      ...resolveHrefTargets(expression.right, tree, visited),
+    ];
+  }
+  if (
+    ts.isBinaryExpression(expression) &&
     expression.operatorToken.kind === ts.SyntaxKind.PlusToken
   ) {
     const left = resolveHrefTargets(expression.left, tree, visited);

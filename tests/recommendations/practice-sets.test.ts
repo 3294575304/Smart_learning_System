@@ -109,6 +109,7 @@ test("练习中心按组展示题量、进度、课程和继续入口", () => {
   assert.match(markup, /已完成 1\/3/);
   assert.match(markup, /\/student\/recommendations\/b\/practice/);
   assert.match(markup, /继续练习/);
-  assert.match(markup, /加载更多练习组/);
+  assert.match(markup, /练习组分页/);
+  assert.match(markup, /下一页/);
   assert.doesNotMatch(markup, /查看下一页推荐/);
 });

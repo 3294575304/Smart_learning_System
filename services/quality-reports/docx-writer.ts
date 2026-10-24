@@ -125,7 +125,7 @@ export async function buildQualityReportDocx(
       }),
       "utf8",
     );
-    let lastError: unknown = null;
+    let firstExecutionError: unknown = null;
     for (const python of pythonCandidates()) {
       try {
         await execFileAsync(
@@ -135,10 +135,12 @@ export async function buildQualityReportDocx(
         );
         return await fs.readFile(outputPath);
       } catch (error) {
-        lastError = error;
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          firstExecutionError ??= error;
+        }
       }
     }
-    throw lastError;
+    throw firstExecutionError ?? new Error("QUALITY_REPORT_PYTHON_UNAVAILABLE");
   } finally {
     await fs.rm(temp, { recursive: true, force: true });
   }

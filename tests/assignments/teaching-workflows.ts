@@ -288,6 +288,14 @@ async function main() {
     { score: 87, feedback: "截图清晰" },
   );
   await completeSubmissionGrading(teacher.id, draft.id, attempt.id, context);
+  await assert.rejects(
+    publishAssignmentResults(teacher.id, draft.id, context),
+    /尚未截止/,
+  );
+  await prisma.assignment.update({
+    where: { id: draft.id },
+    data: { dueAt: new Date(Date.now() - 1) },
+  });
   await publishAssignmentResults(teacher.id, draft.id, context);
   assert.equal(
     (await getTeacherSubmissionForGrading(teacher.id, draft.id, attempt.id))
@@ -319,10 +327,9 @@ async function main() {
   assert.equal(afterRemoval?.submittedCount, 0);
   assert.equal(afterRemoval?.historicalSubmittedCount, 1);
   assert.equal(afterRemoval?.averageScore, null);
-  assert.equal(
-    (await listTeacherResultsOverview(otherTeacher.id, resultsQuery)).items
-      .length,
-    0,
+  await assert.rejects(
+    listTeacherResultsOverview(otherTeacher.id, resultsQuery),
+    /无权访问/,
   );
   await prisma.classMembership.update({
     where: {

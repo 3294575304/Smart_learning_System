@@ -19,7 +19,10 @@ import {
   teacherStudentQuerySchema,
   teacherStudentDetailQuerySchema,
 } from "@/services/assignments/student-query";
-import { getTeacherAssignmentResults } from "@/services/assignment-results/service";
+import {
+  getTeacherAssignmentResults,
+  getTeacherAssignmentStudentAnswer,
+} from "@/services/assignment-results/service";
 import { assignmentResultsQuerySchema } from "@/services/assignment-results/schemas";
 
 export async function verifyAssignmentReporting(input: {
@@ -146,10 +149,24 @@ export async function verifyAssignmentReporting(input: {
         percentage: score === null ? null : 99,
       },
     });
-  await submit(current.id, input.studentId, "GRADED", 1, 15, 20);
+  const currentSubmission = await submit(
+    current.id,
+    input.studentId,
+    "GRADED",
+    1,
+    15,
+    20,
+  );
   await submit(current.id, input.studentId, "IN_PROGRESS", 2);
   await submit(current.id, input.studentId, "WITHDRAWN", 3);
-  await submit(current.id, removed.id, "PUBLISHED", 1, 100, 100);
+  const removedSubmission = await submit(
+    current.id,
+    removed.id,
+    "PUBLISHED",
+    1,
+    100,
+    100,
+  );
   await submit(ended.id, input.studentId, "PENDING_REVIEW");
   await submit(completedAssignment.id, input.studentId, "PUBLISHED", 1, 50, 50);
   await submit(legacyAssignment.id, input.studentId, "PUBLISHED", 1, 100, 100);
@@ -338,6 +355,7 @@ export async function verifyAssignmentReporting(input: {
     });
   }
   const studentQuery = teacherStudentQuerySchema.parse({
+    section: "CURRENT",
     courseId: course.id,
     classroomId: active.id,
   });
@@ -496,6 +514,268 @@ export async function verifyAssignmentReporting(input: {
   assert.equal(
     allStudents.items.find((row) => row.classroomId === emptyRoom.id)?.expected,
     0,
+  );
+  const combinedQuery = teacherStudentQuerySchema.parse({
+    courseId: course.id,
+    classroomId: active.id,
+  });
+  assert.equal(combinedQuery.section, "ALL");
+  const combined = await listTeacherStudentAssignments(
+    input.teacherId,
+    combinedQuery,
+    now,
+  );
+  const currentStudent = combined.items.find(
+    (row) => row.studentId === input.studentId,
+  );
+  assert.equal(currentStudent?.expected, 3);
+  assert.equal(currentStudent?.submitted, 2);
+  assert.equal(currentStudent?.pending, 1);
+  assert.equal(
+    combined.items.find((row) => row.studentId === input.lateStudentId)
+      ?.overdue,
+    2,
+  );
+  assert.equal(
+    combined.items.find((row) => row.studentId === removed.id)?.expected,
+    null,
+  );
+  const combinedStatistics = (
+    await getTeacherCourseAnalytics(input.teacherId, course.id, active.id, {
+      section: "ALL",
+      now,
+    })
+  ).assignmentStatistics;
+  assert.equal(
+    combined.items
+      .filter((row) => row.active)
+      .reduce((sum, row) => sum + (row.expected ?? 0), 0),
+    combinedStatistics.eligibleSubmissionCount,
+  );
+  assert.equal(
+    combined.items
+      .filter((row) => row.active)
+      .reduce((sum, row) => sum + row.submitted, 0),
+    combinedStatistics.completedSubmissionCount,
+  );
+  const combinedDetailQuery =
+    teacherStudentDetailQuerySchema.parse(combinedQuery);
+  const combinedDetail = await getTeacherStudentAssignments(
+    input.teacherId,
+    input.studentId,
+    combinedDetailQuery,
+    now,
+  );
+  assert.equal(combinedDetail.items.length, 3);
+  assert.equal(new Set(combinedDetail.items.map((row) => row.id)).size, 3);
+  assert.equal(
+    combinedDetail.items.find((row) => row.id === current.id)?.historical,
+    false,
+  );
+  assert.equal(
+    combinedDetail.items.find((row) => row.id === ended.id)?.historical,
+    true,
+  );
+  assert.equal(
+    combinedDetail.items.find((row) => row.id === archivedAssignment.id)
+      ?.historical,
+    true,
+  );
+  assert.equal(
+    combinedDetail.items.find((row) => row.id === current.id)?.percentage,
+    75,
+  );
+  const pendingDetail = await getTeacherStudentAssignments(
+    input.teacherId,
+    input.studentId,
+    { ...combinedDetailQuery, submissionFilter: "PENDING_REVIEW" },
+    now,
+  );
+  assert.deepEqual(
+    pendingDetail.items.map((row) => row.id),
+    [ended.id],
+  );
+  const overdueDetail = await getTeacherStudentAssignments(
+    input.teacherId,
+    input.lateStudentId,
+    { ...combinedDetailQuery, submissionFilter: "OVERDUE" },
+    now,
+  );
+  assert.equal(overdueDetail.items.length, 2);
+  const completedDetail = await getTeacherStudentAssignments(
+    input.teacherId,
+    input.studentId,
+    { ...combinedDetailQuery, classroomId: completed.id },
+    now,
+  );
+  assert.equal(completedDetail.items[0].historical, true);
+  const allRooms = await listTeacherStudentAssignments(
+    input.teacherId,
+    { ...combinedQuery, classroomId: undefined },
+    now,
+  );
+  assert.ok(allRooms.items.some((row) => row.classroomId === completed.id));
+  assert.ok(allRooms.items.some((row) => row.classroomId === closed.id));
+  assert.ok(
+    allRooms.items.some(
+      (row) => row.classroomId === archived.id && !row.active,
+    ),
+  );
+  assert.equal(
+    allRooms.items.find((row) => row.classroomId === emptyRoom.id)?.expected,
+    0,
+  );
+  const secondPage = await listTeacherStudentAssignments(
+    input.teacherId,
+    { ...combinedQuery, studentKeyword: "查询同名", pageSize: 1, page: 2 },
+    now,
+  );
+  assert.equal(secondPage.pagination.total, 2);
+  assert.equal(secondPage.items.length, 1);
+  await assert.rejects(
+    () =>
+      listTeacherStudentAssignments(input.otherTeacherId, combinedQuery, now),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    () =>
+      listTeacherStudentAssignments(
+        input.teacherId,
+        { ...combinedQuery, courseId: input.otherCourseId },
+        now,
+      ),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    () =>
+      getTeacherStudentAssignments(
+        input.teacherId,
+        "cm12345678901234567890123",
+        combinedDetailQuery,
+        now,
+      ),
+    ResourceNotFoundError,
+  );
+  const sourceQuestion = await prisma.question.findFirstOrThrow({
+    where: { type: "SHORT_ANSWER" },
+  });
+  const snapshot = await prisma.assignmentQuestion.create({
+    data: {
+      assignmentId: current.id,
+      questionId: sourceQuestion.id,
+      sortOrder: 1,
+      points: 20,
+      titleSnapshot: "个人作答隔离",
+      contentSnapshot: "说明你的答案",
+      typeSnapshot: "SHORT_ANSWER",
+      difficultySnapshot: 1,
+      explanationSnapshot: "参考解析",
+      referenceAnswerSnapshot: "参考答案",
+    },
+  });
+  await prisma.studentAnswer.createMany({
+    data: [
+      {
+        submissionId: currentSubmission.id,
+        assignmentQuestionId: snapshot.id,
+        textAnswer: "学生甲个人答案",
+        maxScore: 20,
+        score: 15,
+        gradingStatus: "GRADED",
+      },
+      {
+        submissionId: removedSubmission.id,
+        assignmentQuestionId: snapshot.id,
+        textAnswer: "历史成员个人答案",
+        maxScore: 20,
+        score: 20,
+        gradingStatus: "GRADED",
+      },
+    ],
+  });
+  const personalQuery = assignmentResultsQuerySchema.parse({
+    studentId: input.studentId,
+  });
+  const personal = await getTeacherAssignmentStudentAnswer(
+    input.teacherId,
+    current.id,
+    personalQuery,
+  );
+  assert.equal(personal.detail.student.id, input.studentId);
+  assert.equal(personal.detail.selectedSubmission?.id, currentSubmission.id);
+  assert.deepEqual(
+    personal.detail.answers.map((answer) => answer.studentAnswer),
+    ["学生甲个人答案"],
+  );
+  assert.equal(personal.detail.attempts.length, 1);
+  assert.equal("students" in personal, false);
+  const personalHistory = await getTeacherAssignmentStudentAnswer(
+    input.teacherId,
+    current.id,
+    {
+      ...personalQuery,
+      studentId: removed.id,
+      submissionId: removedSubmission.id,
+    },
+  );
+  assert.deepEqual(
+    personalHistory.detail.answers.map((answer) => answer.studentAnswer),
+    ["历史成员个人答案"],
+  );
+  const personalMissing = await getTeacherAssignmentStudentAnswer(
+    input.teacherId,
+    current.id,
+    { ...personalQuery, studentId: input.lateStudentId },
+  );
+  assert.equal(personalMissing.detail.selectedSubmission, null);
+  assert.equal(personalMissing.detail.answers.length, 0);
+  await assert.rejects(
+    () =>
+      getTeacherAssignmentStudentAnswer(
+        input.otherTeacherId,
+        current.id,
+        personalQuery,
+      ),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    () =>
+      getTeacherAssignmentStudentAnswer(input.teacherId, current.id, {
+        ...personalQuery,
+        submissionId: removedSubmission.id,
+      }),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    () =>
+      getTeacherAssignmentStudentAnswer(
+        input.teacherId,
+        completedAssignment.id,
+        { ...personalQuery, submissionId: currentSubmission.id },
+      ),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    () =>
+      getTeacherAssignmentStudentAnswer(input.teacherId, current.id, {
+        ...personalQuery,
+        studentId: "cm12345678901234567890123",
+      }),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    () =>
+      getTeacherAssignmentStudentAnswer(input.teacherId, ended.id, {
+        ...personalQuery,
+        studentId: removed.id,
+      }),
+    ResourceNotFoundError,
+  );
+  console.log(
+    "Personal answer isolation passed: no class roster, selected student/submission, draft/withdrawal exclusion, historical read-only evidence, no submission and ownership.",
+  );
+  console.log(
+    "Combined student queries passed: current/history union, no duplicates, publication exclusions, statistics parity, detail badges, drill-down, pagination and ownership.",
   );
   console.log(
     "Student query integration passed: names, leading-zero IDs, exact search, zero tasks, missing submissions, historical read-only evidence, filters, pagination and ownership.",

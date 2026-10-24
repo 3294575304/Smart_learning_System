@@ -6,6 +6,7 @@ import {
   updateDraftAssignment,
   getTeacherAssignment,
   listTeacherAssignments,
+  publishAssignment,
 } from "@/services/assignments/service";
 import {
   assignmentBatchSchema,
@@ -285,7 +286,12 @@ export async function verifyAssignmentManagement(ids: {
       },
     },
   });
+  await prisma.assignment.update({
+    where: { id: own.id },
+    data: { dueAt: new Date(Date.now() - 1000) },
+  });
   assert.deepEqual(await getAssignmentPublicationState(ids.teacherId, own.id), {
+    blockedReason: null,
     pendingCount: 0,
     gradedCount: 1,
     publishedCount: 0,
@@ -380,5 +386,125 @@ export async function verifyAssignmentManagement(ids: {
   assert.ok(archiveResults.items.some((item) => item.id === foreignClass.id));
   console.log(
     "History status options passed: class-scoped availability, archived records hidden by default and recoverable through explicit filters.",
+  );
+  const category = await prisma.course.findUniqueOrThrow({
+    where: { id: ids.courseId },
+    select: { questionCategoryId: true },
+  });
+  const bank = await Promise.all(
+    ["甲", "乙"].map((label) =>
+      prisma.question.create({
+        data: {
+          creatorId: ids.teacherId,
+          questionCategoryId: category.questionCategoryId,
+          title: `分值恢复${label}`,
+          content: "草稿恢复与冻结测试",
+          explanation: "测试解析",
+          type: "SHORT_ANSWER",
+          difficulty: 1,
+          referenceAnswer: "评分参考",
+          status: "ACTIVE",
+        },
+      }),
+    ),
+  );
+  const customInput = assignmentBatchSchema.parse({
+    ...input,
+    requestId: randomUUID(),
+    publish: false,
+    assignment: {
+      ...assignment,
+      submissionTask: undefined,
+      allowAttachments: false,
+      questions: [
+        { questionId: bank[1].id, sortOrder: 1, points: 37.5 },
+        { questionId: bank[0].id, sortOrder: 2, points: 42.5 },
+      ],
+    },
+  });
+  const custom = await createAssignmentBatch(ids.teacherId, customInput);
+  assert.equal(custom.assignments.length, 2);
+  for (const saved of custom.assignments) {
+    const restored = await getTeacherAssignment(ids.teacherId, saved.id);
+    assert.equal(restored.status, "DRAFT");
+    assert.equal(restored.totalPoints, 80);
+    assert.deepEqual(
+      restored.questions.map((q) => [q.questionId, q.points]),
+      [
+        [bank[1].id, 37.5],
+        [bank[0].id, 42.5],
+      ],
+    );
+  }
+  await publishAssignment(ids.teacherId, custom.assignments[0].id);
+  assert.equal(
+    (await getTeacherAssignment(ids.teacherId, custom.assignments[1].id))
+      .status,
+    "DRAFT",
+  );
+  await prisma.question.update({
+    where: { id: bank[1].id },
+    data: { content: "之后修改题库" },
+  });
+  assert.equal(
+    (
+      await getTeacherAssignmentOverview(
+        ids.teacherId,
+        custom.assignments[0].id,
+      )
+    ).questions[0].content,
+    "草稿恢复与冻结测试",
+  );
+  const ended = await prisma.classroom.create({
+    data: {
+      teacherId: ids.teacherId,
+      courseId: ids.courseId,
+      name: "多班发布拒绝结课班",
+      joinCode: randomUUID(),
+      status: "COMPLETED",
+    },
+  });
+  const baselineAfterDrafts = await prisma.assignment.count();
+  await assert.rejects(
+    createAssignmentBatch(ids.teacherId, {
+      ...customInput,
+      publish: true,
+      requestId: randomUUID(),
+      classroomIds: [ids.class1Id, ended.id],
+    }),
+    /已结课|已关闭/,
+  );
+  assert.equal(
+    await prisma.assignment.count(),
+    baselineAfterDrafts,
+    "an ended class must reject the whole batch",
+  );
+  await prisma.classroom.update({
+    where: { id: ended.id },
+    data: { status: "ACTIVE" },
+  });
+  const retryInput = {
+    ...customInput,
+    assignment: { ...customInput.assignment, classroomId: ended.id },
+    publish: true,
+    requestId: randomUUID(),
+    classroomIds: [ended.id],
+  };
+  const firstPublish = await createAssignmentBatch(ids.teacherId, retryInput);
+  await prisma.classroom.update({
+    where: { id: ended.id },
+    data: { status: "COMPLETED" },
+  });
+  const reusedAfterCompletion = await createAssignmentBatch(
+    ids.teacherId,
+    retryInput,
+  );
+  assert.equal(reusedAfterCompletion.reused, true);
+  assert.equal(
+    reusedAfterCompletion.assignments[0].id,
+    firstPublish.assignments[0].id,
+  );
+  console.log(
+    "Editor phase two passed: multi-class custom draft restoration, preserved order/points, independent single-class publication, frozen content and ended-class atomic rejection.",
   );
 }
