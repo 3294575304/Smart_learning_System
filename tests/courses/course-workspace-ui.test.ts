@@ -44,6 +44,21 @@ function renderSetup(overrides: Partial<CourseSetupInput> = {}) {
     }),
   );
 }
+
+function constructionEntries(html: string) {
+  const paths: Record<string, string> = {
+    "#course-classrooms": "classrooms",
+    "/syllabus": "syllabus",
+    "/knowledge-graph": "graph",
+    "/assessment-scheme": "assessment",
+  };
+  return [
+    ...html.matchAll(
+      /<a\b[^>]*href="\/teacher\/courses\/course-a(#course-classrooms|\/syllabus|\/knowledge-graph|\/assessment-scheme)"/g,
+    ),
+  ].map((match) => paths[match[1]]);
+}
+
 test("班级选择器仅显示关联班级，三个分类的入口都携带默认班级", () => {
   const html = renderToStaticMarkup(
     React.createElement(CourseWorkspaceNavigation, {
@@ -170,16 +185,15 @@ test("大纲上传与审核共用卡片状态，下一步保留文字提示", ()
   const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(hrefs.length, 5);
   assert.equal(new Set(hrefs).size, 5);
-  const syllabusTasks = [
-    ...html.matchAll(
-      /<a\b[^>]*href="\/teacher\/courses\/course-a\/syllabus"[^>]*>[\s\S]*?<\/a>/g,
-    ),
-  ].map((match) => match[0]);
-  assert.equal(syllabusTasks.length, 1);
-  assert.match(syllabusTasks[0], /教学大纲/u);
-  assert.match(syllabusTasks[0], /未完成/u);
-  assert.match(syllabusTasks[0], /查看诊断并重试/u);
-  assert.doesNotMatch(html, /<details id="course-setup-/u);
+  assert.match(
+    html,
+    /href="\/teacher\/courses\/course-a\/syllabus"[^>]*>[\s\S]*?教学大纲[\s\S]*?未完成/u,
+  );
+  assert.match(
+    html,
+    /href="\/teacher\/courses\/course-a\/syllabus"[^>]*>[\s\S]*?查看诊断并重试/u,
+  );
+  assert.doesNotMatch(html, /展开详情|收起详情/u);
   assert.match(html, /href="\/teacher\/courses\/course-a\/question-mapping"/u);
   assert.doesNotMatch(
     html,
@@ -187,7 +201,7 @@ test("大纲上传与审核共用卡片状态，下一步保留文字提示", ()
   );
 });
 
-test("课程准备进度随完成情况变化，四项始终是直接入口", () => {
+test("课程准备进度随完成情况变化，四项始终保留直接入口", () => {
   const empty = renderSetup({
     activeClassroomCount: 0,
     syllabus: null,
@@ -214,10 +228,53 @@ test("课程准备进度随完成情况变化，四项始终是直接入口", ()
   assert.match(complete, /已完成 4 \/ 4 项基础准备/u);
   assert.doesNotMatch(complete, /role="progressbar"|bg-red-600/u);
   assert.match(complete, /<details id="course-construction-details" class=/u);
-  for (const html of [empty, partial, complete]) {
-    assert.equal((html.match(/<details\b/g) ?? []).length, 1);
+  for (const [html, detailsCount] of [
+    [empty, 1],
+    [partial, 2],
+    [complete, 2],
+  ] as const) {
+    assert.equal((html.match(/<details\b/g) ?? []).length, detailsCount);
     assert.equal((html.match(/<a\b/g) ?? []).length, 6);
+    assert.doesNotMatch(html, /展开详情|收起详情|data-setup-entry/u);
   }
+  assert.doesNotMatch(empty, /id="course-completed-setup-details"/u);
+  assert.match(
+    partial,
+    /<details id="course-completed-setup-details" class="group\/completed"/u,
+  );
+  assert.match(partial, /已完成 1 项/u);
+  const completedGroup = partial.indexOf('id="course-completed-setup-details"');
+  assert.ok(
+    partial.indexOf('href="/teacher/courses/course-a/syllabus"') <
+      completedGroup,
+  );
+  assert.ok(
+    partial.indexOf('href="/teacher/courses/course-a#course-classrooms"') >
+      completedGroup,
+  );
+  assert.match(
+    complete,
+    /<details id="course-completed-setup-details" class="group\/completed"/u,
+  );
+  assert.match(complete, /已完成 4 项/u);
+  assert.deepEqual(constructionEntries(empty), [
+    "classrooms",
+    "syllabus",
+    "graph",
+    "assessment",
+  ]);
+  assert.deepEqual(constructionEntries(partial), [
+    "syllabus",
+    "graph",
+    "assessment",
+    "classrooms",
+  ]);
+  assert.deepEqual(constructionEntries(complete), [
+    "classrooms",
+    "syllabus",
+    "graph",
+    "assessment",
+  ]);
   for (const [path, title] of [
     ["#course-classrooms", "关联授课班级"],
     ["/syllabus", "教学大纲"],
@@ -227,10 +284,36 @@ test("课程准备进度随完成情况变化，四项始终是直接入口", ()
     const card = [
       ...complete.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>[\s\S]*?<\/a>/g),
     ].find((match) => match[1] === `/teacher/courses/course-a${path}`)?.[0];
-    assert.ok(card, `${title}入口应直接显示`);
+    assert.ok(card, `${title}入口应保留直接链接`);
     assert.match(card, new RegExp(title, "u"));
     assert.match(card, /已完成/u);
   }
+});
+
+test("完成项排到折叠区，状态回退后重新排到前面", () => {
+  const graphPending = renderSetup({ graph: null });
+  assert.deepEqual(constructionEntries(graphPending), [
+    "graph",
+    "classrooms",
+    "syllabus",
+    "assessment",
+  ]);
+  assert.match(graphPending, /已完成 3 项/u);
+
+  const syllabusNeedsReview = renderSetup({
+    syllabus: { id: "file-b", versionNumber: 2, parseStatus: "SUCCEEDED" },
+  });
+  assert.deepEqual(constructionEntries(syllabusNeedsReview), [
+    "syllabus",
+    "classrooms",
+    "graph",
+    "assessment",
+  ]);
+  assert.match(
+    syllabusNeedsReview,
+    /<details id="course-construction-details" open=""/u,
+  );
+  assert.match(syllabusNeedsReview, /正式第 1 版继续生效/u);
 });
 
 test("题目入口独立于准备区域并始终可见，班级操作保留锚点", () => {

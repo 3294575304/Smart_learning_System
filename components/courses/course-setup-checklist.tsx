@@ -55,6 +55,10 @@ const statePresentation = {
   },
 };
 
+function isEntryComplete(steps: CourseSetupStep[]) {
+  return steps.length > 0 && steps.every((step) => step.state === "complete");
+}
+
 export function CourseSetupChecklist({
   courseId,
   progress,
@@ -84,9 +88,15 @@ export function CourseSetupChecklist({
       });
     }
   }
-  const orderedEntries = [...entries.values()].sort(
+  const originalEntries = [...entries.values()].sort(
     (left, right) =>
       Number(right.id === "classrooms") - Number(left.id === "classrooms"),
+  );
+  const pendingEntries = originalEntries.filter(
+    (entry) => !isEntryComplete(entry.steps),
+  );
+  const completedEntries = originalEntries.filter((entry) =>
+    isEntryComplete(entry.steps),
   );
   const isComplete = progress.completedCount === progress.totalCount;
   const questionTools = [
@@ -105,6 +115,69 @@ export function CourseSetupChecklist({
       icon: BookOpenCheck,
     },
   ];
+
+  const renderEntry = ({
+    id,
+    title,
+    description,
+    action,
+    href,
+    icon: Icon,
+    steps,
+  }: (typeof originalEntries)[number]) => (
+    <Link
+      key={id}
+      href={steps[0]?.href ?? href}
+      className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 group-hover:text-blue-600">
+        <Icon aria-hidden="true" className="size-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3 className="text-sm font-medium text-slate-900">{title}</h3>
+        {steps.length ? (
+          <ul className="mt-2 space-y-2">
+            {steps.map((step) => {
+              const {
+                label,
+                icon: StatusIcon,
+                style,
+              } = statePresentation[
+                step.state === "complete" ? "complete" : "incomplete"
+              ];
+              return (
+                <li
+                  key={step.id}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1"
+                >
+                  {steps.length > 1 && (
+                    <span className="text-xs font-medium">{step.title}</span>
+                  )}
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${style}`}
+                  >
+                    <StatusIcon aria-hidden="true" className="size-3.5" />
+                    {label}
+                  </span>
+                  <p className="text-muted-foreground text-xs leading-5">
+                    {step.detail}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground mt-1 text-xs leading-5">
+            {description}
+          </p>
+        )}
+      </div>
+      <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-sky-700 transition-colors group-hover:border-sky-400 group-hover:bg-sky-100">
+        {steps[0]?.action ?? action}
+        <ChevronRight aria-hidden="true" className="size-3.5" />
+      </span>
+    </Link>
+  );
 
   return (
     <>
@@ -156,6 +229,7 @@ export function CourseSetupChecklist({
         )}
         <details
           id="course-construction-details"
+          key={isComplete ? "complete" : "incomplete"}
           open={!isComplete}
           className="group/construction mt-4"
         >
@@ -170,70 +244,28 @@ export function CourseSetupChecklist({
             </span>
           </summary>
           <div className="mt-3 grid gap-2">
-            {orderedEntries.map(
-              ({ id, title, description, action, href, icon: Icon, steps }) => (
-                <Link
-                  key={id}
-                  href={steps[0]?.href ?? href}
-                  className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
-                >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 group-hover:text-blue-600">
-                    <Icon aria-hidden="true" className="size-5" />
+            {pendingEntries.map(renderEntry)}
+            {completedEntries.length > 0 && (
+              <details
+                id="course-completed-setup-details"
+                key={completedEntries.map((entry) => entry.id).join("|")}
+                className="group/completed"
+              >
+                <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-4 transition-transform group-open/completed:rotate-90"
+                  />
+                  <span>已完成 {completedEntries.length} 项</span>
+                  <span className="group-open/completed:hidden">· 展开</span>
+                  <span className="hidden group-open/completed:inline">
+                    · 收起
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-medium text-slate-900">
-                      {title}
-                    </h3>
-                    {steps.length ? (
-                      <ul className="mt-2 space-y-2">
-                        {steps.map((step) => {
-                          const {
-                            label,
-                            icon: StatusIcon,
-                            style,
-                          } = statePresentation[
-                            step.state === "complete"
-                              ? "complete"
-                              : "incomplete"
-                          ];
-                          return (
-                            <li
-                              key={step.id}
-                              className="flex flex-wrap items-center gap-x-2 gap-y-1"
-                            >
-                              {steps.length > 1 && (
-                                <span className="text-xs font-medium">
-                                  {step.title}
-                                </span>
-                              )}
-                              <span
-                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${style}`}
-                              >
-                                <StatusIcon
-                                  aria-hidden="true"
-                                  className="size-3.5"
-                                />
-                                {label}
-                              </span>
-                              <p className="text-muted-foreground text-xs leading-5">
-                                {step.detail}
-                              </p>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <p className="text-muted-foreground mt-1 text-xs leading-5">
-                        {description}
-                      </p>
-                    )}
-                  </div>
-                  <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-sky-700 transition-colors group-hover:border-sky-400 group-hover:bg-sky-100">
-                    {steps[0]?.action ?? action}
-                    <ChevronRight aria-hidden="true" className="size-3.5" />
-                  </span>
-                </Link>
-              ),
+                </summary>
+                <div className="mt-3 grid gap-2">
+                  {completedEntries.map(renderEntry)}
+                </div>
+              </details>
             )}
           </div>
           <p className="text-muted-foreground mt-4 text-xs leading-5">
