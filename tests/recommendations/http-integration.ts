@@ -50,6 +50,8 @@ let membershipToRestore: {
 } | null = null;
 let practiceQuestionId: string | null = null;
 let practiceKnowledgePointId: string | null = null;
+let candidateCategoryId: string | null = null;
+const categorizedSeedQuestionIds: string[] = [];
 
 const server = spawn(
   process.execPath,
@@ -165,6 +167,30 @@ async function main(): Promise<void> {
         where: { teacherId: teacherTwo.id, status: "ACTIVE" },
       }),
     ]);
+    const categoryKey = randomUUID();
+    const category = await prisma.questionCourseCategory.create({
+      data: {
+        name: `HTTP 推荐测试 ${categoryKey}`,
+        normalizedName: `http-recommendation-${categoryKey}`,
+      },
+    });
+    candidateCategoryId = category.id;
+    const seedCandidates = await prisma.question.findMany({
+      where: {
+        creatorId: teacher.id,
+        status: QuestionStatus.ACTIVE,
+        isAssignmentOnly: false,
+        deletedAt: null,
+        questionCategoryId: null,
+      },
+      select: { id: true },
+    });
+    assert.ok(seedCandidates.length > 0);
+    categorizedSeedQuestionIds.push(...seedCandidates.map(({ id }) => id));
+    await prisma.question.updateMany({
+      where: { id: { in: categorizedSeedQuestionIds } },
+      data: { questionCategoryId: category.id },
+    });
     const [
       teacherCookie,
       teacherTwoCookie,
@@ -803,6 +829,17 @@ async function main(): Promise<void> {
     }
     if (practiceQuestionId) {
       await prisma.question.delete({ where: { id: practiceQuestionId } });
+    }
+    if (categorizedSeedQuestionIds.length > 0) {
+      await prisma.question.updateMany({
+        where: { id: { in: categorizedSeedQuestionIds } },
+        data: { questionCategoryId: null },
+      });
+    }
+    if (candidateCategoryId) {
+      await prisma.questionCourseCategory.delete({
+        where: { id: candidateCategoryId },
+      });
     }
     if (practiceKnowledgePointId) {
       await prisma.knowledgePoint.delete({

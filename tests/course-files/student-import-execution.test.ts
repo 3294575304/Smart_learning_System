@@ -161,7 +161,8 @@ async function createImportContext(): Promise<ImportExecutionContext> {
     courseId: course.id,
     classroomId: classroom.id,
     courseNo,
-    studentNoPrefix: `98${suffix}`,
+    // Hex E between digits can look like scientific notation to the roster parser.
+    studentNoPrefix: `98${BigInt(`0x${suffix}`).toString().padStart(13, "0")}`,
     storage: new MemoryStorage(),
     courseIds: [course.id],
     classroomIds: [classroom.id],
