@@ -6,8 +6,44 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { CourseWorkspaceNavigation } from "../../components/courses/course-workspace-navigation";
 import { CourseSetupChecklist } from "../../components/courses/course-setup-checklist";
 import { CourseDetailDisclosure } from "../../components/courses/course-detail-disclosure";
+import {
+  buildCourseSetupProgress,
+  type CourseSetupInput,
+} from "../../services/courses/setup-progress";
 
 Object.assign(globalThis, { React });
+
+function renderSetup(overrides: Partial<CourseSetupInput> = {}) {
+  const progress = buildCourseSetupProgress({
+    courseId: "course-a",
+    status: "ACTIVE",
+    activeClassroomCount: 1,
+    activeStudentCount: 0,
+    syllabus: { id: "file-a", versionNumber: 1, parseStatus: "SUCCEEDED" },
+    publishedSyllabus: {
+      id: "syllabus-a",
+      syllabusId: "file-a",
+      versionNumber: 1,
+      graphDraftStatus: "SUCCEEDED",
+    },
+    graph: {
+      id: "graph-a",
+      sourceSyllabusStructureId: "syllabus-a",
+      versionNumber: 1,
+    },
+    assessment: {
+      sourcePublishedSyllabusStructureId: "syllabus-a",
+      versionNumber: 1,
+    },
+    ...overrides,
+  });
+  return renderToStaticMarkup(
+    React.createElement(CourseSetupChecklist, {
+      courseId: "course-a",
+      progress,
+    }),
+  );
+}
 test("班级选择器仅显示关联班级，三个分类的入口都携带默认班级", () => {
   const html = renderToStaticMarkup(
     React.createElement(CourseWorkspaceNavigation, {
@@ -142,12 +178,92 @@ test("大纲上传与审核共用卡片状态，下一步保留文字提示", ()
   assert.equal(syllabusTasks.length, 1);
   assert.match(syllabusTasks[0], /教学大纲/u);
   assert.match(syllabusTasks[0], /未完成/u);
-  assert.doesNotMatch(syllabusTasks[0], /ring-2/u);
+  assert.match(syllabusTasks[0], /查看诊断并重试/u);
+  assert.doesNotMatch(html, /<details id="course-setup-/u);
   assert.match(html, /href="\/teacher\/courses\/course-a\/question-mapping"/u);
   assert.doesNotMatch(
     html,
     /href="\/teacher\/courses\/course-a\/teaching-progress"/u,
   );
+});
+
+test("课程准备进度随完成情况变化，四项始终是直接入口", () => {
+  const empty = renderSetup({
+    activeClassroomCount: 0,
+    syllabus: null,
+    publishedSyllabus: null,
+    graph: null,
+    assessment: null,
+  });
+  const partial = renderSetup({
+    syllabus: null,
+    publishedSyllabus: null,
+    graph: null,
+    assessment: null,
+  });
+  const complete = renderSetup();
+  for (const [html, count] of [
+    [empty, 0],
+    [partial, 1],
+  ] as const) {
+    assert.match(html, new RegExp(`已完成 ${count} \\/ 4 项基础准备`, "u"));
+    assert.match(html, /class="[^"]*bg-red-200" role="progressbar"/u);
+    assert.match(html, /bg-red-600/u);
+    assert.match(html, /<details id="course-construction-details" open=""/u);
+  }
+  assert.match(complete, /已完成 4 \/ 4 项基础准备/u);
+  assert.doesNotMatch(complete, /role="progressbar"|bg-red-600/u);
+  assert.match(complete, /<details id="course-construction-details" class=/u);
+  for (const html of [empty, partial, complete]) {
+    assert.equal((html.match(/<details\b/g) ?? []).length, 1);
+    assert.equal((html.match(/<a\b/g) ?? []).length, 6);
+  }
+  for (const [path, title] of [
+    ["#course-classrooms", "关联授课班级"],
+    ["/syllabus", "教学大纲"],
+    ["/knowledge-graph", "知识图谱"],
+    ["/assessment-scheme", "考核方案"],
+  ]) {
+    const card = [
+      ...complete.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>[\s\S]*?<\/a>/g),
+    ].find((match) => match[1] === `/teacher/courses/course-a${path}`)?.[0];
+    assert.ok(card, `${title}入口应直接显示`);
+    assert.match(card, new RegExp(title, "u"));
+    assert.match(card, /已完成/u);
+  }
+});
+
+test("题目入口独立于准备区域并始终可见，班级操作保留锚点", () => {
+  for (const html of [
+    renderSetup({
+      activeClassroomCount: 0,
+      syllabus: null,
+      publishedSyllabus: null,
+      graph: null,
+      assessment: null,
+    }),
+    renderSetup(),
+  ]) {
+    const toolsStart = html.indexOf(
+      'aria-labelledby="course-question-tools-title"',
+    );
+    assert.ok(toolsStart > 0);
+    const preparation = html.slice(0, toolsStart);
+    const tools = html.slice(toolsStart);
+    assert.doesNotMatch(
+      preparation,
+      /href="[^"]*(?:question-mapping|\/teacher\/questions)/u,
+    );
+    assert.match(
+      tools,
+      /href="\/teacher\/courses\/course-a\/question-mapping"/u,
+    );
+    assert.match(tools, /href="\/teacher\/questions\?courseId=course-a"/u);
+    assert.match(
+      preparation,
+      /href="\/teacher\/courses\/course-a#course-classrooms"/u,
+    );
+  }
 });
 test("班级与课程设置默认收起并保留深链接锚点", () => {
   const html = renderToStaticMarkup(
