@@ -23,7 +23,7 @@ npx prisma migrate deploy
 powershell -ExecutionPolicy Bypass -File deploy/windows-local/install-local-deployment.ps1
 ```
 
-首次运行前，请准备当前 Windows 用户 SSH 目录中的私钥和已核验的远程主机指纹文件。脚本默认使用 `$HOME\.ssh\codex_sandbox_known_hosts_20260808`；如果文件位置不同，请显式传入 `-KnownHostsPath`。不要创建空文件或直接使用未经核验的 `ssh-keyscan` 输出。
+首次运行前，请准备 SSH 私钥和已核验的远程主机指纹文件。私钥默认位于仓库旁的 `<仓库目录>材料\codex.pem`（例如 `D:\智学系统材料\codex.pem`）；如在其他位置，请传入 `-SshKeyPath`。主机指纹文件默认使用 `$HOME\.ssh\codex_sandbox_known_hosts_20260808`；如在其他位置，请传入 `-KnownHostsPath`。不要创建空文件或直接使用未经核验的 `ssh-keyscan` 输出。
 
 仅在已经确认独立生产构建完整、只需重启或更新任务设置时，才可传入 `-SkipBuild`。
 
