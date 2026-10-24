@@ -17,6 +17,7 @@ export type AssignmentResultsQuery = z.output<
 >;
 
 export const teacherResultsOverviewQuerySchema = z.object({
+  section: z.enum(["ALL", "CURRENT", "HISTORY"]).default("ALL"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(30).default(10),
   courseId: z.preprocess(

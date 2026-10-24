@@ -1,4 +1,5 @@
 import { verifyClassroomCompletion } from "../classrooms/completion.integration-module";
+import { verifyAssignmentReporting } from "../assignment-results/reporting.integration-module";
 import { verifyAssignmentManagement } from "../assignments/management.integration-module";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -294,6 +295,14 @@ async function main() {
     otherTeacherId: other.id,
     studentId: student.id,
     courseId: course.id,
+  });
+  await verifyAssignmentReporting({
+    teacherId: teacher.id,
+    otherTeacherId: other.id,
+    studentId: student.id,
+    lateStudentId: student2.id,
+    courseId: course.id,
+    otherCourseId: another.id,
   });
   const emptyTeacher = await prisma.user.create({
     data: {

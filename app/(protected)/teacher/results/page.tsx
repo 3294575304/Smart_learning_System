@@ -1,12 +1,11 @@
 import { Role } from "@prisma/client";
-import { hundredPointScore } from "@/services/assignments/presentation";
 import { BarChart3, Eye } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageIndex } from "@/components/dashboard/page-index";
 import { PageHeader } from "@/components/dashboard/page-header";
-import { AutoSubmitSelect } from "@/components/filters/auto-submit-select";
+import { TeacherResultsFilters } from "@/components/assignment-results/overview-filters";
 import { TeacherCourseAnalyticsView } from "@/components/courses/teacher-course-analytics";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { getTeacherCourseAnalytics } from "@/services/course-analytics/service";
@@ -15,7 +14,9 @@ import {
   type TeacherResultsOverviewQuery,
 } from "@/services/assignment-results/schemas";
 import { listTeacherResultsOverview } from "@/services/assignment-results/service";
-import { listTeacherClassrooms } from "@/services/classrooms/service";
+import { getTeacherReportingScope } from "@/services/assignment-results/scope";
+import { ResourceNotFoundError } from "@/services/auth/policy";
+import { REPORTING_SECTION_LABELS } from "@/services/assignments/reporting";
 import { listTeacherCourses } from "@/services/courses/service";
 import { notFound } from "next/navigation";
 
@@ -31,6 +32,7 @@ function pageHref(query: TeacherResultsOverviewQuery, page: number): string {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(query.pageSize),
+    section: query.section,
   });
   if (query.courseId) params.set("courseId", query.courseId);
   if (query.classroomId) params.set("classroomId", query.classroomId);
@@ -45,10 +47,11 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
   const teacher = await requirePageRole(Role.TEACHER);
   const rawQuery = await searchParams;
   const filters = teacherResultsOverviewQuerySchema
-    .pick({ courseId: true, classroomId: true })
+    .pick({ courseId: true, classroomId: true, section: true })
     .safeParse({
       courseId: rawQuery.courseId,
       classroomId: rawQuery.classroomId,
+      section: rawQuery.section,
     });
   if (!filters.success) notFound();
   const paginationSchema = teacherResultsOverviewQuerySchema.pick({
@@ -63,8 +66,14 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
     ...filters.data,
     ...(pagination.success ? pagination.data : paginationSchema.parse({})),
   };
+  const now = new Date();
   const [classrooms, courses] = await Promise.all([
-    listTeacherClassrooms(teacher.id),
+    getTeacherReportingScope(teacher.id, parsedQuery, now).catch(
+      (error: unknown) => {
+        if (error instanceof ResourceNotFoundError) notFound();
+        throw error;
+      },
+    ),
     listTeacherCourses(teacher.id),
   ]);
   const selectedCourse = parsedQuery.courseId
@@ -79,23 +88,15 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
     : null;
   if (parsedQuery.classroomId && !selectedClassroom) notFound();
 
-  const filterClassrooms = selectedCourse
-    ? classrooms.filter(
-        (classroom) =>
-          classroom.course?.id === selectedCourse.id &&
-          classroom.status === "ACTIVE",
-      )
-    : classrooms;
-  const classroomId = filterClassrooms.some(
-    (classroom) => classroom.id === parsedQuery.classroomId,
-  )
-    ? parsedQuery.classroomId
-    : undefined;
+  const classroomId = parsedQuery.classroomId;
   const query: TeacherResultsOverviewQuery = { ...parsedQuery, classroomId };
   const [results, analytics] = await Promise.all([
-    listTeacherResultsOverview(teacher.id, query),
+    listTeacherResultsOverview(teacher.id, query, now),
     selectedCourse
-      ? getTeacherCourseAnalytics(teacher.id, selectedCourse.id, classroomId)
+      ? getTeacherCourseAnalytics(teacher.id, selectedCourse.id, classroomId, {
+          section: query.section,
+          now,
+        })
       : Promise.resolve(null),
   ]);
 
@@ -133,45 +134,17 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
         )}
       </details>
 
-      <form className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4">
-        <label className="w-full space-y-1 sm:max-w-xs">
-          <span className="text-xs font-medium">课程</span>
-          <AutoSubmitSelect
-            className="w-full rounded-md border px-3 py-2 text-sm"
-            defaultValue={selectedCourse?.id ?? ""}
-            name="courseId"
-          >
-            <option value="">全部课程</option>
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.name} · {course.term}
-              </option>
-            ))}
-          </AutoSubmitSelect>
-        </label>
-        <label className="w-full space-y-1 sm:max-w-xs">
-          <span className="text-xs font-medium">班级</span>
-          <AutoSubmitSelect
-            className="w-full rounded-md border px-3 py-2 text-sm"
-            defaultValue={classroomId ?? ""}
-            name="classroomId"
-          >
-            <option value="">全部班级</option>
-            {filterClassrooms.map((classroom) => (
-              <option key={classroom.id} value={classroom.id}>
-                {classroom.name}
-              </option>
-            ))}
-          </AutoSubmitSelect>
-        </label>
-        <input name="pageSize" type="hidden" value={query.pageSize} />
-        <Link
-          className="rounded-md border px-4 py-2 text-sm"
-          href="/teacher/results"
-        >
-          重置
-        </Link>
-      </form>
+      <TeacherResultsFilters
+        key={JSON.stringify(query)}
+        courses={courses}
+        classrooms={classrooms}
+        query={query}
+        scopeChanged={rawQuery.scopeChanged === "1"}
+      />
+      <p className="text-xs leading-5 text-slate-500">
+        当前范围：{REPORTING_SECTION_LABELS[query.section]}
+        作业。按现有有效成员关系实时统计，未冻结历史名单；入班前已截止的作业也计入应交。已退出、移除成员的作答单独保留，不计入应交和缺交。
+      </p>
 
       {analytics ? (
         <section
@@ -190,7 +163,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                 {analytics.course.courseNo} · {analytics.course.term}
                 {classroomId && selectedClassroom
                   ? ` · ${selectedClassroom.name}`
-                  : " · 全部有效授课班级"}
+                  : ` · ${REPORTING_SECTION_LABELS[query.section]}范围的全部班级`}
               </p>
             </div>
             <Link
@@ -218,7 +191,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
           </h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             选择一门课程查看该课程已发布作业的完成率、得分率和学生分数段。
-            {selectedClassroom && !selectedClassroom.course
+            {selectedClassroom && !selectedClassroom.courseId
               ? " 当前班级未关联课程，因此这里只显示该班作业成绩。"
               : ""}
           </p>
@@ -275,6 +248,10 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                   </td>
                   <td className="px-4 py-4">
                     {item.submittedCount} / {item.studentCount}
+                    <p className="mt-1 text-xs text-slate-500">
+                      未交 {item.unsubmittedCount} · 逾期未交{" "}
+                      {item.overdueCount}
+                    </p>
                     {item.historicalSubmittedCount > 0 && (
                       <p className="mt-1 text-xs text-slate-500">
                         另有 {item.historicalSubmittedCount}{" "}
@@ -289,13 +266,8 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
                     {valueText(item.averageScore)} / {item.totalPoints}
                   </td>
                   <td className="px-4 py-4">
-                    {valueText(
-                      hundredPointScore(item.highestScore, item.totalPoints),
-                    )}{" "}
-                    /{" "}
-                    {valueText(
-                      hundredPointScore(item.lowestScore, item.totalPoints),
-                    )}
+                    {valueText(item.highestPercentage)} /{" "}
+                    {valueText(item.lowestPercentage)}
                   </td>
                   <td className="px-4 py-4">
                     {item.pendingReviewCount > 0 ? (
@@ -326,6 +298,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
 
       {results.pagination.totalPages > 1 ? (
         <PageIndex
+          nativeNavigation
           ariaLabel="成绩统计分页"
           hrefForPage={(page) => pageHref(query, page)}
           page={results.pagination.page}

@@ -1,5 +1,4 @@
 import {
-  AssignmentStatus,
   GradingStatus,
   MembershipStatus,
   Prisma,
@@ -10,6 +9,13 @@ import {
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { assertTeacherOwnsAssignment } from "@/services/assignment-results/policy";
+import { getTeacherReportingScope } from "@/services/assignment-results/scope";
+import {
+  assignmentReportingWhere,
+  assignmentParticipation,
+  latestEffectiveSubmissions,
+} from "@/services/assignments/reporting";
+import { hundredPointScore } from "@/services/assignments/presentation";
 import type {
   AssignmentResultsQuery,
   TeacherResultsOverviewQuery,
@@ -49,10 +55,12 @@ function roundedAverage(values: number[]): number | null {
 export async function listTeacherResultsOverview(
   teacherId: string,
   query: TeacherResultsOverviewQuery,
+  now = new Date(),
 ): Promise<TeacherResultsOverview> {
+  await getTeacherReportingScope(teacherId, query, now);
   const where: Prisma.AssignmentWhereInput = {
     teacherId,
-    status: { in: [AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED] },
+    ...assignmentReportingWhere(query.section, now),
     ...(query.classroomId ? { classroomId: query.classroomId } : {}),
     ...(query.courseId ? { classroom: { courseId: query.courseId } } : {}),
   };
@@ -86,12 +94,20 @@ export async function listTeacherResultsOverview(
         },
         submissions: {
           where: { status: { in: EFFECTIVE_SUBMISSION_STATUSES } },
-          orderBy: [{ attemptNumber: "desc" }, { id: "desc" }],
+          orderBy: [
+            { attemptNumber: "desc" },
+            { submittedAt: "desc" },
+            { id: "desc" },
+          ],
           select: {
+            id: true,
+            assignmentId: true,
+            attemptNumber: true,
+            submittedAt: true,
             studentId: true,
             status: true,
             score: true,
-            percentage: true,
+            maxScore: true,
           },
         },
       },
@@ -100,22 +116,19 @@ export async function listTeacherResultsOverview(
 
   return {
     items: assignments.map((assignment) => {
-      const latestByStudent = new Map<
-        string,
-        (typeof assignment.submissions)[number]
-      >();
-      for (const submission of assignment.submissions) {
-        if (!latestByStudent.has(submission.studentId)) {
-          latestByStudent.set(submission.studentId, submission);
-        }
-      }
+      const latestByStudent =
+        latestEffectiveSubmissions(assignment.submissions).get(assignment.id) ??
+        new Map<string, (typeof assignment.submissions)[number]>();
       const activeStudentIds = new Set(
         assignment.classroom.memberships.map((member) => member.studentId),
       );
-      const allLatest = [...latestByStudent.values()];
-      const latest = allLatest.filter((submission) =>
-        activeStudentIds.has(submission.studentId),
+      const participation = assignmentParticipation(
+        activeStudentIds,
+        latestByStudent,
+        assignment.dueAt,
+        now,
       );
+      const latest = participation.submissions;
       const finalized = latest.filter(
         (submission) =>
           submission.status === SubmissionStatus.GRADED ||
@@ -124,10 +137,12 @@ export async function listTeacherResultsOverview(
       const scores = finalized.flatMap((submission) =>
         submission.score === null ? [] : [submission.score.toNumber()],
       );
-      const percentages = finalized.flatMap((submission) =>
-        submission.percentage === null
-          ? []
-          : [submission.percentage.toNumber()],
+      const percentages = finalized.flatMap(
+        (submission) =>
+          hundredPointScore(
+            submission.score?.toNumber() ?? null,
+            submission.maxScore?.toNumber() ?? null,
+          ) ?? [],
       );
       return {
         id: assignment.id,
@@ -141,14 +156,18 @@ export async function listTeacherResultsOverview(
         totalPoints: assignment.totalPoints.toNumber(),
         studentCount: assignment.classroom._count.memberships,
         submittedCount: latest.length,
-        historicalSubmittedCount: allLatest.length - latest.length,
-        pendingReviewCount: latest.filter(
-          (submission) => submission.status === SubmissionStatus.PENDING_REVIEW,
-        ).length,
+        historicalSubmittedCount: participation.historicalSubmittedCount,
+        unsubmittedCount: participation.unsubmittedCount,
+        overdueCount: participation.overdueCount,
+        pendingReviewCount: participation.pendingReviewCount,
         averageScore: roundedAverage(scores),
         averagePercentage: roundedAverage(percentages),
         highestScore: scores.length === 0 ? null : Math.max(...scores),
         lowestScore: scores.length === 0 ? null : Math.min(...scores),
+        highestPercentage:
+          percentages.length === 0 ? null : Math.max(...percentages),
+        lowestPercentage:
+          percentages.length === 0 ? null : Math.min(...percentages),
       };
     }),
     pagination: {
@@ -343,7 +362,19 @@ async function loadSelectedStudent(
     where: {
       classroomId,
       studentId: query.studentId,
-      status: "ACTIVE",
+      OR: [
+        { status: "ACTIVE" },
+        {
+          student: {
+            submissions: {
+              some: {
+                assignmentId,
+                status: { in: EFFECTIVE_SUBMISSION_STATUSES },
+              },
+            },
+          },
+        },
+      ],
     },
     select: {
       student: {

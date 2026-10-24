@@ -13,12 +13,7 @@ import Link from "next/link";
 
 import type { TeacherCourseAnalytics } from "@/services/course-analytics/service";
 import { withClassroomQuery } from "@/lib/course-classroom";
-
-const assignmentStatusLabel: Record<string, string> = {
-  DRAFT: "草稿",
-  PUBLISHED: "进行中",
-  CLOSED: "已结束",
-};
+import { REPORTING_SECTION_LABELS } from "@/services/assignments/reporting";
 
 const surveyStatusLabel: Record<string, string> = {
   DRAFT: "草稿",
@@ -100,6 +95,20 @@ export function TeacherCourseAnalyticsView({
   const statistics = data.assignmentStatistics;
   const assignmentParams = new URLSearchParams({ courseId: data.course.id });
   if (classroomId) assignmentParams.set("classroomId", classroomId);
+  const assignmentSection =
+    data.reportingSection === "ALL"
+      ? data.reportingClassroomStatus &&
+        data.reportingClassroomStatus !== "ACTIVE"
+        ? "HISTORY"
+        : "CURRENT"
+      : data.reportingSection;
+  assignmentParams.set("section", assignmentSection);
+  const historyAssignmentParams = new URLSearchParams(assignmentParams);
+  historyAssignmentParams.set("section", "HISTORY");
+  const showCurrentTasks =
+    data.reportingSection !== "HISTORY" &&
+    (!data.reportingClassroomStatus ||
+      data.reportingClassroomStatus === "ACTIVE");
 
   return (
     <div className="space-y-6">
@@ -117,20 +126,40 @@ export function TeacherCourseAnalyticsView({
               作业统计
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              统计已发布和已结束的教师作业；自主练习不计入。
+              {REPORTING_SECTION_LABELS[data.reportingSection]}
+              范围内实际已开放的教师作业；草稿、待开放作业和自主练习不计入。
             </p>
           </div>
-          <Link
-            className="inline-flex items-center gap-1 rounded-lg border border-sky-200 px-3 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-50"
-            href={`/teacher/assignments?${assignmentParams.toString()}`}
-          >
-            全部课程作业
-            <ArrowRight aria-hidden="true" className="size-4" />
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              className="inline-flex items-center gap-1 rounded-lg border border-sky-200 px-3 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-50"
+              href={`/teacher/assignments?${assignmentParams.toString()}`}
+            >
+              {assignmentSection === "HISTORY"
+                ? "查看历史作业"
+                : "查看当前作业"}
+              <ArrowRight aria-hidden="true" className="size-4" />
+            </Link>
+            {data.reportingSection === "ALL" &&
+              assignmentSection === "CURRENT" && (
+                <Link
+                  className="inline-flex items-center rounded-lg border border-sky-200 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
+                  href={`/teacher/assignments?${historyAssignmentParams.toString()}`}
+                >
+                  查看历史作业
+                </Link>
+              )}
+          </div>
         </div>
         <p className="mt-4 text-sm text-slate-500">
           {statistics.assignmentCount} 项作业 · {statistics.studentCount}{" "}
           名有效学生
+        </p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">
+          按现有有效成员关系实时统计；入班前已截止的作业也计入应交，历史退出成员的作答不计入完成率。
+          {statistics.historicalSubmittedCount > 0
+            ? ` 另保留 ${statistics.historicalSubmittedCount} 份历史成员有效提交。`
+            : ""}
         </p>
         {statistics.assignmentCount === 0 ? (
           <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
@@ -161,8 +190,16 @@ export function TeacherCourseAnalyticsView({
                   最终评分 {statistics.finalizedSubmissionCount} 份 ·{" "}
                   {statistics.scoredStudentCount} 名学生已有最终成绩
                 </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  按最终评分的总得分 ÷ 总满分计算，待评分不记零。
+                </p>
               </article>
             </div>
+            <p className="mt-3 text-sm text-slate-600">
+              未交 {statistics.unsubmittedCount} 份 · 逾期未交{" "}
+              {statistics.overdueCount} 份 · 待批改{" "}
+              {statistics.pendingReviewCount} 份
+            </p>
             {statistics.studentCount === 0 ? (
               <p className="mt-5 rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center text-sm text-slate-500">
                 当前筛选范围没有有效学生，暂时无法计算作业完成率和分数段。
@@ -224,6 +261,9 @@ export function TeacherCourseAnalyticsView({
           </>
         )}
       </section>
+      <p className="text-xs leading-5 text-slate-500">
+        以下画像与教学进度沿用当前授课班级范围；出勤、问卷和报告沿用原有课程或指定班级口径，不随作业教学范围扩大。
+      </p>
       <section aria-labelledby="course-overview-heading">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -291,55 +331,57 @@ export function TeacherCourseAnalyticsView({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-5 sm:p-6">
-        <div className="flex items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-sky-700 shadow-sm">
-            <Sparkles aria-hidden="true" className="size-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold text-slate-900">
-              本阶段教学待办
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              系统按课程建设、学习证据和结课评价的依赖顺序排列。
-            </p>
+      {showCurrentTasks && (
+        <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-sky-700 shadow-sm">
+              <Sparkles aria-hidden="true" className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-semibold text-slate-900">
+                本阶段教学待办
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                系统按课程建设、学习证据和结课评价的依赖顺序排列。
+              </p>
+            </div>
           </div>
-        </div>
-        {data.nextActions.length > 0 ? (
-          <div className="mt-5 grid gap-3 lg:grid-cols-2">
-            {data.nextActions.map((action, index) => (
-              <Link
-                key={action.key}
-                href={action.href}
-                className="group flex gap-3 rounded-xl border border-white bg-white/90 p-4 shadow-sm transition hover:border-sky-200 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
-              >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-700">
-                  {index + 1}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium text-slate-900">
-                    {action.title}
+          {data.nextActions.length > 0 ? (
+            <div className="mt-5 grid gap-3 lg:grid-cols-2">
+              {data.nextActions.map((action, index) => (
+                <Link
+                  key={action.key}
+                  href={action.href}
+                  className="group flex gap-3 rounded-xl border border-white bg-white/90 p-4 shadow-sm transition hover:border-sky-200 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                >
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-700">
+                    {index + 1}
                   </span>
-                  <span className="mt-1 block text-sm leading-5 text-slate-500">
-                    {action.detail}
+                  <span className="min-w-0 flex-1">
+                    <span className="font-medium text-slate-900">
+                      {action.title}
+                    </span>
+                    <span className="mt-1 block text-sm leading-5 text-slate-500">
+                      {action.detail}
+                    </span>
                   </span>
-                </span>
-                <ArrowRight
-                  aria-hidden="true"
-                  className="mt-1 size-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-sky-700"
-                />
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-5 flex items-center gap-3 rounded-xl bg-white/90 p-4 text-sm text-emerald-800 shadow-sm">
-            <CheckCircle2 aria-hidden="true" className="size-5" />
-            当前课程关键环节均已完成，可继续观察学生学习变化。
-          </div>
-        )}
-      </section>
+                  <ArrowRight
+                    aria-hidden="true"
+                    className="mt-1 size-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-sky-700"
+                  />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-5 flex items-center gap-3 rounded-xl bg-white/90 p-4 text-sm text-emerald-800 shadow-sm">
+              <CheckCircle2 aria-hidden="true" className="size-5" />
+              当前课程关键环节均已完成，可继续观察学生学习变化。
+            </div>
+          )}
+        </section>
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_0.65fr]">
         <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -442,15 +484,12 @@ export function TeacherCourseAnalyticsView({
         </section>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <section className="min-w-0 rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-slate-900">近期作业</h2>
             <Link
-              href={withClassroomQuery(
-                `/teacher/assignments?courseId=${data.course.id}`,
-                classroomId,
-              )}
+              href={`/teacher/assignments?${assignmentParams.toString()}`}
               className="text-sm font-medium text-sky-700 hover:text-sky-900"
             >
               全部作业 →
@@ -476,10 +515,7 @@ export function TeacherCourseAnalyticsView({
                     </span>
                   </span>
                   <span className="shrink-0 text-right text-xs text-slate-500">
-                    <span className="block">
-                      {assignmentStatusLabel[assignment.status] ??
-                        assignment.status}
-                    </span>
+                    <span className="block">{assignment.displayStatus}</span>
                     {assignment.pendingReviewCount > 0 ? (
                       <span className="mt-1 block text-amber-700">
                         {assignment.pendingReviewCount} 份待批
@@ -490,7 +526,7 @@ export function TeacherCourseAnalyticsView({
               ))
             ) : (
               <p className="py-6 text-center text-sm text-slate-500">
-                当前课程还没有作业。
+                当前教学范围没有实际已开放的作业。
               </p>
             )}
           </div>

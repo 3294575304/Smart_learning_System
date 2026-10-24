@@ -10,6 +10,8 @@ test("统一成绩统计中心复用课程学情并保留课程权限范围", as
     assignmentService,
     view,
     navigation,
+    filters,
+    reporting,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -47,6 +49,17 @@ test("统一成绩统计中心复用课程学情并保留课程权限范围", as
       ),
       "utf8",
     ),
+    readFile(
+      new URL(
+        "../../components/assignment-results/overview-filters.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL("../../services/assignments/reporting.ts", import.meta.url),
+      "utf8",
+    ),
   ]);
 
   assert.match(legacyPage, /requirePageRole\(Role\.TEACHER\)/u);
@@ -62,8 +75,9 @@ test("统一成绩统计中心复用课程学情并保留课程权限范围", as
     resultsPage,
     /TeacherCourseAnalyticsView[\s\S]*data=\{analytics\}/u,
   );
-  assert.match(resultsPage, /name="courseId"/u);
-  assert.match(resultsPage, /name="classroomId"/u);
+  assert.match(filters, /name="courseId"/u);
+  assert.match(filters, /name="classroomId"/u);
+  assert.match(filters, /name="section"/u);
   assert.match(resultsPage, /params\.set\("courseId", query\.courseId\)/u);
   assert.match(
     resultsPage,
@@ -81,10 +95,9 @@ test("统一成绩统计中心复用课程学情并保留课程权限范围", as
     service,
     /AssignmentStatus\.PUBLISHED[\s\S]*?AssignmentStatus\.CLOSED/u,
   );
-  assert.match(service, /SubmissionStatus\.SUBMITTED/u);
-  assert.match(service, /SubmissionStatus\.PENDING_REVIEW/u);
-  assert.match(service, /SubmissionStatus\.GRADED/u);
-  assert.match(service, /SubmissionStatus\.PUBLISHED/u);
+  for (const status of ["SUBMITTED", "PENDING_REVIEW", "GRADED", "PUBLISHED"]) {
+    assert.ok(reporting.includes(`"${status}"`));
+  }
   assert.match(service, /calculateCourseAssignmentStatistics/u);
   assert.match(service, /assignmentStatistics,/u);
   assert.match(assignmentService, /query\.courseId/u);

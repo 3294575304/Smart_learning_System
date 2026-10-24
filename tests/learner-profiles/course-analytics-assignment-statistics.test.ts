@@ -24,7 +24,13 @@ function submission(
 test("完成率只计最新有效提交，得分率只按最终评分的总分与总满分计算", () => {
   const result = calculateCourseAssignmentStatistics({
     assignments: [
-      { id: "assignment-1", classroomId: "room-1", status: "PUBLISHED" },
+      {
+        id: "assignment-1",
+        classroomId: "room-1",
+        status: "PUBLISHED",
+        publishedAt: new Date("2026-01-01"),
+        dueAt: null,
+      },
     ],
     activeStudentIdsByClassroom: new Map([
       ["room-1", new Set(["s1", "s2", "s3", "s4", "s5"])],
@@ -167,8 +173,20 @@ test("按学生跨作业平均得分率归档，覆盖五档边界且比例合�
 
   const result = calculateCourseAssignmentStatistics({
     assignments: [
-      { id: "assignment-1", classroomId: "room-1", status: "PUBLISHED" },
-      { id: "assignment-2", classroomId: "room-1", status: "CLOSED" },
+      {
+        id: "assignment-1",
+        classroomId: "room-1",
+        status: "PUBLISHED",
+        publishedAt: new Date("2026-01-01"),
+        dueAt: null,
+      },
+      {
+        id: "assignment-2",
+        classroomId: "room-1",
+        status: "CLOSED",
+        publishedAt: new Date("2026-01-01"),
+        dueAt: null,
+      },
     ],
     activeStudentIdsByClassroom: new Map([["room-1", new Set(studentIds)]]),
     submissions,
@@ -198,7 +216,13 @@ test("按学生跨作业平均得分率归档，覆盖五档边界且比例合�
 test("选定班级按该班有效成员统计，未评分不当作零分", () => {
   const result = calculateCourseAssignmentStatistics({
     assignments: [
-      { id: "room-1-assignment", classroomId: "room-1", status: "PUBLISHED" },
+      {
+        id: "room-1-assignment",
+        classroomId: "room-1",
+        status: "PUBLISHED",
+        publishedAt: new Date("2026-01-01"),
+        dueAt: null,
+      },
     ],
     activeStudentIdsByClassroom: new Map([["room-1", new Set(["s1", "s2"])]]),
     submissions: [
@@ -230,7 +254,15 @@ test("选定班级按该班有效成员统计，未评分不当作零分", () =>
 
 test("无作业、无有效学生和无最终成绩均返回明确可展示的空统计", () => {
   const noAssignments = calculateCourseAssignmentStatistics({
-    assignments: [{ id: "draft", classroomId: "room-1", status: "DRAFT" }],
+    assignments: [
+      {
+        id: "draft",
+        classroomId: "room-1",
+        status: "DRAFT",
+        publishedAt: new Date("2026-01-01"),
+        dueAt: null,
+      },
+    ],
     activeStudentIdsByClassroom: new Map([["room-1", new Set(["s1", "s2"])]]),
     submissions: [],
   });
@@ -241,7 +273,13 @@ test("无作业、无有效学生和无最终成绩均返回明确可展示的�
 
   const noStudents = calculateCourseAssignmentStatistics({
     assignments: [
-      { id: "assignment", classroomId: "room-1", status: "PUBLISHED" },
+      {
+        id: "assignment",
+        classroomId: "room-1",
+        status: "PUBLISHED",
+        publishedAt: new Date("2026-01-01"),
+        dueAt: null,
+      },
     ],
     activeStudentIdsByClassroom: new Map([["room-1", new Set<string>()]]),
     submissions: [],
@@ -252,7 +290,13 @@ test("无作业、无有效学生和无最终成绩均返回明确可展示的�
 
   const noFinalScores = calculateCourseAssignmentStatistics({
     assignments: [
-      { id: "assignment", classroomId: "room-1", status: "PUBLISHED" },
+      {
+        id: "assignment",
+        classroomId: "room-1",
+        status: "PUBLISHED",
+        publishedAt: new Date("2026-01-01"),
+        dueAt: null,
+      },
     ],
     activeStudentIdsByClassroom: new Map([["room-1", new Set(["s1"])]]),
     submissions: [
@@ -267,4 +311,54 @@ test("无作业、无有效学生和无最终成绩均返回明确可展示的�
   });
   assert.equal(noFinalScores.scoreRate, null);
   assert.equal(noFinalScores.scoreDistribution.at(-1)?.ratio, 100);
+});
+
+test("统计排除预约和未发布归档，补入成员承担旧作业且历史成员单列", () => {
+  const now = new Date("2026-10-24T08:00:00Z");
+  const base = {
+    classroomId: "room",
+    publishedAt: new Date("2026-10-01"),
+    dueAt: now,
+  };
+  const result = calculateCourseAssignmentStatistics(
+    {
+      assignments: [
+        { ...base, id: "past", status: "ARCHIVED" },
+        {
+          ...base,
+          id: "future",
+          status: "PUBLISHED",
+          publishedAt: new Date(now.getTime() + 1),
+        },
+        {
+          ...base,
+          id: "never-published",
+          status: "ARCHIVED",
+          publishedAt: null,
+        },
+        { ...base, id: "draft", status: "DRAFT" },
+      ],
+      activeStudentIdsByClassroom: new Map([
+        ["room", new Set(["late-joiner"])],
+      ]),
+      submissions: [
+        submission({
+          id: "historical",
+          assignmentId: "past",
+          studentId: "removed",
+          attemptNumber: 1,
+          status: "GRADED",
+          score: 100,
+          maxScore: 100,
+        }),
+      ],
+    },
+    now,
+  );
+  assert.equal(result.assignmentCount, 1);
+  assert.equal(result.eligibleSubmissionCount, 1);
+  assert.equal(result.completedSubmissionCount, 0);
+  assert.equal(result.overdueCount, 1);
+  assert.equal(result.historicalSubmittedCount, 1);
+  assert.equal(result.scoreRate, null);
 });

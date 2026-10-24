@@ -186,6 +186,8 @@ async function assertAssignmentResources(
       (question) =>
         !canTeacherUseQuestion(question) ||
         (classroom.course &&
+          // Private task sources are scoped to this owned assignment by the query above.
+          !(question.isAssignmentOnly && question.creatorId === teacherId) &&
           question.questionCategoryId !== classroom.course.questionCategoryId),
     )
   ) {

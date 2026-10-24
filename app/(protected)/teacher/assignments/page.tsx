@@ -1,3 +1,7 @@
+import { AssignmentManagementTabs } from "@/components/assignments/management-tabs";
+import { AssignmentCourseFilter } from "@/components/assignments/student-filters";
+import { TeacherStudentAssignmentsView } from "@/components/assignments/student-query-view";
+import { teacherStudentQuerySchema } from "@/services/assignments/student-query";
 import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import { AssignmentStatus, Role } from "@prisma/client";
 import {
@@ -83,7 +87,25 @@ function displayStatus(input: {
 
 export default async function TeacherAssignmentsPage({ searchParams }: Props) {
   const teacher = await requirePageRole(Role.TEACHER);
-  const parsed = assignmentListQuerySchema.safeParse(await searchParams);
+  const rawQuery = await searchParams;
+  if (
+    rawQuery.view !== undefined &&
+    rawQuery.view !== "ASSIGNMENTS" &&
+    rawQuery.view !== "STUDENTS"
+  )
+    notFound();
+  if (rawQuery.view === "STUDENTS") {
+    const studentQuery = teacherStudentQuerySchema.safeParse(rawQuery);
+    if (!studentQuery.success) notFound();
+    return (
+      <TeacherStudentAssignmentsView
+        teacherId={teacher.id}
+        query={studentQuery.data}
+        notice={rawQuery.scopeChanged === "1"}
+      />
+    );
+  }
+  const parsed = assignmentListQuerySchema.safeParse(rawQuery);
   if (!parsed.success) notFound();
   const query = parsed.data;
   const [assignments, allClassrooms, courses] = await Promise.all([
@@ -103,10 +125,9 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
         (classroom) => classroom.course?.id === query.courseId,
       )
     : sectionClassrooms;
-  const scopedCourse = courses.find((course) => course.id === query.courseId);
 
   return (
-    <section className="space-y-6">
+    <section className="min-w-0 space-y-4">
       <PageHeader
         actions={
           <Link
@@ -121,47 +142,27 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
         title="作业管理"
       />
 
-      {scopedCourse ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
-          <span>
-            当前课程：{scopedCourse.name} · {scopedCourse.term}
-          </span>
-          <Link
-            className="text-sky-700 hover:underline"
-            href={`/teacher?courseId=${scopedCourse.id}${query.classroomId ? `&classroomId=${query.classroomId}` : ""}`}
-          >
-            返回课程工作台
-          </Link>
-        </div>
-      ) : null}
-
-      <nav
-        aria-label="作业分区"
-        className="flex items-center gap-1 border-b border-sky-100"
-      >
-        {(["CURRENT", "HISTORY"] as const).map((section) => (
-          <a
-            key={section}
-            aria-current={query.section === section ? "page" : undefined}
-            className={`border-b-2 px-5 py-3 text-sm font-medium transition ${query.section === section ? "border-sky-600 text-sky-800" : "border-transparent text-slate-500 hover:text-sky-700"}`}
-            href={queryHref(
-              {
-                ...query,
-                section,
-                classroomId: undefined,
-                status: undefined,
-                keyword: undefined,
-              },
-              1,
-            )}
-          >
-            {section === "CURRENT" ? "当前作业" : "历史作业"}
-          </a>
-        ))}
-      </nav>
+      <AssignmentCourseFilter
+        key={JSON.stringify(query)}
+        courses={courses}
+        classrooms={allClassrooms.map((item) => ({
+          id: item.id,
+          courseId: item.course?.id ?? null,
+        }))}
+        courseId={query.courseId}
+        classroomId={query.classroomId}
+        section={query.section}
+        notice={rawQuery.scopeChanged === "1"}
+      />
+      <AssignmentManagementTabs
+        view="ASSIGNMENTS"
+        section={query.section}
+        courseId={query.courseId}
+        classroomId={query.classroomId}
+      />
       {query.section === "HISTORY" ? (
         <p className="text-sm text-slate-500">
-          包含已结课、管理员关闭及历史解散班级的作业，以及单独关闭或归档的作业。数据保留，学生不能继续作答。
+          历史作业保留记录，可继续批改和发布成绩；学生不能继续作答。
         </p>
       ) : null}
       <form

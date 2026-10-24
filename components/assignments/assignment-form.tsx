@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { QuestionType } from "@prisma/client";
-import { ListOrdered } from "lucide-react";
+import { ArrowDown, ArrowUp, ListOrdered, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -207,6 +207,7 @@ export function AssignmentForm({
     () => mode === "create" || isAssignmentQuestionOrderOrganized(selected),
   );
   const [orderFeedback, setOrderFeedback] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [submittingAction, setSubmittingAction] = useState<
     "save" | "publish" | null
   >(null);
@@ -247,6 +248,15 @@ export function AssignmentForm({
     setSelected((items) => organizeAssignmentQuestions(items));
     setAutoOrganize(true);
     setOrderFeedback("题序已整理，同类题保留当前顺序。新增题目也会自动归类。");
+  }
+
+  function clearQuestions() {
+    if (selected.length === 0) return;
+    setSelected([]);
+    setConfirmClear(false);
+    setOrderFeedback(
+      "已清空作业题目，可从题库重新添加。请保存草稿以保留修改。",
+    );
   }
 
   function moveQuestion(index: number, direction: -1 | 1) {
@@ -757,9 +767,14 @@ export function AssignmentForm({
             </p>
           </section>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-2">
-            <section className="rounded-xl border bg-white p-5">
-              <h2 className="font-semibold">从题库选择题目</h2>
+          <div className="grid items-start gap-6 xl:grid-cols-2">
+            <section className="min-w-0 rounded-xl border bg-white p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold">从题库选择题目</h2>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                  筛选结果 {available.length} 道
+                </span>
+              </div>
               <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg bg-sky-50 p-3">
                 <label className="text-xs text-slate-600">
                   新增题量
@@ -777,16 +792,17 @@ export function AssignmentForm({
                 </label>
                 <button
                   type="button"
-                  className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-medium text-sky-700"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:bg-sky-700"
                   onClick={autoPickQuestions}
                 >
-                  一键出题（题库组卷）
+                  <Plus aria-hidden="true" className="size-4" />
+                  一键添加题目
                 </button>
                 <p className="w-full text-xs leading-5 text-slate-500">
                   按下方筛选条件从可用题库中随机加入未选题；请核对后发布。
                 </p>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 [&>input]:min-w-0 [&>select]:min-w-0">
                 <select
                   aria-label="按课程选题"
                   className="rounded-lg border p-2.5 text-sm"
@@ -897,7 +913,7 @@ export function AssignmentForm({
                 当前筛选 {available.length} 道 · 已选 {selected.length}{" "}
                 道。课程列表仅显示有正式图谱且有可选关联题目的课程。
               </p>
-              <div className="mt-4 max-h-[32rem] space-y-2 overflow-y-auto">
+              <div className="mt-4 max-h-[40rem] space-y-2 overflow-y-auto pr-1">
                 {available.length === 0 ? (
                   <p className="text-sm text-gray-500">
                     没有符合条件的题目，请调整筛选。
@@ -911,21 +927,21 @@ export function AssignmentForm({
                       );
                       return (
                         <div
-                          className="flex items-center justify-between gap-3 rounded-md border p-3"
+                          className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${added ? "border-sky-200 bg-sky-50/50" : "hover:border-sky-200"}`}
                           key={question.id}
                         >
-                          <div>
-                            <p className="text-sm font-medium">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm leading-6 font-medium break-words">
                               {question.title}
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="mt-1 text-xs leading-5 text-slate-500">
                               {question.questionCategory?.name ?? "课程题库"} ·{" "}
                               {QUESTION_TYPE_LABELS[question.type]} · 难度{" "}
                               {question.difficulty}
                             </p>
                           </div>
                           <button
-                            className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
+                            className="inline-flex h-9 w-16 shrink-0 items-center justify-center rounded-md border bg-white text-sm whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:text-slate-400"
                             disabled={added}
                             onClick={() => addQuestion(question)}
                             type="button"
@@ -963,28 +979,17 @@ export function AssignmentForm({
               </div>
             </section>
 
-            <section className="rounded-xl border bg-white p-5">
+            <section className="min-w-0 rounded-xl border bg-white p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-semibold">作业题目与顺序</h2>
-                <span className="text-sm text-gray-500">
+                <h2 className="font-semibold">已选作业题目</h2>
+                <span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-medium text-sky-800">
                   {selected.length} 道题 · 总分{" "}
                   {Math.round(
                     selected.reduce((sum, item) => sum + item.points, 0) * 100,
                   ) / 100}
                 </span>
               </div>
-              <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-600">
-                <input
-                  type="checkbox"
-                  className="mt-1 accent-sky-600"
-                  checked={defaultHundredPoints}
-                  onChange={(event) =>
-                    setDefaultHundredPoints(event.target.checked)
-                  }
-                />
-                默认总分100分：增减题目时自动均分。修改单题分值或整理其他总分后，切换为自定义分值。
-              </label>
-              <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50/60 p-3">
+              <div className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
                     <input
@@ -1007,43 +1012,108 @@ export function AssignmentForm({
                     type="button"
                     disabled={selected.length < 2}
                     onClick={organizeQuestions}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-medium text-sky-800 transition hover:bg-sky-100 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none disabled:opacity-50"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-medium whitespace-nowrap text-sky-800 transition hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none disabled:opacity-50"
                   >
                     <ListOrdered aria-hidden="true" className="size-4" />
                     一键整理题序
                   </button>
-                  <label className="flex items-center gap-1 text-xs text-slate-600">
-                    目标总分
+                </div>
+                <p className="text-xs leading-5 text-slate-500">
+                  {ASSIGNMENT_QUESTION_ORDER_LABEL}
+                  。同类题保持原顺序，上移、下移可切换为手动排序。
+                </p>
+                <div className="space-y-3 border-t pt-3">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
                     <input
-                      aria-label="整理分值目标总分"
-                      className="w-20 rounded-md border bg-white px-2 py-2"
-                      type="number"
-                      min="0.01"
-                      max="10000"
-                      step="0.01"
-                      value={targetPoints}
+                      type="checkbox"
+                      className="size-4 accent-sky-600"
+                      checked={defaultHundredPoints}
                       onChange={(event) =>
-                        setTargetPoints(Number(event.target.value))
+                        setDefaultHundredPoints(event.target.checked)
                       }
                     />
+                    总分固定 100 分，增减题目自动均分
                   </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-1 text-xs text-slate-600">
+                      目标总分
+                      <input
+                        aria-label="整理分值目标总分"
+                        className="w-20 rounded-md border bg-white px-2 py-2"
+                        type="number"
+                        min="0.01"
+                        max="10000"
+                        step="0.01"
+                        value={targetPoints}
+                        onChange={(event) =>
+                          setTargetPoints(Number(event.target.value))
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={!selected.length}
+                      onClick={organizePoints}
+                      className="shrink-0 rounded-lg border bg-white px-3 py-2 text-xs whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+                    >
+                      一键整理分值
+                    </button>
+                  </div>
+                  <p className="text-xs leading-5 text-slate-500">
+                    修改单题分值或整理目标总分后，切换为自定义分值。
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                  <span className="text-xs text-slate-500">
+                    清空仅移除本次选题，保留题库原题
+                  </span>
                   <button
                     type="button"
-                    disabled={!selected.length}
-                    onClick={organizePoints}
-                    className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs text-sky-700 disabled:opacity-50"
+                    disabled={selected.length === 0}
+                    onClick={() => setConfirmClear(true)}
+                    aria-expanded={confirmClear && selected.length > 0}
+                    aria-controls="assignment-clear-confirmation"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs whitespace-nowrap text-red-600 hover:bg-red-50 disabled:opacity-40"
                   >
-                    一键整理分值
+                    <Trash2 aria-hidden="true" className="size-4" />
+                    一键清空题目
                   </button>
                 </div>
-                <p className="mt-2 text-xs leading-5 text-slate-600">
-                  {ASSIGNMENT_QUESTION_ORDER_LABEL}
-                  。同类题保持原顺序，使用上移、下移后切换为手动排列。
-                </p>
+                {confirmClear && selected.length > 0 ? (
+                  <div
+                    id="assignment-clear-confirmation"
+                    role="group"
+                    aria-label="确认清空作业题目"
+                    className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-3"
+                  >
+                    <p className="text-sm font-medium text-red-800">
+                      确认清空当前作业的 {selected.length} 道题目？
+                    </p>
+                    <p className="text-xs leading-5 text-red-700">
+                      不会删除题库原题。保存草稿后才会更新作业。
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmClear(false)}
+                        className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                      >
+                        取消清空
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearQuestions}
+                        className="rounded-md bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700"
+                      >
+                        确认清空 {selected.length} 道题目
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {orderFeedback ? (
                   <p
                     role="status"
-                    className="mt-2 text-xs leading-5 text-sky-800"
+                    className="rounded-md bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-800"
                   >
                     {orderFeedback}
                   </p>
@@ -1054,51 +1124,61 @@ export function AssignmentForm({
                   尚未选择题目。草稿可以保存，但发布前至少需要一道题。
                 </p>
               ) : (
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 max-h-[52rem] space-y-3 overflow-y-auto pr-1">
                   {selected.map((question, index) => (
-                    <div className="rounded-md border p-3" key={question.id}>
+                    <div
+                      className="rounded-lg border p-3 sm:p-4"
+                      key={question.id}
+                    >
                       <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm leading-6 font-medium break-words">
                             {index + 1}. {question.title}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="mt-1 text-xs text-slate-500">
                             {QUESTION_TYPE_LABELS[question.type]}
                           </p>
                         </div>
                         <button
-                          className="text-sm text-red-600"
-                          onClick={() =>
+                          className="shrink-0 rounded-md px-2 py-1 text-sm whitespace-nowrap text-red-600 hover:bg-red-50"
+                          aria-label={`移除第 ${index + 1} 题`}
+                          onClick={() => {
+                            setOrderFeedback(null);
                             setSelected((items) =>
                               items.filter((item) => item.id !== question.id),
-                            )
-                          }
+                            );
+                          }}
                           type="button"
                         >
                           移除
                         </button>
                       </div>
-                      <div className="mt-3 flex items-center gap-2 text-sm">
+                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-sm">
                         <button
-                          className="rounded border px-2 py-1 disabled:opacity-40"
+                          className="inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1.5 whitespace-nowrap hover:bg-slate-50 disabled:opacity-40"
+                          aria-label={`上移第 ${index + 1} 题`}
                           disabled={index === 0}
                           onClick={() => moveQuestion(index, -1)}
                           type="button"
                         >
+                          <ArrowUp aria-hidden="true" className="size-3.5" />
                           上移
                         </button>
                         <button
-                          className="rounded border px-2 py-1 disabled:opacity-40"
+                          className="inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1.5 whitespace-nowrap hover:bg-slate-50 disabled:opacity-40"
+                          aria-label={`下移第 ${index + 1} 题`}
                           disabled={index === selected.length - 1}
                           onClick={() => moveQuestion(index, 1)}
                           type="button"
                         >
+                          <ArrowDown aria-hidden="true" className="size-3.5" />
                           下移
                         </button>
-                        <label className="ml-auto flex items-center gap-2">
+                        <label className="ml-auto flex items-center gap-2 whitespace-nowrap">
                           分值
                           <input
-                            className="w-20 rounded border px-2 py-1"
+                            aria-label={`第 ${index + 1} 题分值`}
+                            className="w-20 rounded border px-2 py-1.5"
                             min="0.01"
                             onChange={(event) => {
                               setDefaultHundredPoints(false);

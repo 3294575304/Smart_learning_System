@@ -108,6 +108,24 @@ export async function verifyAssignmentManagement(ids: {
   );
   assert.ok(own);
   assert.ok(foreignClass);
+  await assert.rejects(
+    createAssignmentBatch(ids.teacherId, {
+      ...input,
+      requestId: randomUUID(),
+      assignment: {
+        ...assignment,
+        submissionTask: undefined,
+        questions: [
+          {
+            questionId: own.questions[0].questionId,
+            sortOrder: 1,
+            points: 100,
+          },
+        ],
+      },
+    }),
+    "a private task source cannot be reused as a shared bank question",
+  );
   const ongoing = await listTeacherAssignments(
     ids.teacherId,
     assignmentListQuerySchema.parse({
