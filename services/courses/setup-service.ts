@@ -13,7 +13,6 @@ export async function getTeacherCourseSetupProgress(
     select: {
       id: true,
       status: true,
-      template: { select: { name: true } },
       classrooms: {
         where: { status: "ACTIVE" },
         select: {
@@ -21,20 +20,7 @@ export async function getTeacherCourseSetupProgress(
             where: { status: "ACTIVE" },
             select: { studentId: true },
           },
-          studentIdentityAssignments: {
-            where: {
-              withdrawnAt: null,
-              studentIdentity: { status: "PENDING" },
-            },
-            select: { studentIdentityId: true },
-          },
         },
-      },
-      studentImportBatches: {
-        where: { classroom: { status: "ACTIVE", courseId } },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 1,
-        select: { status: true },
       },
       syllabi: {
         orderBy: { versionNumber: "desc" },
@@ -74,37 +60,21 @@ export async function getTeacherCourseSetupProgress(
           sourcePublishedSyllabusStructureId: true,
         },
       },
-      currentTeachingProgressRevision: {
-        select: {
-          graphVersionId: true,
-          _count: { select: { concepts: true } },
-        },
-      },
     },
   });
   if (!course) throw new ResourceNotFoundError("课程不存在");
 
   const syllabus = course.syllabi[0];
   const publishedSyllabus = course.currentPublishedSyllabusStructure;
-  const teachingProgress = course.currentTeachingProgressRevision;
   return buildCourseSetupProgress({
     courseId: course.id,
     status: course.status,
-    templateName: course.template.name,
     activeClassroomCount: course.classrooms.length,
     activeStudentCount: new Set(
       course.classrooms.flatMap((item) =>
         item.memberships.map((member) => member.studentId),
       ),
     ).size,
-    pendingIdentityCount: new Set(
-      course.classrooms.flatMap((item) =>
-        item.studentIdentityAssignments.map(
-          (assignment) => assignment.studentIdentityId,
-        ),
-      ),
-    ).size,
-    latestImportStatus: course.studentImportBatches[0]?.status ?? null,
     syllabus: syllabus
       ? { ...syllabus, parseStatus: syllabus.parseDrafts[0]?.status ?? null }
       : null,
@@ -117,11 +87,5 @@ export async function getTeacherCourseSetupProgress(
       : null,
     graph: course.currentPublishedKnowledgeGraphVersion,
     assessment: course.currentPublishedAssessmentScheme,
-    teachingProgress: teachingProgress
-      ? {
-          graphVersionId: teachingProgress.graphVersionId,
-          conceptCount: teachingProgress._count.concepts,
-        }
-      : null,
   });
 }

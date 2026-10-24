@@ -17,17 +17,9 @@ import type {
 
 const CONSTRUCTION_ITEMS = [
   {
-    id: "syllabus-upload",
-    title: "上传教学大纲",
-    description: "上传或更换课程教学大纲文件",
-    action: "上传大纲",
-    path: "syllabus",
-    icon: FileText,
-  },
-  {
-    id: "syllabus-review",
-    title: "审核并发布大纲",
-    description: "解析大纲，审核并发布课程内容",
+    id: "syllabus",
+    title: "教学大纲",
+    description: "上传、解析、审核并发布课程大纲",
     action: "查看大纲工作区",
     path: "syllabus",
     icon: FileText,
@@ -47,14 +39,6 @@ const CONSTRUCTION_ITEMS = [
     action: "查看考核方案",
     path: "assessment-scheme",
     icon: ClipboardCheck,
-  },
-  {
-    id: "teaching-progress",
-    title: "教学进度",
-    description: "维护课堂授课进度",
-    action: "设置教学进度",
-    path: "teaching-progress",
-    icon: BookOpenCheck,
   },
 ];
 
@@ -78,7 +62,6 @@ export function CourseSetupChecklist({
   courseId: string;
   progress: CourseSetupProgress;
 }) {
-  // Distinct tasks can share a workspace, so match readiness by task ID.
   const entries = new Map(
     CONSTRUCTION_ITEMS.map(({ path, ...item }) => {
       const href = `/teacher/courses/${courseId}/${path}`;
@@ -120,14 +103,9 @@ export function CourseSetupChecklist({
     icon: BookOpenCheck,
     steps: [],
   });
-  const entryPriority = new Map([
-    [`/teacher/courses/${courseId}#course-basics`, 0],
-    [`/teacher/courses/${courseId}#course-classrooms`, 1],
-  ]);
   const orderedEntries = [...entries.values()].sort(
     (left, right) =>
-      (entryPriority.get(left.href) ?? 2) -
-      (entryPriority.get(right.href) ?? 2),
+      Number(right.id === "classrooms") - Number(left.id === "classrooms"),
   );
 
   return (

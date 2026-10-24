@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -47,7 +47,7 @@ test("班级选择器仅显示关联班级，三个分类的入口都携带默�
   );
 });
 
-test("课程建设独立展示，大纲两项任务共用工作区，课程功能均有对应页面", async () => {
+test("课程建设独立展示，大纲只有一个入口且课程功能均有对应页面", async () => {
   const html = renderToStaticMarkup(
     React.createElement(CourseWorkspaceNavigation, {
       courseId: "course-a",
@@ -78,8 +78,12 @@ test("课程建设独立展示，大纲两项任务共用工作区，课程功�
       /href="\/teacher\/courses\/course-a\/([a-z-]+)(?:#[^"]*)?"/g,
     ),
   ].map((match) => match[1]);
-  assert.equal(paths.length, new Set(paths).size + 1);
-  assert.equal(paths.filter((path) => path === "syllabus").length, 2);
+  assert.equal(paths.length, new Set(paths).size);
+  assert.equal(paths.filter((path) => path === "syllabus").length, 1);
+  assert.doesNotMatch(
+    construction,
+    /课程信息与模板|教学进度|核对学生名单与认领/u,
+  );
   assert.match(
     construction,
     /href="\/teacher\/questions\?courseId=course-a"[\s\S]*题库管理/u,
@@ -96,10 +100,10 @@ test("课程建设独立展示，大纲两项任务共用工作区，课程功�
   for (const path of paths)
     await access(`app/(protected)/teacher/courses/[courseId]/${path}/page.tsx`);
 });
-test("大纲上传与审核分别展示任务状态，下一步保留文字提示", () => {
+test("大纲上传与审核共用卡片状态，下一步保留文字提示", () => {
   const step = {
-    id: "syllabus-review",
-    title: "审核并发布大纲",
+    id: "syllabus",
+    title: "教学大纲",
     state: "attention" as const,
     detail: "本次解析失败，请查看诊断并重试。",
     href: "/teacher/courses/course-a/syllabus",
@@ -109,50 +113,41 @@ test("大纲上传与审核分别展示任务状态，下一步保留文字提�
     React.createElement(CourseSetupChecklist, {
       courseId: "course-a",
       progress: {
-        steps: [
-          {
-            ...step,
-            id: "syllabus-upload",
-            title: "上传教学大纲",
-            state: "complete",
-            detail: "已上传第 1 版文件。",
-          },
-          step,
-        ],
-        totalCount: 2,
+        steps: [step],
+        totalCount: 4,
         completedCount: 1,
-        percentage: 50,
+        percentage: 25,
         nextStep: step,
         archived: false,
         activeStudentCount: 0,
       },
     }),
   );
-  assert.match(html, /上传教学大纲/u);
+  assert.match(html, /教学大纲/u);
   assert.match(html, /已完成/u);
   assert.match(html, /未完成/u);
   assert.match(html, /本次解析失败，请查看诊断并重试。/u);
-  assert.match(html, /下一步：审核并发布大纲/u);
+  assert.match(html, /下一步：教学大纲/u);
   assert.match(html, /aria-valuenow="1"/u);
-  assert.match(html, /aria-valuemax="2"/u);
+  assert.match(html, /aria-valuemax="4"/u);
   assert.match(html, /role="progressbar"/u);
   const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(hrefs.length, 7);
-  assert.equal(new Set(hrefs).size, 6);
+  assert.equal(hrefs.length, 5);
+  assert.equal(new Set(hrefs).size, 5);
   const syllabusTasks = [
     ...html.matchAll(
       /<a\b[^>]*href="\/teacher\/courses\/course-a\/syllabus"[^>]*>[\s\S]*?<\/a>/g,
     ),
   ].map((match) => match[0]);
-  assert.equal(syllabusTasks.length, 2);
-  assert.match(syllabusTasks[0], /上传教学大纲/u);
-  assert.match(syllabusTasks[0], /已完成/u);
-  assert.doesNotMatch(syllabusTasks[0], /审核并发布大纲|ring-2/u);
-  assert.match(syllabusTasks[1], /审核并发布大纲/u);
-  assert.match(syllabusTasks[1], /未完成/u);
-  assert.doesNotMatch(syllabusTasks[1], /ring-2/u);
+  assert.equal(syllabusTasks.length, 1);
+  assert.match(syllabusTasks[0], /教学大纲/u);
+  assert.match(syllabusTasks[0], /未完成/u);
+  assert.doesNotMatch(syllabusTasks[0], /ring-2/u);
   assert.match(html, /href="\/teacher\/courses\/course-a\/question-mapping"/u);
-  assert.match(html, /href="\/teacher\/courses\/course-a\/teaching-progress"/u);
+  assert.doesNotMatch(
+    html,
+    /href="\/teacher\/courses\/course-a\/teaching-progress"/u,
+  );
 });
 test("班级与课程设置默认收起并保留深链接锚点", () => {
   const html = renderToStaticMarkup(
@@ -169,4 +164,17 @@ test("班级与课程设置默认收起并保留深链接锚点", () => {
   assert.match(html, /<details id="course-classrooms"/u);
   assert.doesNotMatch(html, /<details[^>]*\bopen/u);
   assert.match(html, /展开管理/u);
+});
+
+test("精简建设入口后仍保留课程信息、名单和教学进度页面", async () => {
+  const courseDetail = await readFile(
+    "app/(protected)/teacher/courses/[courseId]/page.tsx",
+    "utf8",
+  );
+  assert.match(courseDetail, /id="course-basics"/u);
+  assert.match(courseDetail, /<CourseForm/u);
+  assert.match(courseDetail, /id="course-classrooms"/u);
+  for (const path of ["students", "teaching-progress"]) {
+    await access(`app/(protected)/teacher/courses/[courseId]/${path}/page.tsx`);
+  }
 });
