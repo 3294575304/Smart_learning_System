@@ -100,11 +100,14 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
       <CourseDetailDisclosure
         id="course-classrooms"
         title="授课班级"
-        summary={`${course.linkedClassrooms.length} 个关联班级 · 按班级分别管理教学记录`}
+        summary={`${course.linkedClassrooms.length} 个课程班级 · 按班级分别管理教学记录`}
       >
         <CourseClassroomManager
-          classrooms={course.classrooms}
           courseId={course.id}
+          courseName={course.name}
+          courseNo={course.courseNo}
+          term={course.term}
+          courseStatus={course.status}
           linkedClassrooms={course.linkedClassrooms}
         />
       </CourseDetailDisclosure>

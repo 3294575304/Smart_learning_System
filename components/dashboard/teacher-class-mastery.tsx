@@ -73,7 +73,7 @@ export function TeacherClassMastery({ workspace }: { workspace: Workspace }) {
           <p className="max-w-sm text-xs leading-6 text-slate-500">
             {!chapters.length
               ? "发布正式图谱后，将按章节展示各班级的学习证据与掌握情况。"
-              : "关联授课班级后，可在此对比班级知识掌握情况。"}
+              : "创建课程班级后，可在此对比班级知识掌握情况。"}
           </p>
           <Link
             className="text-sm text-sky-700 underline underline-offset-4"

@@ -42,7 +42,7 @@ export default async function TeacherPage({ searchParams }: Props) {
         <EmptyState
           icon={BookOpenCheck}
           title="先建立一门课程"
-          description="创建课程并关联授课班级后，工作台会展示该课程的待办和知识掌握情况。"
+          description="创建课程班级后，工作台会展示该课程的待办和知识掌握情况。"
           action={
             <Link className="text-sky-700 underline" href="/teacher/courses">
               进入课程管理

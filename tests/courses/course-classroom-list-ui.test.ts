@@ -6,7 +6,10 @@ import {
   AppRouterContext,
   type AppRouterInstance,
 } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { CourseClassroomManager } from "../../components/courses/course-classroom-manager";
+import {
+  CourseClassroomManager,
+  parseClassroomCount,
+} from "../../components/courses/course-classroom-manager";
 import type { TeacherCourseClassroomView } from "../../services/courses/types";
 
 Object.assign(globalThis, { React });
@@ -42,25 +45,38 @@ function render(classrooms: TeacherCourseClassroomView[]) {
       { value: router },
       React.createElement(CourseClassroomManager, {
         courseId: "course-a",
-        linkedClassrooms: [linked],
-        classrooms,
+        courseName: "Python",
+        courseNo: "PY",
+        term: "term",
+        courseStatus: "ACTIVE",
+        linkedClassrooms: classrooms,
       }),
     ),
   );
 }
-test("已关联班级不重复出现在可关联列表，未关联班级仍可选择", () => {
-  const html = render([
-    linked,
-    { ...linked, id: "other", name: "可关联测试班", currentCourse: null },
-  ]);
-  assert.equal((html.match(/已关联测试班/g) ?? []).length, 1);
-  assert.equal((html.match(/可关联测试班/g) ?? []).length, 1);
-  assert.match(html, /关联到此课程/u);
-  assert.match(html, /teaching-progress\?classroomId=linked/u);
-});
-test("全部班级已关联时显示明确空状态并保留已关联管理", () => {
+test("课程建设默认创建一个班级并保留既有班级管理入口", () => {
   const html = render([linked]);
-  assert.match(html, /现有班级均已关联当前课程/u);
-  assert.match(html, /解除关联/u);
+  assert.equal((html.match(/已关联测试班/g) ?? []).length, 1);
+  assert.match(html, /创建课程班级/u);
+  assert.match(html, /要创建的班级个数/u);
+  assert.match(html, /value="1"/u);
+  assert.match(html, /teacher\/classrooms\/linked/u);
+  assert.match(html, /teaching-progress\?classroomId=linked/u);
+  assert.match(html, /profiles\?classroomId=linked/u);
+  assert.match(html, /students\/import\?classroomId=linked/u);
+  assert.doesNotMatch(html, /关联到此课程|解除关联/u);
+});
+test("尚无课程班级时引导创建", () => {
+  const html = render([]);
+  assert.match(html, /暂无课程班级/u);
+  assert.match(html, /开始逐个创建/u);
   assert.doesNotMatch(html, /关联到此课程/u);
+});
+
+test("班级数量只校验正安全整数，不设业务上限", () => {
+  assert.equal(parseClassroomCount("1"), 1);
+  assert.equal(parseClassroomCount("10000"), 10000);
+  for (const input of ["0", "-1", "1.5", "abc", "9007199254740992"]) {
+    assert.equal(parseClassroomCount(input), null);
+  }
 });

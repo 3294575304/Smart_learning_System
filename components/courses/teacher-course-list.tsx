@@ -207,7 +207,7 @@ export function TeacherCourseList({
 
       {courses.length === 0 ? (
         <EmptyState
-          description="先基于课程模板创建一门课程，再把班级关联进来。"
+          description="先基于课程模板创建一门课程，再在课程建设中创建班级。"
           icon={School}
           title="暂无课程"
         />
@@ -250,7 +250,7 @@ export function TeacherCourseList({
                   <strong className="text-slate-900">
                     {course.classroomCount}
                   </strong>{" "}
-                  个关联班级
+                  个课程班级
                 </span>
                 <span>
                   <strong className="text-slate-900">

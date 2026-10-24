@@ -74,7 +74,7 @@ export default async function RandomPickerPage({
             className="mt-3 inline-block text-sky-700 underline"
             href={`/teacher/courses/${parsed.data}#course-classrooms`}
           >
-            返回课程关联班级
+            返回课程班级
           </Link>
         </div>
       ) : students.length === 0 ? (

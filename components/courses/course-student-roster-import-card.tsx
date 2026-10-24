@@ -70,7 +70,7 @@ export function CourseStudentRosterImportCard({
 
       {linkedClassrooms.length === 0 ? (
         <p className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
-          当前课程还没有关联班级。请先关联班级，再导入学生名单。
+          当前课程还没有班级。请先在课程建设中创建班级，再导入学生名单。
         </p>
       ) : null}
     </section>

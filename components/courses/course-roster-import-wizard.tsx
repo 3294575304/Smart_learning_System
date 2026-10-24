@@ -375,6 +375,8 @@ export function CourseRosterImportWizard({
   term,
   linkedClassrooms,
   initialClassroomId,
+  lockedClassroomId,
+  onContinue,
 }: {
   courseId: string;
   courseName: string;
@@ -382,13 +384,15 @@ export function CourseRosterImportWizard({
   term: string;
   linkedClassrooms: TeacherCourseClassroomView[];
   initialClassroomId?: string;
+  lockedClassroomId?: string;
+  onContinue?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [files, setFiles] = useState<CourseFileVersionClientView[]>([]);
   const [selectedFileId, setSelectedFileId] = useState("");
   const [selectedClassroomId, setSelectedClassroomId] = useState(
-    initialClassroomId ?? linkedClassrooms[0]?.id ?? "",
+    lockedClassroomId ?? initialClassroomId ?? linkedClassrooms[0]?.id ?? "",
   );
   const [preview, setPreview] = useState<StudentImportPreviewPage | null>(null);
   const [execution, setExecution] =
@@ -412,8 +416,11 @@ export function CourseRosterImportWizard({
       return;
     }
     setFiles(result.data);
-    setSelectedFileId((current) => current || result.data[0]?.id || "");
-  }, [courseId]);
+    setSelectedFileId(
+      (current) =>
+        current || (lockedClassroomId ? "" : result.data[0]?.id || ""),
+    );
+  }, [courseId, lockedClassroomId]);
 
   useEffect(() => {
     void loadFiles();
@@ -533,7 +540,7 @@ export function CourseRosterImportWizard({
     if (!preview || !preview.batch.summary.canImport) return;
     if (
       !window.confirm(
-        `确认正式导入到“${selectedClassroom?.name ?? "目标班级"}”吗？本次将新增 ${preview.batch.summary.newUserRows} 个待认领身份、匹配 ${preview.batch.summary.existingUserRows} 个已有账号。`,
+        `确认将本次预览的有效名单行导入“${selectedClassroom?.name ?? "目标班级"}”吗？将新增 ${preview.batch.summary.newUserRows} 个待认领身份、匹配 ${preview.batch.summary.existingUserRows} 个已有账号。`,
       )
     ) {
       return;
@@ -652,14 +659,17 @@ export function CourseRosterImportWizard({
 
           {linkedClassrooms.length === 0 ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              <p className="font-medium">当前课程还没有关联班级</p>
-              <p className="mt-1">
-                请先返回课程详情关联自己的班级，再开始名单导入。
-              </p>
+              <p className="font-medium">当前课程还没有班级</p>
+              <p className="mt-1">请先返回课程详情创建班级，再开始名单导入。</p>
               <TeacherBackLink href={`/teacher/courses/${courseId}`}>
                 返回课程
               </TeacherBackLink>
             </div>
+          ) : lockedClassroomId ? (
+            <p className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+              目标班级：<strong>{selectedClassroom?.name}</strong>
+              。本次预览确认的有效名单行都会进入此班级，请核对文件内容。
+            </p>
           ) : (
             <label className="block text-sm">
               <span className="font-medium">目标班级</span>
@@ -904,6 +914,18 @@ export function CourseRosterImportWizard({
           )}
         </section>
       ) : null}
+      {onContinue && (
+        <div className="flex justify-end border-t pt-4">
+          <button
+            className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-sky-50 disabled:opacity-60"
+            disabled={isUploading || isPreviewing || isExecuting}
+            onClick={onContinue}
+            type="button"
+          >
+            {execution ? "完成本班，继续" : "暂不导入，继续"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

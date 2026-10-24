@@ -1805,6 +1805,141 @@ async function main(): Promise<void> {
       404,
     );
 
+    const createClassroomPath = `/api/teacher/courses/${createdCourse.data.id}/classrooms`;
+    const classroomInput = {
+      name: "HTTP 新建课程一班",
+      description: "在课程建设中创建",
+      allowStudentLeave: true,
+    };
+    assert.equal(
+      (await requestJson(createClassroomPath, "", "POST", classroomInput))
+        .status,
+      401,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          createClassroomPath,
+          adminCookie,
+          "POST",
+          classroomInput,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          createClassroomPath,
+          studentCookie,
+          "POST",
+          classroomInput,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          createClassroomPath,
+          teacherTwoCookie,
+          "POST",
+          classroomInput,
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await requestJson(createClassroomPath, teacherCookie, "POST", {
+          ...classroomInput,
+          name: "",
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/courses/${formalCourse.id}/classrooms`,
+          teacherCookie,
+          "POST",
+          classroomInput,
+        )
+      ).status,
+      409,
+    );
+
+    const createdInCourseResponse = await requestJson(
+      createClassroomPath,
+      teacherCookie,
+      "POST",
+      classroomInput,
+    );
+    assert.equal(createdInCourseResponse.status, 201);
+    const createdInCourse =
+      (await createdInCourseResponse.json()) as ApiSuccess<{
+        id: string;
+        name: string;
+      }>;
+    createdClassroomIds.push(createdInCourse.data.id);
+    assert.equal(
+      (
+        await prisma.classroom.findUniqueOrThrow({
+          where: { id: createdInCourse.data.id },
+          select: { courseId: true, teacherId: true, allowStudentLeave: true },
+        })
+      ).courseId,
+      createdCourse.data.id,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          createClassroomPath,
+          teacherCookie,
+          "POST",
+          classroomInput,
+        )
+      ).status,
+      409,
+    );
+    const concurrent = await Promise.all([
+      requestJson(createClassroomPath, teacherCookie, "POST", {
+        ...classroomInput,
+        name: "HTTP 并发课程二班",
+      }),
+      requestJson(createClassroomPath, teacherCookie, "POST", {
+        ...classroomInput,
+        name: "HTTP 并发课程二班",
+      }),
+    ]);
+    assert.deepEqual(
+      concurrent.map((response) => response.status).sort(),
+      [201, 409],
+    );
+    const successfulConcurrentResponse = concurrent.find(
+      (response) => response.status === 201,
+    );
+    assert.ok(successfulConcurrentResponse);
+    const concurrentClassroom =
+      (await successfulConcurrentResponse.json()) as ApiSuccess<{ id: string }>;
+    createdClassroomIds.push(concurrentClassroom.data.id);
+    assert.equal(
+      await prisma.classroom.count({
+        where: { courseId: createdCourse.data.id, name: "HTTP 并发课程二班" },
+      }),
+      1,
+    );
+    assert.equal(
+      await prisma.auditLog.count({
+        where: {
+          targetId: createdInCourse.data.id,
+          action: "COURSE_CLASSROOM_LINKED",
+        },
+      }),
+      1,
+    );
+
     assert.equal(
       (
         await requestJson(

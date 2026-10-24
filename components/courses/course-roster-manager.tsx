@@ -223,7 +223,7 @@ export function CourseRosterManager({
               })
             }
           >
-            <option value="">全部关联班级</option>
+            <option value="">全部课程班级</option>
             {data.classrooms.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}

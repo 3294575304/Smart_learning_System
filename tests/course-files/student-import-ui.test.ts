@@ -6,7 +6,10 @@ import { ClassroomStatus } from "@prisma/client";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+Object.assign(globalThis, { React });
+
 import { CourseStudentRosterImportCard } from "../../components/courses/course-student-roster-import-card";
+import { CourseRosterImportWizard } from "../../components/courses/course-roster-import-wizard";
 import {
   EXECUTION_ACTION_LABELS,
   PREVIEW_STATUS_LABELS,
@@ -41,6 +44,37 @@ test("名单管理入口沿用课程详情卡片并展示明确安全说明", ()
   assert.match(markup, /学号与名单姓名认领/u);
   assert.match(markup, /href="\/teacher\/courses\/course-1\/students"/u);
   assert.match(markup, /1 个班级 · 42 名学生/u);
+});
+
+test("课程建班内的名单导入锁定目标班级并允许稍后补导", () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(CourseRosterImportWizard, {
+      courseId: "course-1",
+      courseName: "Python",
+      courseNo: "PY",
+      term: "2026-2027-1",
+      initialClassroomId: "classroom-1",
+      lockedClassroomId: "classroom-1",
+      linkedClassrooms: [
+        {
+          id: "classroom-1",
+          name: "Python 一班",
+          description: null,
+          status: ClassroomStatus.ACTIVE,
+          allowStudentLeave: true,
+          studentCount: 0,
+          currentCourse: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      onContinue() {},
+    }),
+  );
+  assert.match(markup, /目标班级：<strong>Python 一班<\/strong>/u);
+  assert.match(markup, /有效名单行都会进入此班级/u);
+  assert.match(markup, /暂不导入，继续/u);
+  assert.doesNotMatch(markup, /<select/u);
 });
 
 test("字段映射表单校验必填字段并禁止复用源列", () => {

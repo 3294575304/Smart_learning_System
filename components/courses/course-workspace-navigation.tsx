@@ -171,7 +171,7 @@ export function CourseWorkspaceNavigation({
             disabled={classrooms.length === 0}
             onChange={(event) => setClassroomId(event.target.value)}
           >
-            {classrooms.length === 0 && <option value="">暂无关联班级</option>}
+            {classrooms.length === 0 && <option value="">暂无课程班级</option>}
             {classrooms.map((classroom) => (
               <option key={classroom.id} value={classroom.id}>
                 {classroom.name}
@@ -218,7 +218,7 @@ export function CourseWorkspaceNavigation({
                   </h3>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
                     {group.title === "课堂活动" && !classroomId
-                      ? "请先关联启用中的班级"
+                      ? "请先创建课程班级"
                       : description}
                   </p>
                 </div>

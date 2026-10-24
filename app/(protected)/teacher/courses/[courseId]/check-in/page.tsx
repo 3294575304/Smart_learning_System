@@ -57,12 +57,12 @@ export default async function CourseCheckInPage({
         />
       ) : (
         <div className="rounded-xl border border-dashed bg-white p-8 text-center text-sm text-slate-600">
-          <p>请先关联启用中的班级，再发布签到。</p>
+          <p>请先创建课程班级，再发布签到。</p>
           <Link
             className="mt-3 inline-block text-sky-700 underline"
             href={`/teacher/courses/${parsed.data}#course-classrooms`}
           >
-            返回课程关联班级
+            返回课程班级
           </Link>
         </div>
       )}

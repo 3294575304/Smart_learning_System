@@ -53,7 +53,7 @@ test("课程建设只统计班级、大纲、图谱和考核方案四项", () =>
   assert.equal(progress.activeStudentCount, 30);
 });
 
-test("新课程从关联班级开始，大纲上传和发布只占一项", () => {
+test("新课程从创建班级开始，大纲上传和发布只占一项", () => {
   const progress = buildCourseSetupProgress(
     course({
       activeClassroomCount: 0,
@@ -67,6 +67,7 @@ test("新课程从关联班级开始，大纲上传和发布只占一项", () =>
   assert.equal(progress.completedCount, 0);
   assert.equal(progress.totalCount, 4);
   assert.equal(progress.nextStep?.id, "classrooms");
+  assert.equal(progress.nextStep?.title, "创建课程班级");
   assert.equal(step(course({ syllabus: null }), "syllabus").state, "pending");
   assert.equal(step(course({ syllabus: null }), "syllabus").action, "上传大纲");
 });

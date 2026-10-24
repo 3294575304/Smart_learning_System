@@ -50,13 +50,13 @@ export function buildCourseSetupProgress(input: CourseSetupInput) {
   const steps: CourseSetupStep[] = [
     {
       id: "classrooms",
-      title: "关联授课班级",
+      title: "创建课程班级",
       state: input.activeClassroomCount > 0 ? "complete" : "pending",
       detail: input.activeClassroomCount
-        ? `已关联 ${input.activeClassroomCount} 个开课班级。`
-        : "请先关联一个启用中的班级，后续名单和教学任务将归入该班级。",
+        ? `已有 ${input.activeClassroomCount} 个开课班级。`
+        : "请先创建课程班级，可逐班导入名单并开展教学任务。",
       href: `${base}#course-classrooms`,
-      action: "管理班级",
+      action: "创建班级",
     },
   ];
 
