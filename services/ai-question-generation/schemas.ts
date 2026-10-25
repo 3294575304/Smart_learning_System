@@ -11,6 +11,10 @@ export const AI_QUESTION_JOB_TYPE = "AI_QUESTION_GENERATION";
 export const AI_QUESTION_PROMPT_VERSION = "ai-question-v2";
 export const AI_QUESTION_RULE_VERSION = "ai-question-review-v2";
 
+export const questionGenerationBatchPathSchema = z.object({
+  batchId: z.string().cuid(),
+});
+
 export const questionGenerationRequestSchema = z
   .object({
     courseId: z.string().cuid(),

@@ -68,7 +68,7 @@ async function ownedCourse(teacherId: string, courseId: string) {
 
 async function ownedBatch(teacherId: string, batchId: string) {
   const batch = await prisma.aIQuestionGenerationBatch.findFirst({
-    where: { id: batchId, teacherId, course: { teacherId } },
+    where: { id: batchId, teacherId, deletedAt: null, course: { teacherId } },
     include: {
       candidates: { orderBy: { ordinal: "asc" } },
       job: { select: { status: true, progress: true, errorCode: true } },
@@ -198,9 +198,14 @@ export async function queueQuestionGeneration(
       request: true,
       sourceFileChecksum: true,
       status: true,
+      deletedAt: true,
     },
   });
   if (existing) {
+    if (existing.teacherId !== teacherId)
+      throw new AIQuestionGenerationError("重复请求参数不一致", 409);
+    if (existing.deletedAt)
+      throw new AIQuestionGenerationError("生成任务已删除，请重新提交", 409);
     const suppliedChecksum = file
       ? createHash("sha256")
           .update(Buffer.from(await file.arrayBuffer()))
@@ -355,8 +360,11 @@ export async function queueQuestionGeneration(
           request: true,
           sourceFileChecksum: true,
           status: true,
+          deletedAt: true,
         },
       });
+      if (winner?.teacherId === teacherId && winner.deletedAt)
+        throw new AIQuestionGenerationError("生成任务已删除，请重新提交", 409);
       if (
         winner &&
         winner.teacherId === teacherId &&
@@ -382,7 +390,7 @@ export async function getQuestionGenerationBatch(
 
 export async function listQuestionGenerationBatches(teacherId: string) {
   return prisma.aIQuestionGenerationBatch.findMany({
-    where: { teacherId, course: { teacherId } },
+    where: { teacherId, deletedAt: null, course: { teacherId } },
     orderBy: { createdAt: "desc" },
     take: 30,
     select: {
@@ -396,6 +404,63 @@ export async function listQuestionGenerationBatches(teacherId: string) {
       course: { select: { name: true } },
     },
   });
+}
+
+export async function deleteQuestionGenerationBatch(
+  teacherId: string,
+  batchId: string,
+  context: AuditRequestContext,
+) {
+  const batch = await prisma.aIQuestionGenerationBatch.findFirst({
+    where: { id: batchId, teacherId, course: { teacherId } },
+    select: {
+      id: true,
+      courseId: true,
+      mode: true,
+      status: true,
+      deletedAt: true,
+    },
+  });
+  if (!batch) throw new AIQuestionGenerationError("生成任务不存在", 404);
+  if (batch.deletedAt) return { deleted: true };
+
+  await prisma.$transaction(async (tx) => {
+    const deletedAt = new Date();
+    const updated = await tx.aIQuestionGenerationBatch.updateMany({
+      where: {
+        id: batch.id,
+        teacherId,
+        deletedAt: null,
+        course: { teacherId },
+      },
+      data: { deletedAt },
+    });
+    if (updated.count === 0) {
+      const current = await tx.aIQuestionGenerationBatch.findFirst({
+        where: { id: batch.id, teacherId, course: { teacherId } },
+        select: { deletedAt: true },
+      });
+      if (!current) throw new AIQuestionGenerationError("生成任务不存在", 404);
+      if (!current.deletedAt)
+        throw new AIQuestionGenerationError("生成任务已变化，请重试", 409);
+      return;
+    }
+    await writeGovernanceAuditLog(tx, {
+      actorId: teacherId,
+      action: AuditAction.AI_QUESTION_BATCH_DELETED,
+      targetType: AuditTargetType.AI_QUESTION_BATCH,
+      targetId: batch.id,
+      summary: "移除 AI 出题任务",
+      beforeData: {
+        courseId: batch.courseId,
+        mode: batch.mode,
+        status: batch.status,
+      },
+      afterData: { deletedAt: deletedAt.toISOString() },
+      context,
+    });
+  });
+  return { deleted: true };
 }
 
 export async function editQuestionCandidate(

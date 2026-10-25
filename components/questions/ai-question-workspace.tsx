@@ -1,6 +1,7 @@
 "use client";
 
 import { KnowledgeGraphNodeType, QuestionType } from "@prisma/client";
+import { X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -167,6 +168,8 @@ export function AIQuestionWorkspace({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [deletingBatchId, setDeletingBatchId] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [conceptSelections, setConceptSelections] = useState<
     Record<string, string>
   >({});
@@ -281,6 +284,42 @@ export function AIQuestionWorkspace({
     }
     setNotice("已重新入队，只补齐尚未生成的题目。");
     await loadBatch(batchId);
+  }
+
+  async function deleteBatch(item: BatchSummary) {
+    const active = item.status === "PENDING" || item.status === "RUNNING";
+    if (
+      !window.confirm(
+        `确定从最近出题任务中移除这条任务吗？已入库题目不会删除。${active ? "正在生成的任务仍会继续处理。" : ""}`,
+      )
+    )
+      return;
+    setDeletingBatchId(item.id);
+    setDeleteError("");
+    const result = await requestQuestionApi<{ deleted: boolean }>(
+      `/api/teacher/ai-question-batches/${item.id}`,
+      { method: "DELETE" },
+    );
+    setDeletingBatchId("");
+    if (!result.success) {
+      setDeleteError(result.error);
+      return;
+    }
+    const refreshed = await requestQuestionApi<BatchSummary[]>(
+      "/api/teacher/ai-question-batches",
+      { cache: "no-store" },
+    );
+    setBatches((current) =>
+      refreshed.success
+        ? refreshed.data
+        : current.filter((batch) => batch.id !== item.id),
+    );
+    if (batchId === item.id) {
+      setBatchId("");
+      setBatch(null);
+      setError("");
+    }
+    setNotice("任务已从最近列表移除，已入库题目保留。");
   }
 
   async function confirmAll() {
@@ -605,30 +644,44 @@ export function AIQuestionWorkspace({
                   {batch.requestedCount} · 失败 {batch.failedCount}
                 </p>
               </div>
-              {batch.status === "FAILED" || batch.status === "PARTIAL" ? (
-                <button
-                  className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
-                  disabled={busy}
-                  onClick={() => void retry()}
-                >
-                  重试未完成题目
-                </button>
-              ) : null}
-              {(batch.status === "READY" || batch.status === "PARTIAL") &&
-              batch.candidates.some((item) => item.status === "REVIEW") ? (
-                <button
-                  className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                  disabled={busy || Object.values(editingIds).some(Boolean)}
-                  onClick={() => void confirmAll()}
-                >
-                  审核后全部入库（
-                  {
-                    batch.candidates.filter((item) => item.status === "REVIEW")
-                      .length
-                  }
-                  ）
-                </button>
-              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                {batch.status === "FAILED" || batch.status === "PARTIAL" ? (
+                  <button
+                    className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+                    disabled={busy}
+                    onClick={() => void retry()}
+                  >
+                    重试未完成题目
+                  </button>
+                ) : null}
+                {(batch.status === "READY" || batch.status === "PARTIAL") &&
+                batch.candidates.some((item) => item.status === "REVIEW") ? (
+                  <button
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    disabled={busy || Object.values(editingIds).some(Boolean)}
+                    onClick={() => void confirmAll()}
+                  >
+                    审核后全部入库（
+                    {
+                      batch.candidates.filter(
+                        (item) => item.status === "REVIEW",
+                      ).length
+                    }
+                    ）
+                  </button>
+                ) : null}
+                {batch.candidates.some(
+                  (item) =>
+                    item.status === "CONFIRMED" && item.confirmedQuestionId,
+                ) ? (
+                  <Link
+                    className="inline-flex items-center rounded-lg border border-sky-200 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                    href={`/teacher/courses/${batch.courseId}/question-mapping`}
+                  >
+                    前往题目关联
+                  </Link>
+                ) : null}
+              </div>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
               <div
@@ -704,28 +757,45 @@ export function AIQuestionWorkspace({
       </div>
       <aside className="self-start rounded-2xl border bg-white p-5 shadow-sm">
         <h2 className="font-semibold">最近的出题任务</h2>
+        {deleteError ? (
+          <p role="alert" className="mt-3 text-sm text-red-700">
+            {deleteError}
+          </p>
+        ) : null}
         <div className="mt-3 space-y-2">
           {batches.length ? (
             batches.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setBatchId(item.id);
-                  setError("");
-                }}
-                className={`block w-full rounded-lg border p-3 text-left text-sm hover:bg-slate-50 ${batchId === item.id ? "border-sky-500 bg-sky-50" : ""}`}
-              >
-                <span className="block font-medium">
-                  {item.course.name} ·{" "}
-                  {MODES.find(([value]) => value === item.mode)?.[1] ??
-                    item.mode}
-                </span>
-                <span className="mt-1 block text-xs text-slate-500">
-                  {item.status} · {item.generatedCount}/{item.requestedCount} ·{" "}
-                  {new Date(item.createdAt).toLocaleString("zh-CN")}
-                </span>
-              </button>
+              <div key={item.id} className="group relative">
+                <button
+                  type="button"
+                  disabled={deletingBatchId === item.id}
+                  onClick={() => {
+                    setBatchId(item.id);
+                    setError("");
+                  }}
+                  className={`block w-full rounded-lg border p-3 pr-12 text-left text-sm hover:bg-slate-50 ${batchId === item.id ? "border-sky-500 bg-sky-50" : ""}`}
+                >
+                  <span className="block font-medium">
+                    {item.course.name} ·{" "}
+                    {MODES.find(([value]) => value === item.mode)?.[1] ??
+                      item.mode}
+                  </span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {item.status} · {item.generatedCount}/{item.requestedCount}{" "}
+                    · {new Date(item.createdAt).toLocaleString("zh-CN")}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`删除${item.course.name}的出题任务`}
+                  title="删除任务"
+                  disabled={Boolean(deletingBatchId)}
+                  onClick={() => void deleteBatch(item)}
+                  className="absolute top-2 right-2 rounded-md p-1.5 text-red-600 opacity-100 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                >
+                  <X aria-hidden="true" className="size-4" />
+                </button>
+              </div>
             ))
           ) : (
             <p className="text-sm text-slate-500">还没有 AI 出题任务。</p>
