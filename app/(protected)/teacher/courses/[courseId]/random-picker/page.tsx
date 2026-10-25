@@ -72,7 +72,7 @@ export default async function RandomPickerPage({
           <p>暂无关联的启用班级。</p>
           <Link
             className="mt-3 inline-block text-sky-700 underline"
-            href={`/teacher/courses/${parsed.data}#course-classrooms`}
+            href={`/teacher/courses/${parsed.data}/classrooms`}
           >
             返回课程班级
           </Link>

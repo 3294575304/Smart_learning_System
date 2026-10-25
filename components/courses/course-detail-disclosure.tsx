@@ -8,14 +8,17 @@ export function CourseDetailDisclosure({
   title,
   summary,
   children,
+  revealOnHash = true,
 }: {
   id: string;
   title: string;
   summary: string;
   children?: ReactNode;
+  revealOnHash?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
+    if (!revealOnHash) return;
     const revealAnchor = () => {
       if (window.location.hash === `#${id}`) setOpen(true);
     };
@@ -52,7 +55,7 @@ export function CourseDetailDisclosure({
       window.removeEventListener("hashchange", revealAnchor);
       document.removeEventListener("click", revealLink, true);
     };
-  }, [id]);
+  }, [id, revealOnHash]);
   return (
     <details
       id={id}

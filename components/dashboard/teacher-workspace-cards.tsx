@@ -112,7 +112,7 @@ export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
     {
       label: "授课班级",
       value: overviewClass ? 1 : workspace.metrics.classroomCount,
-      href: `${base}#course-classrooms`,
+      href: `${base}/classrooms`,
       icon: School,
     },
     {

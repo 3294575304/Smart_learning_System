@@ -1,8 +1,8 @@
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { CourseStatus, Role } from "@prisma/client";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 
-import { CourseClassroomManager } from "@/components/courses/course-classroom-manager";
 import { CourseSetupChecklist } from "@/components/courses/course-setup-checklist";
 import { CourseWorkspaceNavigation } from "@/components/courses/course-workspace-navigation";
 import { CourseForm } from "@/components/courses/course-form";
@@ -101,15 +101,17 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
         id="course-classrooms"
         title="授课班级"
         summary={`${course.linkedClassrooms.length} 个课程班级 · 按班级分别管理教学记录`}
+        revealOnHash={false}
       >
-        <CourseClassroomManager
-          courseId={course.id}
-          courseName={course.name}
-          courseNo={course.courseNo}
-          term={course.term}
-          courseStatus={course.status}
-          linkedClassrooms={course.linkedClassrooms}
-        />
+        <p className="text-muted-foreground text-sm">
+          在班级页面逐个创建班级、导入名单并管理已有班级。
+        </p>
+        <Link
+          href={`/teacher/courses/${course.id}/classrooms`}
+          className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+        >
+          查看和创建班级
+        </Link>
       </CourseDetailDisclosure>
       <CourseDetailDisclosure
         id="course-basics"

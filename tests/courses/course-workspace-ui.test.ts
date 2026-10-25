@@ -47,14 +47,14 @@ function renderSetup(overrides: Partial<CourseSetupInput> = {}) {
 
 function constructionEntries(html: string) {
   const paths: Record<string, string> = {
-    "#course-classrooms": "classrooms",
+    "/classrooms": "classrooms",
     "/syllabus": "syllabus",
     "/knowledge-graph": "graph",
     "/assessment-scheme": "assessment",
   };
   return [
     ...html.matchAll(
-      /<a\b[^>]*href="\/teacher\/courses\/course-a(#course-classrooms|\/syllabus|\/knowledge-graph|\/assessment-scheme)"/g,
+      /<a\b[^>]*href="\/teacher\/courses\/course-a(\/classrooms|\/syllabus|\/knowledge-graph|\/assessment-scheme)"/g,
     ),
   ].map((match) => paths[match[1]]);
 }
@@ -125,11 +125,19 @@ test("课程建设独立展示，大纲只有一个入口且课程功能均有�
   assert.match(construction, /课程建设/u);
   assert.match(construction, /课程已归档/u);
   const paths = [
-    ...(html + construction).matchAll(
-      /href="\/teacher\/courses\/course-a\/([a-z-]+)(?:#[^"]*)?"/g,
+    ...new Set(
+      [
+        ...(html + construction).matchAll(
+          /href="\/teacher\/courses\/course-a\/([a-z-]+)(?:#[^"]*)?"/g,
+        ),
+      ].map((match) => match[1]),
     ),
-  ].map((match) => match[1]);
-  assert.equal(paths.length, new Set(paths).size);
+  ];
+  assert.equal(
+    (html.match(/href="\/teacher\/courses\/course-a\/classrooms"/g) ?? [])
+      .length,
+    3,
+  );
   assert.equal(paths.filter((path) => path === "syllabus").length, 1);
   assert.doesNotMatch(
     construction,
@@ -142,7 +150,7 @@ test("课程建设独立展示，大纲只有一个入口且课程功能均有�
   assert.ok(
     construction.indexOf("题目关联") < construction.indexOf("题库管理"),
   );
-  assert.match(html, /请先关联启用中的班级/u);
+  assert.match(html, /请先创建课程班级/u);
   assert.doesNotMatch(html, /href="\/teacher\/assignments\/new"/u);
   const analyticsLink = [...html.matchAll(/href="([^"]+)"/g)]
     .map((match) => new URL(match[1], "http://localhost"))
@@ -249,7 +257,7 @@ test("课程准备进度随完成情况变化，四项始终保留直接入口",
       completedGroup,
   );
   assert.ok(
-    partial.indexOf('href="/teacher/courses/course-a#course-classrooms"') >
+    partial.indexOf('href="/teacher/courses/course-a/classrooms"') >
       completedGroup,
   );
   assert.match(
@@ -276,7 +284,7 @@ test("课程准备进度随完成情况变化，四项始终保留直接入口",
     "assessment",
   ]);
   for (const [path, title] of [
-    ["#course-classrooms", "关联授课班级"],
+    ["/classrooms", "创建课程班级"],
     ["/syllabus", "教学大纲"],
     ["/knowledge-graph", "知识图谱"],
     ["/assessment-scheme", "考核方案"],
@@ -316,7 +324,7 @@ test("完成项排到折叠区，状态回退后重新排到前面", () => {
   assert.match(syllabusNeedsReview, /正式第 1 版继续生效/u);
 });
 
-test("题目入口独立于准备区域并始终可见，班级操作保留锚点", () => {
+test("题目入口独立于准备区域并始终可见，班级操作进入独立页面", () => {
   for (const html of [
     renderSetup({
       activeClassroomCount: 0,
@@ -344,11 +352,11 @@ test("题目入口独立于准备区域并始终可见，班级操作保留锚�
     assert.match(tools, /href="\/teacher\/questions\?courseId=course-a"/u);
     assert.match(
       preparation,
-      /href="\/teacher\/courses\/course-a#course-classrooms"/u,
+      /href="\/teacher\/courses\/course-a\/classrooms"/u,
     );
   }
 });
-test("班级与课程设置默认收起并保留深链接锚点", () => {
+test("授课班级卡片默认收起", () => {
   const html = renderToStaticMarkup(
     React.createElement(
       CourseDetailDisclosure,
@@ -356,6 +364,7 @@ test("班级与课程设置默认收起并保留深链接锚点", () => {
         id: "course-classrooms",
         title: "授课班级",
         summary: "2 个班级",
+        revealOnHash: false,
       },
       "管理内容",
     ),
@@ -373,7 +382,16 @@ test("精简建设入口后仍保留课程信息、名单和教学进度页面",
   assert.match(courseDetail, /id="course-basics"/u);
   assert.match(courseDetail, /<CourseForm/u);
   assert.match(courseDetail, /id="course-classrooms"/u);
-  for (const path of ["students", "teaching-progress"]) {
+  assert.ok(
+    courseDetail.includes("href={`/teacher/courses/${course.id}/classrooms`}"),
+  );
+  assert.ok(courseDetail.includes("revealOnHash={false}"));
+  const dashboard = await readFile(
+    "components/dashboard/teacher-workspace-cards.tsx",
+    "utf8",
+  );
+  assert.ok(dashboard.includes("href: `${base}/classrooms`"));
+  for (const path of ["classrooms", "students", "teaching-progress"]) {
     await access(`app/(protected)/teacher/courses/[courseId]/${path}/page.tsx`);
   }
 });

@@ -55,7 +55,7 @@ export function buildCourseSetupProgress(input: CourseSetupInput) {
       detail: input.activeClassroomCount
         ? `已有 ${input.activeClassroomCount} 个开课班级。`
         : "请先创建课程班级，可逐班导入名单并开展教学任务。",
-      href: `${base}#course-classrooms`,
+      href: `${base}/classrooms`,
       action: "创建班级",
     },
   ];

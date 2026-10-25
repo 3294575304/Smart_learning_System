@@ -68,6 +68,10 @@ test("新课程从创建班级开始，大纲上传和发布只占一项", () =>
   assert.equal(progress.totalCount, 4);
   assert.equal(progress.nextStep?.id, "classrooms");
   assert.equal(progress.nextStep?.title, "创建课程班级");
+  assert.equal(
+    progress.nextStep?.href,
+    "/teacher/courses/course-one/classrooms",
+  );
   assert.equal(step(course({ syllabus: null }), "syllabus").state, "pending");
   assert.equal(step(course({ syllabus: null }), "syllabus").action, "上传大纲");
 });

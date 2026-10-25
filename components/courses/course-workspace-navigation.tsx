@@ -199,7 +199,7 @@ export function CourseWorkspaceNavigation({
                         classroomId,
                       )
                     : group.title === "课堂活动" && !classroomId
-                      ? `/teacher/courses/${courseId}#course-classrooms`
+                      ? `/teacher/courses/${courseId}/classrooms`
                       : withClassroomQuery(
                           path.startsWith("/")
                             ? path
