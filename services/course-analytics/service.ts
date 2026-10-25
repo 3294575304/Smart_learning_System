@@ -16,7 +16,10 @@ import { withClassroomQuery } from "@/lib/course-classroom";
 import { getTeacherCourseClassroom } from "@/services/courses/classroom-context";
 import { calculateAttendanceRate } from "@/services/attendance/calculation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { calculateCourseAssignmentStatistics } from "@/services/course-analytics/assignment-statistics";
+import {
+  calculateCourseAssignmentScoreTrend,
+  calculateCourseAssignmentStatistics,
+} from "@/services/course-analytics/assignment-statistics";
 import {
   summarizeCourseProfiles,
   summarizeWeakCourseConcepts,
@@ -47,6 +50,7 @@ export async function getTeacherCourseAnalytics(
       name: true,
       courseNo: true,
       term: true,
+      currentPublishedAssessmentSchemeId: true,
       classrooms: {
         where: {
           status: "ACTIVE",
@@ -122,6 +126,8 @@ export async function getTeacherCourseAnalytics(
         title: true,
         status: true,
         dueAt: true,
+        publishedAt: true,
+        createdAt: true,
         classroom: { select: { name: true } },
         _count: {
           select: {
@@ -189,7 +195,12 @@ export async function getTeacherCourseAnalytics(
     }),
     prisma.courseGradebook.findMany({
       where: { courseId, course: { teacherId }, ...classroomScope },
-      select: { id: true, currentPublicationId: true },
+      select: {
+        id: true,
+        classroomId: true,
+        schemeId: true,
+        currentPublicationId: true,
+      },
     }),
   ]);
 
@@ -233,6 +244,178 @@ export async function getTeacherCourseAnalytics(
           },
         })
       : [];
+  const recentActivitySince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const currentSchemeGradebooks = course.currentPublishedAssessmentSchemeId
+    ? gradebooks.filter(
+        (gradebook) =>
+          gradebook.schemeId === course.currentPublishedAssessmentSchemeId &&
+          gradebook.currentPublicationId !== null,
+      )
+    : [];
+  const currentPublicationIds = currentSchemeGradebooks.flatMap((gradebook) =>
+    gradebook.currentPublicationId ? [gradebook.currentPublicationId] : [],
+  );
+  const [
+    outcomeRuns,
+    recentAttendanceRecords,
+    recentPracticeAnswers,
+    recentCourseConversations,
+  ] = await Promise.all([
+    currentPublicationIds.length
+      ? prisma.courseOutcomeAttainmentRun.findMany({
+          where: {
+            courseId,
+            ...classroomScope,
+            gradebookId: {
+              in: currentSchemeGradebooks.map((gradebook) => gradebook.id),
+            },
+            gradebookPublicationId: { in: currentPublicationIds },
+          },
+          orderBy: [{ calculatedAt: "desc" }, { versionNumber: "desc" }],
+          select: {
+            classroomId: true,
+            results: {
+              select: {
+                outcomeCode: true,
+                students: {
+                  select: { studentId: true, attained: true },
+                },
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    studentIds.length
+      ? prisma.attendanceRecord.findMany({
+          where: {
+            studentId: { in: studentIds },
+            signedAt: { gte: recentActivitySince },
+            session: { courseId, teacherId, ...classroomScope },
+          },
+          select: { studentId: true },
+        })
+      : Promise.resolve([]),
+    studentIds.length
+      ? prisma.recommendationPracticeAnswer.findMany({
+          where: {
+            createdAt: { gte: recentActivitySince },
+            recommendation: {
+              is: {
+                studentId: { in: studentIds },
+                courseCycle: {
+                  is: { courseId, ...classroomScope },
+                },
+              },
+            },
+          },
+          select: {
+            recommendation: { select: { studentId: true } },
+          },
+        })
+      : Promise.resolve([]),
+    studentIds.length
+      ? prisma.studentLearningConversation.findMany({
+          where: {
+            courseId,
+            studentId: { in: studentIds },
+            updatedAt: { gte: recentActivitySince },
+            deletedAt: null,
+          },
+          select: { studentId: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const latestOutcomeRunByClassroom = new Map<
+    string,
+    (typeof outcomeRuns)[number]
+  >();
+  for (const run of outcomeRuns) {
+    if (!latestOutcomeRunByClassroom.has(run.classroomId)) {
+      latestOutcomeRunByClassroom.set(run.classroomId, run);
+    }
+  }
+  const courseOutcomeCodes = new Set(
+    [...latestOutcomeRunByClassroom.values()].flatMap((run) =>
+      run.results.map((result) => result.outcomeCode),
+    ),
+  );
+  const attainedOutcomeStudentIds = new Set<string>();
+  const courseOutcomeClassroomIds = new Set<string>();
+  for (const run of latestOutcomeRunByClassroom.values()) {
+    const classroomStudentIds = activeStudentIdsByClassroom.get(
+      run.classroomId,
+    );
+    if (!classroomStudentIds?.size) continue;
+    const attainedStudentIdsByOutcome = new Map(
+      run.results.map((result) => [
+        result.outcomeCode,
+        new Set(
+          result.students
+            .filter(
+              (student) =>
+                student.attained === true &&
+                classroomStudentIds.has(student.studentId),
+            )
+            .map((student) => student.studentId),
+        ),
+      ]),
+    );
+    for (const result of run.results) {
+      if (result.students.some((student) => student.attained !== null)) {
+        courseOutcomeClassroomIds.add(run.classroomId);
+      }
+    }
+    if (courseOutcomeCodes.size === 0) continue;
+    for (const studentId of classroomStudentIds) {
+      if (
+        [...courseOutcomeCodes].every((outcomeCode) =>
+          attainedStudentIdsByOutcome.get(outcomeCode)?.has(studentId),
+        )
+      ) {
+        attainedOutcomeStudentIds.add(studentId);
+      }
+    }
+  }
+  const courseOutcomeAttainedStudentCount = attainedOutcomeStudentIds.size;
+  const courseOutcomeAttainmentRate =
+    courseOutcomeClassroomIds.size > 0 && studentIds.length > 0
+      ? Number(
+          (
+            (courseOutcomeAttainedStudentCount / studentIds.length) *
+            100
+          ).toFixed(1),
+        )
+      : null;
+  const recentActiveStudentIds = new Set(
+    assignmentSubmissions
+      .filter(
+        (submission) =>
+          submission.submittedAt !== null &&
+          submission.submittedAt >= recentActivitySince,
+      )
+      .map((submission) => submission.studentId),
+  );
+  for (const record of recentAttendanceRecords) {
+    recentActiveStudentIds.add(record.studentId);
+  }
+  for (const answer of recentPracticeAnswers) {
+    recentActiveStudentIds.add(answer.recommendation.studentId);
+  }
+  for (const conversation of recentCourseConversations) {
+    recentActiveStudentIds.add(conversation.studentId);
+  }
+  const recentActiveStudentCount = recentActiveStudentIds.size;
+  const recentActiveStudentRate = studentIds.length
+    ? Number(((recentActiveStudentCount / studentIds.length) * 100).toFixed(1))
+    : null;
+  const normalizedAssignmentSubmissions = assignmentSubmissions.map(
+    (submission) => ({
+      ...submission,
+      score: submission.score?.toNumber() ?? null,
+      maxScore: submission.maxScore?.toNumber() ?? null,
+    }),
+  );
   const assignmentStatistics = calculateCourseAssignmentStatistics({
     assignments: assignments.map(({ id, classroomId, status }) => ({
       id,
@@ -240,11 +423,20 @@ export async function getTeacherCourseAnalytics(
       status,
     })),
     activeStudentIdsByClassroom,
-    submissions: assignmentSubmissions.map((submission) => ({
-      ...submission,
-      score: submission.score?.toNumber() ?? null,
-      maxScore: submission.maxScore?.toNumber() ?? null,
+    submissions: normalizedAssignmentSubmissions,
+  });
+  const assignmentScoreTrend = calculateCourseAssignmentScoreTrend({
+    assignments: assignments.map((assignment) => ({
+      id: assignment.id,
+      classroomId: assignment.classroomId,
+      title: assignment.title,
+      status: assignment.status,
+      dueAt: assignment.dueAt,
+      publishedAt: assignment.publishedAt,
+      createdAt: assignment.createdAt,
     })),
+    activeStudentIdsByClassroom,
+    submissions: normalizedAssignmentSubmissions,
   });
 
   const latestSnapshotByStudent = new Map<
@@ -385,6 +577,7 @@ export async function getTeacherCourseAnalytics(
       term: course.term,
     },
     assignmentStatistics,
+    assignmentScoreTrend,
     classrooms: course.classrooms.map((classroom) => ({
       id: classroom.id,
       name: classroom.name,
@@ -406,6 +599,11 @@ export async function getTeacherCourseAnalytics(
       pendingReviewCount,
       attendanceRate: attendance.rate === null ? null : Number(attendance.rate),
       closedAttendanceSessionCount: closedAttendanceSessions,
+      courseOutcomeAttainmentRate,
+      courseOutcomeAttainmentClassroomCount: courseOutcomeClassroomIds.size,
+      courseOutcomeAttainedStudentCount,
+      recentActiveStudentCount,
+      recentActiveStudentRate,
       publishedGradebookCount: gradebooks.filter(
         (gradebook) => gradebook.currentPublicationId !== null,
       ).length,
@@ -420,14 +618,6 @@ export async function getTeacherCourseAnalytics(
     },
     profiles: profileSummary,
     weakConcepts,
-    recentAssignments: assignments.slice(0, 5).map((assignment) => ({
-      id: assignment.id,
-      title: assignment.title,
-      status: assignment.status,
-      classroomName: assignment.classroom.name,
-      dueAt: assignment.dueAt,
-      pendingReviewCount: assignment._count.submissions,
-    })),
     recentSurveys: surveys.slice(0, 3).map((survey) => ({
       id: survey.id,
       title: survey.title,

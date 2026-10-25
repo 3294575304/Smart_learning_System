@@ -16,6 +16,7 @@ export interface TeacherResultOverviewItem {
   submittedCount: number;
   historicalSubmittedCount: number;
   pendingReviewCount: number;
+  scoredStudentCount: number;
   averageScore: number | null;
   averagePercentage: number | null;
   highestScore: number | null;

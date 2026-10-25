@@ -51,6 +51,15 @@ export interface CourseAssignmentStatistics {
   scoreDistribution: AssignmentScoreBand[];
 }
 
+export interface CourseAssignmentScoreTrendPoint {
+  assignmentId: string;
+  title: string;
+  date: Date;
+  averageScore: number;
+  finalizedStudentCount: number;
+  eligibleStudentCount: number;
+}
+
 const COMPLETE_STATUSES = new Set<CourseSubmissionStatus>([
   "SUBMITTED",
   "PENDING_REVIEW",
@@ -246,4 +255,102 @@ export function calculateCourseAssignmentStatistics(
     unscoredStudentCount,
     scoreDistribution,
   };
+}
+
+export function calculateCourseAssignmentScoreTrend(input: {
+  assignments: Array<{
+    id: string;
+    classroomId: string;
+    title: string;
+    status: CourseAssignmentStatus;
+    dueAt: Date | null;
+    publishedAt: Date | null;
+    createdAt: Date;
+  }>;
+  activeStudentIdsByClassroom: Map<string, Set<string>>;
+  submissions: CourseAssignmentStatisticsInput["submissions"];
+  limit?: number;
+}): CourseAssignmentScoreTrendPoint[] {
+  const assignmentsById = new Map(
+    input.assignments
+      .filter(
+        (assignment) =>
+          assignment.status === "PUBLISHED" || assignment.status === "CLOSED",
+      )
+      .map((assignment) => [assignment.id, assignment]),
+  );
+  const latestSubmissionByAssignment = new Map<
+    string,
+    Map<string, CourseAssignmentStatisticsInput["submissions"][number]>
+  >();
+
+  for (const submission of input.submissions) {
+    const assignment = assignmentsById.get(submission.assignmentId);
+    if (!assignment || !COMPLETE_STATUSES.has(submission.status)) continue;
+    const activeStudentIds = input.activeStudentIdsByClassroom.get(
+      assignment.classroomId,
+    );
+    if (!activeStudentIds?.has(submission.studentId)) continue;
+
+    let latestByStudent = latestSubmissionByAssignment.get(assignment.id);
+    if (!latestByStudent) {
+      latestByStudent = new Map();
+      latestSubmissionByAssignment.set(assignment.id, latestByStudent);
+    }
+    const current = latestByStudent.get(submission.studentId);
+    if (!current || isLaterSubmission(submission, current)) {
+      latestByStudent.set(submission.studentId, submission);
+    }
+  }
+
+  const scoredAssignments = [...assignmentsById.values()]
+    .flatMap((assignment) => {
+      const latestByStudent = latestSubmissionByAssignment.get(assignment.id);
+      const normalizedScores: number[] = [];
+      for (const submission of latestByStudent?.values() ?? []) {
+        if (
+          !FINAL_SCORE_STATUSES.has(submission.status) ||
+          submission.score === null ||
+          submission.maxScore === null ||
+          submission.maxScore <= 0
+        ) {
+          continue;
+        }
+        normalizedScores.push(
+          Math.max(
+            0,
+            Math.min(100, (submission.score / submission.maxScore) * 100),
+          ),
+        );
+      }
+      if (normalizedScores.length === 0) return [];
+
+      const eligibleStudentCount =
+        input.activeStudentIdsByClassroom.get(assignment.classroomId)?.size ??
+        0;
+      return [
+        {
+          assignmentId: assignment.id,
+          title: assignment.title,
+          date:
+            assignment.dueAt ?? assignment.publishedAt ?? assignment.createdAt,
+          averageScore: Number(
+            (
+              normalizedScores.reduce((sum, score) => sum + score, 0) /
+              normalizedScores.length
+            ).toFixed(1),
+          ),
+          finalizedStudentCount: normalizedScores.length,
+          eligibleStudentCount,
+        },
+      ];
+    })
+    .sort((left, right) => {
+      const dateDifference = right.date.getTime() - left.date.getTime();
+      return (
+        dateDifference || right.assignmentId.localeCompare(left.assignmentId)
+      );
+    });
+
+  return scoredAssignments.slice(0, input.limit ?? 6).reverse();
 }

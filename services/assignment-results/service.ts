@@ -145,6 +145,7 @@ export async function listTeacherResultsOverview(
         pendingReviewCount: latest.filter(
           (submission) => submission.status === SubmissionStatus.PENDING_REVIEW,
         ).length,
+        scoredStudentCount: percentages.length,
         averageScore: roundedAverage(scores),
         averagePercentage: roundedAverage(percentages),
         highestScore: scores.length === 0 ? null : Math.max(...scores),
