@@ -52,6 +52,8 @@ export default async function TeacherPage({ searchParams }: Props) {
       </section>
     );
   const base = `/teacher/courses/${workspace.course.id}`;
+  // Keep deadline labels identical during SSR and the client's first render.
+  const renderedAt = Date.now();
   return (
     <section className="teacher-dashboard space-y-4">
       <header
@@ -82,7 +84,11 @@ export default async function TeacherPage({ searchParams }: Props) {
           </Link>
         </section>
       </header>
-      <TeacherWorkspaceCards key={workspace.course.id} workspace={workspace} />
+      <TeacherWorkspaceCards
+        key={workspace.course.id}
+        renderedAt={renderedAt}
+        workspace={workspace}
+      />
     </section>
   );
 }

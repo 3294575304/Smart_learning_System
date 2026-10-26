@@ -23,7 +23,13 @@ import styles from "./teacher-workspace.module.css";
 import { TEACHER_WORKSPACE_DIRTY } from "./teacher-workspace-refresh";
 
 type Workspace = NonNullable<TeacherDashboardData["workspace"]>;
-export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
+export function TeacherWorkspaceCards({
+  renderedAt,
+  workspace,
+}: {
+  renderedAt: number;
+  workspace: Workspace;
+}) {
   const [todoClass, setTodoClass] = useState("");
   const [activityClass, setActivityClass] = useState("");
   const [overviewClass, setOverviewClass] = useState("");
@@ -329,7 +335,7 @@ export function TeacherWorkspaceCards({ workspace }: { workspace: Workspace }) {
                       ? "草稿"
                       : item.status === "CLOSED"
                         ? "已关闭"
-                        : item.dueAt && item.dueAt <= new Date()
+                        : item.dueAt && item.dueAt.getTime() <= renderedAt
                           ? "已截止"
                           : "已发布"}
                   </span>

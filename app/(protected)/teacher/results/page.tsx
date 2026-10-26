@@ -110,65 +110,81 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
         )}
       </details>
 
-      <form className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_minmax(260px,1.2fr)_minmax(220px,1fr)_auto_auto] xl:items-end">
-        <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+      <form
+        aria-labelledby="selected-course-learning-heading"
+        className="space-y-4 rounded-xl border bg-white p-4"
+      >
+        <div className="min-w-0">
           <h2
-            className="truncate text-base font-semibold text-slate-900"
+            className="text-base font-semibold text-slate-900"
             id="selected-course-learning-heading"
           >
-            {selectedCourse ? `${selectedCourse.name} · 学情分析` : "选择课程"}
+            课程学情分析
           </h2>
-          <p className="mt-1 truncate text-xs text-slate-500">
+          <p className="mt-1 text-sm leading-6 text-slate-600">
             {selectedCourse
-              ? `${selectedCourse.courseNo} · ${selectedCourse.term}${classroomId && selectedClassroom ? ` · ${selectedClassroom.name}` : " · 全部有效授课班级"}`
+              ? `${selectedCourse.name} · ${selectedCourse.courseNo} · ${selectedCourse.term}${classroomId && selectedClassroom ? ` · ${selectedClassroom.name}` : " · 全部有效授课班级"}`
               : "选择课程和班级查看学习证据、作业表现与近期作业。"}
+            {selectedClassroom && !selectedClassroom.course
+              ? " 当前班级未关联课程，因此这里只显示该班作业成绩。"
+              : ""}
           </p>
+          {!courses.length ? (
+            <Link
+              className="mt-2 inline-block text-sm font-medium text-sky-700 hover:underline"
+              href="/teacher/courses"
+            >
+              创建或关联课程 →
+            </Link>
+          ) : null}
         </div>
-        <label className="min-w-0 space-y-1">
-          <span className="text-xs font-medium">课程</span>
-          <AutoSubmitSelect
-            className="w-full rounded-md border px-3 py-2 text-sm"
-            defaultValue={selectedCourse?.id ?? ""}
-            name="courseId"
-          >
-            <option value="">全部课程</option>
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.name} · {course.term}
-              </option>
-            ))}
-          </AutoSubmitSelect>
-        </label>
-        <label className="min-w-0 space-y-1">
-          <span className="text-xs font-medium">班级</span>
-          <AutoSubmitSelect
-            className="w-full rounded-md border px-3 py-2 text-sm"
-            defaultValue={classroomId ?? ""}
-            name="classroomId"
-          >
-            <option value="">全部班级</option>
-            {filterClassrooms.map((classroom) => (
-              <option key={classroom.id} value={classroom.id}>
-                {classroom.name}
-              </option>
-            ))}
-          </AutoSubmitSelect>
-        </label>
-        <input name="pageSize" type="hidden" value={query.pageSize} />
-        <Link
-          className="justify-self-start rounded-md border px-4 py-2 text-sm xl:self-end"
-          href="/teacher/results"
-        >
-          重置
-        </Link>
-        {selectedCourse ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_minmax(260px,1.2fr)_auto_auto] xl:items-end">
+          <label className="min-w-0 space-y-1">
+            <span className="text-xs font-medium">课程</span>
+            <AutoSubmitSelect
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              defaultValue={selectedCourse?.id ?? ""}
+              name="courseId"
+            >
+              <option value="">全部课程</option>
+              {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.name} · {course.term}
+                </option>
+              ))}
+            </AutoSubmitSelect>
+          </label>
+          <label className="min-w-0 space-y-1">
+            <span className="text-xs font-medium">班级</span>
+            <AutoSubmitSelect
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              defaultValue={classroomId ?? ""}
+              name="classroomId"
+            >
+              <option value="">全部班级</option>
+              {filterClassrooms.map((classroom) => (
+                <option key={classroom.id} value={classroom.id}>
+                  {classroom.name}
+                </option>
+              ))}
+            </AutoSubmitSelect>
+          </label>
+          <input name="pageSize" type="hidden" value={query.pageSize} />
           <Link
-            className="justify-self-start rounded-md border px-4 py-2 text-sm text-sky-700 hover:bg-sky-50 xl:self-end"
-            href={`/teacher/courses/${selectedCourse.id}`}
+            className="justify-self-start rounded-md border px-4 py-2 text-sm xl:self-end"
+            href="/teacher/results"
           >
-            返回课程管理
+            重置
           </Link>
-        ) : null}
+          {selectedCourse ? (
+            <Link
+              className="justify-self-start rounded-md border px-4 py-2 text-sm text-sky-700 hover:bg-sky-50 xl:self-end"
+              href={`/teacher/courses/${selectedCourse.id}`}
+            >
+              返回课程管理
+            </Link>
+          ) : null}
+        </div>
       </form>
 
       {analytics ? (
@@ -177,33 +193,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
           classroomId={classroomId}
           recentAssignments={recentResults?.items ?? []}
         />
-      ) : (
-        <section
-          aria-labelledby="course-learning-heading"
-          className="rounded-xl border border-dashed bg-white p-5"
-        >
-          <h2
-            id="course-learning-heading"
-            className="font-semibold text-slate-900"
-          >
-            课程学情分析
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            选择一门课程查看班级学情、近期作业表现和平均得分走势。
-            {selectedClassroom && !selectedClassroom.course
-              ? " 当前班级未关联课程，因此这里只显示该班作业成绩。"
-              : ""}
-          </p>
-          {!courses.length && (
-            <Link
-              className="mt-3 inline-block text-sm font-medium text-sky-700 hover:underline"
-              href="/teacher/courses"
-            >
-              创建或关联课程 →
-            </Link>
-          )}
-        </section>
-      )}
+      ) : null}
     </section>
   );
 }
