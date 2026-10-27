@@ -7,11 +7,12 @@ import {
   FileChartColumn,
   Sparkles,
   Target,
-  TriangleAlert,
   Users,
 } from "lucide-react";
 import Link from "next/link";
 
+import { CourseChapterMastery } from "@/components/courses/course-chapter-mastery";
+import { CourseAttentionConcepts } from "@/components/courses/course-attention-concepts";
 import type { TeacherResultOverviewItem } from "@/services/assignment-results/types";
 import type { TeacherCourseAnalytics } from "@/services/course-analytics/service";
 import { withClassroomQuery } from "@/lib/course-classroom";
@@ -20,6 +21,11 @@ const assignmentStatusLabel: Record<string, string> = {
   DRAFT: "草稿",
   PUBLISHED: "进行中",
   CLOSED: "已结束",
+};
+const assignmentStatusColor: Record<string, string> = {
+  DRAFT: "bg-amber-50 text-amber-700",
+  PUBLISHED: "bg-emerald-50 text-emerald-700",
+  CLOSED: "bg-slate-100 text-slate-600",
 };
 
 function displayPercent(value: number | null) {
@@ -75,11 +81,29 @@ function MetricCard({
   );
 }
 
-function DataCell({ label, value }: { label: string; value: string }) {
+function DataCell({
+  label,
+  value,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  compact?: boolean;
+}) {
   return (
-    <div className="rounded-xl bg-sky-50/60 px-4 py-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+    <div
+      className={`min-w-0 rounded-xl bg-sky-50/60 py-3 ${compact ? "px-3" : "px-4"}`}
+    >
+      <p
+        className={`text-slate-500 ${compact ? "text-center text-[11px] whitespace-nowrap" : "text-xs"}`}
+      >
+        {label}
+      </p>
+      <p
+        className={`mt-1 text-lg font-semibold text-slate-900 ${compact ? "text-center" : ""}`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -104,7 +128,7 @@ function wrapAssignmentTitle(value: string, lineLength = 10) {
   return lines;
 }
 
-function AssignmentScoreTrendChart({
+export function AssignmentScoreTrendChart({
   points,
 }: {
   points: TeacherCourseAnalytics["assignmentScoreTrend"];
@@ -125,6 +149,7 @@ function AssignmentScoreTrendChart({
   const chartPoints = points.map((point, index) => ({
     ...point,
     titleLines: wrapAssignmentTitle(point.title),
+    description: `${point.title}：百分制平均分 ${formatChartScore(point.averageScore)} 分，最终评分 ${point.finalizedStudentCount}/${point.eligibleStudentCount} 名有效学生`,
     x:
       points.length === 1
         ? left + plotWidth / 2
@@ -138,11 +163,8 @@ function AssignmentScoreTrendChart({
     return `${path} L ${point.x} ${point.y}`;
   }, "");
   const yTicks = [0, 25, 50, 75, 100];
-  const chartDescription = points
-    .map(
-      (point) =>
-        `${point.title}：百分制平均分 ${formatChartScore(point.averageScore)} 分，最终评分 ${point.finalizedStudentCount}/${point.eligibleStudentCount} 名有效学生`,
-    )
+  const chartDescription = chartPoints
+    .map((point) => point.description)
     .join("；");
 
   return (
@@ -191,11 +213,7 @@ function AssignmentScoreTrendChart({
         ) : null}
         {chartPoints.map((point) => (
           <g key={point.assignmentId}>
-            <title>
-              {point.title}：百分制平均分 {formatChartScore(point.averageScore)}{" "}
-              分，最终评分 {point.finalizedStudentCount}/
-              {point.eligibleStudentCount} 名有效学生
-            </title>
+            <title>{point.description}</title>
             <circle
               cx={point.x}
               cy={point.y}
@@ -334,6 +352,9 @@ function RecentAssignmentsPanel({
           assignments.slice(0, 4).map((assignment) => {
             const statusLabel =
               assignmentStatusLabel[assignment.status] ?? assignment.status;
+            const statusColor =
+              assignmentStatusColor[assignment.status] ??
+              "bg-slate-100 text-slate-600";
             const classAndDeadline = `${assignment.classroom.name} · 截止 ${displayDate(assignment.dueAt)}`;
             const summary = `${classAndDeadline} · 提交 ${assignment.submittedCount}/${assignment.studentCount} 人 · 得分率 ${displayRate(assignment.averagePercentage)} · 已评 ${assignment.scoredStudentCount} 人 · 待批 ${assignment.pendingReviewCount}`;
 
@@ -351,7 +372,9 @@ function RecentAssignmentsPanel({
                   >
                     {assignment.title}
                   </span>
-                  <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] leading-4 text-slate-600">
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] leading-4 ${statusColor}`}
+                  >
                     {statusLabel}
                   </span>
                   <ArrowRight
@@ -368,25 +391,25 @@ function RecentAssignmentsPanel({
                 <span className="mt-1 flex flex-wrap items-center gap-x-3 text-xs leading-4 text-slate-600">
                   <span>
                     提交{" "}
-                    <strong className="font-semibold tabular-nums">
+                    <strong className="font-semibold text-sky-700 tabular-nums">
                       {assignment.submittedCount}/{assignment.studentCount} 人
                     </strong>
                   </span>
                   <span>
                     得分率{" "}
-                    <strong className="font-semibold tabular-nums">
+                    <strong className="font-semibold text-violet-700 tabular-nums">
                       {displayRate(assignment.averagePercentage)}
                     </strong>
                   </span>
                   <span>
                     已评{" "}
-                    <strong className="font-semibold tabular-nums">
+                    <strong className="font-semibold text-emerald-700 tabular-nums">
                       {assignment.scoredStudentCount} 人
                     </strong>
                   </span>
                   <span>
                     待批{" "}
-                    <strong className="font-semibold tabular-nums">
+                    <strong className="font-semibold text-orange-700 tabular-nums">
                       {assignment.pendingReviewCount}
                     </strong>
                   </span>
@@ -487,6 +510,128 @@ export function TeacherCourseAnalyticsView({
         </div>
       </section>
 
+      <div className="grid items-stretch gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+        <section className="flex flex-col rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-emerald-700">班级学情</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                章节掌握度
+              </h2>
+            </div>
+            <Link
+              href={withClassroomQuery(courseBase + "/profiles", classroomId)}
+              className="text-sm font-medium text-sky-700 hover:text-sky-900"
+            >
+              查看课程画像 →
+            </Link>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <DataCell
+              label="课程平均掌握度"
+              value={displayPercent(data.profiles.averageMastery)}
+            />
+            <DataCell
+              label="稳定结论"
+              value={String(data.profiles.conclusiveCount)}
+            />
+            <DataCell
+              label="需重点关注"
+              value={String(data.profiles.attentionStudentCount)}
+            />
+            <DataCell
+              label="证据待积累"
+              value={String(data.profiles.evidencePendingCount)}
+            />
+          </div>
+          <CourseChapterMastery
+            key={`${data.course.id}:${classroomId ?? "all"}`}
+            chapters={data.chapterMastery}
+            studentCount={data.overview.studentCount}
+          />
+        </section>
+
+        <div className="flex min-w-0 flex-col justify-between gap-6">
+          <CourseAttentionConcepts concepts={data.attentionConcepts} />
+          <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-violet-700">
+                  课程评价闭环
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                  成绩、问卷与质量报告
+                </h2>
+              </div>
+              <FileChartColumn
+                aria-hidden="true"
+                className="size-6 text-violet-500"
+              />
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <DataCell
+                compact
+                label="已发布台账"
+                value={
+                  data.overview.publishedGradebookCount +
+                  "/" +
+                  data.overview.gradebookCount
+                }
+              />
+              <DataCell
+                compact
+                label="已结束问卷"
+                value={String(data.overview.completedSurveyCount)}
+              />
+              <DataCell
+                compact
+                label="问卷答卷"
+                value={String(data.overview.surveyResponseCount)}
+              />
+            </div>
+            <div className="mt-4 grid gap-2">
+              <Link
+                href={withClassroomQuery(
+                  courseBase + "/gradebook",
+                  classroomId,
+                )}
+                className="flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm transition-colors hover:border-sky-300 hover:bg-sky-100"
+              >
+                <span className="font-medium text-sky-800">成绩台账</span>
+                <ArrowRight
+                  aria-hidden="true"
+                  className="size-4 text-sky-700"
+                />
+              </Link>
+              <Link
+                href={withClassroomQuery(courseBase + "/surveys", classroomId)}
+                className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/70 px-4 py-3 text-sm transition-colors hover:border-teal-300 hover:bg-teal-100"
+              >
+                <span className="font-medium text-teal-800">结课问卷</span>
+                <ArrowRight
+                  aria-hidden="true"
+                  className="size-4 text-teal-700"
+                />
+              </Link>
+              <Link
+                href={withClassroomQuery(
+                  courseBase + "/quality-report",
+                  classroomId,
+                )}
+                className="flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-3 text-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
+              >
+                <span className="font-medium text-violet-800">
+                  课程质量报告
+                </span>
+                <ArrowRight
+                  aria-hidden="true"
+                  className="size-4 text-violet-700"
+                />
+              </Link>
+            </div>
+          </section>
+        </div>
+      </div>
       <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
         <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,1fr)]">
           <section
@@ -601,140 +746,6 @@ export function TeacherCourseAnalyticsView({
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-        <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-emerald-700">班级学情</p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900">
-                掌握情况与需要关注的知识点
-              </h2>
-            </div>
-            <Link
-              href={withClassroomQuery(courseBase + "/profiles", classroomId)}
-              className="text-sm font-medium text-sky-700 hover:text-sky-900"
-            >
-              查看课程画像 →
-            </Link>
-          </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <DataCell
-              label="平均掌握度"
-              value={displayPercent(data.profiles.averageMastery)}
-            />
-            <DataCell
-              label="稳定结论"
-              value={String(data.profiles.conclusiveCount)}
-            />
-            <DataCell
-              label="需重点关注"
-              value={String(data.profiles.attentionStudentCount)}
-            />
-            <DataCell
-              label="证据待积累"
-              value={String(data.profiles.evidencePendingCount)}
-            />
-          </div>
-          {data.weakConcepts.length > 0 ? (
-            <div className="mt-5 space-y-3">
-              {data.weakConcepts.slice(0, 5).map((concept) => (
-                <div
-                  key={concept.conceptId}
-                  className="grid gap-2 rounded-xl border border-slate-100 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_7rem_5rem] sm:items-center"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-900">
-                      {concept.name}
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {concept.code} · {concept.studentCount} 名学生有证据
-                    </p>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-sky-100/70">
-                    <div
-                      className="h-full rounded-full bg-emerald-500"
-                      style={{
-                        width: Math.max(3, concept.averageMastery) + "%",
-                      }}
-                    />
-                  </div>
-                  <p className="text-sm font-semibold text-slate-700 sm:text-right">
-                    {concept.averageMastery}%
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-5 flex gap-3 rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-              <TriangleAlert
-                aria-hidden="true"
-                className="mt-0.5 size-5 shrink-0"
-              />
-              当前还没有可汇总的正式知识点证据。完成带知识点绑定的作业批改后，这里会显示班级薄弱知识点。
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-violet-700">
-                课程评价闭环
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900">
-                成绩、问卷与质量报告
-              </h2>
-            </div>
-            <FileChartColumn
-              aria-hidden="true"
-              className="size-6 text-violet-500"
-            />
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            <DataCell
-              label="已发布成绩台账"
-              value={
-                data.overview.publishedGradebookCount +
-                "/" +
-                data.overview.gradebookCount
-              }
-            />
-            <DataCell
-              label="已结束问卷"
-              value={String(data.overview.completedSurveyCount)}
-            />
-            <DataCell
-              label="问卷答卷"
-              value={String(data.overview.surveyResponseCount)}
-            />
-          </div>
-          <div className="mt-4 space-y-2">
-            <Link
-              href={withClassroomQuery(courseBase + "/surveys", classroomId)}
-              className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-4 py-3 text-sm"
-            >
-              <span className="font-medium text-slate-800">结课问卷</span>
-              <ArrowRight
-                aria-hidden="true"
-                className="size-4 text-slate-500"
-              />
-            </Link>
-            <Link
-              href={withClassroomQuery(
-                courseBase + "/quality-report",
-                classroomId,
-              )}
-              className="flex items-center justify-between gap-3 rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3 text-sm"
-            >
-              <span className="font-medium text-violet-900">课程质量报告</span>
-              <ArrowRight
-                aria-hidden="true"
-                className="size-4 text-violet-700"
-              />
-            </Link>
-          </div>
-        </section>
-      </div>
       <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-5 sm:p-6">
         <div className="flex items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-sky-700 shadow-sm">

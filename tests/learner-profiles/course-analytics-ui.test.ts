@@ -102,7 +102,7 @@ test("统一成绩统计中心复用课程学情并保留课程权限范围", as
   assert.match(view, /学生分数段分布/u);
   assert.match(view, /未评分/u);
   assert.match(view, /本阶段教学待办/u);
-  assert.match(view, /掌握情况与需要关注的知识点/u);
+  assert.match(view, /章节掌握度/u);
   assert.match(view, /href=\{courseBase \+ "\/surveys\//u);
   assert.match(
     view,

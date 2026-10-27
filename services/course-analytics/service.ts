@@ -5,6 +5,7 @@ import {
   AttendanceSessionStatus,
   CourseSurveyStatus,
   KnowledgeGraphNodeType,
+  KnowledgeGraphRelationType,
   MembershipStatus,
   QualityReportReviewStatus,
   QualityReportStatus,
@@ -22,7 +23,8 @@ import {
 } from "@/services/course-analytics/assignment-statistics";
 import {
   summarizeCourseProfiles,
-  summarizeWeakCourseConcepts,
+  summarizeCourseChapterMastery,
+  summarizeCourseAttentionConcepts,
 } from "@/services/course-analytics/metrics";
 
 const EFFECTIVE_SUBMISSION_STATUSES: SubmissionStatus[] = [
@@ -71,9 +73,18 @@ export async function getTeacherCourseAnalytics(
           id: true,
           versionNumber: true,
           nodes: {
-            where: { nodeType: KnowledgeGraphNodeType.KNOWLEDGE_POINT },
             orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
-            select: { conceptId: true, code: true, name: true },
+            select: {
+              id: true,
+              conceptId: true,
+              code: true,
+              name: true,
+              nodeType: true,
+            },
+          },
+          edges: {
+            where: { relationType: KnowledgeGraphRelationType.CONTAINS },
+            select: { fromNodeId: true, toNodeId: true },
           },
         },
       },
@@ -455,47 +466,49 @@ export async function getTeacherCourseAnalytics(
   );
 
   const currentGraph = course.currentPublishedKnowledgeGraphVersion;
+  const currentPointIds =
+    currentGraph?.nodes
+      .filter(
+        (node) => node.nodeType === KnowledgeGraphNodeType.KNOWLEDGE_POINT,
+      )
+      .map((node) => node.conceptId) ?? [];
   const conceptEntries =
-    currentGraph && latestSnapshots.length
+    currentPointIds.length && latestSnapshots.length
       ? await prisma.learnerProfileConceptEntry.findMany({
           where: {
             snapshotId: { in: latestSnapshots.map((snapshot) => snapshot.id) },
-            masteryScore: { not: null },
+            conceptId: { in: currentPointIds },
           },
           select: {
             conceptId: true,
             masteryScore: true,
-            concept: {
-              select: {
-                stableKey: true,
-                nodes: {
-                  where: { graphVersionId: currentGraph.id },
-                  take: 1,
-                  select: { code: true, name: true },
-                },
-              },
-            },
+            evidenceCount: true,
+            evidenceState: true,
+            snapshot: { select: { studentId: true } },
           },
         })
       : [];
-  const weakConcepts = summarizeWeakCourseConcepts(
-    conceptEntries.flatMap((entry) => {
-      const node = entry.concept.nodes[0];
-      return entry.masteryScore !== null && node
-        ? [
-            {
-              conceptId: entry.conceptId,
-              code: node.code,
-              name: node.name,
-              masteryScore: entry.masteryScore.toNumber(),
-            },
-          ]
-        : [];
-    }),
+  const masteryEntries = conceptEntries.map((entry) => ({
+    studentId: entry.snapshot.studentId,
+    conceptId: entry.conceptId,
+    masteryScore: entry.masteryScore?.toNumber() ?? null,
+    evidenceCount: entry.evidenceCount,
+    evidenceState: entry.evidenceState,
+  }));
+  const chapterMastery = summarizeCourseChapterMastery(
+    studentIds,
+    currentGraph?.nodes ?? [],
+    currentGraph?.edges ?? [],
+    masteryEntries,
+  );
+  const attentionConcepts = summarizeCourseAttentionConcepts(
+    studentIds,
+    currentGraph?.nodes ?? [],
+    masteryEntries,
   );
 
   const taughtConceptCount = teachingProgress?.concepts.length ?? 0;
-  const totalConceptCount = currentGraph?.nodes.length ?? 0;
+  const totalConceptCount = currentPointIds.length;
   const pendingReviewCount = assignments.reduce(
     (sum, assignment) => sum + assignment._count.submissions,
     0,
@@ -617,7 +630,8 @@ export async function getTeacherCourseAnalytics(
       reportCount: reports.length,
     },
     profiles: profileSummary,
-    weakConcepts,
+    chapterMastery,
+    attentionConcepts,
     recentSurveys: surveys.slice(0, 3).map((survey) => ({
       id: survey.id,
       title: survey.title,

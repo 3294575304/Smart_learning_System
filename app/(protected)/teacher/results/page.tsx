@@ -1,5 +1,6 @@
 import { Role } from "@prisma/client";
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { AutoSubmitSelect } from "@/components/filters/auto-submit-select";
@@ -82,34 +83,6 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
         description="选择课程和班级查看学习证据、作业表现与近期作业。"
         title="学情分析"
       />
-      <details className="rounded-xl border bg-white p-4">
-        <summary className="cursor-pointer font-medium">
-          课程成绩台账 · {courses.length} 门课程
-        </summary>
-        <p className="mt-2 text-sm text-slate-500">
-          作业成绩与课程总评分别维护；各班级使用独立台账，正式成绩保留发布版本。
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {courses.map((course) => (
-            <Link
-              key={course.id}
-              href={`/teacher/courses/${course.id}/gradebook`}
-              className="rounded-lg border px-4 py-3 text-sm text-sky-700 hover:bg-sky-50"
-            >
-              {course.name} · {course.term} →
-            </Link>
-          ))}
-        </div>
-        {!courses.length && (
-          <Link
-            className="mt-3 block text-sm text-sky-700"
-            href="/teacher/courses"
-          >
-            创建或关联课程
-          </Link>
-        )}
-      </details>
-
       <form
         aria-labelledby="selected-course-learning-heading"
         className="space-y-4 rounded-xl border bg-white p-4"
@@ -139,35 +112,47 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
           ) : null}
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_minmax(260px,1.2fr)_auto_auto] xl:items-end">
-          <label className="min-w-0 space-y-1">
-            <span className="text-xs font-medium">课程</span>
-            <AutoSubmitSelect
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              defaultValue={selectedCourse?.id ?? ""}
-              name="courseId"
-            >
-              <option value="">全部课程</option>
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.name} · {course.term}
-                </option>
-              ))}
-            </AutoSubmitSelect>
+          <label className="min-w-0 space-y-1.5">
+            <span className="text-xs font-semibold text-slate-600">课程</span>
+            <span className="relative block">
+              <AutoSubmitSelect
+                className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-10 text-sm text-slate-800 shadow-sm transition hover:border-sky-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-100 focus:outline-none"
+                value={selectedCourse?.id ?? ""}
+                name="courseId"
+              >
+                <option value="">全部课程</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.name} · {course.term}
+                  </option>
+                ))}
+              </AutoSubmitSelect>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-slate-400"
+              />
+            </span>
           </label>
-          <label className="min-w-0 space-y-1">
-            <span className="text-xs font-medium">班级</span>
-            <AutoSubmitSelect
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              defaultValue={classroomId ?? ""}
-              name="classroomId"
-            >
-              <option value="">全部班级</option>
-              {filterClassrooms.map((classroom) => (
-                <option key={classroom.id} value={classroom.id}>
-                  {classroom.name}
-                </option>
-              ))}
-            </AutoSubmitSelect>
+          <label className="min-w-0 space-y-1.5">
+            <span className="text-xs font-semibold text-slate-600">班级</span>
+            <span className="relative block">
+              <AutoSubmitSelect
+                className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-10 text-sm text-slate-800 shadow-sm transition hover:border-sky-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-100 focus:outline-none"
+                value={classroomId ?? ""}
+                name="classroomId"
+              >
+                <option value="">全部班级</option>
+                {filterClassrooms.map((classroom) => (
+                  <option key={classroom.id} value={classroom.id}>
+                    {classroom.name}
+                  </option>
+                ))}
+              </AutoSubmitSelect>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-slate-400"
+              />
+            </span>
           </label>
           <input name="pageSize" type="hidden" value={query.pageSize} />
           <Link
