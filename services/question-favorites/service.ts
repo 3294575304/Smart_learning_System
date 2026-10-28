@@ -1,3 +1,4 @@
+import { PRACTICE_SCORING_RULE } from "@/services/recommendations/scoring";
 import {
   listReviewChapters,
   reviewChapterConcepts,
@@ -606,6 +607,8 @@ export async function practiceFavorite(
         studentId: actor.id,
         questionId,
         cycleKey,
+        assignedPoints: 100,
+        scoringRuleVersion: PRACTICE_SCORING_RULE,
         status: "PENDING",
         source: "RULE",
         reason: "你主动收藏的题目，用于自主复习；本次作答不计入正式课程成绩。",

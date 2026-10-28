@@ -2,37 +2,26 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { bindAvailabilityRefresh } from "./availability-refresh-lifecycle";
 
 /** Read-only task pages stay current when a survey opens or the teacher publishes one. */
 export function SurveyAvailabilityRefresh({ at }: { at?: string | null }) {
   const router = useRouter();
   useEffect(() => {
-    let lastRefreshAt = 0;
-    const refresh = () => {
-      if (
-        document.visibilityState === "hidden" ||
-        Date.now() - lastRefreshAt < 1000
-      )
-        return;
-      lastRefreshAt = Date.now();
-      router.refresh();
-    };
-    const interval = window.setInterval(refresh, 30_000);
-    const boundary = at ? Date.parse(at) : NaN;
-    const timeout = Number.isFinite(boundary)
-      ? window.setTimeout(
-          refresh,
-          Math.min(2_147_483_647, Math.max(0, boundary - Date.now() + 250)),
-        )
-      : null;
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      window.clearInterval(interval);
-      if (timeout !== null) window.clearTimeout(timeout);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    };
+    return bindAvailabilityRefresh(at, () => router.refresh(), {
+      now: () => Date.now(),
+      hidden: () => document.visibilityState === "hidden",
+      every(callback, delay) {
+        const timer = window.setInterval(callback, delay);
+        return () => window.clearInterval(timer);
+      },
+      after(callback, delay) {
+        const timer = window.setTimeout(callback, delay);
+        return () => window.clearTimeout(timer);
+      },
+      focus: window,
+      visibility: document,
+    });
   }, [at, router]);
   return null;
 }

@@ -9,19 +9,25 @@ import {
   teacherStudentDetailQuerySchema,
 } from "./student-query";
 
+// Prisma raw Date parameters are timestamptz; domain DateTime columns store UTC without a zone.
+function utcTimestamp(value: Date) {
+  return Prisma.sql`${value.toISOString()}::timestamp`;
+}
 function assignmentScope(query: TeacherStudentQuery, now: Date) {
   const section =
-    query.section === "CURRENT"
-      ? Prisma.sql`c.status = 'ACTIVE' AND a.status NOT IN ('CLOSED','ARCHIVED')`
-      : Prisma.sql`(c.status <> 'ACTIVE' OR a.status IN ('CLOSED','ARCHIVED'))`;
-  return Prisma.sql`a.status IN ('PUBLISHED','CLOSED','ARCHIVED') AND a."publishedAt" <= ${now} AND ${section}`;
+    query.section === "ALL"
+      ? Prisma.sql`true`
+      : query.section === "CURRENT"
+        ? Prisma.sql`c.status = 'ACTIVE' AND a.status NOT IN ('CLOSED','ARCHIVED')`
+        : Prisma.sql`(c.status <> 'ACTIVE' OR a.status IN ('CLOSED','ARCHIVED'))`;
+  return Prisma.sql`a.status IN ('PUBLISHED','CLOSED','ARCHIVED') AND a."publishedAt" <= ${utcTimestamp(now)} AND ${section}`;
 }
 function cte(teacherId: string, query: TeacherStudentQuery, now: Date) {
   return Prisma.sql`WITH rooms AS (
     SELECT c.* FROM "Classroom" c WHERE c."teacherId" = ${teacherId}
     ${query.courseId ? Prisma.sql`AND c."courseId" = ${query.courseId}` : Prisma.empty}
     ${query.classroomId ? Prisma.sql`AND c.id = ${query.classroomId}` : Prisma.empty}
-    AND ${query.section === "CURRENT" ? Prisma.sql`c.status = 'ACTIVE'` : Prisma.sql`(c.status <> 'ACTIVE' OR EXISTS (SELECT 1 FROM "Assignment" a WHERE a."classroomId" = c.id AND a."teacherId" = ${teacherId} AND ${assignmentScope(query, now)}))`}
+    AND ${query.section === "ALL" ? Prisma.sql`true` : query.section === "CURRENT" ? Prisma.sql`c.status = 'ACTIVE'` : Prisma.sql`(c.status <> 'ACTIVE' OR EXISTS (SELECT 1 FROM "Assignment" a WHERE a."classroomId" = c.id AND a."teacherId" = ${teacherId} AND ${assignmentScope(query, now)}))`}
   ), tasks AS (
     SELECT a.* FROM "Assignment" a JOIN rooms c ON c.id = a."classroomId"
     WHERE a."teacherId" = ${teacherId} AND ${assignmentScope(query, now)}
@@ -34,7 +40,7 @@ function cte(teacherId: string, query: TeacherStudentQuery, now: Date) {
       COALESCE(p."displayName", '未设置姓名') AS name, m.status = 'ACTIVE' AS active,
       COUNT(a.id)::int AS expected, COUNT(s.id)::int AS submitted,
       COUNT(a.id) FILTER (WHERE s.id IS NULL)::int AS unsubmitted,
-      COUNT(a.id) FILTER (WHERE s.id IS NULL AND a."dueAt" <= ${now})::int AS overdue,
+      COUNT(a.id) FILTER (WHERE s.id IS NULL AND a."dueAt" <= ${utcTimestamp(now)})::int AS overdue,
       COUNT(s.id) FILTER (WHERE s.status = 'PENDING_REVIEW')::int AS pending
     FROM rooms c JOIN "ClassMembership" m ON m."classroomId" = c.id
     LEFT JOIN "UserProfile" p ON p."userId" = m."studentId"
@@ -114,6 +120,7 @@ export async function listTeacherStudentAssignments(
 }
 interface DetailRow {
   id: string;
+  historical: boolean;
   title: string;
   dueAt: Date | null;
   submissionId: string | null;
@@ -164,7 +171,7 @@ export async function getTeacherStudentAssignments(
         : !active
           ? Prisma.sql`AND false`
           : query.submissionFilter === "OVERDUE"
-            ? Prisma.sql`AND s.id IS NULL AND a."dueAt" <= ${now}`
+            ? Prisma.sql`AND s.id IS NULL AND a."dueAt" <= ${utcTimestamp(now)}`
             : Prisma.sql`AND s.id IS NULL`;
   const base = Prisma.sql`FROM tasks a LEFT JOIN latest s ON s."assignmentId"=a.id AND s."studentId"=${studentId} WHERE a."classroomId"=${query.classroomId} ${eligible} ${keyword ? Prisma.sql`AND a.title ILIKE ${`%${keyword}%`}` : Prisma.empty} ${filter}`;
   const [totals, rows] = await prisma.$transaction(
@@ -173,11 +180,15 @@ export async function getTeacherStudentAssignments(
         Prisma.sql`${prefix} SELECT COUNT(*) AS total ${base}`,
       ),
       prisma.$queryRaw<DetailRow[]>(
-        Prisma.sql`${prefix} SELECT a.id,a.title,a."dueAt",s.id AS "submissionId",s.status,s."submittedAt",s.score,s."maxScore" ${base} ORDER BY a."publishedAt" DESC,a.id DESC LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}`,
+        Prisma.sql`${prefix} SELECT a.id,a.title,a."dueAt",(a.status IN ('CLOSED','ARCHIVED') OR (SELECT c.status FROM rooms c WHERE c.id = a."classroomId") <> 'ACTIVE') AS historical,s.id AS "submissionId",s.status,s."submittedAt",s.score,s."maxScore" ${base} ORDER BY a."publishedAt" DESC,a.id DESC LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}`,
       ),
     ],
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
   );
+  const grants = await prisma.assignmentMakeupGrant.findMany({
+    where: { assignmentId: { in: rows.map((r) => r.id) }, studentId },
+    orderBy: { createdAt: "desc" },
+  });
   return {
     studentId,
     active,
@@ -187,6 +198,26 @@ export async function getTeacherStudentAssignments(
     courseId: identity.classroom.courseId,
     items: rows.map((row) => ({
       ...row,
+      makeupLabel: (() => {
+        const g = grants.find(
+          (g) =>
+            g.assignmentId === row.id &&
+            ((g.status === "USED" && g.submissionId === row.submissionId) ||
+              (g.status === "ACTIVE" &&
+                g.expiresAt > now &&
+                active &&
+                !row.historical)),
+        );
+        return g
+          ? g.status === "USED"
+            ? g.kind === "REDO"
+              ? "重做已提交"
+              : "补交已提交"
+            : g.kind === "REDO"
+              ? "重做开放"
+              : "补交开放"
+          : null;
+      })(),
       percentage:
         row.status === "GRADED" || row.status === "PUBLISHED"
           ? hundredPointScore(

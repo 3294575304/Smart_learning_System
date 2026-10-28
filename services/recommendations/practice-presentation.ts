@@ -1,7 +1,11 @@
+import { hundredPointScore } from "@/services/assignments/presentation";
 import { QuestionType, RecommendationStatus } from "@prisma/client";
 
 import type { RecommendationViewRecord } from "@/services/recommendations/repository";
-import type { RecommendationPracticeResultView } from "@/services/recommendations/types";
+import type {
+  RecommendationPracticeAnswerResultView,
+  RecommendationPracticeResultView,
+} from "@/services/recommendations/types";
 
 function formatOptions(
   options: Array<{ label: string; content: string }>,
@@ -12,7 +16,7 @@ function formatOptions(
     .join("；");
 }
 
-function studentAnswer(record: RecommendationViewRecord): string {
+export function studentAnswer(record: RecommendationViewRecord): string {
   const answer = record.practiceAnswer;
   if (!answer) return "未作答";
   if (
@@ -52,19 +56,38 @@ function correctAnswer(record: RecommendationViewRecord): string {
   return record.question.referenceAnswer?.trim() || "未设置参考答案";
 }
 
+export function practiceAnswerFeedback(
+  record: RecommendationViewRecord,
+): RecommendationPracticeAnswerResultView | null {
+  const answer = record.practiceAnswer;
+  if (!answer) return null;
+  return {
+    questionId: record.question.id,
+    title: record.question.title,
+    studentAnswer: studentAnswer(record),
+    correctAnswer: correctAnswer(record),
+    explanation: record.question.explanation,
+    recommendationReason: record.reason,
+    isCorrect: answer.isCorrect,
+    score: answer.score.toNumber(),
+    maxScore: answer.maxScore.toNumber(),
+    responseTimeMs: answer.responseTimeMs,
+  };
+}
 export function practiceResultFromRecord(
   record: RecommendationViewRecord,
 ): RecommendationPracticeResultView | null {
   const answer = record.practiceAnswer;
+  const feedback = practiceAnswerFeedback(record);
   if (
     record.status !== RecommendationStatus.COMPLETED ||
     !record.completedAt ||
-    !answer
-  ) {
+    !answer ||
+    !feedback
+  )
     return null;
-  }
-  const score = answer.score.toNumber();
-  const maxScore = answer.maxScore.toNumber();
+  const score = answer.score.toNumber(),
+    maxScore = answer.maxScore.toNumber();
   return {
     recommendationId: record.id,
     status: record.status,
@@ -73,21 +96,7 @@ export function practiceResultFromRecord(
     correctCount: answer.isCorrect ? 1 : 0,
     score,
     maxScore,
-    percentage:
-      maxScore > 0 ? Math.round((score / maxScore) * 10_000) / 100 : 0,
-    answers: [
-      {
-        questionId: record.question.id,
-        title: record.question.title,
-        studentAnswer: studentAnswer(record),
-        correctAnswer: correctAnswer(record),
-        explanation: record.question.explanation,
-        recommendationReason: record.reason,
-        isCorrect: answer.isCorrect,
-        score,
-        maxScore,
-        responseTimeMs: answer.responseTimeMs,
-      },
-    ],
+    percentage: hundredPointScore(score, maxScore),
+    answers: [feedback],
   };
 }

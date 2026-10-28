@@ -89,6 +89,10 @@ export async function closeAdminClassroom(
         closureReason: validatedReason,
       },
     });
+    await transaction.assignmentMakeupGrant.updateMany({
+      where: { assignment: { classroomId }, status: "ACTIVE" },
+      data: { status: "EXPIRED" },
+    });
     await writeGovernanceAuditLog(transaction, {
       actorId,
       action: AuditAction.CLASSROOM_CLOSED_BY_ADMIN,

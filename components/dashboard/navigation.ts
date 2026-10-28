@@ -211,7 +211,17 @@ export function isNavigationItemActive(
 export function getDashboardPageTitle(
   pathname: string,
   groups: NavigationGroup[],
+  context?: { studentId?: string | null; view?: string | null },
 ): string {
+  if (/^\/teacher\/assignments\/students\/[^/]+$/.test(pathname))
+    return "学生作业明细";
+  if (
+    /^\/teacher\/assignments\/[^/]+\/results$/.test(pathname) &&
+    context?.studentId
+  )
+    return "个人作答";
+  if (pathname === "/teacher/assignments" && context?.view === "STUDENTS")
+    return "学生作业查询";
   const labels = getSegmentLabels(pathname);
   const exactLabel = labels[pathname.split("/").filter(Boolean).at(-1) ?? ""];
   if (exactLabel) return exactLabel;

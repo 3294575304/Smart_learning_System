@@ -6,6 +6,7 @@ export const assignmentResultsQuerySchema = z
     pageSize: z.coerce.number().int().min(1).max(50).default(20),
     studentId: z.string().cuid("学生 ID 格式无效").optional(),
     submissionId: z.string().cuid("提交 ID 格式无效").optional(),
+    returnTo: z.string().max(8000).optional(),
   })
   .refine((query) => !query.submissionId || Boolean(query.studentId), {
     path: ["submissionId"],

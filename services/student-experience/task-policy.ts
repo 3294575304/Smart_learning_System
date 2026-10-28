@@ -2,7 +2,11 @@ import type { StudentAssignmentListItem } from "@/services/assignments/types";
 export function studentAssignmentState(
   assignment: Pick<
     StudentAssignmentListItem,
-    "dueAt" | "latestSubmissionId" | "inProgressSubmissionId" | "historyOnly"
+    | "dueAt"
+    | "latestSubmissionId"
+    | "inProgressSubmissionId"
+    | "historyOnly"
+    | "makeupKind"
   >,
   now: Date,
 ) {
@@ -10,6 +14,7 @@ export function studentAssignmentState(
     return assignment.latestSubmissionId ? "SUBMITTED" : "EXPIRED";
   if (assignment.inProgressSubmissionId && assignment.dueAt > now)
     return "IN_PROGRESS";
+  if (assignment.makeupKind && assignment.dueAt > now) return "PENDING";
   if (assignment.latestSubmissionId) return "SUBMITTED";
   if (assignment.dueAt <= now) return "EXPIRED";
   return "PENDING";

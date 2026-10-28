@@ -5,7 +5,7 @@ const optionalId = z.preprocess(
   z.string().cuid().optional(),
 );
 export const teacherStudentQuerySchema = z.object({
-  section: z.enum(["CURRENT", "HISTORY"]).default("CURRENT"),
+  section: z.enum(["ALL", "CURRENT", "HISTORY"]).default("ALL"),
   courseId: optionalId,
   classroomId: optionalId,
   studentKeyword: z.string().trim().max(120).default(""),
@@ -32,15 +32,13 @@ export const studentFilterLabels = {
 export function studentListHref(query: TeacherStudentQuery, page = query.page) {
   const params = new URLSearchParams({
     view: "STUDENTS",
-    section: query.section,
+    section: "ALL",
     page: String(page),
     pageSize: String(query.pageSize),
   });
   if (query.courseId) params.set("courseId", query.courseId);
   if (query.classroomId) params.set("classroomId", query.classroomId);
   if (query.studentKeyword) params.set("studentKeyword", query.studentKeyword);
-  if (query.submissionFilter !== "ALL")
-    params.set("submissionFilter", query.submissionFilter);
   return `/teacher/assignments?${params}`;
 }
 export function safeStudentReturn(value?: string) {
@@ -58,4 +56,34 @@ export function safeStudentReturn(value?: string) {
   return parsed.success
     ? studentListHref(parsed.data)
     : "/teacher/assignments?view=STUDENTS";
+}
+
+export function safeStudentWorkReturn(
+  value: string | undefined,
+  studentId: string,
+  classroomId: string,
+): string | undefined {
+  const pathname = `/teacher/assignments/students/${studentId}`;
+  if (!value?.startsWith(`${pathname}?`) || value.length > 8000)
+    return undefined;
+  const url = new URL(value, "http://localhost");
+  if (url.origin !== "http://localhost" || url.pathname !== pathname)
+    return undefined;
+  const parsed = teacherStudentDetailQuerySchema.safeParse(
+    Object.fromEntries(url.searchParams),
+  );
+  if (!parsed.success || parsed.data.classroomId !== classroomId)
+    return undefined;
+  const query = parsed.data;
+  const params = new URLSearchParams({
+    classroomId,
+    section: query.section,
+    submissionFilter: query.submissionFilter,
+    assignmentKeyword: query.assignmentKeyword,
+    page: String(query.page),
+    pageSize: String(query.pageSize),
+    returnTo: safeStudentReturn(query.returnTo),
+  });
+  if (query.courseId) params.set("courseId", query.courseId);
+  return `${pathname}?${params}`;
 }

@@ -39,6 +39,9 @@ export interface TeacherAssignmentView {
 }
 
 export interface StudentAssignmentListItem {
+  originalDueAt?: Date;
+  makeupKind?: "MAKEUP" | "REDO" | null;
+  canWrite?: boolean;
   id: string;
   title: string;
   description: string;
@@ -111,6 +114,7 @@ export interface SubmissionResultView {
 }
 
 export interface TeacherSubmissionListItem {
+  gradingBlockedReason: string | null;
   id: string;
   student: {
     id: string;
@@ -174,6 +178,8 @@ export interface TeacherSubmissionAnswerView {
 }
 
 export interface TeacherSubmissionDetail {
+  canManageGrading: boolean;
+  gradingBlockedReason: string | null;
   id: string;
   status: SubmissionStatus;
   attemptNumber: number;

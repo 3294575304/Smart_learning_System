@@ -1,5 +1,6 @@
 "use client";
 
+import { studentScoreLabel } from "@/services/recommendations/scoring";
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { requestApi } from "@/components/courses/request-api";
 import { recommendationDetailApiPath } from "@/lib/api/recommendations";
@@ -36,6 +37,10 @@ interface Props {
   recommendation: RecommendationDetailView;
   embedded?: boolean;
   onCompleted?: (id: string) => void;
+  onProgrammingQueued?: (
+    id: string,
+    attempt: NonNullable<RecommendationDetailView["programmingAttempt"]>,
+  ) => void;
   onDraftChange?: (id: string, answer: QuestionAnswerState) => void;
   initialAnswer?: QuestionAnswerState;
   batchBusy?: boolean;
@@ -94,13 +99,17 @@ function PracticeResult({
             </dd>
           </div>
           <div>
-            <dt className="text-emerald-700">正确率</dt>
-            <dd className="mt-1 text-lg font-semibold">{result.percentage}%</dd>
+            <dt className="text-emerald-700">本题得分率</dt>
+            <dd className="mt-1 text-lg font-semibold">
+              {result.percentage === null
+                ? "缺少完整成绩"
+                : `${result.percentage}%`}
+            </dd>
           </div>
           <div>
-            <dt className="text-emerald-700">得分</dt>
+            <dt className="text-emerald-700">本题成绩（百分制）</dt>
             <dd className="mt-1 text-lg font-semibold">
-              {result.score} / {result.maxScore}
+              {studentScoreLabel(result.score, result.maxScore)}
             </dd>
           </div>
           <div>
@@ -164,6 +173,7 @@ export function RecommendationPractice({
   recommendation,
   embedded,
   onCompleted,
+  onProgrammingQueued,
   onDraftChange,
   initialAnswer,
   batchBusy,
@@ -281,6 +291,11 @@ export function RecommendationPractice({
       return;
     }
     setProgrammingAttemptId(response.data.attemptId);
+    onProgrammingQueued?.(recommendation.id, {
+      id: response.data.attemptId,
+      status: response.data.status,
+      progress: 0,
+    });
   }
 
   return (
@@ -345,6 +360,7 @@ export function RecommendationPractice({
             <ProgrammingAttemptStatus
               assignmentQuestionId={recommendation.questionId}
               attemptId={programmingAttemptId}
+              displayMaxScore={recommendation.assignedPoints}
               onComplete={() => {
                 void requestApi<RecommendationDetailView>(
                   recommendationDetailApiPath(recommendation.id),

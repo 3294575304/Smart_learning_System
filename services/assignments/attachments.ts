@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import type { AuthenticatedUser } from "@/services/auth/types";
 import { AssignmentOperationError } from "@/services/assignments/errors";
-import { assertAssignmentAcceptsWork } from "@/services/assignments/policy";
+import { assertStudentWorkAccess } from "./work-access";
 import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import { getStorageService } from "@/services/storage";
 import { writeTeachingAuditLog } from "@/services/audit/repository";
@@ -62,7 +62,12 @@ async function access(
       submission.status !== SubmissionStatus.IN_PROGRESS
     )
       throw new AssignmentOperationError("已提交作答不能修改附件", 409);
-    assertAssignmentAcceptsWork(submission.assignment, new Date());
+    await assertStudentWorkAccess(
+      tx,
+      submission.assignmentId,
+      actor.id,
+      submissionId,
+    );
     await assertClassroomWorkAllowed(tx, submission.assignment.classroomId);
     if (!submission.assignment.allowAttachments)
       throw new AssignmentOperationError("此作业不接收附件", 400);

@@ -8,7 +8,10 @@ import {
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { PageIndex } from "@/components/dashboard/page-index";
-import { StudentAssignmentFilters } from "./student-filters";
+import {
+  AssignmentCourseFilter,
+  StudentAssignmentFilters,
+} from "./student-filters";
 import { AssignmentManagementTabs } from "./management-tabs";
 
 export async function TeacherStudentAssignmentsView({
@@ -43,9 +46,16 @@ export async function TeacherStudentAssignmentsView({
   };
   return (
     <section className="min-w-0 space-y-4">
-      <PageHeader
-        title="作业管理"
-        description="按学生查看应交、缺交和待批改作业；入班前已截止的作业也计入有效成员的应交范围。"
+      <PageHeader title="作业管理" description="按姓名或学号查询学生作业。" />
+      <AssignmentCourseFilter
+        key={`course:${JSON.stringify(query)}`}
+        courses={courses}
+        classrooms={result.classrooms}
+        courseId={query.courseId}
+        classroomId={query.classroomId}
+        section="ALL"
+        notice={notice}
+        studentQuery={query}
       />
       <AssignmentManagementTabs
         view="STUDENTS"
@@ -56,13 +66,10 @@ export async function TeacherStudentAssignmentsView({
       <StudentAssignmentFilters
         key={JSON.stringify(query)}
         query={query}
-        courses={courses}
         classrooms={result.classrooms}
-        notice={notice}
       />
       <p className="text-sm text-slate-500">
-        共 {result.pagination.total}{" "}
-        条学生与教学班记录；历史成员仅展示已有作答，不推测应交和缺交。
+        共 {result.pagination.total} 条记录 · 包含当前及历史已开放作业
       </p>
       {result.items.length === 0 ? (
         <div className="rounded-xl border border-dashed bg-white p-8 text-center text-slate-500">

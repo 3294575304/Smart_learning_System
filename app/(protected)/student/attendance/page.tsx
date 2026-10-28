@@ -1,4 +1,5 @@
-import { StudentClassroomFilter } from "@/components/dashboard/student-classroom-filter";
+import { StudentTaskScope } from "@/components/dashboard/student-task-scope";
+import { studentTaskScopeSchema } from "@/services/student-experience/task-scope";
 import { listStudentTaskClassrooms } from "@/services/courses/student-access";
 import { Role } from "@prisma/client";
 import Link from "next/link";
@@ -9,7 +10,6 @@ import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentAttendance } from "@/services/attendance/service";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { courseIdSchema } from "@/services/courses/schemas";
 
 export default async function StudentAttendancePage({
   searchParams,
@@ -18,25 +18,14 @@ export default async function StudentAttendancePage({
 }) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
-  if (
-    raw.classroomId !== undefined &&
-    (typeof raw.classroomId !== "string" ||
-      !courseIdSchema.safeParse(raw.classroomId).success)
-  )
-    notFound();
-  const classroomId =
-    typeof raw.classroomId === "string" ? raw.classroomId : undefined;
-  const rawCourseId = Array.isArray(raw.courseId)
-    ? raw.courseId[0]
-    : raw.courseId;
-  const parsedCourseId =
-    rawCourseId !== undefined ? courseIdSchema.safeParse(rawCourseId) : null;
-  if (parsedCourseId && !parsedCourseId.success) notFound();
+  const scopeResult = studentTaskScopeSchema.safeParse(raw);
+  if (!scopeResult.success) notFound();
+  const { courseId: requestedCourseId, classroomId } = scopeResult.data;
   let data: Awaited<ReturnType<typeof getStudentAttendance>>;
   try {
     data = await getStudentAttendance(
       student.id,
-      parsedCourseId?.success ? parsedCourseId.data : undefined,
+      requestedCourseId,
       classroomId,
     );
   } catch (error) {
@@ -70,8 +59,9 @@ export default async function StudentAttendancePage({
         }
         eyebrow={data.course?.name}
       />
-      <StudentClassroomFilter
+      <StudentTaskScope
         classrooms={classrooms}
+        courseId={courseId}
         selectedId={classroomId}
         summary={`共 ${data.records.length} 条出勤记录`}
       />

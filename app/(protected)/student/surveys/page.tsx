@@ -3,7 +3,11 @@ import {
   COURSE_SURVEY_AVAILABILITY_LABELS,
   nextCourseSurveyChangeAt,
 } from "@/services/course-surveys/availability";
-import { StudentClassroomFilter } from "@/components/dashboard/student-classroom-filter";
+import { StudentTaskScope } from "@/components/dashboard/student-task-scope";
+import {
+  studentTaskScopeSchema,
+  studentTaskHref,
+} from "@/services/student-experience/task-scope";
 import { listStudentTaskClassrooms } from "@/services/courses/student-access";
 import { Role } from "@prisma/client";
 import { ArrowRight, ClipboardCheck } from "lucide-react";
@@ -15,7 +19,6 @@ import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { listStudentCourseSurveys } from "@/services/course-surveys/service";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { courseIdSchema } from "@/services/courses/schemas";
 import { getStudentCourseContext } from "@/services/courses/student-access";
 
 export default async function StudentSurveysPage({
@@ -25,24 +28,13 @@ export default async function StudentSurveysPage({
 }) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
-  if (
-    raw.classroomId !== undefined &&
-    (typeof raw.classroomId !== "string" ||
-      !courseIdSchema.safeParse(raw.classroomId).success)
-  )
-    notFound();
-  const classroomId =
-    typeof raw.classroomId === "string" ? raw.classroomId : undefined;
-  const rawCourseId = Array.isArray(raw.courseId)
-    ? raw.courseId[0]
-    : raw.courseId;
-  const parsedCourseId =
-    rawCourseId !== undefined ? courseIdSchema.safeParse(rawCourseId) : null;
-  if (parsedCourseId && !parsedCourseId.success) notFound();
+  const scopeResult = studentTaskScopeSchema.safeParse(raw);
+  if (!scopeResult.success) notFound();
+  const { courseId, classroomId } = scopeResult.data;
   let course: Awaited<ReturnType<typeof getStudentCourseContext>> | null = null;
-  if (parsedCourseId?.success) {
+  if (courseId) {
     try {
-      course = await getStudentCourseContext(student.id, parsedCourseId.data);
+      course = await getStudentCourseContext(student.id, courseId);
     } catch (error) {
       if (error instanceof ResourceNotFoundError) notFound();
       throw error;
@@ -88,23 +80,31 @@ export default async function StudentSurveysPage({
         eyebrow={course?.name}
         title="课程问卷"
       />
-      <StudentClassroomFilter
+      <StudentTaskScope
         classrooms={classrooms}
+        courseId={course?.id}
         selectedId={classroomId}
         summary={`共 ${surveys.length} 份问卷 · ${surveys.filter((item) => item.isOpen && !item.submittedAt).length} 份待完成 · ${surveys.filter((item) => item.availability === "SCHEDULED").length} 份待开放`}
       />
       {surveys.length === 0 ? (
         <EmptyState
-          description="当前教学班范围内暂无可查看的问卷，可切换全部教学班。"
+          description={
+            course && classroomId
+              ? "本班暂无可查看的问卷。"
+              : "当前范围内暂无可查看的问卷。"
+          }
           icon={ClipboardCheck}
-          title="暂无问卷"
+          title={course && classroomId ? "本班暂无问卷" : "暂无问卷"}
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {surveys.map((survey) => (
             <Link
               className="rounded-xl border bg-white p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600"
-              href={`/student/surveys/${survey.id}`}
+              href={studentTaskHref(
+                `/student/surveys/${survey.id}`,
+                scopeResult.data,
+              )}
               key={survey.id}
             >
               <div className="flex items-start justify-between gap-3">

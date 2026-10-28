@@ -62,7 +62,11 @@ export default async function StudentAssignmentsPage({
         <h1 className="text-2xl font-semibold">{data.name}的作业</h1>
         <p className="mt-2 text-sm text-slate-500">
           学号：{data.studentNo ?? "未设置"} · {data.classroomName} ·{" "}
-          {query.section === "CURRENT" ? "当前作业" : "历史作业"}
+          {query.section === "ALL"
+            ? "全部已开放作业"
+            : query.section === "CURRENT"
+              ? "当前作业"
+              : "历史作业"}
           {!data.active ? " · 历史成员，仅展示已有作答" : ""}
         </p>
       </header>
@@ -143,6 +147,16 @@ export default async function StudentAssignmentsPage({
                 <tr key={item.id} className="border-b last:border-0">
                   <td className="max-w-xs px-4 py-4 font-medium break-words">
                     {item.title}
+                    {item.makeupLabel ? (
+                      <span className="ml-2 inline-block rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
+                        {item.makeupLabel}
+                      </span>
+                    ) : null}
+                    {item.historical && (
+                      <span className="ml-2 inline-block rounded bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
+                        历史作业
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-4">
                     {item.dueAt?.toLocaleString("zh-CN", {
@@ -169,13 +183,9 @@ export default async function StudentAssignmentsPage({
                   <td className="px-4 py-4">
                     <a
                       className="text-sky-700 hover:underline"
-                      href={
-                        item.submissionId
-                          ? `/teacher/assignments/${item.id}/results?${new URLSearchParams({ studentId: id.data, submissionId: item.submissionId })}#student-detail`
-                          : `/teacher/assignments/${item.id}`
-                      }
+                      href={`/teacher/assignments/${item.id}/results?${new URLSearchParams({ studentId: id.data, returnTo: pageHref(query.page), ...(item.submissionId ? { submissionId: item.submissionId } : {}) })}`}
                     >
-                      {item.submissionId ? "查看作答" : "查看作业"}
+                      {item.submissionId ? "查看作答" : "查看提交情况"}
                     </a>
                   </td>
                 </tr>

@@ -1,5 +1,12 @@
+import { assertStudentWorkAccess } from "@/services/assignments/work-access";
+import {
+  assertGradingWritable,
+  gradingAccess,
+  touchAssignmentLifecycle,
+} from "@/services/assignments/lifecycle-lock";
 import { assertClassroomWorkAllowed } from "@/services/assignments/classroom-work";
 import "server-only";
+import { assertPracticeGroupWritable } from "@/services/practice-sets/management";
 
 import {
   AuditAction,
@@ -224,6 +231,12 @@ export async function createPublicProgrammingRun(
       },
     });
     if (!submission) throw new ResourceNotFoundError("作答记录不存在");
+    await assertStudentWorkAccess(
+      transaction,
+      submission.assignmentId,
+      studentId,
+      submissionId,
+    );
     await assertClassroomWorkAllowed(
       transaction,
       submission.assignment.classroomId,
@@ -298,6 +311,25 @@ export async function createRecommendationProgrammingAttempt(
 ) {
   const input = createRecommendationProgrammingAttemptSchema.parse(rawInput);
   return runAssignmentSerializable(async (transaction) => {
+    await assertPracticeGroupWritable(transaction, studentId, recommendationId);
+    const existing = await transaction.programmingAttempt.findFirst({
+      where: {
+        studentId,
+        recommendationId,
+        backgroundJob: {
+          is: {
+            type: "PYTHON_JUDGE",
+            idempotencyKey: `recommendation:${recommendationId}:${input.idempotencyKey}`,
+          },
+        },
+      },
+      select: { id: true, sourceCode: true, status: true },
+    });
+    if (existing) {
+      if (existing.sourceCode !== input.sourceCode)
+        throw new AssignmentOperationError("相同幂等键对应了不同判题输入", 409);
+      return { attemptId: existing.id, status: existing.status };
+    }
     const recommendation =
       await transaction.personalizedRecommendation.findFirst({
         where: {
@@ -309,12 +341,21 @@ export async function createRecommendationProgrammingAttempt(
             status: "ACTIVE",
             deletedAt: null,
           },
-          courseCycle: { isNot: null },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          courseCycle: {
+            is: {
+              classroom: {
+                status: "ACTIVE",
+                memberships: { some: { studentId, status: "ACTIVE" } },
+              },
+            },
+          },
         },
         select: {
           id: true,
           questionId: true,
           status: true,
+          assignedPoints: true,
           courseCycle: { select: { courseId: true } },
           question: {
             select: {
@@ -477,6 +518,7 @@ async function projectJudgeResult(
           id: true,
           studentId: true,
           questionId: true,
+          assignedPoints: true,
           courseCycle: { select: { courseId: true } },
         },
       },
@@ -570,6 +612,19 @@ async function projectJudgeResult(
     },
   });
   if (attempt.kind === ProgrammingAttemptKind.FORMAL_JUDGE) {
+    if (attempt.studentAnswer) {
+      const submission = await transaction.submission.findUniqueOrThrow({
+        where: { id: attempt.studentAnswer.submissionId },
+        select: { assignmentId: true },
+      });
+      const access = await gradingAccess(
+        transaction,
+        submission.assignmentId,
+        attempt.studentId,
+      );
+      if (access.reason) return;
+      await touchAssignmentLifecycle(transaction, submission.assignmentId);
+    }
     const requiresScoreReview = rows.some((row) =>
       needsProgrammingScoreReview(
         row.errorType,
@@ -606,13 +661,18 @@ async function projectJudgeResult(
       ]);
     if (attempt.recommendationId && attempt.recommendation) {
       const isCorrect = earned.equals(attempt.maxScore);
+      const practiceMax =
+        attempt.recommendation.assignedPoints ?? attempt.maxScore;
+      const practiceScore = attempt.recommendation.assignedPoints
+        ? earned.div(attempt.maxScore).mul(practiceMax).toDecimalPlaces(2)
+        : earned;
       const answer = await transaction.recommendationPracticeAnswer.upsert({
         where: { recommendationId: attempt.recommendationId },
         update: {
           assessmentRevisionKey: attempt.id,
           textAnswer: attempt.sourceCode,
-          score: earned,
-          maxScore: attempt.maxScore,
+          score: practiceScore,
+          maxScore: practiceMax,
           isCorrect,
         },
         create: {
@@ -621,8 +681,8 @@ async function projectJudgeResult(
           idempotencyKey: `programming-attempt:${attempt.id}`,
           assessmentRevisionKey: attempt.id,
           textAnswer: attempt.sourceCode,
-          score: earned,
-          maxScore: attempt.maxScore,
+          score: practiceScore,
+          maxScore: practiceMax,
           isCorrect,
         },
         select: { id: true },
@@ -633,8 +693,8 @@ async function projectJudgeResult(
           status: "COMPLETED",
           completedAt: now,
           wasCorrect: isCorrect,
-          score: earned,
-          maxScore: attempt.maxScore,
+          score: practiceScore,
+          maxScore: practiceMax,
         },
       });
       const projection = await appendRecommendationPracticeLearningEvent(
@@ -762,7 +822,10 @@ export async function rejudgeProgrammingAttempt(
             submission: {
               select: {
                 assignment: {
-                  select: { classroom: { select: { courseId: true } } },
+                  select: {
+                    id: true,
+                    classroom: { select: { courseId: true } },
+                  },
                 },
               },
             },
@@ -777,6 +840,12 @@ export async function rejudgeProgrammingAttempt(
       !previous.studentAnswer
     )
       throw new ResourceNotFoundError("判题记录不存在");
+    await assertGradingWritable(
+      transaction,
+      teacherId,
+      previous.studentAnswer.submission.assignment.id,
+      previous.studentId,
+    );
     const created = await createAttemptAndJob(transaction, {
       studentAnswerId: previous.studentAnswerId,
       assignmentQuestionId: previous.assignmentQuestionId,
@@ -815,7 +884,14 @@ export async function revokeProgrammingAttempt(
         status: ProgrammingAttemptStatus.SUCCEEDED,
         assignmentQuestion: { assignment: { teacherId } },
       },
-      include: { studentAnswer: { select: { submissionId: true } } },
+      include: {
+        studentAnswer: {
+          select: {
+            submissionId: true,
+            submission: { select: { assignmentId: true } },
+          },
+        },
+      },
     });
     if (
       !previous ||
@@ -825,6 +901,12 @@ export async function revokeProgrammingAttempt(
       !previous.studentAnswer
     )
       throw new ResourceNotFoundError("判题记录不存在");
+    await assertGradingWritable(
+      transaction,
+      teacherId,
+      previous.studentAnswer.submission.assignmentId,
+      previous.studentId,
+    );
     const latest = await transaction.programmingAttempt.findFirst({
       where: {
         studentAnswerId: previous.studentAnswerId,

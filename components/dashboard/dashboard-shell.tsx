@@ -1,4 +1,5 @@
 "use client";
+import { safeStudentReturn } from "@/services/assignments/student-query";
 
 import { Role } from "@prisma/client";
 import {
@@ -55,7 +56,13 @@ function displayUserName(user: AuthenticatedUser): string {
 function Breadcrumbs({ pathname }: { pathname: string }) {
   const searchParams = useSearchParams();
   const classroomId = searchParams.get("classroomId");
-  const crumbs = buildBreadcrumbs(pathname).map((crumb) =>
+  const returnTo = searchParams.get("returnTo");
+  const studentQueryHref = safeStudentReturn(returnTo ?? undefined);
+  const crumbs = buildBreadcrumbs(pathname, undefined, {
+    studentId: searchParams.get("studentId"),
+    view: searchParams.get("view"),
+    studentQueryHref,
+  }).map((crumb) =>
     classroomId &&
     crumb.href.startsWith("/student/courses/") &&
     crumb.href.endsWith("/learning-center")
@@ -91,6 +98,24 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
         ))}
       </ol>
     </nav>
+  );
+}
+
+function ContextPageTitle({
+  pathname,
+  groups,
+}: {
+  pathname: string;
+  groups: NavigationGroup[];
+}) {
+  const query = useSearchParams();
+  return (
+    <p className="truncate text-sm font-semibold">
+      {getDashboardPageTitle(pathname, groups, {
+        studentId: query.get("studentId"),
+        view: query.get("view"),
+      })}
+    </p>
   );
 }
 
@@ -331,9 +356,18 @@ export function DashboardShell({
               <Menu className="h-5 w-5" />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">
-                {currentPageTitle}
-              </p>
+              <Suspense
+                fallback={
+                  <p className="truncate text-sm font-semibold">
+                    {currentPageTitle}
+                  </p>
+                }
+              >
+                <ContextPageTitle
+                  pathname={pathname}
+                  groups={navigationGroups}
+                />
+              </Suspense>
               <Suspense fallback={null}>
                 <Breadcrumbs pathname={pathname} />
               </Suspense>

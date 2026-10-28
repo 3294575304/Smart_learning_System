@@ -1,3 +1,9 @@
+import { studentWorkWindow } from "./work-window";
+import {
+  assertStudentWorkAccess,
+  readStudentWorkAccess,
+  bindMakeupDraft,
+} from "./work-access";
 import { assertClassroomWorkAllowed } from "./classroom-work";
 import { assignmentSectionWhere } from "@/services/assignments/presentation";
 import "server-only";
@@ -38,7 +44,6 @@ import { gradeAnswer, savedAnswerInput } from "@/services/assignments/grading";
 import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import {
   assertActiveMembership,
-  assertAssignmentAcceptsWork,
   assertAssignmentIsVisible,
   assertCanStartAttempt,
   assertDraftAssignment,
@@ -314,7 +319,14 @@ async function replaceQuestionSnapshots(
 export async function getTeacherAssignmentEditorOptions(teacherId: string) {
   const [classrooms, questions, courses] = await Promise.all([
     prisma.classroom.findMany({
-      where: { teacherId, status: "ACTIVE" },
+      where: {
+        teacherId,
+        status: "ACTIVE",
+        OR: [
+          { courseId: null },
+          { course: { teacherId, status: { not: "ARCHIVED" } } },
+        ],
+      },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -380,6 +392,11 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
     classrooms: classrooms.map(({ course, ...classroom }) => ({
       ...classroom,
       questionCategoryId: course?.questionCategoryId ?? null,
+    })),
+    publicationCourses: courses.map(({ id, name, term }) => ({
+      id,
+      name,
+      term,
     })),
     courses: buildEditorCourseOptions(
       courses,
@@ -750,7 +767,20 @@ export async function listStudentAssignments(
           memberships: { where: { studentId }, select: { status: true } },
         },
       },
-      _count: { select: { questions: true } },
+      makeupGrants: {
+        where: { studentId, status: "ACTIVE" },
+        orderBy: { createdAt: "desc" },
+      },
+      _count: {
+        select: {
+          questions: true,
+          submissions: {
+            where: {
+              OR: [{ status: "PUBLISHED" }, { publishedAt: { not: null } }],
+            },
+          },
+        },
+      },
       submissions: {
         where: { studentId, status: { not: SubmissionStatus.WITHDRAWN } },
         orderBy: { attemptNumber: "desc" },
@@ -761,6 +791,12 @@ export async function listStudentAssignments(
   });
   return assignments.flatMap((assignment) => {
     if (!assignment.publishedAt || !assignment.dueAt) return [];
+    const work = studentWorkWindow(
+      assignment,
+      assignment.makeupGrants,
+      assignment._count.submissions > 0,
+      now,
+    );
     const historyOnly =
       assignment.status === AssignmentStatus.CLOSED ||
       assignment.classroom.status !== "ACTIVE" ||
@@ -782,7 +818,10 @@ export async function listStudentAssignments(
         totalPoints: assignment.totalPoints.toNumber(),
         questionCount: assignment._count.questions,
         publishedAt: assignment.publishedAt,
-        dueAt: assignment.dueAt,
+        dueAt: work.dueAt ?? assignment.dueAt,
+        originalDueAt: assignment.dueAt,
+        makeupKind: work.grant?.kind ?? null,
+        canWrite: work.canWrite,
         allowResubmission: assignment.allowResubmission,
         attemptCount: assignment.submissions.filter(
           (submission) => submission.status !== SubmissionStatus.IN_PROGRESS,
@@ -839,6 +878,7 @@ export async function getStudentAssignment(
   assignmentId: string,
 ) {
   const assignment = await requireStudentAssignment(studentId, assignmentId);
+  const work = await readStudentWorkAccess(assignmentId, studentId);
   return {
     id: assignment.id,
     title: assignment.title,
@@ -848,7 +888,17 @@ export async function getStudentAssignment(
     publishedAt: assignment.publishedAt,
     dueAt: assignment.dueAt,
     allowResubmission: assignment.allowResubmission,
-    isExpired: !assignment.dueAt || assignment.dueAt <= new Date(),
+    isExpired: !work.canWrite,
+    canWrite:
+      work.canWrite &&
+      (Boolean(work.grant) ||
+        assignment.allowResubmission ||
+        assignment.submissions.every(
+          (item) => item.status === SubmissionStatus.IN_PROGRESS,
+        )),
+    writeBlockedReason: work.reason,
+    effectiveDueAt: work.dueAt,
+    makeupKind: work.grant?.kind ?? null,
     questions: assignment.questions.map((question) => ({
       id: question.id,
       title: question.titleSnapshot,
@@ -872,69 +922,79 @@ async function createAttempt(
   assignmentId: string,
   idempotencyKey: string,
 ) {
-  return prisma.$transaction(
-    async (transaction) => {
-      const keyed = await transaction.submission.findUnique({
-        where: { idempotencyKey },
-        select: { id: true, studentId: true, assignmentId: true },
-      });
-      const assignment = await transaction.assignment.findUnique({
-        where: { id: assignmentId },
-        include: {
-          classroom: {
-            select: {
-              status: true,
-              memberships: {
-                where: { studentId },
-                select: { status: true },
-              },
+  return runAssignmentSerializable(async (transaction) => {
+    const keyed = await transaction.submission.findUnique({
+      where: { idempotencyKey },
+      select: { id: true, studentId: true, assignmentId: true },
+    });
+    const assignment = await transaction.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        classroom: {
+          select: {
+            status: true,
+            memberships: {
+              where: { studentId },
+              select: { status: true },
             },
           },
-          submissions: {
-            where: { studentId, status: { not: SubmissionStatus.WITHDRAWN } },
-            orderBy: { attemptNumber: "desc" },
-            select: { id: true, status: true, attemptNumber: true },
-          },
         },
-      });
-      if (!assignment) throw new ResourceNotFoundError("作业不存在");
-      assertActiveMembership(assignment.classroom.memberships[0] ?? null);
-      assertAssignmentAcceptsWork(assignment, new Date());
-      await assertClassroomWorkAllowed(transaction, assignment.classroomId);
-      if (keyed) {
-        if (
-          keyed.studentId !== studentId ||
-          keyed.assignmentId !== assignmentId
-        ) {
-          throw new AssignmentOperationError("幂等键已被其他作答使用", 409);
-        }
-        return keyed.id;
+        submissions: {
+          where: { studentId, status: { not: SubmissionStatus.WITHDRAWN } },
+          orderBy: { attemptNumber: "desc" },
+          select: { id: true, status: true, attemptNumber: true },
+        },
+      },
+    });
+    if (!assignment) throw new ResourceNotFoundError("作业不存在");
+    assertActiveMembership(assignment.classroom.memberships[0] ?? null);
+    const work = await assertStudentWorkAccess(
+      transaction,
+      assignmentId,
+      studentId,
+    );
+    await assertClassroomWorkAllowed(transaction, assignment.classroomId);
+    if (keyed) {
+      if (
+        keyed.studentId !== studentId ||
+        keyed.assignmentId !== assignmentId
+      ) {
+        throw new AssignmentOperationError("幂等键已被其他作答使用", 409);
       }
+      return keyed.id;
+    }
 
-      const inProgress = assignment.submissions.find(
-        (submission) => submission.status === SubmissionStatus.IN_PROGRESS,
-      );
-      if (inProgress) return inProgress.id;
-      const submittedCount = assignment.submissions.length;
+    const submittedCount = assignment.submissions.filter(
+      (item) => item.status !== SubmissionStatus.IN_PROGRESS,
+    ).length;
+    if (!work.grant)
       assertCanStartAttempt(assignment.allowResubmission, submittedCount);
-      const attemptNumber =
-        Math.max(
-          0,
-          ...assignment.submissions.map((item) => item.attemptNumber),
-        ) + 1;
-      const submission = await transaction.submission.create({
-        data: {
-          assignmentId,
-          studentId,
-          attemptNumber,
-          idempotencyKey,
-        },
-        select: { id: true },
-      });
-      return submission.id;
-    },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-  );
+    const inProgress = assignment.submissions.find(
+      (item) => item.status === SubmissionStatus.IN_PROGRESS,
+    );
+    if (inProgress) {
+      if (work.grant)
+        await bindMakeupDraft(transaction, work.grant.id, inProgress.id);
+      return inProgress.id;
+    }
+    const sequence = await transaction.submission.aggregate({
+      where: { assignmentId, studentId },
+      _max: { attemptNumber: true },
+    });
+    const attemptNumber = (sequence._max.attemptNumber ?? 0) + 1;
+    const submission = await transaction.submission.create({
+      data: {
+        assignmentId,
+        studentId,
+        attemptNumber,
+        idempotencyKey,
+      },
+      select: { id: true },
+    });
+    if (work.grant)
+      await bindMakeupDraft(transaction, work.grant.id, submission.id);
+    return submission.id;
+  }, "开始作答发生并发冲突，请重试");
 }
 
 export async function startOrResumeAttempt(
@@ -1013,6 +1073,11 @@ export async function getStudentSubmissionDraft(
       "班级已结课或已关闭，请返回作业页面查看历史提交与成绩",
     );
   assertAssignmentIsVisible(submission.assignment, new Date());
+  const work = await readStudentWorkAccess(
+    submission.assignmentId,
+    studentId,
+    submission.id,
+  );
   return {
     id: submission.id,
     assignmentId: submission.assignmentId,
@@ -1022,7 +1087,10 @@ export async function getStudentSubmissionDraft(
     status: submission.status,
     version: submission.saveVersion,
     lastSavedAt: submission.lastSavedAt,
-    dueAt: submission.assignment.dueAt,
+    dueAt: work.dueAt,
+    canWrite: work.canWrite,
+    writeBlockedReason: work.reason,
+    makeupKind: work.grant?.kind ?? null,
     questions: submission.assignment.questions.map((question) => ({
       id: question.id,
       title: question.titleSnapshot,
@@ -1115,7 +1183,12 @@ export async function saveStudentAnswers(
     assertActiveMembership(
       submission.assignment.classroom.memberships[0] ?? null,
     );
-    assertAssignmentAcceptsWork(submission.assignment, now);
+    await assertStudentWorkAccess(
+      transaction,
+      submission.assignmentId,
+      studentId,
+      submissionId,
+    );
     await assertClassroomWorkAllowed(
       transaction,
       submission.assignment.classroomId,
@@ -1303,8 +1376,13 @@ export async function submitStudentAssignment(
       (item) => item.studentId === studentId,
     );
     assertActiveMembership(membership ?? null);
+    const work = await assertStudentWorkAccess(
+      transaction,
+      submission.assignmentId,
+      studentId,
+      submissionId,
+    );
     const now = new Date();
-    assertAssignmentAcceptsWork(submission.assignment, now);
     await assertClassroomWorkAllowed(
       transaction,
       submission.assignment.classroomId,
@@ -1318,6 +1396,19 @@ export async function submitStudentAssignment(
       data: { status: SubmissionStatus.SUBMITTED, submittedAt: now },
     });
     if (claimed.count !== 1) return;
+    if (work.grant) {
+      const consumed = await transaction.assignmentMakeupGrant.updateMany({
+        where: {
+          id: work.grant.id,
+          status: "ACTIVE",
+          expiresAt: { gt: now },
+          submissionId,
+        },
+        data: { status: "USED", usedAt: now },
+      });
+      if (consumed.count !== 1)
+        throw new AssignmentOperationError("补交授权已失效，请刷新后重试", 409);
+    }
 
     const answerMap = new Map(
       submission.answers.map((answer) => [answer.assignmentQuestionId, answer]),
@@ -1567,16 +1658,34 @@ export async function createAssignmentBatch(
   );
   return runAssignmentSerializable(
     async (tx) => {
+      // Coordinate publication with class completion/closure in a stable lock order.
+      await tx.$queryRaw`SELECT id FROM "Classroom" WHERE id IN (${Prisma.join(classroomIds)}) AND "teacherId" = ${teacherId} ORDER BY id FOR SHARE`;
       const classrooms = await tx.classroom.findMany({
-        where: { id: { in: classroomIds }, teacherId, status: "ACTIVE" },
+        where: { id: { in: classroomIds }, teacherId },
         select: {
           id: true,
+          name: true,
+          status: true,
           courseId: true,
           course: { select: { teacherId: true, status: true } },
         },
       });
       if (classrooms.length !== classroomIds.length)
         throw new ResourceNotFoundError("班级不存在");
+      const existing = await tx.assignment.findMany({
+        where: { id: { in: ids }, teacherId },
+        include: teacherAssignmentInclude,
+      });
+      if (existing.length === ids.length)
+        return { assignments: existing.map(teacherView), reused: true };
+      if (existing.length)
+        throw new AssignmentOperationError("批次状态异常，请刷新后重试", 409);
+      const inactive = classrooms.filter((item) => item.status !== "ACTIVE");
+      if (inactive.length)
+        throw new AssignmentOperationError(
+          `以下班级已结课、已关闭或已归档，不能保存或发布作业：${inactive.map((item) => item.name).join("、")}`,
+          409,
+        );
       if (
         classrooms.some(
           (item) =>
@@ -1600,14 +1709,6 @@ export async function createAssignmentBatch(
           "批量发布仅支持本人同一课程下的有效班级",
           400,
         );
-      const existing = await tx.assignment.findMany({
-        where: { id: { in: ids }, teacherId },
-        include: teacherAssignmentInclude,
-      });
-      if (existing.length === ids.length)
-        return { assignments: existing.map(teacherView), reused: true };
-      if (existing.length)
-        throw new AssignmentOperationError("批次状态异常，请刷新后重试", 409);
       for (let index = 0; index < classroomIds.length; index++) {
         await createDraftInTransaction(
           tx,

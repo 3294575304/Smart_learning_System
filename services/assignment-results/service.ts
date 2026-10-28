@@ -479,6 +479,38 @@ async function loadSelectedStudent(
   };
 }
 
+/** Read one student's answers without loading the classroom statistics or roster. */
+export async function getTeacherAssignmentStudentAnswer(
+  teacherId: string,
+  assignmentId: string,
+  query: AssignmentResultsQuery,
+) {
+  return prisma.$transaction(
+    async (transaction) => {
+      const assignment = await transaction.assignment.findFirst({
+        where: { id: assignmentId, teacherId },
+        select: {
+          id: true,
+          teacherId: true,
+          title: true,
+          allowAttachments: true,
+          classroom: { select: { id: true, name: true } },
+        },
+      });
+      assertTeacherOwnsAssignment(teacherId, assignment);
+      const detail = await loadSelectedStudent(
+        transaction,
+        assignmentId,
+        assignment.classroom.id,
+        query,
+      );
+      if (!detail) throw new ResourceNotFoundError("学生不存在");
+      return { assignment, detail };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+  );
+}
+
 export async function getTeacherAssignmentResults(
   teacherId: string,
   assignmentId: string,

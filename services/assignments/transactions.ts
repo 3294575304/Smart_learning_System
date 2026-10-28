@@ -7,7 +7,12 @@ import { ConceptMasteryConcurrencyError } from "@/services/concept-mastery/error
 function retryable(error: unknown): boolean {
   if (error instanceof ConceptMasteryConcurrencyError) return true;
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
-  return error.code === "P2034" || error.code === "P2002";
+  return (
+    error.code === "P2034" ||
+    error.code === "P2002" ||
+    (error.code === "P2010" &&
+      (error.meta?.code === "40001" || error.meta?.code === "40P01"))
+  );
 }
 
 export async function runAssignmentSerializable<T>(

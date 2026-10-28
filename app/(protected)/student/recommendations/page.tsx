@@ -1,3 +1,4 @@
+import { practiceSetQuerySchema } from "@/services/practice-sets/types";
 import { redirect } from "next/navigation";
 import { ClassroomStatus, Role } from "@prisma/client";
 import { PracticeCenterTabs } from "@/components/recommendations/practice-center-tabs";
@@ -14,6 +15,9 @@ import { listSelfReflections } from "@/services/self-reflections/service";
 
 interface Props {
   searchParams: Promise<{
+    section?: string | string[];
+    page?: string | string[];
+    keyword?: string | string[];
     cursor?: string | string[];
     status?: string | string[];
     courseId?: string | string[];
@@ -67,8 +71,15 @@ export default async function StudentRecommendationsPage({
       : firstQueryValue(query.view) === "assistant"
         ? "assistant"
         : "recommended";
+  const listQuery = practiceSetQuerySchema.parse({
+    courseId: initialCourseId,
+    section: firstQueryValue(query.section),
+    page: firstQueryValue(query.page),
+    keyword: firstQueryValue(query.keyword),
+    status: firstQueryValue(query.status),
+  });
   const [result, classrooms, practiceCourses] = await Promise.all([
-    listPracticeSets(student, {}),
+    listPracticeSets(student, listQuery),
     listStudentClassrooms(student.id),
     listStudentPracticeCourses(student.id),
   ]);
@@ -121,6 +132,7 @@ export default async function StudentRecommendationsPage({
           <PracticeSetCenter
             key={JSON.stringify(result)}
             initialResult={result}
+            initialQuery={{ ...listQuery, section: result.section }}
           />
         }
         generation={

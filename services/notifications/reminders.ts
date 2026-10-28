@@ -1,3 +1,4 @@
+import { publishedResultsWhere } from "@/services/assignments/work-access";
 import "server-only";
 
 import {
@@ -39,6 +40,7 @@ export async function runAssignmentDueReminders(
     select: { id: true },
   });
   try {
+    await prisma.$executeRaw`UPDATE "AssignmentMakeupGrant" g SET status='EXPIRED', "updatedAt"=(${now.toISOString()}::timestamp) FROM "Assignment" a JOIN "Classroom" c ON c.id=a."classroomId" WHERE g."assignmentId"=a.id AND g.status='ACTIVE' AND (g."expiresAt"<=(${now.toISOString()}::timestamp) OR a.status<>'PUBLISHED' OR c.status<>'ACTIVE' OR NOT EXISTS (SELECT 1 FROM "ClassMembership" m JOIN "User" u ON u.id=m."studentId" WHERE m."studentId"=g."studentId" AND m."classroomId"=a."classroomId" AND m.status='ACTIVE' AND u.status='ACTIVE'))`;
     const dueBefore = new Date(
       now.getTime() + ASSIGNMENT_DUE_REMINDER_HOURS * 60 * 60 * 1_000,
     );
@@ -48,6 +50,7 @@ export async function runAssignmentDueReminders(
         publishedAt: { lte: now },
         dueAt: { gt: now, lte: dueBefore },
         classroom: { status: ClassroomStatus.ACTIVE },
+        submissions: { none: publishedResultsWhere },
       },
       orderBy: [{ dueAt: "asc" }, { id: "asc" }],
       take: ASSIGNMENT_REMINDER_ASSIGNMENT_LIMIT,
@@ -97,12 +100,70 @@ export async function runAssignmentDueReminders(
             ],
       );
     });
-    const writeResult = await notifyAssignmentsDueSoon(candidates);
+    const grants = await prisma.assignmentMakeupGrant.findMany({
+      where: {
+        status: "ACTIVE",
+        expiresAt: { gt: now, lte: dueBefore },
+        student: { role: "STUDENT", status: "ACTIVE" },
+        assignment: {
+          status: "PUBLISHED",
+          publishedAt: { lte: now },
+          classroom: { status: "ACTIVE" },
+          submissions: { none: publishedResultsWhere },
+        },
+      },
+      take: ASSIGNMENT_REMINDER_ASSIGNMENT_LIMIT,
+      orderBy: [{ expiresAt: "asc" }, { id: "asc" }],
+      include: {
+        assignment: {
+          select: {
+            id: true,
+            title: true,
+            classroom: {
+              select: {
+                memberships: {
+                  where: { status: "ACTIVE" },
+                  select: { studentId: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    const grantCandidates = grants
+      .filter((g) =>
+        g.assignment.classroom.memberships.some(
+          (m) => m.studentId === g.studentId,
+        ),
+      )
+      .map((g) => ({
+        recipientId: g.studentId,
+        assignmentId: g.assignmentId,
+        assignmentTitle: `${g.assignment.title}（${g.kind === "REDO" ? "重做" : "补交"}）`,
+        dueAt: g.expiresAt,
+        grantId: g.id,
+      }));
+    const grantStudents = new Set(
+      grantCandidates.map((g) => `${g.assignmentId}:${g.recipientId}`),
+    );
+    const combined = [
+      ...candidates.filter(
+        (c) => !grantStudents.has(`${c.assignmentId}:${c.recipientId}`),
+      ),
+      ...grantCandidates,
+    ];
+    const writeResult = await notifyAssignmentsDueSoon(combined);
     const result = {
       runId: run.id,
-      scannedCount: assignments.length,
+      scannedCount: assignments.length + grants.length,
       createdCount: writeResult.createdCount,
-      skippedCount: activeRecipientCount - writeResult.createdCount,
+      skippedCount: Math.max(
+        0,
+        activeRecipientCount +
+          grantCandidates.length -
+          writeResult.createdCount,
+      ),
       failedCount: 0,
     };
     await prisma.notificationJobRun.update({

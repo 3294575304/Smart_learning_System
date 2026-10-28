@@ -1,7 +1,10 @@
 import { AssignmentManagementTabs } from "@/components/assignments/management-tabs";
 import { AssignmentCourseFilter } from "@/components/assignments/student-filters";
 import { TeacherStudentAssignmentsView } from "@/components/assignments/student-query-view";
-import { teacherStudentQuerySchema } from "@/services/assignments/student-query";
+import {
+  studentListHref,
+  teacherStudentQuerySchema,
+} from "@/services/assignments/student-query";
 import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import { AssignmentStatus, Role } from "@prisma/client";
 import {
@@ -14,7 +17,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
@@ -97,6 +100,12 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
   if (rawQuery.view === "STUDENTS") {
     const studentQuery = teacherStudentQuerySchema.safeParse(rawQuery);
     if (!studentQuery.success) notFound();
+    if (
+      studentQuery.data.section !== "ALL" ||
+      studentQuery.data.submissionFilter !== "ALL"
+    ) {
+      redirect(studentListHref(studentQuery.data));
+    }
     return (
       <TeacherStudentAssignmentsView
         teacherId={teacher.id}

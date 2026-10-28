@@ -148,7 +148,7 @@ export function StudentAttendanceView({
       </div>
       {records.length === 0 ? (
         <div className="rounded-xl border bg-white p-6 text-sm text-gray-500">
-          暂无签到记录。
+          {courseId && classroomId ? "本班暂无签到记录。" : "暂无签到记录。"}
         </div>
       ) : (
         records.map((record) => (

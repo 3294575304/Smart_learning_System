@@ -193,25 +193,30 @@ export default async function TeacherSubmissionsPage({
                       {submission.objectiveScore}
                     </td>
                     <td className="px-4 py-4">
-                      {submission.requiresManualReview
-                        ? "仍有待批改题目"
-                        : submission.status === SubmissionStatus.PENDING_REVIEW
-                          ? "单题已完成，可结束整份批改"
-                          : "已完成"}
+                      {submission.gradingBlockedReason
+                        ? submission.gradingBlockedReason
+                        : submission.requiresManualReview
+                          ? "仍有待批改题目"
+                          : submission.status ===
+                              SubmissionStatus.PENDING_REVIEW
+                            ? "单题已完成，可结束整份批改"
+                            : "已完成"}
                     </td>
                     <td className="px-5 py-4">
                       <Link
-                        aria-label={`${submission.status === SubmissionStatus.PENDING_REVIEW ? "进入批改" : "查看详情"}：${submission.student.displayName}`}
+                        aria-label={`${!submission.gradingBlockedReason && submission.status === SubmissionStatus.PENDING_REVIEW ? "进入批改" : "查看详情"}：${submission.student.displayName}`}
                         className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
                         href={`/teacher/assignments/${assignmentId.data}/submissions/${submission.id}`}
                         title={
+                          !submission.gradingBlockedReason &&
                           submission.status === SubmissionStatus.PENDING_REVIEW
                             ? "进入批改"
                             : "查看提交详情"
                         }
                       >
-                        {submission.status ===
-                        SubmissionStatus.PENDING_REVIEW ? (
+                        {!submission.gradingBlockedReason &&
+                        submission.status ===
+                          SubmissionStatus.PENDING_REVIEW ? (
                           <ClipboardCheck
                             aria-hidden="true"
                             className="size-4"
@@ -219,7 +224,8 @@ export default async function TeacherSubmissionsPage({
                         ) : (
                           <Eye aria-hidden="true" className="size-4" />
                         )}
-                        {submission.status === SubmissionStatus.PENDING_REVIEW
+                        {!submission.gradingBlockedReason &&
+                        submission.status === SubmissionStatus.PENDING_REVIEW
                           ? "进入批改"
                           : "查看详情"}
                       </Link>

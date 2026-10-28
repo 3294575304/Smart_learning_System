@@ -1,3 +1,6 @@
+import { hundredPointScore } from "@/services/assignments/presentation";
+import { studentTaskScopeSchema } from "@/services/student-experience/task-scope";
+import { assertAssignmentTaskScope } from "@/services/student-experience/task-scope-access";
 import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { Role } from "@prisma/client";
 import Link from "next/link";
@@ -16,8 +19,10 @@ interface Props {
 export default async function ResultPage({ params, searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const query = await searchParams;
-  const returnParams = new URLSearchParams({ view: "records" });
-  for (const key of ["courseId", "classroomId", "page", "pageSize"]) {
+  const scope = studentTaskScopeSchema.safeParse(query);
+  if (!scope.success) notFound();
+  const returnParams = new URLSearchParams({ view: "records", ...scope.data });
+  for (const key of ["page", "pageSize"]) {
     const value = query[key];
     if (typeof value === "string" && value.length < 100)
       returnParams.set(key, value);
@@ -27,6 +32,7 @@ export default async function ResultPage({ params, searchParams }: Props) {
       student.id,
       (await params).submissionId,
     );
+    await assertAssignmentTaskScope(result.assignmentId, scope.data);
     return (
       <section className="space-y-6">
         <div>
@@ -36,7 +42,7 @@ export default async function ResultPage({ params, searchParams }: Props) {
           >
             ← 返回作业与成绩
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold">
+          <h1 className="mt-2 text-2xl font-semibold break-words">
             {result.assignmentTitle} · 提交结果
           </h1>
           <p className="mt-2 text-sm text-gray-500">
@@ -48,11 +54,12 @@ export default async function ResultPage({ params, searchParams }: Props) {
           <div className="rounded-xl border bg-white p-6">
             <p className="text-sm text-gray-500">正式成绩</p>
             <p className="mt-2 text-3xl font-semibold">
-              {result.score} / {result.maxScore}
+              {hundredPointScore(result.score, result.maxScore) === null
+                ? "缺少完整成绩"
+                : `${hundredPointScore(result.score, result.maxScore)} 分`}
             </p>
             <p className="mt-2 text-sm text-gray-500">
-              得分率：
-              {result.percentage === null ? "—" : `${result.percentage}%`}
+              百分制 · 原始得分 {result.score ?? "—"}／{result.maxScore ?? "—"}
             </p>
           </div>
         ) : (
@@ -91,7 +98,9 @@ export default async function ResultPage({ params, searchParams }: Props) {
                     </p>
                   </div>
                   <span className="font-medium">
-                    {answer.score ?? 0} / {answer.maxScore}
+                    {answer.score === null
+                      ? "待批改"
+                      : `${answer.score} / ${answer.maxScore}`}
                   </span>
                 </div>
                 <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">

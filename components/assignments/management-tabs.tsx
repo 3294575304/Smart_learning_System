@@ -1,6 +1,6 @@
 type Props = {
   view: "ASSIGNMENTS" | "STUDENTS";
-  section: "CURRENT" | "HISTORY";
+  section: "ALL" | "CURRENT" | "HISTORY";
   courseId?: string;
   classroomId?: string;
 };
@@ -14,7 +14,7 @@ export function AssignmentManagementTabs({
   const tabs = [
     { label: "当前作业", view: "ASSIGNMENTS", section: "CURRENT" },
     { label: "历史作业", view: "ASSIGNMENTS", section: "HISTORY" },
-    { label: "学生作业查询", view: "STUDENTS", section },
+    { label: "学生作业查询", view: "STUDENTS", section: "ALL" },
   ] as const;
   return (
     <nav aria-label="作业分区" className="flex gap-1 border-b border-sky-200">

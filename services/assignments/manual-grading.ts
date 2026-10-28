@@ -1,3 +1,10 @@
+import { countUsableGrants, usableGrantWindow } from "./work-access";
+import { assignmentCapabilities } from "./capabilities";
+import {
+  assertGradingWritable,
+  lockAssignmentLifecycle,
+  touchAssignmentLifecycle,
+} from "./lifecycle-lock";
 import "server-only";
 import { latestEffectiveSubmissions } from "./latest-submissions";
 
@@ -44,7 +51,7 @@ const submittedStatuses: SubmissionStatus[] = [
 const gradingDetailInclude = {
   assignment: {
     include: {
-      classroom: { select: { id: true, name: true } },
+      classroom: { select: { id: true, name: true, status: true } },
       questions: {
         orderBy: { sortOrder: "asc" as const },
         include: {
@@ -108,7 +115,7 @@ function decimalNumber(value: Prisma.Decimal | null): number | null {
 
 function detailFromRecord(
   submission: GradingSubmissionRecord,
-): TeacherSubmissionDetail {
+): Omit<TeacherSubmissionDetail, "canManageGrading" | "gradingBlockedReason"> {
   return {
     id: submission.id,
     status: submission.status,
@@ -210,7 +217,19 @@ export async function listTeacherAssignmentSubmissions(
       id: true,
       title: true,
       totalPoints: true,
-      classroom: { select: { name: true } },
+      status: true,
+      publishedAt: true,
+      dueAt: true,
+      classroom: {
+        select: {
+          name: true,
+          status: true,
+          memberships: {
+            where: { status: "ACTIVE" },
+            select: { studentId: true },
+          },
+        },
+      },
       _count: {
         select: {
           submissions: { where: { status: { in: submittedStatuses } } },
@@ -268,6 +287,13 @@ export async function listTeacherAssignmentSubmissions(
     },
     items: submissions.map((submission) => ({
       id: submission.id,
+      gradingBlockedReason:
+        assignmentCapabilities(assignment).gradingBlockedReason ??
+        (assignment.classroom.memberships.some(
+          (member) => member.studentId === submission.student.id,
+        )
+          ? null
+          : "历史成员的作答仅供查看，不能修改成绩"),
       student: {
         id: submission.student.id,
         displayName:
@@ -313,9 +339,30 @@ export async function getTeacherSubmissionForGrading(
   assignmentId: string,
   submissionId: string,
 ): Promise<TeacherSubmissionDetail> {
-  return detailFromRecord(
-    await loadTeacherSubmission(teacherId, assignmentId, submissionId),
+  const record = await loadTeacherSubmission(
+    teacherId,
+    assignmentId,
+    submissionId,
   );
+  const membership = await prisma.classMembership.findUnique({
+    where: {
+      classroomId_studentId: {
+        classroomId: record.assignment.classroomId,
+        studentId: record.studentId,
+      },
+    },
+    select: { status: true },
+  });
+  const blockedReason =
+    assignmentCapabilities(record.assignment).gradingBlockedReason ??
+    (membership?.status === "ACTIVE"
+      ? null
+      : "历史成员的作答仅供查看，不能修改成绩");
+  return {
+    ...detailFromRecord(record),
+    canManageGrading: blockedReason === null,
+    gradingBlockedReason: blockedReason,
+  };
 }
 
 export async function saveManualAnswerGrade(
@@ -350,10 +397,16 @@ export async function saveManualAnswerGrade(
         assignmentQuestion: {
           select: { typeSnapshot: true, points: true },
         },
-        submission: { select: { status: true } },
+        submission: { select: { status: true, studentId: true } },
       },
     });
     if (!answer) throw new ResourceNotFoundError("待批改答案不存在");
+    await assertGradingWritable(
+      transaction,
+      teacherId,
+      assignmentId,
+      answer.submission.studentId,
+    );
     const isProgramming =
       answer.assignmentQuestion.typeSnapshot ===
       QuestionType.PYTHON_PROGRAMMING;
@@ -461,6 +514,12 @@ export async function completeSubmissionGrading(
       include: gradingDetailInclude,
     });
     if (!submission) throw new ResourceNotFoundError("提交记录不存在");
+    await assertGradingWritable(
+      transaction,
+      teacherId,
+      assignmentId,
+      submission.studentId,
+    );
     if (
       submission.status === SubmissionStatus.GRADED ||
       submission.status === SubmissionStatus.PUBLISHED
@@ -667,6 +726,21 @@ export async function publishAssignmentResults(
 ): Promise<PublishAssignmentResultsResult> {
   const result = await runAssignmentSerializable<PublishTransactionResult>(
     async (transaction) => {
+      const lifecycle = await lockAssignmentLifecycle(
+        transaction,
+        assignmentId,
+        teacherId,
+      );
+      const capability = assignmentCapabilities({
+        ...lifecycle,
+        activeMakeupCount: await countUsableGrants(transaction, assignmentId),
+      });
+      if (!capability.canPublishResults)
+        throw new AssignmentOperationError(
+          capability.publicationBlockedReason ?? "当前状态不能公布成绩",
+          409,
+        );
+      await touchAssignmentLifecycle(transaction, assignmentId);
       const assignment = await transaction.assignment.findFirst({
         where: { id: assignmentId, teacherId },
         select: {
@@ -836,8 +910,11 @@ export async function getAssignmentPublicationState(
     where: { id: assignmentId, teacherId },
     select: {
       status: true,
+      publishedAt: true,
+      dueAt: true,
       classroom: {
         select: {
+          status: true,
           memberships: {
             where: { status: "ACTIVE" },
             select: { studentId: true },
@@ -881,12 +958,38 @@ export async function getAssignmentPublicationState(
           item.maxScore === null ||
           item.gradedAt === null)),
   ).length;
+  const grantWindow = await usableGrantWindow(prisma, assignmentId);
+  const capability = assignmentCapabilities({
+    ...assignment,
+    activeMakeupCount: grantWindow.count,
+  });
+  const deadlines =
+    assignment.classroom.status === "ACTIVE"
+      ? [assignment.dueAt, grantWindow.nextAt].filter(
+          (date): date is Date => date !== null && date > new Date(),
+        )
+      : [];
+  const refreshAt = deadlines.length
+    ? new Date(Math.min(...deadlines.map((date) => date.getTime())))
+    : null;
+  const gradedCount = latest.filter((item) => item.status === "GRADED").length;
+  const blockedReason =
+    capability.publicationBlockedReason ??
+    (pendingCount
+      ? `还有 ${pendingCount} 份最新提交未完成批改`
+      : !gradedCount
+        ? latest.length
+          ? "成绩已全部公布"
+          : "暂无可公布成绩"
+        : null);
   return {
+    ...(refreshAt ? { refreshAt } : {}),
+    blockedReason,
     pendingCount,
     gradedCount: latest.filter((item) => item.status === "GRADED").length,
     publishedCount: latest.filter((item) => item.status === "PUBLISHED").length,
     canPublish:
-      ["PUBLISHED", "CLOSED"].includes(assignment.status) &&
+      capability.canPublishResults &&
       pendingCount === 0 &&
       latest.some((item) => item.status === "GRADED"),
   };

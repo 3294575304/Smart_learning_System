@@ -1,3 +1,5 @@
+import { AssignmentMakeupControls } from "@/components/assignments/makeup-controls";
+import { getAssignmentMakeupManagement } from "@/services/assignments/makeup-service";
 import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import { Role } from "@prisma/client";
 import Link from "next/link";
@@ -27,6 +29,7 @@ export default async function TeacherAssignmentPage({
       teacher.id,
       id.data,
     );
+    const makeup = await getAssignmentMakeupManagement(teacher.id, id.data);
     return (
       <section className="space-y-5">
         <TeacherBackLink
@@ -94,6 +97,7 @@ export default async function TeacherAssignmentPage({
           ) : null}
         </header>
         <TeacherAssignmentNav assignmentId={assignment.id} active="content" />
+        <AssignmentMakeupControls data={makeup} />
         <p className="text-xs leading-5 text-slate-500">
           {assignment.status === "DRAFT"
             ? assignment.classroom.status === "ACTIVE"

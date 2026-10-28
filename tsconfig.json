@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
@@ -19,9 +23,26 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "next-env.d.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".data/next-practice-history-20261028/types/**/*.ts",
+    ".data/next-practice-management-20261028/types/**/*.ts",
+    ".data/next-student-acceptance-20261028/types/**/*.ts",
+    ".data/next-student-acceptance-final-20261028/types/**/*.ts",
+    ".data/next-student-acceptance-verified-20261028/types/**/*.ts",
+    ".data/next-student-home-stage2-20261027/types/**/*.ts",
+    ".data/next-student-scoring-20261028/types/**/*.ts",
+    ".next/types/**/*.ts",
+    "next-env.d.ts",
+    ".data/next-practice-management-verified-20261028/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
