@@ -1,3 +1,4 @@
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { studentScoreLabel } from "@/services/recommendations/scoring";
 import { StudentTaskScope } from "@/components/dashboard/student-task-scope";
 import {
@@ -114,8 +115,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
           description="统一查看提交记录、批改进度与正式成绩；历史班级保留本人记录，未发布成绩不提前显示。"
           eyebrow={course?.name}
           actions={
-            <Link
-              className="rounded-md border bg-white px-3 py-2 text-sm"
+            <StudentBackLink
               href={
                 course && classroomId
                   ? studentTaskHref(
@@ -125,8 +125,8 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
                   : "/student/results?view=course"
               }
             >
-              {course && classroomId ? "返回课程学习中心" : "查看课程总评"}
-            </Link>
+              {course && classroomId ? "返回我的课程" : "查看课程总评"}
+            </StudentBackLink>
           }
         />
         <StudentTaskScope
@@ -168,16 +168,15 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
     <section className="space-y-4">
       <PageHeader
         actions={
-          <Link
-            className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+          <StudentBackLink
             href={
               course
                 ? `/student/courses/${course.id}/learning-center${classroomId ? `?classroomId=${encodeURIComponent(classroomId)}` : ""}`
                 : "/student/tasks"
             }
           >
-            {course ? "返回课程学习中心" : "返回学习任务"}
-          </Link>
+            {course ? "返回我的课程" : "返回学习任务"}
+          </StudentBackLink>
         }
         description={
           course

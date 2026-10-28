@@ -5,7 +5,6 @@ import { TeacherAssignmentNav } from "@/components/assignments/teacher-assignmen
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role, SubmissionStatus } from "@prisma/client";
 import { Eye } from "lucide-react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ResultsPagination } from "@/components/assignment-results/pagination";
@@ -149,12 +148,6 @@ export default async function AssignmentResultsPage({
                 assignmentId={results.assignment.id}
                 publication={publication}
               />
-              <Link
-                className="text-sm underline"
-                href={`/teacher/assignments/${results.assignment.id}/submissions`}
-              >
-                进入提交批改
-              </Link>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs">
                 基于每名学生最新有效提交
               </span>

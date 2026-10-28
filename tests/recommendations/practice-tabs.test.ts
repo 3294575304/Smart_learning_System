@@ -3,6 +3,8 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PracticeCenterTabs } from "../../components/recommendations/practice-center-tabs";
 
 for (const view of ["recommended", "generate", "assistant"] as const) {
@@ -10,15 +12,19 @@ for (const view of ["recommended", "generate", "assistant"] as const) {
     Object.assign(globalThis, { React });
     const markup = renderToStaticMarkup(
       React.createElement(
-        SearchParamsContext.Provider,
-        { value: new URLSearchParams({ view, courseId: "python" }) },
-        React.createElement(PracticeCenterTabs, {
-          initialView: view,
-          practice: React.createElement("p", null, "已加载练习"),
-          generation: React.createElement("input", {
-            defaultValue: "循环练习",
+        AppRouterContext.Provider,
+        { value: { push() {} } as unknown as AppRouterInstance },
+        React.createElement(
+          SearchParamsContext.Provider,
+          { value: new URLSearchParams({ view, courseId: "python" }) },
+          React.createElement(PracticeCenterTabs, {
+            initialView: view,
+            practice: React.createElement("p", null, "已加载练习"),
+            generation: React.createElement("input", {
+              defaultValue: "循环练习",
+            }),
           }),
-        }),
+        ),
       ),
     );
     assert.match(

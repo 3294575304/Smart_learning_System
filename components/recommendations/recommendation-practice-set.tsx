@@ -1,9 +1,11 @@
 "use client";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { summarizePracticeScores } from "@/services/recommendations/scoring";
 import { PracticeManagementActions } from "./practice-management-actions";
 import { PracticeHistoryQuestion } from "./practice-history-question";
 import { canAnswerPractice } from "@/services/practice-sets/types";
-import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { practiceListReturnUrl } from "@/services/practice-sets/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Send, CheckCircle2 } from "lucide-react";
 import { parsePracticeDraft } from "@/services/practice-sets/draft-storage";
@@ -31,9 +33,21 @@ export function RecommendationPracticeSet({
   set: PracticeSet;
   initialRecommendation: RecommendationDetailView;
 }) {
+  const searchParams = useSearchParams();
+  const returnTo = practiceListReturnUrl(searchParams?.get("returnTo"));
+  const initialQuestion = useRef(searchParams?.get("question")).current;
   const [questions, setQuestions] = useState(set.questions);
   const readOnly = !questions.some(canAnswerPractice);
-  const [current, setCurrent] = useState(initialRecommendation.id);
+  const [current, setCurrent] = useState(
+    set.questions.some((q) => q.id === initialQuestion)
+      ? (initialQuestion ?? initialRecommendation.id)
+      : initialRecommendation.id,
+  );
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("question", current);
+    window.history.replaceState(window.history.state, "", url);
+  }, [current]);
   const [cache, setCache] = useState<Record<string, RecommendationDetailView>>({
     [initialRecommendation.id]: initialRecommendation,
   });
@@ -78,7 +92,7 @@ export function RecommendationPracticeSet({
       if (saved) {
         setDrafts(saved.drafts);
         keys.current = saved.keys;
-        if (saved.current) setCurrent(saved.current);
+        if (saved.current && !initialQuestion) setCurrent(saved.current);
         setStorageMessage(
           "已恢复本标签页的未提交答案；已提交题目以服务器结果为准。",
         );
@@ -88,7 +102,7 @@ export function RecommendationPracticeSet({
     } finally {
       setDraftsReady(true);
     }
-  }, [storageKey, set.questions, userId, readOnly]);
+  }, [storageKey, set.questions, userId, readOnly, initialQuestion]);
   useEffect(() => {
     if (!draftsReady || !userId) return;
     const save = () => {
@@ -384,19 +398,16 @@ export function RecommendationPracticeSet({
     };
   }, [current, retry, cache, questions]);
   return (
-    <section className="min-w-0 space-y-5">
-      <header>
-        <Link
-          href="/student/recommendations"
-          className="text-sm text-slate-500 hover:underline"
-        >
-          ← 返回练习中心
-        </Link>
+    <section className="mx-auto max-w-[1440px] min-w-0 space-y-5">
+      <header className="rounded-2xl border border-sky-100 bg-white/90 p-4 shadow-sm sm:p-6">
+        <StudentBackLink href={returnTo}>返回练习中心</StudentBackLink>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs text-slate-500">{set.courseName}</p>
-            <h1 className="mt-1 text-2xl font-semibold">{set.title}</h1>
-            <div className="mt-2 flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-slate-500">{set.courseName}</p>
+            <h1 className="mt-1 text-xl font-semibold [overflow-wrap:anywhere] sm:text-2xl">
+              {set.title}
+            </h1>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {set.management?.trashedAt ? (
                 <span className="text-sm text-amber-700">
                   已移入回收站 · 恢复后只能回看
@@ -412,7 +423,7 @@ export function RecommendationPracticeSet({
               />
             </div>
           </div>
-          <p className="text-sm text-slate-600">
+          <p className="rounded-xl bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800">
             已完成 {completed}/{questions.length} 题
           </p>
         </div>

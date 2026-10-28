@@ -4,7 +4,7 @@ import { getDashboardPageTitle } from "@/components/dashboard/navigation";
 test("作业查询、个人明细、整班统计的标题互不混淆", () => {
   assert.equal(
     getDashboardPageTitle("/teacher/assignments", [], { view: "STUDENTS" }),
-    "学生作业查询",
+    "作业管理",
   );
   assert.equal(
     getDashboardPageTitle("/teacher/assignments/students/student-a", []),

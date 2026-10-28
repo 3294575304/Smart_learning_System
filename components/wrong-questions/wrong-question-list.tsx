@@ -16,9 +16,11 @@ function sourceHref(item: WrongQuestionListItem): string {
 export function WrongQuestionList({
   items,
   hasFilters,
+  returnTo,
 }: {
   items: WrongQuestionListItem[];
   hasFilters: boolean;
+  returnTo?: string;
 }) {
   if (items.length === 0) {
     return (
@@ -74,7 +76,7 @@ export function WrongQuestionList({
                       : "rounded-full bg-amber-100 px-2.5 py-1 text-amber-800"
                   }
                 >
-                  {item.isMastered ? "已掌握" : "未掌握"}
+                  {item.isMastered ? "已掌握" : "待复习"}
                 </span>
               </div>
               <h2 className="mt-2 text-sm font-semibold break-words sm:text-base">
@@ -110,6 +112,9 @@ export function WrongQuestionList({
 
           <div className="text-muted-foreground mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs">
             <span>
+              最近出错：{item.lastWrongAt.toLocaleDateString("zh-CN")}
+            </span>
+            <span>
               知识点：
               {item.knowledgePoints.length > 0
                 ? item.knowledgePoints.map((point) => point.name).join("、")
@@ -128,7 +133,7 @@ export function WrongQuestionList({
             <Link
               aria-label={`查看错题 ${item.title} 详情并重新练习`}
               className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
-              href={`/student/wrong-questions/${item.id}`}
+              href={`/student/wrong-questions/${item.id}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`}
               title="查看详情并重新练习"
             >
               <BookOpenCheck aria-hidden="true" className="size-4" />

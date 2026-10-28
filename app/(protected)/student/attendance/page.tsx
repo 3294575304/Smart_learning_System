@@ -1,8 +1,8 @@
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { StudentTaskScope } from "@/components/dashboard/student-task-scope";
 import { studentTaskScopeSchema } from "@/services/student-experience/task-scope";
 import { listStudentTaskClassrooms } from "@/services/courses/student-access";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StudentAttendanceView } from "@/components/attendance/student-attendance-view";
@@ -40,16 +40,15 @@ export default async function StudentAttendancePage({
     <section className="space-y-4">
       <PageHeader
         actions={
-          <Link
-            className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+          <StudentBackLink
             href={
               courseId
                 ? `/student/courses/${courseId}/learning-center${classroomId ? `?classroomId=${encodeURIComponent(classroomId)}` : ""}`
                 : "/student/tasks"
             }
           >
-            {courseId ? "返回课程学习中心" : "返回学习任务"}
-          </Link>
+            {courseId ? "返回我的课程" : "返回学习任务"}
+          </StudentBackLink>
         }
         title="签到与出勤"
         description={

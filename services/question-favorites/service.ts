@@ -385,6 +385,18 @@ export async function listFavorites(
 ): Promise<FavoriteList> {
   assertRole(actor, [Role.STUDENT]);
   const query = favoriteQuerySchema.parse(rawQuery);
+  if (query.courseId && query.courseId !== "GENERAL") {
+    const [ownHistory, membership] = await Promise.all([
+      prisma.studentQuestionFavorite.count({
+        where: { studentId: actor.id, courseId: query.courseId },
+      }),
+      prisma.classMembership.count({
+        where: { studentId: actor.id, classroom: { courseId: query.courseId } },
+      }),
+    ]);
+    if (!ownHistory && !membership)
+      throw new ResourceNotFoundError("课程不存在或无权访问");
+  }
   const where: Prisma.StudentQuestionFavoriteWhereInput = {
     studentId: actor.id,
     ...(query.courseId === "GENERAL"

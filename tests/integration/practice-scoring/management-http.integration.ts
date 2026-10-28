@@ -87,6 +87,60 @@ test("real HTTP verifies management authentication, atomic batches, private resp
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
+    // Actual production HTTP rendering, separate from interactive browser acceptance.
+    for (const page of [
+      "/student/recommendations?section=ACTIVE",
+      "/student/analytics",
+      "/student/analytics?classroomId=",
+      "/student/recommendations?section=HISTORY&keyword=missing",
+      "/student/wrong-questions",
+      "/student/wrong-questions?view=favorites&page=1",
+    ]) {
+      const response = await request(page, studentCookie);
+      assert.equal(response.status, 200, page);
+      const html = await response.text();
+      assert.ok(
+        html.includes(
+          page.includes("analytics")
+            ? "学习分析"
+            : page.includes("wrong-questions")
+              ? "复习中心"
+              : "练习中心",
+        ),
+      );
+      assert.ok(!html.includes("Internal Server Error"));
+    }
+    const invalidAnalytics = await request(
+      `/student/analytics?classroomId=${first.id}`,
+      studentCookie,
+    );
+    // Streamed App Router pages may commit HTTP 200 before notFound renders.
+    assert.ok([200, 404].includes(invalidAnalytics.status));
+    const invalidHtml = await invalidAnalytics.text();
+    assert.match(invalidHtml, /资源不存在/);
+    assert.doesNotMatch(invalidHtml, /暂无可查看的教学班/);
+    assert.equal(
+      new URL((await request("/student/analytics", "")).url).pathname,
+      "/login",
+    );
+    const teacherAnalytics = await request("/student/analytics", teacherCookie);
+    const teacherHtml = await teacherAnalytics.text();
+    assert.ok(
+      new URL(teacherAnalytics.url).pathname === "/403" ||
+        teacherHtml.includes("NEXT_REDIRECT;replace;/403"),
+    );
+    assert.doesNotMatch(teacherHtml, /暂无可查看的教学班/);
+    const invalidReview = await request(
+      "/student/wrong-questions?courseId=invalid",
+      studentCookie,
+    );
+    assert.equal(invalidReview.status, 200);
+    assert.match(await invalidReview.text(), /筛选参数无效/);
+    const forbiddenFavorites = await request(
+      "/api/student/question-favorites?courseId=not-a-course",
+      studentCookie,
+    );
+    assert.equal(forbiddenFavorites.status, 404);
     const trash = { action: "TRASH", expectedRevision: 0 };
     assert.equal((await request(path, "", "PATCH", trash)).status, 401);
     assert.equal(
@@ -223,6 +277,160 @@ test("real HTTP verifies management authentication, atomic batches, private resp
       }),
       0,
     );
+    // Full partial-completion lifecycle through authenticated HTTP, not a browser result.
+    const lifecycleStudent = await factory.student();
+    const classroom = await factory.classroom(teacher.id);
+    await factory.membership(classroom.id, lifecycleStudent.id);
+    const cookie = await factory.sessionCookie(lifecycleStudent.id);
+    for (let i = 0; i < 3; i++)
+      await factory.question(teacher.id, { type: "TRUE_FALSE" });
+    const generationInput = {
+      studentId: lifecycleStudent.id,
+      classroomId: classroom.id,
+      requestId: randomUUID(),
+      limit: 3,
+      recommendedDifficulty: 3,
+    };
+    const generation = await request(
+      "/api/recommendations",
+      cookie,
+      "POST",
+      generationInput,
+    );
+    assert.equal(generation.status, 200);
+    const group = (await generation.json()).data;
+    assert.equal(group.items.length, 3);
+    assert.equal(group.scoringSummary.totalPoints, 100);
+    const repeated = (
+      await (
+        await request("/api/recommendations", cookie, "POST", generationInput)
+      ).json()
+    ).data;
+    assert.equal(repeated.cycleKey, group.cycleKey);
+    const entry = group.items[0];
+    assert.equal(
+      (
+        await request(
+          `/api/recommendations/${entry.id}/start`,
+          cookie,
+          "POST",
+          {},
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await request(
+          `/api/recommendations/${entry.id}/submit`,
+          cookie,
+          "POST",
+          {
+            idempotencyKey: randomUUID(),
+            answers: [
+              { questionId: entry.questionId, kind: "BOOLEAN", value: true },
+            ],
+          },
+        )
+      ).status,
+      200,
+    );
+    const savedBefore =
+      await prisma.recommendationPracticeAnswer.findUniqueOrThrow({
+        where: { recommendationId: entry.id },
+      });
+    const evidenceBefore = await prisma.learningEvent.count();
+    const managementPath = `/api/student/practice-sets/${entry.id}`;
+    const end = await request(managementPath, cookie, "PATCH", {
+      action: "END",
+      expectedRevision: 0,
+    });
+    assert.equal(end.status, 200);
+    const ended = (await end.json()).data;
+    assert.ok(ended.endedAt);
+    const unsubmitted = group.items[1];
+    assert.equal(
+      (
+        await request(
+          `/api/recommendations/${unsubmitted.id}/start`,
+          cookie,
+          "POST",
+          {},
+        )
+      ).status,
+      409,
+    );
+    const deleted = await request(managementPath, cookie, "PATCH", {
+      action: "TRASH",
+      expectedRevision: ended.revision,
+    });
+    assert.equal(deleted.status, 200);
+    const trashed = (await deleted.json()).data;
+    const trashList = (
+      await (
+        await request("/api/student/practice-sets?section=TRASH", cookie)
+      ).json()
+    ).data;
+    assert.equal(trashList.total, 1);
+    const restore = await request(managementPath, cookie, "PATCH", {
+      action: "RESTORE",
+      expectedRevision: trashed.revision,
+    });
+    assert.equal(restore.status, 200);
+    const restored = (await restore.json()).data;
+    assert.ok(restored.endedAt);
+    assert.equal(restored.trashedAt, null);
+    const historyList = (
+      await (
+        await request("/api/student/practice-sets?section=HISTORY", cookie)
+      ).json()
+    ).data;
+    assert.equal(historyList.total, 1);
+    assert.equal(historyList.items[0].completed, 1);
+    const historicalDetail = (
+      await (await request(`/api/recommendations/${entry.id}`, cookie)).json()
+    ).data;
+    assert.equal(historicalDetail.readOnly, true);
+    assert.ok(historicalDetail.content);
+    assert.equal(
+      (
+        await request(
+          `/api/recommendations/${unsubmitted.id}/submit`,
+          cookie,
+          "POST",
+          {
+            idempotencyKey: randomUUID(),
+            answers: [
+              {
+                questionId: unsubmitted.questionId,
+                kind: "BOOLEAN",
+                value: true,
+              },
+            ],
+          },
+        )
+      ).status,
+      409,
+    );
+    const savedAfter =
+      await prisma.recommendationPracticeAnswer.findUniqueOrThrow({
+        where: { recommendationId: entry.id },
+      });
+    assert.equal(savedAfter.score.toString(), savedBefore.score.toString());
+    assert.equal(
+      savedAfter.maxScore.toString(),
+      savedBefore.maxScore.toString(),
+    );
+    assert.equal(await prisma.learningEvent.count(), evidenceBefore);
+    const historyPage = await request(
+      `/student/recommendations/${entry.id}/practice`,
+      cookie,
+    );
+    assert.equal(historyPage.status, 200);
+    const html = await historyPage.text();
+    assert.match(html, /只读回看/);
+    assert.match(html, /返回练习中心/);
+    assert.doesNotMatch(html, />提交全部练习</);
   } finally {
     server.kill();
     if (server.exitCode === null)

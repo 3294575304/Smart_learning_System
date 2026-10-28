@@ -1,3 +1,5 @@
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
+import { reviewReturnUrl } from "@/services/review/navigation";
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { Role } from "@prisma/client";
 import Link from "next/link";
@@ -12,6 +14,7 @@ import { getWrongQuestionDetail } from "@/services/wrong-questions/service";
 
 interface Props {
   params: Promise<{ wrongQuestionId: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }
 
 function sourceHref(sourceType: string, sourceRecordId: string): string {
@@ -22,8 +25,10 @@ function sourceHref(sourceType: string, sourceRecordId: string): string {
 
 export default async function StudentWrongQuestionDetailPage({
   params,
+  searchParams,
 }: Props) {
   const student = await requirePageRole(Role.STUDENT);
+  const returnTo = reviewReturnUrl((await searchParams).returnTo, false);
   try {
     const detail = await getWrongQuestionDetail(
       student.id,
@@ -32,12 +37,7 @@ export default async function StudentWrongQuestionDetailPage({
     return (
       <section className="space-y-6">
         <header>
-          <Link
-            className="text-muted-foreground text-sm hover:underline"
-            href="/student/wrong-questions"
-          >
-            ← 返回错题本
-          </Link>
+          <StudentBackLink href={returnTo}>返回错题本</StudentBackLink>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap gap-2 text-xs">

@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { requestApi } from "@/components/courses/request-api";
 import { QuestionType } from "@prisma/client";
 import { questionTypeLabel } from "@/components/recommendations/recommendation-presenters";
@@ -14,9 +14,11 @@ import { FavoritePracticeButton } from "./favorite-practice-button";
 function FavoriteRow({
   item,
   onChange,
+  returnTo,
 }: {
   item: FavoriteView;
   onChange: () => void;
+  returnTo: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState(item.note);
@@ -70,7 +72,7 @@ function FavoriteRow({
           </p>
           <Link
             className="mt-1 block text-sm font-medium break-words hover:text-sky-700 sm:text-base"
-            href={`/student/question-favorites/${item.questionId}`}
+            href={`/student/question-favorites/${item.questionId}?returnTo=${encodeURIComponent(returnTo)}`}
           >
             {item.title}
           </Link>
@@ -161,6 +163,10 @@ function FavoriteRow({
 }
 export function FavoriteCenter({ enabled }: { enabled: boolean }) {
   const params = useSearchParams();
+  const initialUrl = useRef(true);
+  const [page, setPage] = useState(() =>
+    Math.max(1, Number(params.get("page")) || 1),
+  );
   const [chapter, setChapter] = useState(params.get("chapterId") ?? "");
   const [result, setResult] = useState<FavoriteList | null>(null);
   const [course, setCourse] = useState(params.get("courseId") ?? "");
@@ -172,11 +178,18 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   useEffect(() => {
+    const restore = () => window.location.reload();
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+  useEffect(() => {
     if (!enabled) return;
     let alive = true;
+    const controller = new AbortController();
     setBusy(true);
+    setResult(null);
     setError("");
-    const query = new URLSearchParams();
+    const query = new URLSearchParams({ page: String(page) });
     if (course) query.set("courseId", course);
     if (chapter) query.set("chapterId", chapter);
     if (point) query.set("knowledgePointId", point);
@@ -184,16 +197,23 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
     if (querySearch) query.set("search", querySearch);
     void requestApi<FavoriteList>(`/api/student/question-favorites?${query}`, {
       method: "GET",
+      signal: controller.signal,
     }).then((response) => {
       if (!alive) return;
       setBusy(false);
-      if (response.success) setResult(response.data);
-      else setError(response.error);
+      if (response.success) {
+        if (!response.data.items.length && page > 1) {
+          setPage(page - 1);
+          return;
+        }
+        setResult(response.data);
+      } else setError(response.error);
     });
     return () => {
       alive = false;
+      controller.abort();
     };
-  }, [enabled, course, chapter, point, type, querySearch, revision]);
+  }, [enabled, course, chapter, point, type, querySearch, revision, page]);
   useEffect(() => {
     if (!enabled) return;
     const url = new URL(window.location.href);
@@ -209,43 +229,19 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
       else url.searchParams.delete(name);
     }
     url.searchParams.set("view", "favorites");
-    url.searchParams.delete("page");
-    window.history.replaceState(null, "", url);
-  }, [enabled, course, chapter, point, type, querySearch]);
+    url.searchParams.set("page", String(page));
+    if (url.href !== window.location.href) {
+      const method = initialUrl.current ? "replaceState" : "pushState";
+      window.history[method](window.history.state, "", url);
+    }
+    initialUrl.current = false;
+  }, [enabled, course, chapter, point, type, querySearch, page]);
   useEffect(() => {
     const update = () => setRevision((value) => value + 1);
     window.addEventListener("question-favorites-changed", update);
     return () =>
       window.removeEventListener("question-favorites-changed", update);
   }, []);
-  async function more() {
-    if (!result?.nextPage || busy) return;
-    setBusy(true);
-    const query = new URLSearchParams({ page: String(result.nextPage) });
-    if (course) query.set("courseId", course);
-    if (chapter) query.set("chapterId", chapter);
-    if (point) query.set("knowledgePointId", point);
-    if (type) query.set("type", type);
-    if (querySearch) query.set("search", querySearch);
-    const response = await requestApi<FavoriteList>(
-      `/api/student/question-favorites?${query}`,
-      { method: "GET" },
-    );
-    setBusy(false);
-    if (response.success)
-      setResult({
-        ...response.data,
-        items: [
-          ...new Map(
-            [...result.items, ...response.data.items].map((item) => [
-              item.questionId,
-              item,
-            ]),
-          ).values(),
-        ],
-      });
-    else setError(response.error);
-  }
   return (
     <section className="space-y-4" aria-label="我的收藏">
       <header>
@@ -259,13 +255,14 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
           主动收藏想复习的题目；取消收藏不影响错题与掌握状态，备注仅自己可见。
         </p>
       </header>
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid max-w-4xl gap-3 rounded-xl border border-sky-100 bg-white p-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+        <div className="grid gap-3 sm:grid-cols-1">
           <select
             aria-label="收藏课程"
             disabled={busy}
             value={course}
             onChange={(e) => {
+              setPage(1);
               setCourse(e.target.value);
               setChapter("");
               setPoint("");
@@ -279,53 +276,12 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
               </option>
             ))}
           </select>
-          <select
-            aria-label="收藏章节"
-            disabled={busy || !course || !result?.chapters?.length}
-            value={chapter}
-            onChange={(event) => setChapter(event.target.value)}
-            className="rounded-lg border px-3 py-2 text-sm"
-          >
-            <option value="">{course ? "全部章节" : "请先选择课程"}</option>
-            {result?.chapters?.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="收藏知识点"
-            disabled={busy || !course}
-            value={point}
-            onChange={(e) => setPoint(e.target.value)}
-            className="rounded-lg border px-3 py-2 text-sm"
-          >
-            <option value="">全部知识点</option>
-            {result?.knowledgePoints.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="收藏题型"
-            disabled={busy}
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="rounded-lg border px-3 py-2 text-sm"
-          >
-            <option value="">全部题型</option>
-            {Object.values(QuestionType).map((item) => (
-              <option key={item} value={item}>
-                {questionTypeLabel(item)}
-              </option>
-            ))}
-          </select>
         </div>
         <form
           className="flex gap-2"
           onSubmit={(event) => {
             event.preventDefault();
+            setPage(1);
             setQuerySearch(search.trim());
             setRevision((value) => value + 1);
           }}
@@ -350,6 +306,7 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
             type="button"
             className="text-xs text-slate-500"
             onClick={() => {
+              setPage(1);
               setCourse("");
               setChapter("");
               setPoint("");
@@ -362,6 +319,69 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
             重置
           </button>
         </form>
+        <details
+          className="sm:col-span-2"
+          open={Boolean(chapter || point || type)}
+        >
+          <summary className="cursor-pointer text-sm text-sky-700">
+            高级筛选 · 章节、知识点、题型
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {" "}
+            <select
+              aria-label="收藏章节"
+              disabled={busy || !course || !result?.chapters?.length}
+              value={chapter}
+              onChange={(event) => {
+                setPage(1);
+                setChapter(event.target.value);
+                setPoint("");
+              }}
+              className="rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">{course ? "全部章节" : "请先选择课程"}</option>
+              {result?.chapters?.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="收藏知识点"
+              disabled={busy || !course}
+              value={point}
+              onChange={(e) => {
+                setPage(1);
+                setPoint(e.target.value);
+              }}
+              className="rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">全部知识点</option>
+              {result?.knowledgePoints.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="收藏题型"
+              disabled={busy}
+              value={type}
+              onChange={(e) => {
+                setPage(1);
+                setType(e.target.value);
+              }}
+              className="rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">全部题型</option>
+              {Object.values(QuestionType).map((item) => (
+                <option key={item} value={item}>
+                  {questionTypeLabel(item)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </details>
       </div>
       {busy && (
         <p role="status" className="text-sm text-slate-500">
@@ -392,20 +412,37 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
           <FavoriteRow
             key={`${item.id}:${item.revision}`}
             item={item}
+            returnTo={`/student/wrong-questions?${new URLSearchParams({ view: "favorites", page: String(page), ...Object.fromEntries(Object.entries({ courseId: course, chapterId: chapter, knowledgePointId: point, type, keyword: querySearch }).filter(([, value]) => value)) })}`}
             onChange={() => setRevision((value) => value + 1)}
           />
         ))}
       </div>
-      {result?.nextPage && (
-        <button
-          disabled={busy}
-          type="button"
-          onClick={() => void more()}
-          className="w-full rounded-lg border bg-white py-2 text-sm"
+      {result && (page > 1 || result.nextPage) ? (
+        <nav
+          aria-label="收藏分页"
+          className="flex items-center justify-between text-sm"
         >
-          加载更多收藏
-        </button>
-      )}
+          <button
+            type="button"
+            disabled={busy || page === 1}
+            onClick={() => setPage(page - 1)}
+            className="rounded-lg border bg-white px-3 py-2 disabled:opacity-40"
+          >
+            上一页
+          </button>
+          <span>
+            第 {page} 页 · 共 {result.total} 道
+          </span>
+          <button
+            type="button"
+            disabled={busy || !result.nextPage}
+            onClick={() => setPage(page + 1)}
+            className="rounded-lg border bg-white px-3 py-2 disabled:opacity-40"
+          >
+            下一页
+          </button>
+        </nav>
+      ) : null}
     </section>
   );
 }

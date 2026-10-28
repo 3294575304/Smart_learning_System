@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Clock3, RotateCcw, Loader2 } from "lucide-react";
 import { EditorDialog } from "./editor-dialog";
 import { requestAssignmentApi } from "./request-api";
 import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-workspace-refresh";
@@ -206,36 +207,38 @@ export function AssignmentMakeupControls({ data }: { data: Data }) {
         : "撤销补交／重做授权";
   return (
     <section
-      className="space-y-3 rounded-xl border bg-white p-4 sm:p-5"
+      className="mt-4 min-w-0 space-y-3 border-t border-sky-100 pt-4"
       aria-label="延期与补交管理"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-semibold">延期与补交</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 sm:max-w-xl">
+          <p className="text-xs leading-5 text-slate-500">
             仅调整当前班级；原题目和评分标准保留，不自动扣分。有效补交窗口结束前不能公布成绩。
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <button
             type="button"
-            className="h-10 rounded-lg border px-3 text-sm text-sky-700 disabled:opacity-50"
-            disabled={Boolean(blocked)}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-sky-200 bg-white px-3 text-sm font-medium text-sky-700 shadow-sm transition duration-150 hover:border-sky-400 hover:bg-sky-50 hover:shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 active:scale-[0.97] active:bg-sky-100 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transform-none"
+            disabled={pending || Boolean(blocked)}
             title={blocked ?? undefined}
             onClick={() => open("extend")}
           >
+            <Clock3 className="h-4 w-4" aria-hidden="true" />
             延长截止
           </button>
           <button
             type="button"
-            className="h-10 rounded-lg border px-3 text-sm text-sky-700 disabled:opacity-50"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-sky-200 bg-white px-3 text-sm font-medium text-sky-700 shadow-sm transition duration-150 hover:border-sky-400 hover:bg-sky-50 hover:shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 active:scale-[0.97] active:bg-sky-100 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transform-none"
             disabled={
+              pending ||
               Boolean(blocked) ||
               Boolean(data.dueAt && new Date(data.dueAt).getTime() > now)
             }
             title={blocked ?? "截止后可开放一次补交或重做"}
             onClick={() => open("grant")}
           >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
             补交／重做
           </button>
         </div>
@@ -254,7 +257,7 @@ export function AssignmentMakeupControls({ data }: { data: Data }) {
       ) : null}
       {data.makeupGrants.length ? (
         <details>
-          <summary className="cursor-pointer text-sm text-sky-700">
+          <summary className="w-fit cursor-pointer rounded-md text-sm text-sky-700 transition hover:text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">
             授权记录（{data.makeupGrants.length}条，有效
             {data.makeupGrants.filter(active).length}条）
           </summary>
@@ -442,7 +445,7 @@ export function AssignmentMakeupControls({ data }: { data: Data }) {
           <div className="flex justify-end gap-3">
             <button
               type="button"
-              className="h-10 rounded-lg border px-4 text-sm"
+              className="h-10 rounded-lg border px-4 text-sm transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-sky-600 active:scale-[0.97] disabled:opacity-50"
               disabled={pending}
               onClick={() => setMode(null)}
             >
@@ -450,9 +453,12 @@ export function AssignmentMakeupControls({ data }: { data: Data }) {
             </button>
             <button
               type="submit"
-              className="h-10 rounded-lg bg-sky-700 px-4 text-sm text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 active:scale-[0.97] disabled:opacity-50"
               disabled={pending}
             >
+              {pending ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : null}
               {pending ? "处理中…" : "确认调整"}
             </button>
           </div>

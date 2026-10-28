@@ -16,6 +16,7 @@ function pageHref(query: WrongQuestionListQuery, page: number): string {
   if (query.type) params.set("type", query.type);
   if (query.isMastered !== undefined)
     params.set("isMastered", String(query.isMastered));
+  if (query.isMastered === undefined) params.set("isMastered", "all");
   if (query.recentDays) params.set("recentDays", String(query.recentDays));
   return `/student/wrong-questions?${params.toString()}`;
 }

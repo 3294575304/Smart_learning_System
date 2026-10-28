@@ -3,7 +3,7 @@ import { EditorDialog } from "@/components/assignments/editor-dialog";
 
 import { useRouter } from "next/navigation";
 import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-workspace-refresh";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 import type { PublishAssignmentResultsResult } from "@/services/assignments/types";
@@ -38,6 +38,14 @@ export function PublishResultsButton({
     return () => window.clearTimeout(timer);
   }, [publication.refreshAt, router]);
   const [pending, setPending] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
+  const inFlight = useRef(false);
+  const [publishedSource, setPublishedSource] = useState<
+    typeof publication | null
+  >(null);
+  const justPublished = publishedSource === publication;
+  const busy = pending || refreshing;
+  const canPublish = publication.canPublish && !justPublished;
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [message, setMessage] = useState<{
     kind: "success" | "error";
@@ -45,18 +53,20 @@ export function PublishResultsButton({
   } | null>(null);
 
   async function publish() {
-    if (pending || !publication.canPublish) return;
+    if (inFlight.current || busy || !canPublish) return;
+    inFlight.current = true;
     setPending(true);
     setMessage(null);
     const result = await requestAssignmentApi<PublishAssignmentResultsResult>(
       `/api/teacher/assignments/${assignmentId}/results/publish`,
       { method: "POST" },
     );
-    setPending(false);
     setConfirmPublish(false);
+    inFlight.current = false;
+    setPending(false);
     if (!result.success) {
       setMessage({ kind: "error", text: result.error });
-      router.refresh();
+      startRefresh(() => router.refresh());
       return;
     }
     setMessage({
@@ -66,29 +76,37 @@ export function PublishResultsButton({
           ? `已正式发布 ${result.data.publishedCount} 份成绩`
           : "该作业成绩已经全部发布",
     });
+    setPublishedSource(publication);
     markTeacherWorkspaceDirty();
-    router.refresh();
+    startRefresh(() => router.refresh());
   }
 
   return (
     <div className="space-y-2 text-right">
       <button
         className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        disabled={pending || !publication.canPublish}
+        disabled={busy || !canPublish}
         onClick={() => setConfirmPublish(true)}
         type="button"
+        aria-busy={busy}
       >
         {pending
           ? "公布中…"
-          : publication.canPublish
-            ? `公布给学生（${publication.gradedCount}份）`
-            : publication.blockedReason
-              ? publication.blockedReason
-              : publication.pendingCount
-                ? "尚有提交待批改"
-                : publication.publishedCount
-                  ? "成绩已全部公布"
-                  : "暂无可公布成绩"}
+          : refreshing
+            ? justPublished
+              ? "已公布，正在刷新…"
+              : "正在刷新…"
+            : justPublished
+              ? "成绩已全部公布"
+              : canPublish
+                ? `公布给学生（${publication.gradedCount}份）`
+                : publication.blockedReason
+                  ? publication.blockedReason
+                  : publication.pendingCount
+                    ? "尚有提交待批改"
+                    : publication.publishedCount
+                      ? "成绩已全部公布"
+                      : "暂无可公布成绩"}
       </button>
       <p className="max-w-sm text-xs leading-5 text-slate-500">
         公布后学生可见分数、答案、解析和反馈；完成的待公布事项会从工作台移除。
@@ -111,9 +129,9 @@ export function PublishResultsButton({
       <EditorDialog
         open={confirmPublish}
         title="确认公布成绩及答案"
-        busy={pending}
+        busy={busy}
         onClose={() => {
-          if (!pending) setConfirmPublish(false);
+          if (!busy) setConfirmPublish(false);
         }}
       >
         <p className="mt-4 text-left text-sm leading-7">
@@ -123,7 +141,7 @@ export function PublishResultsButton({
           <button
             type="button"
             className="h-10 rounded-lg border px-4 text-sm"
-            disabled={pending}
+            disabled={busy}
             onClick={() => setConfirmPublish(false)}
           >
             返回检查
@@ -131,7 +149,7 @@ export function PublishResultsButton({
           <button
             type="button"
             className="h-10 rounded-lg bg-sky-700 px-4 text-sm text-white disabled:opacity-50"
-            disabled={pending || !publication.canPublish}
+            disabled={busy || !canPublish}
             onClick={() => void publish()}
           >
             {pending ? "公布中…" : "确认公布"}

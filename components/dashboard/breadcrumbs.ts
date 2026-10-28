@@ -1,4 +1,8 @@
-import { getSegmentLabels, SEGMENT_LABELS } from "./navigation";
+import {
+  getSegmentLabels,
+  getStudentPageLabel,
+  SEGMENT_LABELS,
+} from "./navigation";
 
 export interface BreadcrumbItem {
   href: string;
@@ -74,7 +78,10 @@ export function buildBreadcrumbs(
       return {
         href: targetHref,
         label:
-          isTeacherStudentRoot && index === 2
+          getStudentPageLabel(
+            isStudentVirtualRoot ? targetHref.split("?")[0] : href,
+          ) ??
+          (isTeacherStudentRoot && index === 2
             ? "学生作业查询"
             : isTeacherStudentRoot && index === 3
               ? "学生作业明细"
@@ -83,19 +90,18 @@ export function buildBreadcrumbs(
                   segment === "results" &&
                   context?.studentId
                 ? "个人作答"
-                : pathname === "/teacher/assignments" &&
-                    segment === "assignments" &&
-                    context?.view === "STUDENTS"
-                  ? "学生作业查询"
-                  : isTeacherCourseDetail
-                    ? "课程管理详情"
-                    : isStudentCourse
-                      ? "课程学习中心"
-                      : isTeacherAssignment
-                        ? "作业详情"
-                        : isResourceDetail
-                          ? `${labels[segments[index - 1]] ?? "资源"}详情`
-                          : (labels[segment] ?? "详情"),
+                : isTeacherCourseDetail
+                  ? "课程管理详情"
+                  : isStudentCourse
+                    ? "课程学习中心"
+                    : isTeacherAssignment
+                      ? "作业详情"
+                      : isResourceDetail
+                        ? `${labels[segments[index - 1]] ?? "资源"}详情`
+                        : (labels[segment] ??
+                          (index > 0 && labels[segments[index - 1]]
+                            ? `${labels[segments[index - 1]]}详情`
+                            : "详情"))),
         linkable:
           hasChildPage &&
           targetHref !== pathname &&
@@ -107,6 +113,10 @@ export function buildBreadcrumbs(
     })
     .filter(
       (item, index, items) =>
-        !items.slice(index + 1).some((next) => next.href === item.href),
+        !(
+          segments[0] === "student" &&
+          segments[1] === "submissions" &&
+          index === 2
+        ) && !items.slice(index + 1).some((next) => next.href === item.href),
     );
 }

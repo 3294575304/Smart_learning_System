@@ -9,6 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { StudentPageHeader } from "./student-page-header";
 import {
   STUDENT_TASK_PRESENTATION,
@@ -52,32 +53,41 @@ const linkStyle =
 export function StudentHomeView({
   name,
   overview,
+  insights,
 }: {
   name: string;
   overview: StudentTaskOverview;
+  insights?: ReactNode;
 }) {
   const next = overview.items[0];
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <StudentPageHeader
         title={`${name}，今天继续加油`}
-        description="先处理课程待办，再按自己的节奏练习和复习。"
+        description="查看课程学习状态，安排今天的任务、练习和复习。"
       />
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
-        <div className="min-w-0 space-y-5">
+      <div
+        className={
+          insights
+            ? "grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"
+            : "grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]"
+        }
+      >
+        {insights && <div className="min-w-0">{insights}</div>}
+        <div className="flex min-w-0 flex-col gap-4">
           <section
             aria-labelledby="next-task-heading"
-            className="overflow-hidden rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-white p-5 sm:p-6"
+            className="overflow-hidden rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-white p-4"
           >
             <div className="flex items-center gap-2 text-sm font-medium text-sky-700">
               <ListTodo aria-hidden="true" className="size-4" />
               当前优先任务
             </div>
-            <div className="mt-4 flex flex-wrap items-start justify-between gap-5">
+            <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1 basis-56">
                 <h2
                   id="next-task-heading"
-                  className="text-xl font-semibold break-words text-slate-900"
+                  className="text-lg font-semibold break-words text-slate-900"
                 >
                   {next ? next.title : "当前没有待处理任务"}
                 </h2>
@@ -115,7 +125,7 @@ export function StudentHomeView({
 
           <section
             aria-labelledby="pending-tasks-heading"
-            className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+            className="flex min-h-64 flex-1 flex-col rounded-2xl border border-slate-200 bg-white p-4 lg:min-h-80"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2
@@ -128,52 +138,59 @@ export function StudentHomeView({
                 </span>
               </h2>
               <Link
-                className="inline-flex min-h-10 items-center gap-1 text-sm font-medium text-sky-700 hover:underline focus-visible:outline-2 focus-visible:outline-sky-600"
+                className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-sky-600"
                 href="/student/tasks"
               >
                 查看全部任务
                 <ArrowRight aria-hidden="true" className="size-4" />
               </Link>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
-              {(
-                Object.keys(STUDENT_TASK_PRESENTATION) as Array<
-                  keyof typeof STUDENT_TASK_PRESENTATION
-                >
-              ).map((kind) => {
-                const {
-                  label,
-                  icon: Icon,
-                  color,
-                } = STUDENT_TASK_PRESENTATION[kind];
-                return (
-                  <Link
-                    key={kind}
-                    href={`/student/tasks#${kind}`}
-                    className={`min-w-0 rounded-xl p-3 transition hover:ring-1 hover:ring-current focus-visible:outline-2 focus-visible:outline-sky-600 sm:p-4 ${color}`}
+            {!insights && (
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+                {(
+                  Object.keys(STUDENT_TASK_PRESENTATION) as Array<
+                    keyof typeof STUDENT_TASK_PRESENTATION
                   >
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm">
-                      <Icon aria-hidden="true" className="size-4 shrink-0" />
-                      {label}
-                    </div>
-                    <p className="mt-2 text-2xl font-semibold">
-                      {overview.counts[kind]}
-                      <span className="ml-1 text-xs font-normal">项</span>
-                    </p>
-                  </Link>
-                );
-              })}
-            </div>
-            <div className="mt-5">
+                ).map((kind) => {
+                  const {
+                    label,
+                    icon: Icon,
+                    color,
+                  } = STUDENT_TASK_PRESENTATION[kind];
+                  return (
+                    <Link
+                      key={kind}
+                      href={`/student/tasks#${kind}`}
+                      className={`min-w-0 rounded-xl p-3 transition hover:ring-1 hover:ring-current focus-visible:outline-2 focus-visible:outline-sky-600 sm:p-4 ${color}`}
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm">
+                        <Icon aria-hidden="true" className="size-4 shrink-0" />
+                        {label}
+                      </div>
+                      <p className="mt-2 text-2xl font-semibold">
+                        {overview.counts[kind]}
+                        <span className="ml-1 text-xs font-normal">项</span>
+                      </p>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+            <div className="mt-3 flex flex-1 flex-col">
               {overview.items.length ? (
                 <StudentTaskList items={overview.items.slice(0, 5)} />
               ) : (
-                <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-sky-100 bg-gradient-to-b from-sky-50/60 to-white px-5 py-8 text-center text-sm text-slate-600">
                   <CheckCircle2
                     aria-hidden="true"
-                    className="size-5 shrink-0 text-emerald-600"
+                    className="size-10 shrink-0 rounded-full bg-emerald-50 p-2 text-emerald-600"
                   />
-                  作业、签到和问卷暂无待办。
+                  <p className="font-medium text-slate-700">
+                    作业、签到和问卷暂无待办。
+                  </p>
+                  <p className="max-w-64 text-xs leading-5 text-slate-500">
+                    任务处理完毕后会保留此看板，你可以继续学习或复习。
+                  </p>
                 </div>
               )}
             </div>
@@ -188,7 +205,7 @@ export function StudentHomeView({
           {overview.scheduledSurveys.length ? (
             <section
               aria-labelledby="upcoming-surveys-heading"
-              className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+              className="rounded-2xl border border-slate-200 bg-white p-4"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2
@@ -227,51 +244,51 @@ export function StudentHomeView({
               ) : null}
             </section>
           ) : null}
-        </div>
 
-        <aside
-          aria-labelledby="student-shortcuts-heading"
-          className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5"
-        >
-          <h2
-            id="student-shortcuts-heading"
-            className="font-semibold text-slate-900"
+          <aside
+            aria-labelledby="student-shortcuts-heading"
+            className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4"
           >
-            常用入口
-          </h2>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-            {shortcuts.map(({ title, detail, href, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className="group flex min-w-0 items-start gap-3 rounded-xl p-3 transition hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-600"
-              >
-                <span className="rounded-lg bg-sky-50 p-2 text-sky-700 group-hover:bg-white">
-                  <Icon aria-hidden="true" className="size-5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900">{title}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {detail}
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <Link
-              href="/student/analytics"
-              className="inline-flex min-h-10 items-center gap-2 text-sm text-slate-600 hover:text-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600"
+            <h2
+              id="student-shortcuts-heading"
+              className="font-semibold text-slate-900"
             >
-              <BrainCircuit aria-hidden="true" className="size-4" />
-              查看学习分析
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </Link>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              课程进展、掌握情况与学习趋势在对应课程和分析页面查看。
-            </p>
-          </div>
-        </aside>
+              常用入口
+            </h2>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {shortcuts.map(({ title, detail, href, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="group flex min-w-0 items-center gap-2 rounded-xl border border-sky-100 bg-sky-50/30 p-2.5 transition hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-600"
+                >
+                  <span className="rounded-lg bg-sky-50 p-2 text-sky-700 group-hover:bg-white">
+                    <Icon aria-hidden="true" className="size-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900">
+                      {title}
+                    </p>
+                    <span className="sr-only">{detail}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <div className="mt-3 border-t border-slate-100 pt-2">
+              <Link
+                href="/student/analytics"
+                className="inline-flex min-h-10 items-center gap-2 text-sm text-slate-600 hover:text-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600"
+              >
+                <BrainCircuit aria-hidden="true" className="size-4" />
+                查看学习分析
+                <ArrowRight aria-hidden="true" className="size-4" />
+              </Link>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                查看各课程的完整进度、知识依据与学习趋势。
+              </p>
+            </div>
+          </aside>
+        </div>
       </div>
     </section>
   );

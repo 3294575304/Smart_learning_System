@@ -15,7 +15,8 @@ test("练习中心先展示筛选结果，再提供生成入口", async () => {
   assert.ok(groupedResults >= 0 && groupedResults < generationHeading);
   assert.doesNotMatch(page, /<RecommendationCard|查看下一页推荐/);
   assert.ok(generationHeading < recommendationGenerator);
-  assert.ok(recommendationGenerator < practiceGenerator);
+  assert.ok(practiceGenerator < recommendationGenerator);
+  assert.match(page, /<details[\s\S]*根据近期答题生成推荐/);
 });
 
 test("练习中心标题区不重复显示返回学习主页链接", async () => {
@@ -24,6 +25,6 @@ test("练习中心标题区不重复显示返回学习主页链接", async () =>
     "utf8",
   );
 
-  assert.match(page, /<h1 className="text-2xl font-semibold">练习中心<\/h1>/);
+  assert.match(page, /<StudentPageHeader[\s\S]*?title="练习中心"/);
   assert.doesNotMatch(page, /返回学习主页/);
 });

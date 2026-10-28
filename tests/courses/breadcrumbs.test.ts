@@ -141,3 +141,24 @@ test("学生作业明细的虚拟根指向真实查询入口，个人作答不�
     "成绩统计",
   );
 });
+
+test("作业管理页签切换保持顶部模块名称", () => {
+  assert.deepEqual(
+    buildBreadcrumbs("/teacher/assignments", undefined, { view: "STUDENTS" }),
+    buildBreadcrumbs("/teacher/assignments"),
+  );
+});
+
+test("三角色模块及补充功能使用明确的导航内容", () => {
+  for (const [path, label] of [
+    ["/admin/classrooms", "班级治理"],
+    ["/admin/questions", "共享题库"],
+    ["/admin/question-course-categories", "题库课程分类"],
+    ["/student/course-grades", "课程总评"],
+    ["/teacher/questions/ai", "AI出题"],
+    ["/teacher/courses/course-a/random-picker", "随机选人"],
+    ["/teacher/assignments/task-a/submissions/submission-a", "提交记录详情"],
+    ["/notifications/notification-a", "通知中心详情"],
+  ])
+    assert.equal(buildBreadcrumbs(path).at(-1)?.label, label);
+});

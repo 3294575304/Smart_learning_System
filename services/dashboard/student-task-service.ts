@@ -8,8 +8,10 @@ import {
   summarizeStudentTasks,
 } from "./student-task-overview";
 
-export async function getStudentTaskOverview(studentId: string) {
-  const now = new Date();
+export async function getStudentTaskOverview(
+  studentId: string,
+  now = new Date(),
+) {
   const [assignments, home] = await Promise.all([
     listStudentAssignments(studentId),
     getStudentHomeTasks(studentId, now),

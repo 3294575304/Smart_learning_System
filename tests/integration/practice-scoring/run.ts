@@ -32,6 +32,7 @@ async function main() {
       "tests/integration/recommendations/recommendation-service.integration.test.ts",
       "tests/integration/practice-scoring/scoring.integration.ts",
       "tests/integration/practice-scoring/management.integration.ts",
+      "tests/integration/practice-scoring/student-analytics.integration.ts",
       ...(process.env.PRACTICE_HTTP_DIST
         ? ["tests/integration/practice-scoring/management-http.integration.ts"]
         : []),

@@ -266,6 +266,12 @@ export function CoursePracticeCenter({
       className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
     >
       <div>
+        <a
+          className="float-right text-sm text-sky-700 underline"
+          href={`/student/recommendations?section=HISTORY&courseId=${course.courseId}`}
+        >
+          历史记录
+        </a>
         <h2 className="font-semibold">按课程章节生成练习或测试</h2>
         <p className="mt-1 text-sm text-gray-500">
           从本课程分类的共享题库中筛选已审核题目；可练习课程图谱中的任意章节，包含尚未授课的内容。
@@ -294,19 +300,6 @@ export function CoursePracticeCenter({
               </option>
             ))}
           </select>
-        </label>
-        <label className="text-sm">
-          难度
-          <input
-            aria-label="目标难度"
-            className="mt-1 w-full"
-            min={1}
-            max={5}
-            type="range"
-            value={difficulty}
-            onChange={(event) => setDifficulty(Number(event.target.value))}
-          />
-          <span>{difficulty}</span>
         </label>
       </div>
 
@@ -370,6 +363,19 @@ export function CoursePracticeCenter({
         </div>
       ) : null}
 
+      <label className="text-sm">
+        难度
+        <input
+          aria-label="目标难度"
+          className="mt-1 w-full"
+          min={1}
+          max={5}
+          type="range"
+          value={difficulty}
+          onChange={(event) => setDifficulty(Number(event.target.value))}
+        />
+        <span>{difficulty}</span>
+      </label>
       <fieldset>
         <legend className="text-sm font-medium">生成类型</legend>
         <div className="mt-2 flex flex-wrap gap-2">

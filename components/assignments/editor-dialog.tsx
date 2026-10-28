@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import React, { useEffect, useId, useRef, type ReactNode } from "react";
 
 /** Native modal provides focus containment, Escape and background inertness. */
 export function EditorDialog({

@@ -95,9 +95,9 @@ export default async function TeacherAssignmentPage({
               {assignment.description}
             </p>
           ) : null}
+          <AssignmentMakeupControls data={makeup} />
         </header>
         <TeacherAssignmentNav assignmentId={assignment.id} active="content" />
-        <AssignmentMakeupControls data={makeup} />
         <p className="text-xs leading-5 text-slate-500">
           {assignment.status === "DRAFT"
             ? assignment.classroom.status === "ACTIVE"

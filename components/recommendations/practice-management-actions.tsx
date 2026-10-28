@@ -1,6 +1,14 @@
 "use client";
 import { useEffect, useRef, useState, useId } from "react";
 import { requestApi } from "@/components/courses/request-api";
+import {
+  ChevronDown,
+  MoreHorizontal,
+  Pencil,
+  Square,
+  Trash2,
+  RotateCcw,
+} from "lucide-react";
 import type { PracticeManagementView } from "@/services/practice-sets/management-schemas";
 type Action = "RENAME" | "END" | "TRASH" | "RESTORE";
 const labels: Record<Action, string> = {
@@ -34,6 +42,45 @@ export function PracticeManagementActions({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [conflict, setConflict] = useState(false);
+  const menu = useRef<HTMLDetailsElement>(null);
+  const [menuLeft, setMenuLeft] = useState(0);
+  function positionMenu() {
+    if (!menu.current?.open) return;
+    const bounds = menu.current.getBoundingClientRect();
+    const main = document
+      .getElementById("dashboard-main")
+      ?.getBoundingClientRect();
+    const minLeft = Math.max(12, (main?.left ?? 0) + 12);
+    const left = Math.max(
+      minLeft,
+      Math.min(bounds.right - 176, window.innerWidth - 188),
+    );
+    setMenuLeft(left - bounds.left);
+  }
+  useEffect(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !menu.current?.contains(event.target) &&
+        menu.current
+      )
+        menu.current.open = false;
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && menu.current?.open) {
+        menu.current.open = false;
+        menu.current.querySelector("summary")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("resize", positionMenu);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("resize", positionMenu);
+    };
+  }, []);
   const dialogTitle = useId();
   const dialog = useRef<HTMLDialogElement>(null),
     sending = useRef(false);
@@ -41,6 +88,10 @@ export function PracticeManagementActions({
     if (action && !dialog.current?.open) dialog.current?.showModal();
   }, [action]);
   function open(next: Action) {
+    if (menu.current) {
+      menu.current.open = false;
+      menu.current.querySelector("summary")?.focus();
+    }
     setConflict(false);
     setName(title);
     setError("");
@@ -113,14 +164,26 @@ export function PracticeManagementActions({
           恢复记录
         </button>
       ) : (
-        <details className="relative text-sm">
+        <details
+          ref={menu}
+          onToggle={positionMenu}
+          className="group relative shrink-0 text-sm"
+        >
           <summary
-            className="cursor-pointer rounded-lg border bg-white px-3 py-2"
+            className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-xl border border-sky-200 bg-white px-3 py-2 font-medium text-slate-700 shadow-sm hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden"
             aria-label={`管理${title}`}
           >
-            更多
+            <MoreHorizontal aria-hidden="true" className="size-4" />
+            管理练习
+            <ChevronDown
+              aria-hidden="true"
+              className="size-3.5 transition-transform group-open:rotate-180"
+            />
           </summary>
-          <div className="absolute right-0 z-20 mt-1 min-w-36 space-y-1 rounded-lg border bg-white p-2 shadow-lg">
+          <div
+            style={{ left: menuLeft }}
+            className="absolute z-40 mt-2 w-44 max-w-[calc(100vw_-_2rem)] space-y-1 rounded-xl border border-sky-100 bg-white p-1.5 shadow-lg"
+          >
             {(management?.trashedAt
               ? ["RESTORE"]
               : active
@@ -130,9 +193,20 @@ export function PracticeManagementActions({
               <button
                 key={value}
                 type="button"
-                className="block w-full rounded px-3 py-2 text-left hover:bg-sky-50 focus-visible:outline-sky-600"
+                className={`flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-sky-50 focus-visible:outline-sky-600 ${value === "TRASH" ? "text-red-700" : "text-slate-700"}`}
                 onClick={() => open(value as Action)}
               >
+                {(() => {
+                  const Icon = {
+                    RENAME: Pencil,
+                    END: Square,
+                    TRASH: Trash2,
+                    RESTORE: RotateCcw,
+                  }[value as Action];
+                  return (
+                    <Icon aria-hidden="true" className="size-4 shrink-0" />
+                  );
+                })()}
                 {labels[value as Action]}
               </button>
             ))}

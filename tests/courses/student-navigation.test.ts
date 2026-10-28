@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readdir, access } from "node:fs/promises";
+import path from "node:path";
 
 import { buildBreadcrumbs } from "../../components/dashboard/breadcrumbs";
 import {
@@ -18,7 +20,7 @@ test("学生共享路径使用学生名称，顶部与面包屑保持一致", ()
     ["/student/recommendations", "练习中心"],
     ["/student/wrong-questions", "复习中心"],
     ["/student/analytics", "学习分析"],
-    ["/student/course-grades", "课程正式成绩"],
+    ["/student/course-grades", "课程总评"],
   ];
   for (const [pathname, label] of cases) {
     assert.equal(getDashboardPageTitle(pathname, NAVIGATION.STUDENT), label);
@@ -64,11 +66,11 @@ test("学习任务入口在全局任务页及三个任务列表中保持选中",
       "/student/assignments/assignment-123",
       NAVIGATION.STUDENT,
     ),
-    "我的作业",
+    "作业详情",
   );
   assert.equal(
     getDashboardPageTitle("/student/surveys/survey-123", NAVIGATION.STUDENT),
-    "课程问卷",
+    "问卷详情",
   );
 });
 
@@ -157,4 +159,76 @@ test("作答和提交结果统一选中学习任务入口", () => {
     buildBreadcrumbs("/student/submissions/sub1/result")[1].href,
     "/student/assignments?view=records",
   );
+});
+
+test("学生所有资源详情使用同一标题与面包屑命名，不暴露资源ID", () => {
+  for (const [path, label] of [
+    ["/student/assignments/a1", "作业详情"],
+    ["/student/surveys/s1", "问卷详情"],
+    ["/student/wrong-questions/w1", "错题详情"],
+    ["/student/question-favorites/q1", "收藏题目详情"],
+    ["/student/practice/cycle1", "练习记录"],
+    ["/student/recommendations/r1", "练习详情"],
+    ["/student/recommendations/r1/practice", "练习作答"],
+    ["/student/submissions/s1/answer", "在线答题"],
+    ["/student/submissions/s1/result", "提交结果"],
+    ["/student/courses/c1/knowledge-graph", "知识图谱"],
+    ["/student/courses/c1/profile", "我的课程画像"],
+  ]) {
+    assert.equal(getDashboardPageTitle(path, NAVIGATION.STUDENT), label);
+    assert.equal(buildBreadcrumbs(path).at(-1)?.label, label);
+    const active = NAVIGATION.STUDENT.flatMap((g) => g.items).filter((item) =>
+      isNavigationItemActive(path, item),
+    );
+    assert.equal(active.length, 1);
+  }
+});
+
+test("虚拟详情父级只保留可访问的模块，作答不陈列不存在的提交页", () => {
+  assert.equal(buildBreadcrumbs("/student/practice/c1")[1].label, "练习中心");
+  assert.equal(
+    buildBreadcrumbs("/student/question-favorites/q1")[1].label,
+    "复习中心",
+  );
+  const crumbs = buildBreadcrumbs("/student/submissions/s1/answer");
+  assert.deepEqual(
+    crumbs.map((c) => c.label),
+    ["学习主页", "我的作业", "在线答题"],
+  );
+  assert.ok(!crumbs.some((c) => c.href === "/student/submissions/s1"));
+});
+
+test("学生全部已实现页面有一致标题、唯一选中导航，侧栏目标真实存在", async () => {
+  const root = "app/(protected)/student";
+  async function pages(dir: string): Promise<string[]> {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const nested = await Promise.all(
+      entries.map((entry) =>
+        entry.isDirectory()
+          ? pages(path.join(dir, entry.name))
+          : Promise.resolve(
+              entry.name === "page.tsx" ? [path.join(dir, entry.name)] : [],
+            ),
+      ),
+    );
+    return nested.flat();
+  }
+  const items = NAVIGATION.STUDENT.flatMap((g) => g.items);
+  for (const file of await pages(root)) {
+    const relative = path
+      .relative(root, path.dirname(file))
+      .replaceAll(path.sep, "/")
+      .replace(/\[[^\]]+\]/g, "resource-123");
+    const pathname = `/student${relative ? `/${relative}` : ""}`;
+    const title = getDashboardPageTitle(pathname, NAVIGATION.STUDENT);
+    assert.equal(buildBreadcrumbs(pathname).at(-1)?.label, title, pathname);
+    assert.doesNotMatch(title, /resource-123|页面详情/);
+    assert.equal(
+      items.filter((item) => isNavigationItemActive(pathname, item)).length,
+      1,
+      pathname,
+    );
+  }
+  for (const item of items)
+    await access(`app/(protected)${item.href}/page.tsx`);
 });

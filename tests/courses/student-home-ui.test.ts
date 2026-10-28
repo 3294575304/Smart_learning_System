@@ -93,7 +93,7 @@ test("首页与任务中心只消费同一聚合服务，首页不再加载旧�
     "app/(protected)/student/tasks/page.tsx",
   ]) {
     const source = await readFile(path, "utf8");
-    assert.match(source, /getStudentTaskOverview\(student.id\)/u);
+    assert.match(source, /getStudentTaskOverview\(student.id(?:,\s*now)?\)/u);
     assert.doesNotMatch(
       source,
       /getStudentDashboard|listStudentAssignments|getStudentHomeTasks/u,

@@ -1,4 +1,5 @@
 "use client";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 
 import { studentScoreLabel } from "@/services/recommendations/scoring";
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
@@ -6,7 +7,6 @@ import { requestApi } from "@/components/courses/request-api";
 import { recommendationDetailApiPath } from "@/lib/api/recommendations";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { QuestionType, RecommendationStatus } from "@prisma/client";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -302,12 +302,11 @@ export function RecommendationPractice({
     <section className="min-w-0 space-y-6" aria-busy={batchBusy}>
       {!embedded && (
         <header className="min-w-0">
-          <Link
-            className="text-sm text-gray-500 hover:underline"
+          <StudentBackLink
             href={`/student/recommendations/${recommendation.id}`}
           >
-            ← 返回推荐详情
-          </Link>
+            返回推荐详情
+          </StudentBackLink>
           <h1 className="mt-2 text-2xl font-semibold break-words">推荐练习</h1>
           <p className="mt-2 text-sm text-gray-600">
             作答结果由服务端判分，并同步更新错题与知识掌握度。

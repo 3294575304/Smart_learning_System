@@ -243,3 +243,16 @@ test("list sections, course validation, search, stable paging and missing manage
 test.after(async () => {
   await Promise.all([prisma.$disconnect(), integrationPrisma.$disconnect()]);
 });
+
+test("favorites reject unavailable course parameters without widening list scope", async () => {
+  const { actor } = await setup("favorites-scope");
+  const { listFavorites } =
+    await import("../../../services/question-favorites/service");
+  await assert.rejects(
+    () => listFavorites(actor, { courseId: "nonexistent-course" }),
+    /课程不存在或无权访问/,
+  );
+  const result = await listFavorites(actor, { courseId: "GENERAL" });
+  assert.equal(result.total, 0);
+  assert.equal(result.items.length, 0);
+});

@@ -127,6 +127,11 @@ export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   "system-config": "系统配置",
   announcements: "系统公告",
   "course-templates": "课程模板",
+  "question-course-categories": "题库课程分类",
+  "random-picker": "随机选人",
+  ai: "AI出题",
+  profile: "学生画像",
+  "change-initial-password": "修改初始密码",
   courses: "课程管理",
   syllabus: "教学大纲",
   "assessment-scheme": "考核方案",
@@ -167,7 +172,7 @@ const STUDENT_SEGMENT_LABELS: Readonly<Record<string, string>> = {
       group.items.map((item) => [item.href.split("/").at(-1), item.label]),
     ),
   ),
-  "course-grades": "课程正式成绩",
+  "course-grades": "课程总评",
   "question-favorites": "我的收藏",
   submissions: "我的作答",
   practice: "练习",
@@ -184,6 +189,8 @@ export function getSegmentLabels(
   pathname: string,
   labels: Readonly<Record<string, string>> = SEGMENT_LABELS,
 ): Readonly<Record<string, string>> {
+  if (pathname === "/admin" || pathname.startsWith("/admin/"))
+    return { ...labels, classrooms: "班级治理", questions: "共享题库" };
   return pathname === "/student" || pathname.startsWith("/student/")
     ? { ...labels, ...STUDENT_SEGMENT_LABELS }
     : labels;
@@ -208,11 +215,34 @@ export function isNavigationItemActive(
   );
 }
 
+/** Student page titles and breadcrumb leaves share the same resource names. */
+export function getStudentPageLabel(pathname: string): string | undefined {
+  const path = pathname.replace(/\/$/, "");
+  if (path !== "/student" && !path.startsWith("/student/")) return undefined;
+  const detailRoutes: Array<[RegExp, string]> = [
+    [/^\/student\/assignments\/[^/]+$/, "作业详情"],
+    [/^\/student\/surveys\/[^/]+$/, "问卷详情"],
+    [/^\/student\/wrong-questions\/[^/]+$/, "错题详情"],
+    [/^\/student\/question-favorites\/[^/]+$/, "收藏题目详情"],
+    [/^\/student\/practice\/[^/]+$/, "练习记录"],
+    [/^\/student\/recommendations\/[^/]+$/, "练习详情"],
+    [/^\/student\/recommendations\/[^/]+\/practice$/, "练习作答"],
+    [/^\/student\/submissions\/[^/]+\/answer$/, "在线答题"],
+    [/^\/student\/submissions\/[^/]+\/result$/, "提交结果"],
+  ];
+  return (
+    detailRoutes.find(([pattern]) => pattern.test(path))?.[1] ??
+    getSegmentLabels(path)[path.split("/").at(-1) ?? ""]
+  );
+}
+
 export function getDashboardPageTitle(
   pathname: string,
   groups: NavigationGroup[],
   context?: { studentId?: string | null; view?: string | null },
 ): string {
+  const studentLabel = getStudentPageLabel(pathname);
+  if (studentLabel) return studentLabel;
   if (/^\/teacher\/assignments\/students\/[^/]+$/.test(pathname))
     return "学生作业明细";
   if (
@@ -220,8 +250,6 @@ export function getDashboardPageTitle(
     context?.studentId
   )
     return "个人作答";
-  if (pathname === "/teacher/assignments" && context?.view === "STUDENTS")
-    return "学生作业查询";
   const labels = getSegmentLabels(pathname);
   const exactLabel = labels[pathname.split("/").filter(Boolean).at(-1) ?? ""];
   if (exactLabel) return exactLabel;

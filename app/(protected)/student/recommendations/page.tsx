@@ -1,5 +1,7 @@
+import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
+import { StudentPageHeader } from "@/components/dashboard/student-page-header";
 import { practiceSetQuerySchema } from "@/services/practice-sets/types";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ClassroomStatus, Role } from "@prisma/client";
 import { PracticeCenterTabs } from "@/components/recommendations/practice-center-tabs";
 import { GenerateRecommendationsForm } from "@/components/recommendations/generate-recommendations-form";
@@ -79,10 +81,20 @@ export default async function StudentRecommendationsPage({
     status: firstQueryValue(query.status),
   });
   const [result, classrooms, practiceCourses] = await Promise.all([
-    listPracticeSets(student, listQuery),
-    listStudentClassrooms(student.id),
-    listStudentPracticeCourses(student.id),
+    activeView === "recommended" ? listPracticeSets(student, listQuery) : null,
+    activeView === "generate" ? listStudentClassrooms(student.id) : [],
+    activeView !== "recommended" ? listStudentPracticeCourses(student.id) : [],
   ]);
+  if (
+    activeView !== "recommended" &&
+    (initialCourseId || initialClassroomId) &&
+    !practiceCourses.some(
+      (item) =>
+        (!initialCourseId || item.courseId === initialCourseId) &&
+        (!initialClassroomId || item.classroomId === initialClassroomId),
+    )
+  )
+    notFound();
   const reflectionOption =
     practiceCourses.find(
       (item) =>
@@ -90,91 +102,102 @@ export default async function StudentRecommendationsPage({
         (!initialClassroomId || item.classroomId === initialClassroomId),
     ) ?? practiceCourses[0];
   const reflectionCourse = reflectionOption?.courseId ?? null;
-  const reflections = reflectionCourse
-    ? await listSelfReflections(student.id, reflectionCourse)
-    : [];
+  const reflections =
+    activeView === "assistant" && reflectionCourse
+      ? await listSelfReflections(student.id, reflectionCourse)
+      : [];
   const activeClassrooms = classrooms
     .filter((classroom) => classroom.status === ClassroomStatus.ACTIVE)
     .map((classroom) => ({ id: classroom.id, name: classroom.name }));
 
   return (
     <section className="mx-auto max-w-[1440px] min-w-0 space-y-5">
-      <header className="min-w-0 rounded-2xl border border-sky-100 bg-white/80 px-5 py-5 sm:px-6">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold">练习中心</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
-            按课程生成与完成练习，或与 AI 梳理学习疑问。
-          </p>
-        </div>
-      </header>
+      <StudentPageHeader
+        actions={
+          <StudentCourseReturnLink
+            courseId={initialCourseId}
+            classroomId={initialClassroomId}
+          />
+        }
+        title="练习中心"
+        description="按课程生成与完成练习，或与 AI 梳理学习疑问。"
+      />
 
       <PracticeCenterTabs
         initialView={activeView}
         assistant={
-          <LearningAssistantPanel
-            key={`${initialCourseId}:${initialConceptId}`}
-            courses={practiceCourses}
-            initialCourseId={initialCourseId}
-            initialConceptId={initialConceptId}
-            reflectionHistory={
-              reflectionOption ? (
-                <SelfReflectionPanel
-                  historyOnly
-                  classroomId={reflectionOption.classroomId}
-                  courseId={reflectionOption.courseId}
-                  initialReflections={reflections}
-                />
-              ) : undefined
-            }
-          />
+          activeView === "assistant" ? (
+            <LearningAssistantPanel
+              key={`${initialCourseId}:${initialConceptId}`}
+              courses={practiceCourses}
+              initialCourseId={initialCourseId}
+              initialConceptId={initialConceptId}
+              reflectionHistory={
+                reflectionOption ? (
+                  <SelfReflectionPanel
+                    historyOnly
+                    classroomId={reflectionOption.classroomId}
+                    courseId={reflectionOption.courseId}
+                    initialReflections={reflections}
+                  />
+                ) : undefined
+              }
+            />
+          ) : null
         }
         practice={
-          <PracticeSetCenter
-            key={JSON.stringify(result)}
-            initialResult={result}
-            initialQuery={{ ...listQuery, section: result.section }}
-          />
+          result ? (
+            <PracticeSetCenter
+              key={JSON.stringify(result)}
+              initialResult={result}
+              initialQuery={{ ...listQuery, section: result.section }}
+            />
+          ) : null
         }
         generation={
-          <section
-            aria-labelledby="generate-practice-heading"
-            className="space-y-4"
-          >
-            <header>
-              <h2 className="font-semibold" id="generate-practice-heading">
-                生成练习
-              </h2>
-              <p className="mt-1 text-sm text-gray-500">
-                选择课程和练习范围，确认条件后开始。也可以根据近期答题获取推荐。
-              </p>
-            </header>
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="font-medium">根据近期答题生成推荐</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                系统结合班级课程范围和近期答题情况，为你挑选待练题目。
-              </p>
-              <div className="mt-4">
-                <GenerateRecommendationsForm
-                  key={initialClassroomId}
-                  initialClassroomId={initialClassroomId}
-                  classrooms={activeClassrooms}
-                  studentId={student.id}
-                />
-              </div>
-            </div>
-            <CoursePracticeCenter
-              key={`${initialClassroomId}:${initialCourseId}:${initialConceptId}:${JSON.stringify(initialChapterIds)}:${initialChapterId}:${initialMode}:${initialDifficulty}:${initialTemplate}`}
-              courses={practiceCourses}
-              initialClassroomId={initialClassroomId}
-              initialChapterId={initialChapterId}
-              initialChapterIds={initialChapterIds}
-              initialDifficulty={initialDifficulty}
-              initialTemplate={initialTemplate}
-              initialMode={initialMode}
-              initialConceptId={initialConceptId}
-              initialCourseId={initialCourseId}
-            />
-          </section>
+          activeView === "generate" ? (
+            <section
+              aria-labelledby="generate-practice-heading"
+              className="space-y-4"
+            >
+              <header>
+                <h2 className="font-semibold" id="generate-practice-heading">
+                  生成练习
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  选择课程和练习范围，确认条件后开始。也可以根据近期答题获取推荐。
+                </p>
+              </header>
+              <CoursePracticeCenter
+                key={`${initialClassroomId}:${initialCourseId}:${initialConceptId}:${JSON.stringify(initialChapterIds)}:${initialChapterId}:${initialMode}:${initialDifficulty}:${initialTemplate}`}
+                courses={practiceCourses}
+                initialClassroomId={initialClassroomId}
+                initialChapterId={initialChapterId}
+                initialChapterIds={initialChapterIds}
+                initialDifficulty={initialDifficulty}
+                initialTemplate={initialTemplate}
+                initialMode={initialMode}
+                initialConceptId={initialConceptId}
+                initialCourseId={initialCourseId}
+              />
+              <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <summary className="cursor-pointer font-medium text-sky-800">
+                  根据近期答题生成推荐
+                </summary>
+                <p className="mt-1 text-sm text-gray-500">
+                  系统结合班级课程范围和近期答题情况，为你挑选待练题目。
+                </p>
+                <div className="mt-4">
+                  <GenerateRecommendationsForm
+                    key={initialClassroomId}
+                    initialClassroomId={initialClassroomId}
+                    classrooms={activeClassrooms}
+                    studentId={student.id}
+                  />
+                </div>
+              </details>
+            </section>
+          ) : null
         }
       />
     </section>

@@ -568,10 +568,7 @@ function filterOptionsFromRecords(
   );
   for (const record of records) {
     const course = recordCourse(record);
-    courseMap.set(
-      course?.id ?? "LEGACY",
-      course?.name ?? "历史错题（未归属课程）",
-    );
+    courseMap.set(course?.id ?? "LEGACY", course?.name ?? "通用与历史错题");
   }
 
   for (const record of records) {

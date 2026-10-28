@@ -2,8 +2,8 @@
 
 import { BookOpen, SlidersHorizontal, MessageCircle } from "lucide-react";
 import { AssistantPanelActiveContext } from "./practice-panel-context";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 
 interface Props {
   initialView: "recommended" | "generate" | "assistant";
@@ -12,13 +12,15 @@ interface Props {
   assistant?: ReactNode;
 }
 
-/** The browser history update keeps deep links without another server navigation. */
+/** Only the selected server panel loads its domain data. */
 export function PracticeCenterTabs({
   initialView,
   practice,
   generation,
   assistant,
 }: Props) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const searchParams = useSearchParams();
   const [view, setView] = useState(initialView);
   const queryView = searchParams.get("view");
@@ -43,8 +45,9 @@ export function PracticeCenterTabs({
       )
         return;
       url.searchParams.set("view", "generate");
-      window.history.replaceState(null, "", url);
-      setView("generate");
+      startTransition(() =>
+        router.push(`${url.pathname}${url.search}`, { scroll: false }),
+      );
       window.requestAnimationFrame(() => {
         document
           .getElementById("course-practice-center")
@@ -54,21 +57,35 @@ export function PracticeCenterTabs({
     window.addEventListener("learning-assistant-practice", openPractice);
     return () =>
       window.removeEventListener("learning-assistant-practice", openPractice);
-  }, []);
+  }, [router]);
 
   function selectView(nextView: Props["initialView"]) {
-    setView(nextView);
     const url = new URL(window.location.href);
     url.searchParams.set("view", nextView);
-    window.history.replaceState(null, "", url);
+    if (
+      nextView !== "recommended" &&
+      url.searchParams.get("courseId") === "GENERAL"
+    ) {
+      url.searchParams.delete("courseId");
+      url.searchParams.delete("chapterId");
+      url.searchParams.delete("conceptId");
+    }
+    startTransition(() =>
+      router.push(`${url.pathname}${url.search}`, { scroll: false }),
+    );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" aria-busy={pending}>
+      {pending ? (
+        <p role="status" className="text-sm text-slate-500">
+          正在加载功能…
+        </p>
+      ) : null}
       <div
         role="tablist"
         aria-label="练习中心功能"
-        className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm sm:grid-cols-3"
+        className="flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-sky-100 bg-white p-1"
       >
         {(
           [
@@ -84,7 +101,7 @@ export function PracticeCenterTabs({
             id={`practice-tab-${value}`}
             aria-selected={view === value}
             aria-controls={`practice-panel-${value}`}
-            className={`flex min-w-0 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${view === value ? "bg-sky-50 text-sky-800 ring-1 ring-sky-200 ring-inset" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
+            className={`flex min-w-0 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${view === value ? "bg-sky-50 text-sky-800 ring-1 ring-sky-200 ring-inset" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
             onClick={() => selectView(value)}
             onKeyDown={(event) => {
               if (

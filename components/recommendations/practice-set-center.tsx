@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { practiceListQuery } from "@/services/practice-sets/navigation";
 import { useEffect, useRef, useState } from "react";
 import { requestApi } from "@/components/courses/request-api";
 import type {
@@ -36,7 +37,20 @@ export function PracticeSetCenter({
     },
     [],
   );
-  async function load(next: Query = query) {
+  useEffect(() => {
+    const restore = () => {
+      const parsed = practiceListQuery(window.location.search);
+      if (parsed.success) {
+        setKeyword(parsed.data.keyword ?? "");
+        void load(parsed.data, false);
+      }
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+    // load owns the request sequence; history restoration reads only the URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  async function load(next: Query = query, push = true) {
     const version = ++sequence.current;
     requested.current = next;
     controller.current?.abort();
@@ -74,15 +88,31 @@ export function PracticeSetCenter({
       if (value !== undefined && value !== "")
         url.searchParams.set(key, String(value));
     }
-    window.history.replaceState(null, "", url);
+    const historyMethod =
+      push && url.href !== window.location.href ? "pushState" : "replaceState";
+    window.history[historyMethod](window.history.state, "", url);
   }
   function changed() {
     setNotice("练习记录已更新。");
-    void load(query);
+    void load(query, false);
   }
+  const returnParams = new URLSearchParams({ view: "recommended" });
+  for (const [key, value] of Object.entries(query))
+    if (value !== undefined) returnParams.set(key, String(value));
+  const returnTo = `/student/recommendations?${returnParams}`;
+  const detailHref = (id: string) =>
+    `/student/recommendations/${id}/practice?returnTo=${encodeURIComponent(returnTo)}`;
   const section = query.section ?? result.section ?? "ACTIVE";
   return (
-    <section className="space-y-4" aria-label="我的练习组">
+    <section className="space-y-4" aria-label="我的练习组" aria-busy={busy}>
+      <p className="text-xs text-slate-500">
+        当前范围：
+        {query.courseId === "GENERAL"
+          ? "通用历史练习"
+          : (result.courses.find((course) => course.id === query.courseId)
+              ?.name ?? "全部课程")}
+        {query.keyword ? ` · 搜索“${query.keyword}”` : ""}
+      </p>
       <nav className="flex flex-wrap items-center gap-2" aria-label="练习分区">
         {(
           [
@@ -104,7 +134,7 @@ export function PracticeSetCenter({
                 page: 1,
               })
             }
-            className={`rounded-lg border px-4 py-2 text-sm ${section === value ? "bg-sky-600 text-white" : "bg-white text-slate-600"}`}
+            className={`rounded-lg border px-4 py-2 text-sm ${value === "TRASH" ? "ml-2" : ""} ${section === value ? "bg-sky-600 text-white" : "bg-white text-slate-600"}`}
           >
             {label}
             {result.counts ? ` ${result.counts[value]}` : ""}
@@ -112,7 +142,7 @@ export function PracticeSetCenter({
         ))}
       </nav>
       <form
-        className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4"
+        className="flex w-full max-w-3xl flex-wrap items-end gap-3 rounded-xl border border-sky-100 bg-white p-3"
         onSubmit={(event) => {
           event.preventDefault();
           void load({
@@ -122,7 +152,7 @@ export function PracticeSetCenter({
           });
         }}
       >
-        <label className="text-sm">
+        <label className="w-full text-sm sm:w-52">
           课程
           <select
             disabled={busy}
@@ -134,7 +164,7 @@ export function PracticeSetCenter({
                 page: 1,
               })
             }
-            className="ml-2 rounded-lg border p-2"
+            className="mt-1 w-full min-w-0 rounded-lg border p-2"
           >
             <option value="">全部课程</option>
             {initialResult.courses.map((course) => (
@@ -145,10 +175,10 @@ export function PracticeSetCenter({
             <option value="GENERAL">通用历史练习</option>
           </select>
         </label>
-        <label className="min-w-40 flex-1 text-sm">
+        <label className="w-full min-w-0 text-sm sm:w-72">
           搜索
           <input
-            className="ml-2 rounded-lg border p-2"
+            className="mt-1 w-full min-w-0 rounded-lg border p-2"
             placeholder="练习名称、课程或题目"
             maxLength={100}
             value={keyword}
@@ -163,7 +193,7 @@ export function PracticeSetCenter({
           <label className="text-sm">
             状态
             <select
-              className="ml-2 rounded-lg border p-2"
+              className="mt-1 w-full min-w-0 rounded-lg border p-2"
               disabled={busy}
               value={query.status ?? ""}
               onChange={(event) =>
@@ -248,7 +278,7 @@ export function PracticeSetCenter({
             : "暂无符合条件的练习，可调整筛选或前往生成练习。"}
         </p>
       ) : null}
-      <div className="divide-y rounded-xl border bg-white">
+      <div inert={busy} className="divide-y rounded-xl border bg-white">
         {result.items.map((item) => {
           const score = summarizePracticeScores(item.questions);
           return (
@@ -302,7 +332,7 @@ export function PracticeSetCenter({
               </div>
               <Link
                 className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white"
-                href={`/student/recommendations/${item.entryId}/practice`}
+                href={detailHref(item.entryId)}
               >
                 {item.status === "ACTIVE"
                   ? item.completed
@@ -326,7 +356,7 @@ export function PracticeSetCenter({
                       <span>{index + 1}.</span>
                       <Link
                         className="min-w-0 flex-1 break-words hover:text-sky-700"
-                        href={`/student/recommendations/${question.id}/practice`}
+                        href={detailHref(question.id)}
                       >
                         {question.title}
                       </Link>

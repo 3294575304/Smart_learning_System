@@ -1,3 +1,4 @@
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { RecommendationStatus, Role } from "@prisma/client";
 import Link from "next/link";
@@ -40,12 +41,9 @@ export default async function RecommendationDetailPage({ params }: Props) {
     return (
       <section className="min-w-0 space-y-6">
         <header className="min-w-0">
-          <Link
-            className="text-sm text-gray-500 hover:underline"
-            href="/student/recommendations"
-          >
-            ← 返回推荐列表
-          </Link>
+          <StudentBackLink href="/student/recommendations">
+            返回推荐列表
+          </StudentBackLink>
           <div className="mt-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h1 className="text-2xl font-semibold break-words">
