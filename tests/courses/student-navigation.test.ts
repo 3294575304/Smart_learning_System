@@ -95,7 +95,7 @@ test("课程内页保留我的课程上下文且不产生不存在的课程详�
 test("学生命名不会影响教师同名路径或管理员导航", () => {
   for (const [pathname, label] of [
     ["/teacher/assignments", "作业管理"],
-    ["/teacher/results", "成绩统计"],
+    ["/teacher/results", "学情分析"],
     ["/teacher/courses/course-123/attendance", "出勤台账"],
     ["/teacher/courses/course-123/analytics", "学情分析"],
   ]) {

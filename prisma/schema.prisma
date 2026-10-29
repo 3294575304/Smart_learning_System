@@ -77,6 +77,7 @@ enum AuditAction {
   AI_QUESTION_MAPPING_BATCH_CREATED
   AI_QUESTION_MAPPING_BATCH_CONFIRMED
   AI_QUESTION_BATCH_CREATED
+  AI_QUESTION_BATCH_DELETED
   AI_QUESTION_CANDIDATE_EDITED
   AI_QUESTION_CANDIDATE_CONFIRMED
   AI_QUESTION_CANDIDATE_DISCARDED
@@ -2423,6 +2424,7 @@ model AIQuestionGenerationBatch {
   sourceFileSizeBytes   Int?
   sourceFileExpiresAt   DateTime?
   sourceFileDeletedAt   DateTime?
+  deletedAt             DateTime?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -2432,6 +2434,7 @@ model AIQuestionGenerationBatch {
   candidates AIQuestionGenerationCandidate[]
 
   @@index([teacherId, createdAt])
+  @@index([teacherId, deletedAt, createdAt])
   @@index([courseId, status, createdAt])
   @@index([sourceFileExpiresAt, sourceFileDeletedAt])
 }

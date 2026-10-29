@@ -6,9 +6,11 @@ import { PrismaClient, QuestionType } from "@prisma/client";
 import {
   confirmAllQuestionCandidates,
   confirmQuestionCandidate,
+  deleteQuestionGenerationBatch,
   discardQuestionCandidate,
   editQuestionCandidate,
   getQuestionGenerationBatch,
+  listQuestionGenerationBatches,
   queueQuestionGeneration,
   retryQuestionGeneration,
 } from "@/services/ai-question-generation/service";
@@ -182,6 +184,71 @@ async function main() {
   assert.equal(stored.status, "ACTIVE");
   assert.equal(stored.questionCategoryId, course.questionCategoryId);
   assert.equal(stored.type, QuestionType.SINGLE_CHOICE);
+  const jobStatusBeforeDelete = await prisma.backgroundJob.findUniqueOrThrow({
+    where: { id: job.id },
+    select: { status: true },
+  });
+  await assert.rejects(
+    deleteQuestionGenerationBatch(otherTeacher.id, requested.id, {
+      ipAddress: null,
+      userAgent: null,
+    }),
+    /生成任务不存在/u,
+  );
+  assert.deepEqual(
+    await deleteQuestionGenerationBatch(teacher.id, requested.id, {
+      ipAddress: null,
+      userAgent: null,
+    }),
+    { deleted: true },
+  );
+  assert.deepEqual(
+    await deleteQuestionGenerationBatch(teacher.id, requested.id, {
+      ipAddress: null,
+      userAgent: null,
+    }),
+    { deleted: true },
+  );
+  assert.equal(
+    (await listQuestionGenerationBatches(teacher.id)).some(
+      (item) => item.id === requested.id,
+    ),
+    false,
+  );
+  await assert.rejects(
+    getQuestionGenerationBatch(teacher.id, requested.id),
+    /生成任务不存在/u,
+  );
+  assert.ok(
+    await prisma.question.findUnique({ where: { id: confirmed.questionId } }),
+  );
+  const retainedBatch =
+    await prisma.aIQuestionGenerationBatch.findUniqueOrThrow({
+      where: { id: requested.id },
+      include: { candidates: true },
+    });
+  assert.ok(retainedBatch.deletedAt);
+  assert.equal(retainedBatch.status, "READY");
+  assert.equal(
+    retainedBatch.candidates[0]?.confirmedQuestionId,
+    confirmed.questionId,
+  );
+  assert.deepEqual(
+    await prisma.backgroundJob.findUniqueOrThrow({
+      where: { id: job.id },
+      select: { status: true },
+    }),
+    jobStatusBeforeDelete,
+  );
+  assert.equal(
+    await prisma.auditLog.count({
+      where: {
+        targetId: requested.id,
+        action: "AI_QUESTION_BATCH_DELETED",
+      },
+    }),
+    1,
+  );
   await assert.rejects(
     queueQuestionGeneration(
       teacher.id,
@@ -606,6 +673,35 @@ async function main() {
       else process.env[key] = value;
     }
   }
+  const pendingBatch = await queueQuestionGeneration(
+    teacher.id,
+    { ...analogyInput, idempotencyKey: randomUUID() },
+    null,
+    { ipAddress: null, userAgent: null },
+  );
+  await deleteQuestionGenerationBatch(teacher.id, pendingBatch.id, {
+    ipAddress: null,
+    userAgent: null,
+  });
+  const hiddenPendingBatch =
+    await prisma.aIQuestionGenerationBatch.findUniqueOrThrow({
+      where: { id: pendingBatch.id },
+    });
+  assert.ok(hiddenPendingBatch.jobId);
+  assert.equal(
+    (
+      await prisma.backgroundJob.findUniqueOrThrow({
+        where: { id: hiddenPendingBatch.jobId },
+      })
+    ).status,
+    "PENDING",
+  );
+  assert.equal(
+    (await listQuestionGenerationBatches(teacher.id)).some(
+      (item) => item.id === pendingBatch.id,
+    ),
+    false,
+  );
   await prisma.$disconnect();
 }
 

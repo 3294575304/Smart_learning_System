@@ -200,6 +200,62 @@ async function main(): Promise<void> {
         .status,
       200,
     );
+    const aiCourse = await prisma.course.findFirstOrThrow({
+      where: { teacherId: teacher.id, questionCategoryId: category.id },
+      select: { id: true },
+    });
+    const aiBatch = await prisma.aIQuestionGenerationBatch.create({
+      data: {
+        courseId: aiCourse.id,
+        teacherId: teacher.id,
+        questionCategoryId: category.id,
+        mode: "RANGE",
+        idempotencyKey: randomBytes(16).toString("hex"),
+        request: {},
+        requestedCount: 1,
+        promptVersion: "http-test",
+        ruleVersion: "http-test",
+      },
+    });
+    const aiBatchPath = `/api/teacher/ai-question-batches/${aiBatch.id}`;
+    assert.equal(
+      (await requestJson(aiBatchPath, undefined, "DELETE")).status,
+      401,
+    );
+    assert.equal(
+      (await requestJson(aiBatchPath, studentCookie, "DELETE")).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson(aiBatchPath, teacherTwoCookie, "DELETE")).status,
+      404,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          "/api/teacher/ai-question-batches/invalid-id",
+          teacherCookie,
+          "DELETE",
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (await requestJson(aiBatchPath, teacherCookie, "DELETE")).status,
+      200,
+    );
+    assert.equal(
+      (await requestJson(aiBatchPath, teacherCookie, "DELETE")).status,
+      200,
+    );
+    assert.equal((await requestJson(aiBatchPath, teacherCookie)).status, 404);
+    assert.ok(
+      (
+        await prisma.aIQuestionGenerationBatch.findUniqueOrThrow({
+          where: { id: aiBatch.id },
+        })
+      ).deletedAt,
+    );
     assert.equal(
       (
         await requestJson(
