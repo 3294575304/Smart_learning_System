@@ -1,3 +1,7 @@
+import {
+  assignmentCapabilities,
+  type AssignmentLifecycle,
+} from "@/services/assignments/capabilities";
 import { CONCLUSIVE_EVIDENCE_COUNT } from "@/services/learner-profiles/constants";
 
 export interface DashboardMasteryEntry {
@@ -60,6 +64,8 @@ export interface DashboardSubmission {
 /** Match the existing publication gate; publishing is separate from assignment completion. */
 export function summarizeDashboardAssignmentTodo(
   submissions: readonly DashboardSubmission[],
+  lifecycle?: AssignmentLifecycle,
+  now = new Date(),
 ) {
   const effective = submissions.filter((item) =>
     ["SUBMITTED", "PENDING_REVIEW", "GRADED", "PUBLISHED"].includes(
@@ -81,8 +87,10 @@ export function summarizeDashboardAssignmentTodo(
   );
   return {
     pendingReviewCount,
-    publishableCount: blocked
-      ? 0
-      : effective.filter((item) => item.status === "GRADED").length,
+    publishableCount:
+      blocked ||
+      (lifecycle && !assignmentCapabilities(lifecycle, now).canPublishResults)
+        ? 0
+        : effective.filter((item) => item.status === "GRADED").length,
   };
 }

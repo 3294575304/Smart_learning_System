@@ -3,40 +3,49 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("筛选选择项立即生效且服务端页面不直接绑定事件", async () => {
-  const [control, assignments, results, notifications] = await Promise.all([
-    readFile(
-      new URL(
-        "../../components/filters/auto-submit-select.tsx",
-        import.meta.url,
+  const [control, assignments, results, notifications, resultsFilters] =
+    await Promise.all([
+      readFile(
+        new URL(
+          "../../components/filters/auto-submit-select.tsx",
+          import.meta.url,
+        ),
+        "utf8",
       ),
-      "utf8",
-    ),
-    readFile(
-      new URL(
-        "../../app/(protected)/teacher/assignments/page.tsx",
-        import.meta.url,
+      readFile(
+        new URL(
+          "../../app/(protected)/teacher/assignments/page.tsx",
+          import.meta.url,
+        ),
+        "utf8",
       ),
-      "utf8",
-    ),
-    readFile(
-      new URL(
-        "../../app/(protected)/teacher/results/page.tsx",
-        import.meta.url,
+      readFile(
+        new URL(
+          "../../app/(protected)/teacher/results/page.tsx",
+          import.meta.url,
+        ),
+        "utf8",
       ),
-      "utf8",
-    ),
-    readFile(
-      new URL(
-        "../../components/notifications/notification-center.tsx",
-        import.meta.url,
+      readFile(
+        new URL(
+          "../../components/notifications/notification-center.tsx",
+          import.meta.url,
+        ),
+        "utf8",
       ),
-      "utf8",
-    ),
-  ]);
+      readFile(
+        new URL(
+          "../../components/assignment-results/overview-filters.tsx",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ]);
 
   assert.match(control, /form\?\.requestSubmit\(\)/u);
   assert.equal(assignments.match(/<AutoSubmitSelect/gu)?.length, 3);
-  assert.equal(results.match(/<AutoSubmitSelect/gu)?.length, 2);
+  assert.match(results, /<TeacherResultsFilters/u);
+  assert.match(resultsFilters, /form\.requestSubmit\(\)/u);
   assert.doesNotMatch(assignments, /onChange=|应用筛选/u);
   assert.doesNotMatch(results, /onChange=|>\s*筛选\s*</u);
   assert.match(assignments, /aria-label="作业列表筛选"/u);

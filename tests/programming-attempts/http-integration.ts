@@ -41,6 +41,7 @@ interface ExecutorSubmission {
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
+let archiveOnExecution: string | null = null;
 const applicationPort = 3116;
 const executorPort = 3216;
 const baseUrl = `http://127.0.0.1:${applicationPort}`;
@@ -101,6 +102,13 @@ const executor = createServer(async (request, response) => {
     return;
   }
   if (request.method === "POST" && url.pathname === "/v1/executions") {
+    if (archiveOnExecution) {
+      await prisma.assignment.update({
+        where: { id: archiveOnExecution },
+        data: { status: "ARCHIVED" },
+      });
+      archiveOnExecution = null;
+    }
     const input = (await readJson(request)) as ExecutorSubmission;
     assert.equal(input.networkAccess, false);
     assert.equal(input.metadata.purpose, "FUTURE_JUDGE");
@@ -747,6 +755,171 @@ async function main(): Promise<void> {
       );
     }
 
+    await prisma.assignment.update({
+      where: { id: assignment.data.id },
+      data: { dueAt: new Date(Date.now() - 1000) },
+    });
+    const grantsPath = `/api/teacher/assignments/${assignment.data.id}/makeup-grants`;
+    const grantInput = {
+      requestId: randomUUID(),
+      studentIds: [student.id],
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      reason: "编程补交权限验收",
+    };
+    assert.equal(
+      (await requestJson(grantsPath, undefined, "POST", grantInput)).status,
+      401,
+    );
+    assert.equal(
+      (await requestJson(grantsPath, studentCookie, "POST", grantInput)).status,
+      403,
+    );
+    assert.equal(
+      (await requestJson(grantsPath, teacherTwoCookie, "POST", grantInput))
+        .status,
+      404,
+    );
+    assert.equal(
+      (
+        await requestJson(grantsPath, teacherCookie, "POST", {
+          ...grantInput,
+          studentIds: [outsider.id],
+        })
+      ).status,
+      404,
+    );
+    const grantResponse = await requestJson(
+      grantsPath,
+      teacherCookie,
+      "POST",
+      grantInput,
+    );
+    assert.equal(grantResponse.status, 200);
+    const grantData = (await grantResponse.json()) as ApiSuccess<{
+      grants: Array<{ id: string; kind: string }>;
+    }>;
+    assert.equal(grantData.data.grants[0].kind, "REDO");
+    const redoResponse = await requestJson(
+      `/api/student/assignments/${assignment.data.id}/attempts`,
+      studentCookie,
+      "POST",
+      { idempotencyKey: randomUUID() },
+    );
+    assert.equal(redoResponse.status, 201);
+    const redoDraft = (await redoResponse.json()) as ApiSuccess<{ id: string }>;
+    const runPath = `/api/student/submissions/${redoDraft.data.id}/programming-runs`;
+    const runInput = {
+      assignmentQuestionId: assignmentQuestion.id,
+      sourceCode,
+      idempotencyKey: randomUUID(),
+    };
+    const makeupRun = await requestJson(
+      runPath,
+      studentCookie,
+      "POST",
+      runInput,
+    );
+    assert.equal(makeupRun.status, 202);
+    const makeupRunData = (await makeupRun.json()) as ApiSuccess<{
+      attemptId: string;
+    }>;
+    await waitForAttempt(makeupRunData.data.attemptId, studentCookie);
+    assert.equal(
+      (
+        await requestJson(
+          `/api/teacher/assignments/${assignment.data.id}/results/publish`,
+          teacherCookie,
+          "POST",
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `${grantsPath}/${grantData.data.grants[0].id}`,
+          teacherCookie,
+          "DELETE",
+          { reason: "撤销运行验收权限" },
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await requestJson(runPath, studentCookie, "POST", {
+          ...runInput,
+          idempotencyKey: randomUUID(),
+        })
+      ).status,
+      409,
+    );
+    console.info(
+      "Makeup HTTP checks passed: role/ownership/member isolation, redo despite single-submit rule, public-run gate and publication protection.",
+    );
+
+    if (!usesExternalExecutor) {
+      archiveOnExecution = assignment.data.id;
+      const response = await requestJson(
+        `/api/teacher/programming-attempts/${formal.id}/rejudge`,
+        teacherCookie,
+        "POST",
+        {
+          reason: "验证在途判题遇到归档后不再改写成绩",
+          idempotencyKey: randomUUID(),
+        },
+      );
+      assert.equal(response.status, 202);
+      const rejudge = (await response.json()) as ApiSuccess<{
+        attemptId: string;
+      }>;
+      await waitForAttempt(rejudge.data.attemptId, studentCookie);
+      assert.equal(
+        (
+          await prisma.assignment.findUniqueOrThrow({
+            where: { id: assignment.data.id },
+          })
+        ).status,
+        "ARCHIVED",
+      );
+      assert.deepEqual(
+        await prisma.studentAnswer.findUniqueOrThrow({
+          where: { id: storedAnswer.id },
+        }),
+        storedAnswer,
+      );
+      assert.equal(
+        await prisma.studentAnswerConceptEvidence.count({
+          where: { assignmentId: assignment.data.id },
+        }),
+        evidence.length,
+      );
+    }
+    await prisma.assignment.update({
+      where: { id: assignment.data.id },
+      data: { status: "ARCHIVED" },
+    });
+    for (const action of ["rejudge", "revoke"] as const) {
+      const response = await requestJson(
+        `/api/teacher/programming-attempts/${formal.id}/${action}`,
+        teacherCookie,
+        "POST",
+        {
+          reason: "归档只读边界检查",
+          ...(action === "rejudge" ? { idempotencyKey: randomUUID() } : {}),
+        },
+      );
+      assert.equal(response.status, 409);
+    }
+    assert.deepEqual(
+      await prisma.studentAnswer.findUniqueOrThrow({
+        where: { id: storedAnswer.id },
+      }),
+      storedAnswer,
+    );
+    console.info(
+      "Archive HTTP checks passed: rejudge/revoke denied and answer unchanged.",
+    );
     console.info(
       `Programming runtime HTTP integration passed (${usesExternalExecutor ? "real remote executor" : "controlled executor double"}): public run, hidden judge, grade and concept evidence.`,
     );

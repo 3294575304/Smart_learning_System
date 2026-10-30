@@ -1,4 +1,5 @@
 import "server-only";
+import { assertPracticeGroupWritable } from "@/services/practice-sets/management";
 
 import {
   Prisma,
@@ -35,6 +36,7 @@ const practiceSubmissionSelect =
     studentId: true,
     status: true,
     expiresAt: true,
+    assignedPoints: true,
     questionId: true,
     practiceAnswer: { select: { id: true } },
     programmingAttempts: { select: { id: true }, take: 1 },
@@ -194,6 +196,11 @@ async function completePracticeTransaction(
         throw new ResourceNotFoundError("推荐记录不存在");
       }
       assertCanAccessRecommendation(actor, recommendation.studentId);
+      await assertPracticeGroupWritable(
+        transaction,
+        actor.id,
+        recommendationId,
+      );
       if (recommendation.status === RecommendationStatus.COMPLETED) {
         if (!recommendation.practiceAnswer) {
           throw new RecommendationOperationError(
@@ -249,7 +256,7 @@ async function completePracticeTransaction(
         : gradeAnswer(
             {
               type: recommendation.question.type,
-              points: 1,
+              points: recommendation.assignedPoints?.toNumber() ?? 1,
               correctBoolean: recommendation.question.correctBoolean,
               acceptableAnswers: recommendation.question.acceptableAnswers,
               isCaseSensitive: recommendation.question.isCaseSensitive,
@@ -272,7 +279,7 @@ async function completePracticeTransaction(
           completedAt: now,
           wasCorrect: grading.isCorrect,
           score: new Prisma.Decimal(grading.score),
-          maxScore: new Prisma.Decimal(1),
+          maxScore: new Prisma.Decimal(recommendation.assignedPoints ?? 1),
         },
       });
       if (updated.count !== 1) {
@@ -295,7 +302,7 @@ async function completePracticeTransaction(
             submittedAnswer.kind === "CHOICE" ? submittedAnswer.optionIds : [],
           responseTimeMs: submittedAnswer.responseTimeMs,
           score: new Prisma.Decimal(grading.score),
-          maxScore: new Prisma.Decimal(1),
+          maxScore: new Prisma.Decimal(recommendation.assignedPoints ?? 1),
           isCorrect: grading.isCorrect,
         },
         select: { id: true },

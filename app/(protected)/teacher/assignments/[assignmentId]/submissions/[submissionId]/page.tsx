@@ -83,9 +83,16 @@ export default async function SubmissionGradingPage({ params }: Props) {
           </div>
         </header>
 
-        {submission.status === SubmissionStatus.PUBLISHED ? (
+        {submission.gradingBlockedReason ? (
+          <p
+            role="status"
+            className="rounded-lg border bg-slate-50 p-4 text-sm text-slate-600"
+          >
+            {submission.gradingBlockedReason}
+          </p>
+        ) : submission.status === SubmissionStatus.PUBLISHED ? (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            该提交成绩已经正式发布，当前页面为只读状态。
+            该提交成绩已公布，普通评分只读；编程题重判或撤销须填写原因并保留审计。
           </div>
         ) : submission.status === SubmissionStatus.GRADED ? (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
@@ -116,7 +123,8 @@ export default async function SubmissionGradingPage({ params }: Props) {
                     (answer.gradingStatus ===
                       GradingStatus.MANUAL_REVIEW_REQUIRED ||
                       answer.gradingStatus === GradingStatus.GRADED))) &&
-                submission.status === SubmissionStatus.PENDING_REVIEW;
+                submission.status === SubmissionStatus.PENDING_REVIEW &&
+                submission.canManageGrading;
               return (
                 <article
                   className="rounded-xl border bg-white p-5"
@@ -193,7 +201,7 @@ export default async function SubmissionGradingPage({ params }: Props) {
                       {answer.manualScore}
                     </p>
                   ) : null}
-                  {isProgramming ? (
+                  {isProgramming && submission.canManageGrading ? (
                     <ProgrammingAttemptActions
                       attempt={answer.programmingAttempt}
                     />
@@ -221,7 +229,8 @@ export default async function SubmissionGradingPage({ params }: Props) {
           )}
         </div>
 
-        {submission.status === SubmissionStatus.PENDING_REVIEW ? (
+        {submission.status === SubmissionStatus.PENDING_REVIEW &&
+        submission.canManageGrading ? (
           <footer className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white p-5">
             <div>
               <p className="font-medium">完成整份批改</p>

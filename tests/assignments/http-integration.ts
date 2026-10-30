@@ -750,6 +750,14 @@ async function main(): Promise<void> {
       14,
     );
 
+    assert.equal(
+      (await requestJson(publishResultsPath, teacherCookie, "POST")).status,
+      409,
+    );
+    await prisma.assignment.update({
+      where: { id: manualAssignmentId },
+      data: { dueAt: new Date(Date.now() - 1) },
+    });
     const publishResultsResponse = await requestJson(
       publishResultsPath,
       teacherCookie,

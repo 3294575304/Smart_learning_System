@@ -1,10 +1,10 @@
+import { safeStudentWorkReturn } from "@/services/assignments/student-query";
 import { getAssignmentPublicationState } from "@/services/assignments/manual-grading";
 import { hundredPointScore } from "@/services/assignments/presentation";
 import { TeacherAssignmentNav } from "@/components/assignments/teacher-assignment-nav";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role, SubmissionStatus } from "@prisma/client";
 import { Eye } from "lucide-react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ResultsPagination } from "@/components/assignment-results/pagination";
@@ -17,6 +17,7 @@ import { assignmentResultsQuerySchema } from "@/services/assignment-results/sche
 import {
   assignmentResultStatusLabels,
   getTeacherAssignmentResults,
+  getTeacherAssignmentStudentAnswer,
 } from "@/services/assignment-results/service";
 import { assignmentIdSchema } from "@/services/assignments/schemas";
 
@@ -51,7 +52,7 @@ function studentDetailHref(
     studentId,
   });
   if (submissionId) params.set("submissionId", submissionId);
-  return `/teacher/assignments/${assignmentId}/results?${params.toString()}#student-detail`;
+  return `/teacher/assignments/${assignmentId}/results?${params.toString()}`;
 }
 
 export default async function AssignmentResultsPage({
@@ -67,10 +68,49 @@ export default async function AssignmentResultsPage({
     pageSize: singleValue(rawQuery.pageSize),
     studentId: singleValue(rawQuery.studentId),
     submissionId: singleValue(rawQuery.submissionId),
+    returnTo: singleValue(rawQuery.returnTo),
   });
   if (!parsedId.success || !parsedQuery.success) notFound();
 
   try {
+    if (parsedQuery.data.studentId) {
+      const personal = await getTeacherAssignmentStudentAnswer(
+        teacher.id,
+        parsedId.data,
+        parsedQuery.data,
+      );
+      const returnTo = safeStudentWorkReturn(
+        parsedQuery.data.returnTo,
+        parsedQuery.data.studentId,
+        personal.assignment.classroom.id,
+      );
+      const backHref =
+        returnTo ??
+        `/teacher/assignments/${parsedId.data}/results?page=${parsedQuery.data.page}&pageSize=${parsedQuery.data.pageSize}`;
+      return (
+        <section className="min-w-0 space-y-4">
+          <TeacherBackLink href={backHref}>
+            {returnTo ? "返回该学生的作业" : "返回班级成绩"}
+          </TeacherBackLink>
+          <header>
+            <h1 className="text-2xl font-semibold">
+              {personal.assignment.title} · 个人作答
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              {personal.assignment.classroom.name}
+            </p>
+          </header>
+          <StudentAnswerDetail
+            assignmentId={parsedId.data}
+            detail={personal.detail}
+            page={parsedQuery.data.page}
+            pageSize={parsedQuery.data.pageSize}
+            returnTo={returnTo}
+            attachmentsEnabled={personal.assignment.allowAttachments}
+          />
+        </section>
+      );
+    }
     const results = await getTeacherAssignmentResults(
       teacher.id,
       parsedId.data,
@@ -108,12 +148,6 @@ export default async function AssignmentResultsPage({
                 assignmentId={results.assignment.id}
                 publication={publication}
               />
-              <Link
-                className="text-sm underline"
-                href={`/teacher/assignments/${results.assignment.id}/submissions`}
-              >
-                进入提交批改
-              </Link>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs">
                 基于每名学生最新有效提交
               </span>
@@ -379,21 +413,27 @@ export default async function AssignmentResultsPage({
                           {student.submittedAt?.toLocaleString("zh-CN") ?? "—"}
                         </td>
                         <td className="py-3">
-                          <Link
-                            aria-label={`查看 ${student.displayName} 的作答`}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
-                            href={studentDetailHref(
-                              results.assignment.id,
-                              student.studentId,
-                              student.submissionId,
-                              results.students.page,
-                              results.students.pageSize,
-                            )}
-                            title="查看作答"
-                          >
-                            <Eye aria-hidden="true" className="size-4" />
-                            查看作答
-                          </Link>
+                          {student.submissionId ? (
+                            <a
+                              aria-label={`查看 ${student.displayName} 的作答`}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
+                              href={studentDetailHref(
+                                results.assignment.id,
+                                student.studentId,
+                                student.submissionId,
+                                results.students.page,
+                                results.students.pageSize,
+                              )}
+                              title="查看作答"
+                            >
+                              <Eye aria-hidden="true" className="size-4" />
+                              查看作答
+                            </a>
+                          ) : (
+                            <span className="text-sm text-slate-400">
+                              未提交，暂无作答
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -410,15 +450,6 @@ export default async function AssignmentResultsPage({
             totalPages={results.students.totalPages}
           />
         </section>
-
-        {results.selectedStudent ? (
-          <StudentAnswerDetail
-            assignmentId={results.assignment.id}
-            detail={results.selectedStudent}
-            page={results.students.page}
-            pageSize={results.students.pageSize}
-          />
-        ) : null}
       </section>
     );
   } catch (error: unknown) {

@@ -1,3 +1,8 @@
+import {
+  studentTaskScopeSchema,
+  studentTaskHref,
+} from "@/services/student-experience/task-scope";
+import { assertAssignmentTaskScope } from "@/services/student-experience/task-scope-access";
 import { listAssignmentResourceFiles } from "@/services/assignments/resources";
 import { Role, SubmissionStatus } from "@prisma/client";
 import Link from "next/link";
@@ -10,14 +15,21 @@ import { getStudentAssignment } from "@/services/assignments/service";
 
 interface Props {
   params: Promise<{ assignmentId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
-export default async function StudentAssignmentPage({ params }: Props) {
+export default async function StudentAssignmentPage({
+  params,
+  searchParams,
+}: Props) {
   const student = await requirePageRole(Role.STUDENT);
+  const scope = studentTaskScopeSchema.safeParse(await searchParams);
+  if (!scope.success) notFound();
   try {
     const assignment = await getStudentAssignment(
       student.id,
       (await params).assignmentId,
     );
+    await assertAssignmentTaskScope(assignment.id, scope.data);
     const resourceFiles = await listAssignmentResourceFiles(
       student,
       assignment.id,
@@ -36,17 +48,19 @@ export default async function StudentAssignmentPage({ params }: Props) {
         <div>
           <Link
             className="text-sm text-gray-500 hover:underline"
-            href="/student/assignments"
+            href={studentTaskHref("/student/assignments", scope.data)}
           >
             ← 返回作业列表
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold">{assignment.title}</h1>
+          <h1 className="mt-2 text-2xl font-semibold break-words">
+            {assignment.title}
+          </h1>
           <p className="mt-2 text-gray-600">
             {assignment.description || "暂无作业说明"}
           </p>
           <p className="mt-2 text-sm text-gray-500">
             {assignment.classroomName} · {assignment.questions.length} 题 ·{" "}
-            {assignment.totalPoints} 分
+            百分制展示 · 原始满分 {assignment.totalPoints} 分
           </p>
           <p className="mt-1 text-sm text-gray-500">
             截止：{assignment.dueAt?.toLocaleString("zh-CN") ?? "未设置"}
@@ -76,12 +90,18 @@ export default async function StudentAssignmentPage({ params }: Props) {
           {inProgress ? (
             <Link
               className="rounded-md bg-sky-600 px-4 py-2 text-white"
-              href={`/student/submissions/${inProgress.id}/answer`}
+              href={studentTaskHref(
+                `/student/submissions/${inProgress.id}/answer`,
+                scope.data,
+              )}
             >
               继续作答
             </Link>
           ) : canStart ? (
-            <StartAttemptButton assignmentId={assignment.id} />
+            <StartAttemptButton
+              assignmentId={assignment.id}
+              scope={scope.data}
+            />
           ) : null}
           {assignment.isExpired ? (
             <p className="rounded-md bg-sky-100/70 px-4 py-2 text-sm text-gray-600">
@@ -114,7 +134,10 @@ export default async function StudentAssignmentPage({ params }: Props) {
               {submitted.map((attempt) => (
                 <Link
                   className="flex justify-between rounded-md border p-3 text-sm hover:bg-sky-50/70"
-                  href={`/student/submissions/${attempt.id}/result`}
+                  href={studentTaskHref(
+                    `/student/submissions/${attempt.id}/result`,
+                    scope.data,
+                  )}
                   key={attempt.id}
                 >
                   <span>第 {attempt.attemptNumber} 次提交</span>

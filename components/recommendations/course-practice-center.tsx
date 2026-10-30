@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 interface ChapterOption {
   id: string;
@@ -166,8 +166,13 @@ export function CoursePracticeCenter({
   );
   const count = mode === "TEST" ? 50 : practiceCount;
 
+  const generationRequest = useRef<{ signature: string; id: string } | null>(
+    null,
+  );
+  const generationBusy = useRef(false);
   async function generate() {
-    if (!course || pending || selectionNeedsReview) return;
+    if (!course || pending || generationBusy.current || selectionNeedsReview)
+      return;
     if (
       mode === "PRACTICE" &&
       (!Number.isInteger(practiceCount) ||
@@ -177,6 +182,20 @@ export function CoursePracticeCenter({
       setFeedback("请输入 1–50 的整数题量。");
       return;
     }
+    const signature = JSON.stringify({
+      courseId: course.courseId,
+      classroomId: course.classroomId,
+      chapterIds,
+      focusedConceptId,
+      mode,
+      effectiveTemplate,
+      count,
+      practiceCount,
+      difficulty,
+    });
+    if (generationRequest.current?.signature !== signature)
+      generationRequest.current = { signature, id: crypto.randomUUID() };
+    generationBusy.current = true;
     setPending(true);
     setFeedback(null);
     try {
@@ -186,6 +205,7 @@ export function CoursePracticeCenter({
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
+            requestId: generationRequest.current.id,
             classroomId: course.classroomId,
             chapterIds: focusedConceptId ? [] : chapterIds,
             conceptIds: focusedConceptId ? [focusedConceptId] : [],
@@ -228,6 +248,7 @@ export function CoursePracticeCenter({
     } catch {
       setFeedback("网络连接异常，请稍后重试");
     } finally {
+      generationBusy.current = false;
       setPending(false);
     }
   }
@@ -245,6 +266,12 @@ export function CoursePracticeCenter({
       className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
     >
       <div>
+        <a
+          className="float-right text-sm text-sky-700 underline"
+          href={`/student/recommendations?section=HISTORY&courseId=${course.courseId}`}
+        >
+          历史记录
+        </a>
         <h2 className="font-semibold">按课程章节生成练习或测试</h2>
         <p className="mt-1 text-sm text-gray-500">
           从本课程分类的共享题库中筛选已审核题目；可练习课程图谱中的任意章节，包含尚未授课的内容。
@@ -273,19 +300,6 @@ export function CoursePracticeCenter({
               </option>
             ))}
           </select>
-        </label>
-        <label className="text-sm">
-          难度
-          <input
-            aria-label="目标难度"
-            className="mt-1 w-full"
-            min={1}
-            max={5}
-            type="range"
-            value={difficulty}
-            onChange={(event) => setDifficulty(Number(event.target.value))}
-          />
-          <span>{difficulty}</span>
         </label>
       </div>
 
@@ -349,6 +363,19 @@ export function CoursePracticeCenter({
         </div>
       ) : null}
 
+      <label className="text-sm">
+        难度
+        <input
+          aria-label="目标难度"
+          className="mt-1 w-full"
+          min={1}
+          max={5}
+          type="range"
+          value={difficulty}
+          onChange={(event) => setDifficulty(Number(event.target.value))}
+        />
+        <span>{difficulty}</span>
+      </label>
       <fieldset>
         <legend className="text-sm font-medium">生成类型</legend>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -412,7 +439,8 @@ export function CoursePracticeCenter({
           : `${chapterIds.length || "全部"} 个大章节`}{" "}
         ·{mode === "TEST" ? " 综合测试" : " 练习"} · {count} 题 · 难度{" "}
         {difficulty}。 图谱版本 {course.graphVersionNumber ?? "未发布"}
-        。自主练习不受教师教学进度限制。
+        。整组总分 100
+        分，按实际题量均分，不计课程成绩；自主练习不受教师教学进度限制。
       </div>
       {mode === "PRACTICE" ? (
         <p className="text-sm text-slate-500">

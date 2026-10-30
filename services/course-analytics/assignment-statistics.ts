@@ -1,3 +1,9 @@
+import {
+  assignmentParticipation,
+  isReportableAssignment,
+  latestEffectiveSubmissions,
+} from "@/services/assignments/reporting";
+
 export type CourseAssignmentStatus =
   "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
 
@@ -14,6 +20,8 @@ export interface CourseAssignmentStatisticsInput {
     id: string;
     classroomId: string;
     status: CourseAssignmentStatus;
+    publishedAt: Date | null;
+    dueAt: Date | null;
   }>;
   activeStudentIdsByClassroom: Map<string, Set<string>>;
   submissions: Array<{
@@ -43,6 +51,10 @@ export interface CourseAssignmentStatistics {
   studentCount: number;
   eligibleSubmissionCount: number;
   completedSubmissionCount: number;
+  unsubmittedCount: number;
+  overdueCount: number;
+  pendingReviewCount: number;
+  historicalSubmittedCount: number;
   completionRate: number | null;
   finalizedSubmissionCount: number;
   scoreRate: number | null;
@@ -59,13 +71,6 @@ export interface CourseAssignmentScoreTrendPoint {
   finalizedStudentCount: number;
   eligibleStudentCount: number;
 }
-
-const COMPLETE_STATUSES = new Set<CourseSubmissionStatus>([
-  "SUBMITTED",
-  "PENDING_REVIEW",
-  "GRADED",
-  "PUBLISHED",
-]);
 
 const FINAL_SCORE_STATUSES = new Set<CourseSubmissionStatus>([
   "GRADED",
@@ -87,21 +92,6 @@ const SCORE_BANDS = [
 
 function roundedPercent(part: number, total: number): number | null {
   return total > 0 ? Number(((part / total) * 100).toFixed(1)) : null;
-}
-
-function isLaterSubmission(
-  candidate: CourseAssignmentStatisticsInput["submissions"][number],
-  current: CourseAssignmentStatisticsInput["submissions"][number],
-) {
-  if (candidate.attemptNumber !== current.attemptNumber) {
-    return candidate.attemptNumber > current.attemptNumber;
-  }
-  const candidateTime =
-    candidate.submittedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
-  const currentTime =
-    current.submittedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
-  if (candidateTime !== currentTime) return candidateTime > currentTime;
-  return candidate.id.localeCompare(current.id) > 0;
 }
 
 function findScoreBand(score: number) {
@@ -130,45 +120,25 @@ function distributionRatios(counts: number[], total: number) {
 
 export function calculateCourseAssignmentStatistics(
   input: CourseAssignmentStatisticsInput,
+  now = new Date(),
 ): CourseAssignmentStatistics {
-  const assignments = input.assignments.filter(
-    (assignment) =>
-      assignment.status === "PUBLISHED" || assignment.status === "CLOSED",
-  );
-  const assignmentsById = new Map(
-    assignments.map((assignment) => [assignment.id, assignment]),
+  const assignments = input.assignments.filter((assignment) =>
+    isReportableAssignment(assignment, now),
   );
   const activeStudentIds = new Set(
     [...input.activeStudentIdsByClassroom.values()].flatMap((studentIds) => [
       ...studentIds,
     ]),
   );
-  const latestSubmissionByAssignment = new Map<
-    string,
-    Map<string, CourseAssignmentStatisticsInput["submissions"][number]>
-  >();
-
-  for (const submission of input.submissions) {
-    const assignment = assignmentsById.get(submission.assignmentId);
-    if (!assignment || !COMPLETE_STATUSES.has(submission.status)) continue;
-    const assignmentStudents = input.activeStudentIdsByClassroom.get(
-      assignment.classroomId,
-    );
-    if (!assignmentStudents?.has(submission.studentId)) continue;
-
-    let latestByStudent = latestSubmissionByAssignment.get(assignment.id);
-    if (!latestByStudent) {
-      latestByStudent = new Map();
-      latestSubmissionByAssignment.set(assignment.id, latestByStudent);
-    }
-    const current = latestByStudent.get(submission.studentId);
-    if (!current || isLaterSubmission(submission, current)) {
-      latestByStudent.set(submission.studentId, submission);
-    }
-  }
+  const latestSubmissionByAssignment = latestEffectiveSubmissions(
+    input.submissions,
+  );
 
   let eligibleSubmissionCount = 0;
   let completedSubmissionCount = 0;
+  let overdueCount = 0;
+  let pendingReviewCount = 0;
+  let historicalSubmittedCount = 0;
   let finalizedSubmissionCount = 0;
   let totalScore = 0;
   let totalMaxScore = 0;
@@ -179,10 +149,18 @@ export function calculateCourseAssignmentStatistics(
       input.activeStudentIdsByClassroom.get(assignment.classroomId) ??
       new Set<string>();
     eligibleSubmissionCount += assignmentStudents.size;
-    const latestByStudent = latestSubmissionByAssignment.get(assignment.id);
-    if (!latestByStudent) continue;
+    const participation = assignmentParticipation(
+      assignmentStudents,
+      latestSubmissionByAssignment.get(assignment.id) ?? new Map(),
+      assignment.dueAt,
+      now,
+    );
+    overdueCount += participation.overdueCount;
+    pendingReviewCount += participation.pendingReviewCount;
+    historicalSubmittedCount += participation.historicalSubmittedCount;
 
-    for (const [studentId, submission] of latestByStudent) {
+    for (const submission of participation.submissions) {
+      const studentId = submission.studentId;
       completedSubmissionCount += 1;
       if (
         !FINAL_SCORE_STATUSES.has(submission.status) ||
@@ -245,6 +223,10 @@ export function calculateCourseAssignmentStatistics(
     studentCount: activeStudentIds.size,
     eligibleSubmissionCount,
     completedSubmissionCount,
+    unsubmittedCount: eligibleSubmissionCount - completedSubmissionCount,
+    overdueCount,
+    pendingReviewCount,
+    historicalSubmittedCount,
     completionRate: roundedPercent(
       completedSubmissionCount,
       eligibleSubmissionCount,
@@ -270,44 +252,28 @@ export function calculateCourseAssignmentScoreTrend(input: {
   activeStudentIdsByClassroom: Map<string, Set<string>>;
   submissions: CourseAssignmentStatisticsInput["submissions"];
   limit?: number;
+  now?: Date;
 }): CourseAssignmentScoreTrendPoint[] {
   const assignmentsById = new Map(
     input.assignments
-      .filter(
-        (assignment) =>
-          assignment.status === "PUBLISHED" || assignment.status === "CLOSED",
+      .filter((assignment) =>
+        isReportableAssignment(assignment, input.now ?? new Date()),
       )
       .map((assignment) => [assignment.id, assignment]),
   );
-  const latestSubmissionByAssignment = new Map<
-    string,
-    Map<string, CourseAssignmentStatisticsInput["submissions"][number]>
-  >();
-
-  for (const submission of input.submissions) {
-    const assignment = assignmentsById.get(submission.assignmentId);
-    if (!assignment || !COMPLETE_STATUSES.has(submission.status)) continue;
-    const activeStudentIds = input.activeStudentIdsByClassroom.get(
-      assignment.classroomId,
-    );
-    if (!activeStudentIds?.has(submission.studentId)) continue;
-
-    let latestByStudent = latestSubmissionByAssignment.get(assignment.id);
-    if (!latestByStudent) {
-      latestByStudent = new Map();
-      latestSubmissionByAssignment.set(assignment.id, latestByStudent);
-    }
-    const current = latestByStudent.get(submission.studentId);
-    if (!current || isLaterSubmission(submission, current)) {
-      latestByStudent.set(submission.studentId, submission);
-    }
-  }
+  const latestSubmissionByAssignment = latestEffectiveSubmissions(
+    input.submissions,
+  );
 
   const scoredAssignments = [...assignmentsById.values()]
     .flatMap((assignment) => {
       const latestByStudent = latestSubmissionByAssignment.get(assignment.id);
       const normalizedScores: number[] = [];
+      const eligibleStudents = input.activeStudentIdsByClassroom.get(
+        assignment.classroomId,
+      );
       for (const submission of latestByStudent?.values() ?? []) {
+        if (!eligibleStudents?.has(submission.studentId)) continue;
         if (
           !FINAL_SCORE_STATUSES.has(submission.status) ||
           submission.score === null ||

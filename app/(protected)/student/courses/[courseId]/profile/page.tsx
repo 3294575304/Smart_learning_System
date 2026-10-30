@@ -1,6 +1,6 @@
 import { getStudentClassroomContext } from "@/services/courses/student-access";
 import { Role } from "@prisma/client";
-import Link from "next/link";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { notFound } from "next/navigation";
 
 import { LearnerProfileDetail } from "@/components/learner-profiles/profile-detail";
@@ -39,12 +39,11 @@ export default async function StudentLearnerProfilePage({
     return (
       <section className="space-y-6">
         <header>
-          <Link
-            className="text-muted-foreground text-sm underline"
-            href={`/student/courses/${profile.course.id}/learning-center${classroomId ? `?classroomId=${encodeURIComponent(classroomId)}` : ""}`}
+          <StudentBackLink
+            href={`/student/courses/${profile.course.id}/learning-center?tab=profile${classroomId ? `&classroomId=${encodeURIComponent(classroomId)}` : ""}`}
           >
             返回课程学习中心
-          </Link>
+          </StudentBackLink>
           <h1 className="mt-3 text-2xl font-semibold">
             {profile.course.name} · 我的课程画像
           </h1>

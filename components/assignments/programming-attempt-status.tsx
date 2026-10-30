@@ -28,10 +28,12 @@ export function ProgrammingAttemptStatus({
   assignmentQuestionId,
   attemptId,
   onComplete,
+  displayMaxScore,
 }: {
   assignmentQuestionId: string;
   attemptId: string;
   onComplete?: (score: number, maxScore: number) => void;
+  displayMaxScore?: number | null;
 }) {
   const [attempt, setAttempt] = useState<AttemptDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function ProgrammingAttemptStatus({
             : attempt.status === "PENDING" || attempt.status === "RUNNING"
               ? `执行中 ${attempt.progress}%`
               : attempt.status === "SUCCEEDED"
-                ? `${attempt.score ?? 0} / ${attempt.maxScore} 分`
+                ? `${displayMaxScore != null && attempt.score !== null && attempt.maxScore > 0 ? Math.round((attempt.score / attempt.maxScore) * displayMaxScore * 100) / 100 : (attempt.score ?? "缺少成绩")} / ${displayMaxScore ?? attempt.maxScore} 分`
                 : attempt.safeErrorSummary}
         </span>
       </div>

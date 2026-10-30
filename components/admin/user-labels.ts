@@ -12,6 +12,9 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
 };
 
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  ASSIGNMENT_DEADLINE_EXTENDED: "作业延期",
+  ASSIGNMENT_MAKEUP_GRANTED: "开放补交或重做",
+  ASSIGNMENT_MAKEUP_REVOKED: "撤销补交授权",
   COURSE_ROSTER_UPDATED: "课程名单维护",
   SUBMISSION_ATTACHMENT_UPLOADED: "上传作业附件",
   SUBMISSION_ATTACHMENT_DOWNLOADED: "下载作业附件",

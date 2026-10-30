@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  studentTaskHref,
+  type StudentTaskScope,
+} from "@/services/student-experience/task-scope";
+
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -8,9 +13,14 @@ import { requestAssignmentApi } from "@/components/assignments/request-api";
 interface Props {
   assignmentId: string;
   disabled?: boolean;
+  scope?: StudentTaskScope;
 }
 
-export function StartAttemptButton({ assignmentId, disabled = false }: Props) {
+export function StartAttemptButton({
+  assignmentId,
+  disabled = false,
+  scope = {},
+}: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +41,9 @@ export function StartAttemptButton({ assignmentId, disabled = false }: Props) {
       setPending(false);
       return;
     }
-    router.push(`/student/submissions/${response.data.id}/answer`);
+    router.push(
+      studentTaskHref(`/student/submissions/${response.data.id}/answer`, scope),
+    );
     router.refresh();
   }
 

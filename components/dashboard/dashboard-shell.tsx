@@ -1,4 +1,5 @@
 "use client";
+import { safeStudentReturn } from "@/services/assignments/student-query";
 
 import { Role } from "@prisma/client";
 import {
@@ -55,7 +56,13 @@ function displayUserName(user: AuthenticatedUser): string {
 function Breadcrumbs({ pathname }: { pathname: string }) {
   const searchParams = useSearchParams();
   const classroomId = searchParams.get("classroomId");
-  const crumbs = buildBreadcrumbs(pathname).map((crumb) =>
+  const returnTo = searchParams.get("returnTo");
+  const studentQueryHref = safeStudentReturn(returnTo ?? undefined);
+  const crumbs = buildBreadcrumbs(pathname, undefined, {
+    studentId: searchParams.get("studentId"),
+    view: searchParams.get("view"),
+    studentQueryHref,
+  }).map((crumb) =>
     classroomId &&
     crumb.href.startsWith("/student/courses/") &&
     crumb.href.endsWith("/learning-center")
@@ -66,6 +73,7 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
       : crumb,
   );
 
+  const BreadcrumbLink = pathname.startsWith("/student") ? "a" : Link;
   return (
     <nav aria-label="面包屑" className="min-w-0 overflow-hidden">
       <ol className="text-muted-foreground flex items-center gap-1 overflow-hidden text-xs">
@@ -73,12 +81,12 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
           <li className="flex min-w-0 items-center gap-1" key={crumb.href}>
             {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0" /> : null}
             {crumb.linkable ? (
-              <Link
+              <BreadcrumbLink
                 className="truncate rounded px-1 py-0.5 font-medium text-sky-700 underline-offset-4 transition hover:bg-sky-100 hover:underline focus-visible:outline-2 focus-visible:outline-sky-600"
                 href={crumb.href}
               >
                 {crumb.label}
-              </Link>
+              </BreadcrumbLink>
             ) : (
               <span
                 aria-current={index === crumbs.length - 1 ? "page" : undefined}
@@ -94,6 +102,24 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
   );
 }
 
+function ContextPageTitle({
+  pathname,
+  groups,
+}: {
+  pathname: string;
+  groups: NavigationGroup[];
+}) {
+  const query = useSearchParams();
+  return (
+    <p className="truncate text-sm font-semibold">
+      {buildBreadcrumbs(pathname, undefined, {
+        studentId: query.get("studentId"),
+        view: query.get("view"),
+      }).at(-1)?.label ?? getDashboardPageTitle(pathname, groups)}
+    </p>
+  );
+}
+
 function SidebarNavigation({
   groups,
   pathname,
@@ -105,6 +131,7 @@ function SidebarNavigation({
   student?: boolean;
   onNavigate?: () => void;
 }) {
+  const NavigationLink = student ? "a" : Link;
   return (
     <nav aria-label="主导航" className="space-y-5 px-3 py-4">
       {groups.map((group) => (
@@ -123,7 +150,7 @@ function SidebarNavigation({
               const Icon = item.icon;
               const active = isNavigationItemActive(pathname, item);
               return (
-                <Link
+                <NavigationLink
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:outline-none",
@@ -145,7 +172,7 @@ function SidebarNavigation({
                   ) : null}
                   <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
                   <span>{item.label}</span>
-                </Link>
+                </NavigationLink>
               );
             })}
           </div>
@@ -331,9 +358,18 @@ export function DashboardShell({
               <Menu className="h-5 w-5" />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">
-                {currentPageTitle}
-              </p>
+              <Suspense
+                fallback={
+                  <p className="truncate text-sm font-semibold">
+                    {currentPageTitle}
+                  </p>
+                }
+              >
+                <ContextPageTitle
+                  pathname={pathname}
+                  groups={navigationGroups}
+                />
+              </Suspense>
               <Suspense fallback={null}>
                 <Breadcrumbs pathname={pathname} />
               </Suspense>
@@ -414,7 +450,7 @@ export function DashboardShell({
           className={cn(
             "mx-auto w-full min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8",
             user.role === Role.STUDENT
-              ? "max-w-[1440px]"
+              ? "max-w-7xl"
               : user.role === Role.TEACHER && pathname === "/teacher"
                 ? "max-w-none lg:py-5"
                 : "max-w-7xl",

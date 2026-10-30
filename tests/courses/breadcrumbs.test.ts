@@ -117,3 +117,48 @@ test("课程学习中心路径只显示主页、我的课程和当前页，链�
   ]);
   assert.equal(new Set(crumbs.map((item) => item.href)).size, crumbs.length);
 });
+
+test("学生作业明细的虚拟根指向真实查询入口，个人作答不误标整班成绩", () => {
+  const crumbs = buildBreadcrumbs("/teacher/assignments/students/student-a");
+  assert.equal(
+    crumbs.find((item) => item.label === "学生作业查询")?.href,
+    "/teacher/assignments?view=STUDENTS",
+  );
+  assert.equal(crumbs.at(-1)?.label, "学生作业明细");
+  assert.ok(
+    !crumbs.some(
+      (item) => item.linkable && item.href === "/teacher/assignments/students",
+    ),
+  );
+  assert.equal(
+    buildBreadcrumbs("/teacher/assignments/task-a/results", undefined, {
+      studentId: "student-a",
+    }).at(-1)?.label,
+    "个人作答",
+  );
+  assert.equal(
+    buildBreadcrumbs("/teacher/assignments/task-a/results").at(-1)?.label,
+    "成绩统计",
+  );
+});
+
+test("作业管理页签切换保持顶部模块名称", () => {
+  assert.deepEqual(
+    buildBreadcrumbs("/teacher/assignments", undefined, { view: "STUDENTS" }),
+    buildBreadcrumbs("/teacher/assignments"),
+  );
+});
+
+test("三角色模块及补充功能使用明确的导航内容", () => {
+  for (const [path, label] of [
+    ["/admin/classrooms", "班级治理"],
+    ["/admin/questions", "共享题库"],
+    ["/admin/question-course-categories", "题库课程分类"],
+    ["/student/course-grades", "课程总评"],
+    ["/teacher/questions/ai", "AI出题"],
+    ["/teacher/courses/course-a/random-picker", "随机选人"],
+    ["/teacher/assignments/task-a/submissions/submission-a", "提交记录详情"],
+    ["/notifications/notification-a", "通知中心详情"],
+  ])
+    assert.equal(buildBreadcrumbs(path).at(-1)?.label, label);
+});

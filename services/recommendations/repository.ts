@@ -1,4 +1,8 @@
 import "server-only";
+import {
+  practicePointAllocation,
+  PRACTICE_SCORING_RULE,
+} from "@/services/recommendations/scoring";
 
 import { createHash } from "node:crypto";
 
@@ -56,6 +60,8 @@ const recommendationViewSelect =
     wasCorrect: true,
     score: true,
     maxScore: true,
+    assignedPoints: true,
+    scoringRuleVersion: true,
     practiceAnswer: {
       select: {
         id: true,
@@ -75,6 +81,7 @@ const recommendationViewSelect =
       select: {
         id: true,
         status: true,
+        sourceCode: true,
         backgroundJob: { select: { progress: true } },
       },
     },
@@ -235,6 +242,7 @@ export async function buildRecommendationRequest(
     classroomId: classroom.id,
     recommendedDifficulty: input.recommendedDifficulty,
     count: input.limit,
+    requestId: input.requestId,
     teacherScope: {
       candidateQuestionIds: candidateQuestions.map((question) => question.id),
       knowledgePointIds: [],
@@ -431,9 +439,16 @@ export function createRecommendationCycleKey(
     classroomId: request.classroomId,
     recommendedDifficulty: request.recommendedDifficulty,
     count: request.count,
-    contextVersion,
-    day: now.toISOString().slice(0, 10),
-    candidateQuestionIds: [...request.teacherScope.candidateQuestionIds].sort(),
+    ...(request.requestId
+      ? { requestId: request.requestId }
+      : { contextVersion, day: now.toISOString().slice(0, 10) }),
+    ...(request.requestId
+      ? {}
+      : {
+          candidateQuestionIds: [
+            ...request.teacherScope.candidateQuestionIds,
+          ].sort(),
+        }),
     knowledgePointIds: [...request.teacherScope.knowledgePointIds].sort(),
     types: [...request.teacherScope.types].sort(),
     tags: [...request.teacherScope.tags].sort(),
@@ -561,6 +576,17 @@ export async function persistRecommendations(input: {
     try {
       return await prisma.$transaction(
         async (transaction) => {
+          const frozen = await transaction.personalizedRecommendation.findMany({
+            where: { studentId: input.studentId, cycleKey: input.cycleKey },
+            orderBy: [{ priority: "desc" }, { id: "asc" }],
+            select: { questionId: true, expiresAt: true },
+          });
+          if (frozen.length)
+            return {
+              questionIds: frozen.map((item) => item.questionId),
+              createdCount: 0,
+              expiresAt: frozen[0].expiresAt ?? expiresAt,
+            };
           const conflicts =
             await transaction.personalizedRecommendation.findMany({
               where: {
@@ -598,8 +624,11 @@ export async function persistRecommendations(input: {
             existingInCycle.map((record) => record.questionId),
           );
 
-          for (const item of acceptedItems) {
+          const points = practicePointAllocation(acceptedItems.length);
+          for (const [index, item] of acceptedItems.entries()) {
             const data = {
+              assignedPoints: points[index],
+              scoringRuleVersion: PRACTICE_SCORING_RULE,
               knowledgePointId: item.primaryKnowledgePointId,
               analysisId: input.analysisId,
               source: input.source,

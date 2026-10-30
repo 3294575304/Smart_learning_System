@@ -1,4 +1,9 @@
 import "server-only";
+import { runPracticeSerializable } from "@/services/recommendations/transactions";
+import {
+  practicePointAllocation,
+  PRACTICE_SCORING_RULE,
+} from "@/services/recommendations/scoring";
 import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import { AssignmentOperationError } from "@/services/assignments/errors";
 import { groupKnowledgeChapters } from "@/services/knowledge-graph/chapter-groups";
@@ -713,7 +718,7 @@ export async function createCourseRecommendations(
   const expiresAt = new Date(now);
   expiresAt.setUTCDate(expiresAt.getUTCDate() + 7);
   await expireStudentRecommendations(actor.id, now);
-  return prisma.$transaction(
+  return runPracticeSerializable(
     async (transaction) => {
       const policy = await ensureDefaultPolicy(
         transaction,
@@ -888,7 +893,19 @@ export async function createCourseRecommendations(
         ruleVersion: policy.ruleVersion,
         generatedForDay: now.toISOString().slice(0, 10),
       };
-      const inputFingerprint = courseRecommendationFingerprint(requestSnapshot);
+      const inputFingerprint = courseRecommendationFingerprint(
+        input.requestId
+          ? {
+              studentId: actor.id,
+              courseId,
+              ...input,
+              conceptIds: [...input.conceptIds].sort(),
+              chapterIds: [...(input.chapterIds ?? [])].sort(),
+              questionTypes: [...input.questionTypes].sort(),
+              ...(favorite ? { favoriteReview: favorite } : {}),
+            }
+          : requestSnapshot,
+      );
       const existingCycle =
         await transaction.courseRecommendationCycle.findUnique({
           where: {
@@ -1084,7 +1101,8 @@ export async function createCourseRecommendations(
           expiresAt,
         },
       });
-      for (const item of selectedQuestions) {
+      const assignedPoints = practicePointAllocation(selectedQuestions.length);
+      for (const [index, item] of selectedQuestions.entries()) {
         const recommendation =
           await transaction.personalizedRecommendation.upsert({
             where: {
@@ -1099,6 +1117,8 @@ export async function createCourseRecommendations(
               studentId: actor.id,
               questionId: item.question.id,
               courseCycleId: cycle.id,
+              assignedPoints: assignedPoints[index],
+              scoringRuleVersion: PRACTICE_SCORING_RULE,
               targetConceptId: item.targetConceptId,
               cycleKey,
               source: RecommendationSource.RULE,
@@ -1169,6 +1189,8 @@ async function courseRecommendationCycleView(
           reason: true,
           reasonCodes: true,
           rankingScore: true,
+          assignedPoints: true,
+          scoringRuleVersion: true,
           targetConceptId: true,
           status: true,
           question: {
@@ -1202,7 +1224,21 @@ async function courseRecommendationCycleView(
     items: cycle.recommendations.map((record) => ({
       ...record,
       rankingScore: record.rankingScore?.toNumber() ?? null,
+      assignedPoints: record.assignedPoints?.toNumber() ?? null,
     })),
+    scoringSummary: {
+      totalPoints: cycle.recommendations.every(
+        (record) => record.assignedPoints !== null,
+      )
+        ? cycle.recommendations.reduce(
+            (sum, record) =>
+              sum + Math.round((record.assignedPoints?.toNumber() ?? 0) * 100),
+            0,
+          ) / 100
+        : null,
+      actualCount: cycle.recommendations.length,
+      ruleVersion: cycle.recommendations[0]?.scoringRuleVersion ?? null,
+    },
   };
 }
 

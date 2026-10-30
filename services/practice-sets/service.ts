@@ -1,4 +1,6 @@
 import "server-only";
+import { managementView, readPracticeManagement } from "./management";
+import type { PracticeManagementView } from "./management-schemas";
 import { buildPracticeSet } from "./grouping";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -9,7 +11,6 @@ import { expireStudentRecommendations } from "@/services/recommendations/reposit
 import { recommendationIdSchema } from "@/services/recommendations/schemas";
 import {
   practiceSetQuerySchema,
-  practiceSetStatus,
   type PracticeSet,
   type PracticeSetList,
 } from "./types";
@@ -19,6 +20,14 @@ const setQuestionSelect =
     id: true,
     cycleKey: true,
     status: true,
+    assignedPoints: true,
+    score: true,
+    maxScore: true,
+    programmingAttempts: {
+      orderBy: { revisionNumber: "desc" },
+      take: 1,
+      select: { status: true },
+    },
     createdAt: true,
     courseCycle: {
       select: {
@@ -29,6 +38,8 @@ const setQuestionSelect =
     conceptSnapshots: { select: { resolvedNode: { select: { name: true } } } },
     question: {
       select: {
+        status: true,
+        deletedAt: true,
         title: true,
         type: true,
         knowledgePointLinks: {
@@ -37,16 +48,43 @@ const setQuestionSelect =
       },
     },
   });
+function managedSet(
+  set: PracticeSet,
+  management: PracticeManagementView,
+): PracticeSet {
+  const ended = Boolean(management.endedAt || management.trashedAt);
+  return {
+    ...set,
+    title: management.title ?? set.title,
+    management,
+    status: ended && set.status === "ACTIVE" ? "EXPIRED" : set.status,
+    questions: set.questions.map((q) => ({
+      ...q,
+      readOnly: ended || q.readOnly,
+    })),
+  };
+}
 export async function listPracticeSets(
   actor: AuthenticatedUser,
   rawQuery: unknown,
 ): Promise<PracticeSetList> {
   assertCanAccessRecommendation(actor, actor.id);
   const query = practiceSetQuerySchema.parse(rawQuery);
+  if (query.courseId && query.courseId !== "GENERAL") {
+    const allowed = await prisma.course.findFirst({
+      where: {
+        id: query.courseId,
+        classrooms: {
+          some: { memberships: { some: { studentId: actor.id } } },
+        },
+      },
+      select: { id: true },
+    });
+    if (!allowed) throw new ResourceNotFoundError("课程不存在或无权访问");
+  }
   await expireStudentRecommendations(actor.id, new Date());
-  const [aggregates, cycles] = await Promise.all([
-    prisma.personalizedRecommendation.groupBy({
-      by: ["cycleKey", "status"],
+  const [records, metadata, cycles] = await Promise.all([
+    prisma.personalizedRecommendation.findMany({
       where: {
         studentId: actor.id,
         ...(query.courseId === "GENERAL"
@@ -55,57 +93,78 @@ export async function listPracticeSets(
             ? { courseCycle: { is: { courseId: query.courseId } } }
             : {}),
       },
-      _count: { _all: true },
-      _max: { createdAt: true },
+      orderBy: [{ priority: "desc" }, { id: "asc" }],
+      select: { ...setQuestionSelect, cycleKey: true },
     }),
+    prisma.practiceSetManagement.findMany({ where: { studentId: actor.id } }),
     prisma.courseRecommendationCycle.findMany({
       where: { studentId: actor.id },
       distinct: ["courseId"],
       select: { course: { select: { id: true, name: true } } },
     }),
   ]);
-  const groups = new Map<
-    string,
-    { statuses: (typeof aggregates)[number]["status"][]; generatedAt: number }
-  >();
-  for (const row of aggregates) {
-    const current = groups.get(row.cycleKey) ?? {
-      statuses: [],
-      generatedAt: 0,
-    };
-    current.statuses.push(row.status);
-    current.generatedAt = Math.max(
-      current.generatedAt,
-      row._max.createdAt?.getTime() ?? 0,
-    );
-    groups.set(row.cycleKey, current);
+  const groups = new Map<string, typeof records>();
+  for (const record of records) {
+    const rows = groups.get(record.cycleKey) ?? [];
+    rows.push(record);
+    groups.set(record.cycleKey, rows);
   }
-  const ordered = [...groups]
-    .filter(
-      ([, value]) =>
-        !query.status || practiceSetStatus(value.statuses) === query.status,
+  const byKey = new Map(metadata.map((row) => [row.cycleKey, row]));
+  const keyword = query.keyword?.toLocaleLowerCase();
+  const sets = [...groups]
+    .map(([key, rows]) =>
+      managedSet(
+        {
+          ...buildPracticeSet(rows),
+          generatedAt: new Date(
+            Math.max(...rows.map((row) => row.createdAt.getTime())),
+          ).toISOString(),
+        },
+        managementView(byKey.get(key) ?? null),
+      ),
     )
-    .sort(
-      (a, b) => b[1].generatedAt - a[1].generatedAt || a[0].localeCompare(b[0]),
+    .filter(
+      (set) =>
+        !keyword ||
+        [
+          set.title,
+          set.courseName,
+          ...set.knowledgePoints,
+          ...set.questions.map((q) => q.title),
+        ].some((value) => value.toLocaleLowerCase().includes(keyword)),
     );
-  const pageSize = 20;
-  const keys = ordered
-    .slice((query.page - 1) * pageSize, query.page * pageSize)
-    .map(([key]) => key);
-  const records = keys.length
-    ? await prisma.personalizedRecommendation.findMany({
-        where: { studentId: actor.id, cycleKey: { in: keys } },
-        orderBy: [{ priority: "desc" }, { id: "asc" }],
-        select: setQuestionSelect,
-      })
-    : [];
+  sets.sort(
+    (a, b) =>
+      b.generatedAt.localeCompare(a.generatedAt) || a.id.localeCompare(b.id),
+  );
+  const sectionOf = (set: PracticeSet) =>
+    set.management?.trashedAt
+      ? "TRASH"
+      : set.status === "ACTIVE"
+        ? "ACTIVE"
+        : "HISTORY";
+  const counts = { ACTIVE: 0, HISTORY: 0, TRASH: 0 };
+  for (const set of sets) counts[sectionOf(set)]++;
+  const section =
+    query.section ??
+    (query.status && query.status !== "ACTIVE" ? "HISTORY" : "ACTIVE");
+  const filtered = sets.filter(
+    (set) =>
+      sectionOf(set) === section &&
+      (!query.status || set.status === query.status),
+  );
+  const page = Math.min(
+    query.page,
+    Math.max(1, Math.ceil(filtered.length / 20)),
+  );
   return {
-    items: keys.map((key) =>
-      buildPracticeSet(records.filter((record) => record.cycleKey === key)),
-    ),
+    items: filtered.slice((page - 1) * 20, page * 20),
     courses: cycles.map((cycle) => cycle.course),
-    total: ordered.length,
-    nextPage: query.page * pageSize < ordered.length ? query.page + 1 : null,
+    total: filtered.length,
+    section,
+    counts,
+    page,
+    nextPage: page * 20 < filtered.length ? page + 1 : null,
   };
 }
 
@@ -126,5 +185,8 @@ export async function getPracticeSet(
     orderBy: [{ priority: "desc" }, { id: "asc" }],
     select: setQuestionSelect,
   });
-  return buildPracticeSet(records);
+  return managedSet(
+    buildPracticeSet(records),
+    await readPracticeManagement(actor.id, anchor.cycleKey),
+  );
 }

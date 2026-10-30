@@ -21,18 +21,24 @@ import {
   calculateCourseAssignmentScoreTrend,
   calculateCourseAssignmentStatistics,
 } from "@/services/course-analytics/assignment-statistics";
+import { getTeacherReportingScope } from "@/services/assignment-results/scope";
+import {
+  assignmentDisplayStatus,
+  ASSIGNMENT_FILTER_LABELS,
+} from "@/services/assignments/presentation";
+import {
+  assignmentReportingWhere,
+  assignmentParticipation,
+  latestEffectiveSubmissions,
+  reportingClassroomMatches,
+  EFFECTIVE_SUBMISSION_STATUSES,
+  type AssignmentReportingSection,
+} from "@/services/assignments/reporting";
 import {
   summarizeCourseProfiles,
   summarizeCourseChapterMastery,
   summarizeCourseAttentionConcepts,
 } from "@/services/course-analytics/metrics";
-
-const EFFECTIVE_SUBMISSION_STATUSES: SubmissionStatus[] = [
-  SubmissionStatus.SUBMITTED,
-  SubmissionStatus.PENDING_REVIEW,
-  SubmissionStatus.GRADED,
-  SubmissionStatus.PUBLISHED,
-];
 
 function percentage(part: number, total: number) {
   return total > 0 ? Math.round((part / total) * 100) : null;
@@ -42,7 +48,17 @@ export async function getTeacherCourseAnalytics(
   teacherId: string,
   courseId: string,
   classroomId?: string,
+  options: { section?: AssignmentReportingSection; now?: Date } = {},
 ) {
+  const section = options.section ?? "CURRENT";
+  const now = options.now ?? new Date();
+  const reportingScope = await getTeacherReportingScope(
+    teacherId,
+    { courseId, classroomId, section },
+    now,
+  );
+  const reportingClassroomStatus =
+    reportingScope.find((item) => item.id === classroomId)?.status ?? null;
   await getTeacherCourseClassroom(teacherId, courseId, classroomId);
   const classroomScope = classroomId ? { classroomId } : {};
   const course = await prisma.course.findFirst({
@@ -127,6 +143,8 @@ export async function getTeacherCourseAnalytics(
     surveys,
     reports,
     gradebooks,
+    reportingClassrooms,
+    reportingAssignments,
   ] = await Promise.all([
     prisma.assignment.findMany({
       where: { teacherId, classroom: { courseId }, ...classroomScope },
@@ -213,27 +231,62 @@ export async function getTeacherCourseAnalytics(
         currentPublicationId: true,
       },
     }),
+    prisma.classroom.findMany({
+      where: {
+        id: {
+          in: reportingScope
+            .filter(
+              (item) =>
+                item.courseId === courseId &&
+                (!classroomId || item.id === classroomId) &&
+                reportingClassroomMatches(item, section),
+            )
+            .map((item) => item.id),
+        },
+        teacherId,
+        courseId,
+      },
+      select: {
+        id: true,
+        memberships: {
+          where: { status: MembershipStatus.ACTIVE },
+          select: { studentId: true },
+        },
+      },
+    }),
+    prisma.assignment.findMany({
+      where: {
+        teacherId,
+        classroom: { courseId },
+        ...classroomScope,
+        ...assignmentReportingWhere(section, now),
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        classroomId: true,
+        classroom: { select: { name: true } },
+        status: true,
+        publishedAt: true,
+        dueAt: true,
+        createdAt: true,
+      },
+    }),
   ]);
 
   const activeStudentIdsByClassroom = new Map(
-    course.classrooms.map((classroom) => [
+    reportingClassrooms.map((classroom) => [
       classroom.id,
       new Set(classroom.memberships.map((membership) => membership.studentId)),
     ]),
   );
-  const assignmentIds = assignments
-    .filter(
-      (assignment) =>
-        assignment.status === AssignmentStatus.PUBLISHED ||
-        assignment.status === AssignmentStatus.CLOSED,
-    )
-    .map((assignment) => assignment.id);
+  const assignmentIds = reportingAssignments.map((assignment) => assignment.id);
   const assignmentSubmissions =
-    assignmentIds.length > 0 && studentIds.length > 0
+    assignmentIds.length > 0
       ? await prisma.submission.findMany({
           where: {
             assignmentId: { in: assignmentIds },
-            studentId: { in: studentIds },
             status: { in: EFFECTIVE_SUBMISSION_STATUSES },
           },
           orderBy: [
@@ -255,7 +308,7 @@ export async function getTeacherCourseAnalytics(
           },
         })
       : [];
-  const recentActivitySince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const recentActivitySince = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const currentSchemeGradebooks = course.currentPublishedAssessmentSchemeId
     ? gradebooks.filter(
         (gradebook) =>
@@ -271,6 +324,7 @@ export async function getTeacherCourseAnalytics(
     recentAttendanceRecords,
     recentPracticeAnswers,
     recentCourseConversations,
+    recentAssignmentSubmissions,
   ] = await Promise.all([
     currentPublicationIds.length
       ? prisma.courseOutcomeAttainmentRun.findMany({
@@ -335,6 +389,25 @@ export async function getTeacherCourseAnalytics(
           select: { studentId: true },
         })
       : Promise.resolve([]),
+    studentIds.length
+      ? prisma.submission.findMany({
+          where: {
+            assignmentId: {
+              in: assignments
+                .filter(
+                  (assignment) =>
+                    assignment.status === AssignmentStatus.PUBLISHED ||
+                    assignment.status === AssignmentStatus.CLOSED,
+                )
+                .map((assignment) => assignment.id),
+            },
+            studentId: { in: studentIds },
+            status: { in: EFFECTIVE_SUBMISSION_STATUSES },
+            submittedAt: { gte: recentActivitySince },
+          },
+          select: { studentId: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const latestOutcomeRunByClassroom = new Map<
@@ -354,8 +427,10 @@ export async function getTeacherCourseAnalytics(
   const attainedOutcomeStudentIds = new Set<string>();
   const courseOutcomeClassroomIds = new Set<string>();
   for (const run of latestOutcomeRunByClassroom.values()) {
-    const classroomStudentIds = activeStudentIdsByClassroom.get(
-      run.classroomId,
+    const classroomStudentIds = new Set(
+      course.classrooms
+        .find((classroom) => classroom.id === run.classroomId)
+        ?.memberships.map((member) => member.studentId) ?? [],
     );
     if (!classroomStudentIds?.size) continue;
     const attainedStudentIdsByOutcome = new Map(
@@ -399,13 +474,7 @@ export async function getTeacherCourseAnalytics(
         )
       : null;
   const recentActiveStudentIds = new Set(
-    assignmentSubmissions
-      .filter(
-        (submission) =>
-          submission.submittedAt !== null &&
-          submission.submittedAt >= recentActivitySince,
-      )
-      .map((submission) => submission.studentId),
+    recentAssignmentSubmissions.map((submission) => submission.studentId),
   );
   for (const record of recentAttendanceRecords) {
     recentActiveStudentIds.add(record.studentId);
@@ -427,28 +496,21 @@ export async function getTeacherCourseAnalytics(
       maxScore: submission.maxScore?.toNumber() ?? null,
     }),
   );
-  const assignmentStatistics = calculateCourseAssignmentStatistics({
-    assignments: assignments.map(({ id, classroomId, status }) => ({
-      id,
-      classroomId,
-      status,
-    })),
-    activeStudentIdsByClassroom,
-    submissions: normalizedAssignmentSubmissions,
-  });
+  const assignmentStatistics = calculateCourseAssignmentStatistics(
+    {
+      assignments: reportingAssignments,
+      activeStudentIdsByClassroom,
+      submissions: normalizedAssignmentSubmissions,
+    },
+    now,
+  );
   const assignmentScoreTrend = calculateCourseAssignmentScoreTrend({
-    assignments: assignments.map((assignment) => ({
-      id: assignment.id,
-      classroomId: assignment.classroomId,
-      title: assignment.title,
-      status: assignment.status,
-      dueAt: assignment.dueAt,
-      publishedAt: assignment.publishedAt,
-      createdAt: assignment.createdAt,
-    })),
+    assignments: reportingAssignments,
     activeStudentIdsByClassroom,
     submissions: normalizedAssignmentSubmissions,
+    now,
   });
+  const latestByAssignment = latestEffectiveSubmissions(assignmentSubmissions);
 
   const latestSnapshotByStudent = new Map<
     string,
@@ -591,6 +653,8 @@ export async function getTeacherCourseAnalytics(
     },
     assignmentStatistics,
     assignmentScoreTrend,
+    reportingSection: section,
+    reportingClassroomStatus,
     classrooms: course.classrooms.map((classroom) => ({
       id: classroom.id,
       name: classroom.name,
@@ -632,6 +696,21 @@ export async function getTeacherCourseAnalytics(
     profiles: profileSummary,
     chapterMastery,
     attentionConcepts,
+    recentAssignments: reportingAssignments.slice(0, 5).map((assignment) => ({
+      id: assignment.id,
+      title: assignment.title,
+      status: assignment.status,
+      displayStatus:
+        ASSIGNMENT_FILTER_LABELS[assignmentDisplayStatus(assignment, now)],
+      classroomName: assignment.classroom.name,
+      dueAt: assignment.dueAt,
+      pendingReviewCount: assignmentParticipation(
+        activeStudentIdsByClassroom.get(assignment.classroomId) ?? new Set(),
+        latestByAssignment.get(assignment.id) ?? new Map(),
+        assignment.dueAt,
+        now,
+      ).pendingReviewCount,
+    })),
     recentSurveys: surveys.slice(0, 3).map((survey) => ({
       id: survey.id,
       title: survey.title,
@@ -642,7 +721,11 @@ export async function getTeacherCourseAnalytics(
       dueAt: survey.dueAt,
     })),
     latestReport,
-    nextActions: nextActions.slice(0, 5).map((action) => ({
+    nextActions: (section === "HISTORY" ||
+    (reportingClassroomStatus && reportingClassroomStatus !== "ACTIVE")
+      ? []
+      : nextActions.slice(0, 5)
+    ).map((action) => ({
       ...action,
       href: withClassroomQuery(action.href, classroomId),
     })),

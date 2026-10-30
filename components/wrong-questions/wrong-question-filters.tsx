@@ -27,7 +27,12 @@ export function WrongQuestionFilters({
     setPending(false);
   }, [query]);
   function value(name: keyof WrongQuestionListQuery) {
-    return draft[name] ?? String(query[name] ?? "");
+    return (
+      draft[name] ??
+      (name === "isMastered" && query.isMastered === undefined
+        ? "all"
+        : String(query[name] ?? ""))
+    );
   }
   function update(name: keyof WrongQuestionListQuery, next: string) {
     if (pending) return;
@@ -52,10 +57,13 @@ export function WrongQuestionFilters({
     <section
       aria-label="错题筛选"
       aria-busy={pending}
-      className="rounded-xl border bg-white p-4"
+      className="max-w-4xl rounded-xl border border-sky-100 bg-white p-3"
     >
-      <fieldset disabled={pending} className="space-y-3 disabled:opacity-70">
-        <div className="grid gap-3 sm:grid-cols-3">
+      <fieldset
+        disabled={pending}
+        className="grid gap-3 disabled:opacity-70 sm:grid-cols-3"
+      >
+        <div className="grid grid-cols-2 gap-3 sm:col-span-2">
           <label className="text-xs font-medium">
             课程
             <select
@@ -65,27 +73,20 @@ export function WrongQuestionFilters({
               onChange={(e) => update("courseId", e.target.value)}
             >
               <option value="">全部课程</option>
-              {filterOptions.courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs font-medium">
-            班级
-            <select
-              aria-label="班级"
-              className={selectClass}
-              value={value("classroomId")}
-              onChange={(e) => update("classroomId", e.target.value)}
-            >
-              <option value="">全部班级</option>
-              {filterOptions.classrooms.map((classroom) => (
-                <option key={classroom.id} value={classroom.id}>
-                  {classroom.name}
-                </option>
-              ))}
+              <optgroup label="我的课程">
+                {filterOptions.courses
+                  .filter((c) => c.id !== "LEGACY")
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </optgroup>
+              {filterOptions.courses.some((c) => c.id === "LEGACY") && (
+                <optgroup label="其他来源">
+                  <option value="LEGACY">通用与历史错题</option>
+                </optgroup>
+              )}
             </select>
           </label>
           <label className="text-xs font-medium">
@@ -96,14 +97,14 @@ export function WrongQuestionFilters({
               value={value("isMastered")}
               onChange={(e) => update("isMastered", e.target.value)}
             >
-              <option value="">全部状态</option>
-              <option value="false">待巩固</option>
+              <option value="all">全部状态</option>
+              <option value="false">待复习</option>
               <option value="true">已掌握</option>
             </select>
           </label>
         </div>
         <form
-          className="flex gap-2"
+          className="flex items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             update("keyword", keyword.trim());
@@ -125,6 +126,7 @@ export function WrongQuestionFilters({
           </button>
         </form>
         <details
+          className="sm:col-span-3"
           key={`${query.courseId ?? "all"}:${Boolean(query.type || query.chapterId || query.knowledgePointId || query.recentDays)}`}
           open={Boolean(
             query.type ||
@@ -134,9 +136,25 @@ export function WrongQuestionFilters({
           )}
         >
           <summary className="w-fit cursor-pointer text-sm text-sky-700">
-            更多筛选 · 题型、章节、知识点、时间
+            高级筛选 · 班级、题型、章节、知识点、时间
           </summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="text-xs font-medium">
+              班级
+              <select
+                aria-label="班级"
+                className={selectClass}
+                value={value("classroomId")}
+                onChange={(e) => update("classroomId", e.target.value)}
+              >
+                <option value="">全部班级</option>
+                {filterOptions.classrooms.map((classroom) => (
+                  <option key={classroom.id} value={classroom.id}>
+                    {classroom.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="text-xs font-medium">
               题型
               <select
@@ -220,6 +238,14 @@ export function WrongQuestionFilters({
           </div>
         </details>
       </fieldset>
+      {query.courseId === "LEGACY" && (
+        <p
+          role="note"
+          className="mt-3 rounded-lg bg-sky-50 px-3 py-2 text-xs leading-5 text-slate-600"
+        >
+          这些错题来自通用练习或旧版未绑定课程的作答，作为独立来源保留原答案、反馈和掌握状态，不代表一门课程。
+        </p>
+      )}
       {active ? (
         <div
           className="mt-3 flex flex-wrap items-center gap-2"
@@ -253,9 +279,9 @@ export function WrongQuestionFilters({
             <button
               type="button"
               className="rounded-full border px-2.5 py-1 text-xs text-slate-700"
-              onClick={() => update("isMastered", "")}
+              onClick={() => update("isMastered", "all")}
             >
-              {query.isMastered ? "已掌握" : "待巩固"} ×
+              {query.isMastered ? "已掌握" : "待复习"} ×
             </button>
           ) : null}
           {query.keyword ? (

@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  studentTaskHref,
+  type StudentTaskScope,
+} from "@/services/student-experience/task-scope";
+
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { QuestionType, SubmissionStatus } from "@prisma/client";
 import { useRouter } from "next/navigation";
@@ -44,6 +49,7 @@ interface SavedAnswer {
 
 interface Props {
   autosaveDelayMs: number;
+  scope?: StudentTaskScope;
   submission: {
     id: string;
     assignmentTitle: string;
@@ -130,7 +136,11 @@ function apiAnswers(
   });
 }
 
-export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
+export function AnswerSheet({
+  autosaveDelayMs,
+  submission,
+  scope = {},
+}: Props) {
   const router = useRouter();
   const storageKey = `assignment-draft:${submission.id}`;
   const [answers, setAnswers] = useState<AnswerMap>(() =>
@@ -291,7 +301,9 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
       return;
     }
     localStorage.removeItem(storageKey);
-    router.replace(`/student/submissions/${response.data.id}/result`);
+    router.replace(
+      studentTaskHref(`/student/submissions/${response.data.id}/result`, scope),
+    );
     router.refresh();
   }
 
@@ -306,8 +318,10 @@ export function AnswerSheet({ autosaveDelayMs, submission }: Props) {
   return (
     <section className="space-y-6">
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white/95 p-4 shadow-sm backdrop-blur">
-        <div>
-          <h1 className="font-semibold">{submission.assignmentTitle}</h1>
+        <div className="min-w-0 flex-1 basis-56">
+          <h1 className="font-semibold break-words">
+            {submission.assignmentTitle}
+          </h1>
           <p className="text-sm text-gray-500">
             第 {submission.attemptNumber} 次作答 · 已答 {answeredCount}/
             {submission.questions.length} · 截止{" "}

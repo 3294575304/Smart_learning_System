@@ -10,6 +10,8 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
     assignmentService,
     view,
     navigation,
+    filters,
+    reporting,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -47,6 +49,17 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
       ),
       "utf8",
     ),
+    readFile(
+      new URL(
+        "../../components/assignment-results/overview-filters.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL("../../services/assignments/reporting.ts", import.meta.url),
+      "utf8",
+    ),
   ]);
 
   assert.match(legacyPage, /requirePageRole\(Role\.TEACHER\)/u);
@@ -62,8 +75,9 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
     resultsPage,
     /TeacherCourseAnalyticsView[\s\S]*data=\{analytics\}/u,
   );
-  assert.match(resultsPage, /name="courseId"/u);
-  assert.match(resultsPage, /name="classroomId"/u);
+  assert.match(filters, /name="courseId"/u);
+  assert.match(filters, /name="classroomId"/u);
+  assert.match(filters, /name="section"/u);
   assert.match(resultsPage, /courseId: firstValue\(rawQuery\.courseId\)/u);
   assert.match(
     resultsPage,
@@ -77,8 +91,8 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
     resultsPage,
     /if \(parsedQuery\.classroomId && !selectedClassroom\) notFound\(\)/u,
   );
-  assert.match(resultsPage, /classroom\.course\?\.id === selectedCourse\.id/u);
-  assert.match(resultsPage, /classroom\.status === "ACTIVE"/u);
+  assert.match(resultsPage, /getTeacherReportingScope/u);
+  assert.match(filters, /reportingClassroomMatches/u);
   assert.match(resultsPage, /选择课程和班级查看学习证据、作业表现与近期作业/u);
   assert.match(service, /where: \{ id: courseId, teacherId \}/u);
   assert.match(
@@ -91,10 +105,9 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
     service,
     /AssignmentStatus\.PUBLISHED[\s\S]*?AssignmentStatus\.CLOSED/u,
   );
-  assert.match(service, /SubmissionStatus\.SUBMITTED/u);
-  assert.match(service, /SubmissionStatus\.PENDING_REVIEW/u);
-  assert.match(service, /SubmissionStatus\.GRADED/u);
-  assert.match(service, /SubmissionStatus\.PUBLISHED/u);
+  for (const status of ["SUBMITTED", "PENDING_REVIEW", "GRADED", "PUBLISHED"]) {
+    assert.ok(reporting.includes(`"${status}"`));
+  }
   assert.match(service, /calculateCourseAssignmentStatistics/u);
   assert.match(service, /assignmentStatistics,/u);
   assert.match(assignmentService, /query\.courseId/u);
@@ -102,7 +115,7 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
   assert.match(resultsPage, /page: 1,[\s\S]*?pageSize: 5/u);
   assert.match(
     resultsPage,
-    /selectedCourse\s*\? listTeacherResultsOverview\(teacher\.id, query\)/u,
+    /selectedCourse\s*\? listTeacherResultsOverview\(teacher\.id, query, now\)/u,
   );
   assert.match(
     resultsPage,

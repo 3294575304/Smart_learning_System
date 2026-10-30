@@ -51,6 +51,7 @@ export async function notifyAssignmentsDueSoon(
     assignmentId: string;
     assignmentTitle: string;
     dueAt: Date;
+    grantId?: string;
   }>,
 ) {
   return createNotifications(
@@ -64,6 +65,7 @@ export async function notifyAssignmentsDueSoon(
       sourceId: input.assignmentId,
       deduplicationKey: notificationDeduplication.assignmentDueSoon(
         input.assignmentId,
+        `${input.grantId ?? "class"}:${input.dueAt.toISOString()}`,
       ),
       expiresAt: input.dueAt,
     })),

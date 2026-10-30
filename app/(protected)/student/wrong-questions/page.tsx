@@ -1,3 +1,5 @@
+import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { ReviewTabs } from "@/components/wrong-questions/review-tabs";
@@ -54,14 +56,57 @@ export default async function StudentWrongQuestionsPage({
   const student = await requirePageRole(Role.STUDENT);
   const raw = firstValues(await searchParams);
   const favorites = raw.view === "favorites";
-  const { view: _view, ...filters } = raw;
+  const {
+    view: _view,
+    backCourseId: _backCourseId,
+    backClassroomId: _backClassroomId,
+    ...filters
+  } = raw;
+  const returnAction = (
+    <StudentCourseReturnLink
+      courseId={_backCourseId}
+      classroomId={_backClassroomId}
+    />
+  );
+  if (!favorites && filters.isMastered === undefined)
+    filters.isMastered = "false";
+  if (filters.isMastered === "all") delete filters.isMastered;
   void _view;
   const parsed = wrongQuestionListQuerySchema.safeParse(
     favorites ? {} : filters,
   );
-  const query = parsed.success
-    ? parsed.data
-    : wrongQuestionListQuerySchema.parse({});
+  if (!parsed.success)
+    return (
+      <section className="mx-auto max-w-[1440px] min-w-0 space-y-4">
+        <PageHeader
+          actions={returnAction}
+          title="复习中心"
+          description="请检查筛选条件。"
+        />
+        <p role="alert" className="rounded-xl border bg-white p-5">
+          筛选参数无效，未查询任何记录。
+          <Link
+            className="ml-2 text-sky-700 underline"
+            href="/student/wrong-questions"
+          >
+            重新选择筛选
+          </Link>
+        </p>
+      </section>
+    );
+  if (favorites)
+    return (
+      <section className="mx-auto max-w-[1440px] min-w-0 space-y-4">
+        <PageHeader
+          actions={returnAction}
+          title="复习中心"
+          description="整理错题和收藏，按课程与章节复习。收藏和掌握状态分别保存。"
+        />
+        <ReviewTabs favorites />
+        <FavoriteCenter enabled />
+      </section>
+    );
+  const query = parsed.data;
   let result: Awaited<ReturnType<typeof listWrongQuestions>>;
   let chapters: Awaited<ReturnType<typeof listReviewChapters>>;
   try {
@@ -79,8 +124,9 @@ export default async function StudentWrongQuestionsPage({
     : await summarizeWrongCourses(student.id, query.courseId);
 
   return (
-    <section className="space-y-4">
+    <section className="mx-auto max-w-[1440px] min-w-0 space-y-4">
       <PageHeader
+        actions={returnAction}
         description="整理错题和收藏，按课程与章节复习。收藏和掌握状态分别保存。"
         title="复习中心"
       />
@@ -108,6 +154,7 @@ export default async function StudentWrongQuestionsPage({
             summaries={courseSummaries}
           />
           <WrongQuestionList
+            returnTo={`/student/wrong-questions?${new URLSearchParams(Object.entries(raw).filter(([, value]) => value !== undefined) as [string, string][])}`}
             hasFilters={hasActiveFilters(query)}
             items={result.items}
           />

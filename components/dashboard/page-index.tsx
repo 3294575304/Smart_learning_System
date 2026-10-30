@@ -7,6 +7,7 @@ interface PageIndexProps {
   hrefForPage: (page: number) => string;
   ariaLabel: string;
   summary?: string;
+  nativeNavigation?: boolean;
 }
 
 function visiblePageNumbers(page: number, totalPages: number): number[] {
@@ -31,10 +32,13 @@ export function PageIndex({
   hrefForPage,
   ariaLabel,
   summary,
+  nativeNavigation = false,
 }: PageIndexProps) {
   if (totalPages <= 1) return null;
 
   const pages = visiblePageNumbers(page, totalPages);
+  // GET-filtered pages can keep pagination usable independently of client routing.
+  const PaginationLink = nativeNavigation ? "a" : Link;
 
   return (
     <nav
@@ -45,14 +49,14 @@ export function PageIndex({
         <span className="mr-2 text-sm text-gray-500">{summary}</span>
       ) : null}
       {page > 1 ? (
-        <Link
+        <PaginationLink
           aria-label="上一页"
           className={iconLinkClassName}
           href={hrefForPage(page - 1)}
           title="上一页"
         >
           <ChevronLeft aria-hidden="true" className="size-4" />
-        </Link>
+        </PaginationLink>
       ) : null}
       {pages.map((pageNumber, index) => {
         const previousPage = pages[index - 1];
@@ -69,7 +73,7 @@ export function PageIndex({
                 …
               </span>
             ) : null}
-            <Link
+            <PaginationLink
               aria-current={pageNumber === page ? "page" : undefined}
               aria-label={`第 ${pageNumber} 页`}
               className={`inline-flex size-9 shrink-0 items-center justify-center rounded-md border text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none ${
@@ -80,19 +84,19 @@ export function PageIndex({
               href={hrefForPage(pageNumber)}
             >
               {pageNumber}
-            </Link>
+            </PaginationLink>
           </span>
         );
       })}
       {page < totalPages ? (
-        <Link
+        <PaginationLink
           aria-label="下一页"
           className={iconLinkClassName}
           href={hrefForPage(page + 1)}
           title="下一页"
         >
           <ChevronRight aria-hidden="true" className="size-4" />
-        </Link>
+        </PaginationLink>
       ) : null}
     </nav>
   );

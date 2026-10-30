@@ -1,11 +1,12 @@
 "use client";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 
+import { studentScoreLabel } from "@/services/recommendations/scoring";
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { requestApi } from "@/components/courses/request-api";
 import { recommendationDetailApiPath } from "@/lib/api/recommendations";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { QuestionType, RecommendationStatus } from "@prisma/client";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -36,6 +37,10 @@ interface Props {
   recommendation: RecommendationDetailView;
   embedded?: boolean;
   onCompleted?: (id: string) => void;
+  onProgrammingQueued?: (
+    id: string,
+    attempt: NonNullable<RecommendationDetailView["programmingAttempt"]>,
+  ) => void;
   onDraftChange?: (id: string, answer: QuestionAnswerState) => void;
   initialAnswer?: QuestionAnswerState;
   batchBusy?: boolean;
@@ -94,13 +99,17 @@ function PracticeResult({
             </dd>
           </div>
           <div>
-            <dt className="text-emerald-700">正确率</dt>
-            <dd className="mt-1 text-lg font-semibold">{result.percentage}%</dd>
+            <dt className="text-emerald-700">本题得分率</dt>
+            <dd className="mt-1 text-lg font-semibold">
+              {result.percentage === null
+                ? "缺少完整成绩"
+                : `${result.percentage}%`}
+            </dd>
           </div>
           <div>
-            <dt className="text-emerald-700">得分</dt>
+            <dt className="text-emerald-700">本题成绩（百分制）</dt>
             <dd className="mt-1 text-lg font-semibold">
-              {result.score} / {result.maxScore}
+              {studentScoreLabel(result.score, result.maxScore)}
             </dd>
           </div>
           <div>
@@ -164,6 +173,7 @@ export function RecommendationPractice({
   recommendation,
   embedded,
   onCompleted,
+  onProgrammingQueued,
   onDraftChange,
   initialAnswer,
   batchBusy,
@@ -281,18 +291,22 @@ export function RecommendationPractice({
       return;
     }
     setProgrammingAttemptId(response.data.attemptId);
+    onProgrammingQueued?.(recommendation.id, {
+      id: response.data.attemptId,
+      status: response.data.status,
+      progress: 0,
+    });
   }
 
   return (
     <section className="min-w-0 space-y-6" aria-busy={batchBusy}>
       {!embedded && (
         <header className="min-w-0">
-          <Link
-            className="text-sm text-gray-500 hover:underline"
+          <StudentBackLink
             href={`/student/recommendations/${recommendation.id}`}
           >
-            ← 返回推荐详情
-          </Link>
+            返回推荐详情
+          </StudentBackLink>
           <h1 className="mt-2 text-2xl font-semibold break-words">推荐练习</h1>
           <p className="mt-2 text-sm text-gray-600">
             作答结果由服务端判分，并同步更新错题与知识掌握度。
@@ -345,6 +359,7 @@ export function RecommendationPractice({
             <ProgrammingAttemptStatus
               assignmentQuestionId={recommendation.questionId}
               attemptId={programmingAttemptId}
+              displayMaxScore={recommendation.assignedPoints}
               onComplete={() => {
                 void requestApi<RecommendationDetailView>(
                   recommendationDetailApiPath(recommendation.id),

@@ -15,12 +15,16 @@ export interface TeacherResultOverviewItem {
   studentCount: number;
   submittedCount: number;
   historicalSubmittedCount: number;
+  unsubmittedCount: number;
+  overdueCount: number;
   pendingReviewCount: number;
   scoredStudentCount: number;
   averageScore: number | null;
   averagePercentage: number | null;
   highestScore: number | null;
   lowestScore: number | null;
+  highestPercentage: number | null;
+  lowestPercentage: number | null;
 }
 
 export interface TeacherResultsOverview {

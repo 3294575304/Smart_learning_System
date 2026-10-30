@@ -1,3 +1,4 @@
+import type { PracticeManagementView } from "@/services/practice-sets/management-schemas";
 import type {
   QuestionStatus,
   QuestionType,
@@ -126,6 +127,8 @@ export interface RecommendationKnowledgePointView {
 }
 
 export interface RecommendationListItemView {
+  assignedPoints?: number | null;
+  scoringRuleVersion?: string | null;
   id: string;
   questionId: string;
   title: string;
@@ -140,6 +143,10 @@ export interface RecommendationListItemView {
 }
 
 export interface RecommendationDetailView extends RecommendationListItemView {
+  management?: PracticeManagementView;
+  readOnly?: boolean;
+  savedAnswer?: string | null;
+  historyFeedback?: RecommendationPracticeAnswerResultView | null;
   options: Array<{
     id: string;
     label: string;
@@ -178,7 +185,7 @@ export interface RecommendationPracticeResultView {
   correctCount: number;
   score: number;
   maxScore: number;
-  percentage: number;
+  percentage: number | null;
   answers: RecommendationPracticeAnswerResultView[];
 }
 
@@ -191,6 +198,11 @@ export interface RecommendationListResult {
 }
 
 export interface RecommendationGenerationResult {
+  scoringSummary?: {
+    totalPoints: number | null;
+    actualCount: number;
+    ruleVersion: string | null;
+  };
   cycleKey: string;
   studentId: string;
   targetDifficulty: number;

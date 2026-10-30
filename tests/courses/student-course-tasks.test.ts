@@ -16,12 +16,10 @@ test("课程学习中心提供当前课程的作业、签到和问卷入口", as
 
 test("任务中心按待完成作业、开放签到和待填问卷汇总", async () => {
   const page = await readFile("app/(protected)/student/tasks/page.tsx", "utf8");
-  assert.match(page, /listStudentAssignments\(student\.id\)/u);
-  assert.match(page, /getStudentHomeTasks\(student\.id\)/u);
-  assert.match(page, /pendingAssignments/u);
-  assert.match(page, /pendingAttendance/u);
-  assert.match(page, /pendingSurveys/u);
-  assert.match(page, /task\.items\.map/u);
+  assert.match(page, /getStudentTaskOverview\(student\.id\)/u);
+  assert.match(page, /overview\.counts\[kind\]/u);
+  assert.match(page, /overview\.items\.filter/u);
+  assert.match(page, /StudentTaskList items=\{items\}/u);
   assert.match(page, /当前没有待处理事项/u);
   assert.match(page, /\/student\/assignments\?status=ALL/u);
   assert.match(page, /\/student\/attendance/u);

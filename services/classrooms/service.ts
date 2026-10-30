@@ -483,6 +483,10 @@ export async function completeClassroom(
             where: { id: classroomId },
             data: { status: ClassroomStatus.COMPLETED, completedAt },
           });
+          await transaction.assignmentMakeupGrant.updateMany({
+            where: { assignment: { classroomId }, status: "ACTIVE" },
+            data: { status: "EXPIRED" },
+          });
           await writeGovernanceAuditLog(transaction, {
             actorId: teacherId,
             action: AuditAction.CLASSROOM_COMPLETED,
