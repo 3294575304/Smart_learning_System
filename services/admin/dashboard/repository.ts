@@ -343,7 +343,7 @@ export async function loadRecentAssignments(
   limit: number,
 ): Promise<DashboardActivity[]> {
   const records = await prisma.assignment.findMany({
-    where: { publishedAt: { not: null } },
+    where: { deletedAt: null, publishedAt: { not: null } },
     orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
     take: limit,
     select: {

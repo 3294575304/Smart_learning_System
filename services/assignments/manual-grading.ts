@@ -1,3 +1,11 @@
+import { summarizeSubmission } from "./submission-summary";
+import { countUsableGrants, usableGrantWindow } from "./work-access";
+import { assignmentCapabilities } from "./capabilities";
+import {
+  assertGradingWritable,
+  lockAssignmentLifecycle,
+  touchAssignmentLifecycle,
+} from "./lifecycle-lock";
 import "server-only";
 import { latestEffectiveSubmissions } from "./latest-submissions";
 
@@ -44,7 +52,7 @@ const submittedStatuses: SubmissionStatus[] = [
 const gradingDetailInclude = {
   assignment: {
     include: {
-      classroom: { select: { id: true, name: true } },
+      classroom: { select: { id: true, name: true, status: true } },
       questions: {
         orderBy: { sortOrder: "asc" as const },
         include: {
@@ -108,7 +116,15 @@ function decimalNumber(value: Prisma.Decimal | null): number | null {
 
 function detailFromRecord(
   submission: GradingSubmissionRecord,
-): TeacherSubmissionDetail {
+): Omit<
+  TeacherSubmissionDetail,
+  | "canManageGrading"
+  | "gradingBlockedReason"
+  | "attempts"
+  | "isLatestEffective"
+  | "questions"
+  | "snapshotAt"
+> {
   return {
     id: submission.id,
     status: submission.status,
@@ -124,6 +140,8 @@ function detailFromRecord(
     assignment: {
       id: submission.assignment.id,
       title: submission.assignment.title,
+      category: submission.assignment.category,
+      allowAttachments: submission.assignment.allowAttachments,
       classroomId: submission.assignment.classroom.id,
       classroomName: submission.assignment.classroom.name,
       totalPoints: submission.assignment.totalPoints.toNumber(),
@@ -137,6 +155,12 @@ function detailFromRecord(
     },
     answers: submission.answers.map((answer) => ({
       id: answer.id,
+      finalScore: decimalNumber(answer.score),
+      options: answer.assignmentQuestion.optionSnapshots.map((option) => ({
+        id: option.id,
+        label: option.labelSnapshot,
+        content: option.contentSnapshot,
+      })),
       assignmentQuestionId: answer.assignmentQuestionId,
       title: answer.assignmentQuestion.titleSnapshot,
       content: answer.assignmentQuestion.contentSnapshot,
@@ -205,12 +229,25 @@ export async function listTeacherAssignmentSubmissions(
   query: TeacherSubmissionListQuery,
 ): Promise<TeacherSubmissionListResult> {
   const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, teacherId },
+    where: { id: assignmentId, teacherId, deletedAt: null },
     select: {
       id: true,
       title: true,
       totalPoints: true,
-      classroom: { select: { name: true } },
+      questions: { select: { id: true, typeSnapshot: true, points: true } },
+      status: true,
+      publishedAt: true,
+      dueAt: true,
+      classroom: {
+        select: {
+          name: true,
+          status: true,
+          memberships: {
+            where: { status: "ACTIVE" },
+            select: { studentId: true },
+          },
+        },
+      },
       _count: {
         select: {
           submissions: { where: { status: { in: submittedStatuses } } },
@@ -222,9 +259,13 @@ export async function listTeacherAssignmentSubmissions(
 
   const where: Prisma.SubmissionWhereInput = {
     assignmentId,
-    status: query.status ?? { in: submittedStatuses },
+    status:
+      query.status === SubmissionStatus.GRADED ||
+      query.status === SubmissionStatus.PUBLISHED
+        ? { in: [SubmissionStatus.GRADED, SubmissionStatus.PUBLISHED] }
+        : (query.status ?? { in: submittedStatuses }),
   };
-  const [total, submissions] = await prisma.$transaction([
+  const [total, submissions, latestSubmissions] = await prisma.$transaction([
     prisma.submission.count({ where }),
     prisma.submission.findMany({
       where,
@@ -250,12 +291,26 @@ export async function listTeacherAssignmentSubmissions(
         answers: {
           select: {
             score: true,
+            isCorrect: true,
+            assignmentQuestionId: true,
+            programmingAttempts: {
+              where: { kind: "FORMAL_JUDGE" },
+              orderBy: { revisionNumber: "desc" },
+              take: 1,
+              select: { status: true },
+            },
             gradingStatus: true,
             assignmentQuestion: { select: { typeSnapshot: true } },
           },
         },
       },
     }),
+    prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT DISTINCT ON ("studentId") id FROM "Submission"
+      WHERE "assignmentId" = ${assignmentId}
+      AND status::text IN ('SUBMITTED', 'PENDING_REVIEW', 'GRADED', 'PUBLISHED')
+      ORDER BY "studentId", "attemptNumber" DESC, "submittedAt" DESC NULLS LAST, id DESC
+    `,
   ]);
 
   return {
@@ -268,6 +323,16 @@ export async function listTeacherAssignmentSubmissions(
     },
     items: submissions.map((submission) => ({
       id: submission.id,
+      gradingBlockedReason:
+        assignmentCapabilities(assignment).gradingBlockedReason ??
+        (assignment.classroom.memberships.some(
+          (member) => member.studentId === submission.student.id,
+        )
+          ? null
+          : "历史成员的作答仅供查看，不能修改成绩") ??
+        (latestSubmissions.some((latest) => latest.id === submission.id)
+          ? null
+          : "历史提交只读，请切换到最新有效提交处理"),
       student: {
         id: submission.student.id,
         displayName:
@@ -280,12 +345,20 @@ export async function listTeacherAssignmentSubmissions(
       submittedAt: submission.submittedAt,
       gradedAt: submission.gradedAt,
       publishedAt: submission.publishedAt,
-      objectiveScore: submission.answers.reduce(
-        (sum, answer) =>
-          answer.assignmentQuestion.typeSnapshot === QuestionType.SHORT_ANSWER
-            ? sum
-            : sum + (answer.score?.toNumber() ?? 0),
-        0,
+      ...summarizeSubmission(
+        assignment.questions.map((question) => ({
+          id: question.id,
+          type: question.typeSnapshot,
+          points: question.points.toNumber(),
+        })),
+        submission.answers.map((answer) => ({
+          questionId: answer.assignmentQuestionId,
+          score: decimalNumber(answer.score),
+          isCorrect: answer.isCorrect,
+          gradingStatus: answer.gradingStatus,
+          judgeStatus: answer.programmingAttempts[0]?.status ?? null,
+        })),
+        submission.status,
       ),
       currentScore: decimalNumber(submission.score),
       maxScore:
@@ -313,9 +386,68 @@ export async function getTeacherSubmissionForGrading(
   assignmentId: string,
   submissionId: string,
 ): Promise<TeacherSubmissionDetail> {
-  return detailFromRecord(
-    await loadTeacherSubmission(teacherId, assignmentId, submissionId),
+  const snapshotAt = Date.now();
+  const record = await loadTeacherSubmission(
+    teacherId,
+    assignmentId,
+    submissionId,
   );
+  const membership = await prisma.classMembership.findUnique({
+    where: {
+      classroomId_studentId: {
+        classroomId: record.assignment.classroomId,
+        studentId: record.studentId,
+      },
+    },
+    select: { status: true },
+  });
+  const attempts = await prisma.submission.findMany({
+    where: {
+      assignmentId,
+      studentId: record.studentId,
+      status: { in: submittedStatuses },
+    },
+    orderBy: [
+      { attemptNumber: "desc" },
+      { submittedAt: "desc" },
+      { id: "desc" },
+    ],
+    select: { id: true, attemptNumber: true, submittedAt: true, status: true },
+  });
+  const isLatestEffective = attempts[0]?.id === record.id;
+  const blockedReason =
+    assignmentCapabilities(record.assignment).gradingBlockedReason ??
+    (membership?.status === "ACTIVE"
+      ? null
+      : "历史成员的作答仅供查看，不能修改成绩") ??
+    (isLatestEffective ? null : "历史提交只读，请切换到最新有效提交处理");
+  const detail = detailFromRecord(record);
+  return {
+    ...detail,
+    snapshotAt,
+    attempts,
+    isLatestEffective,
+    questions: record.assignment.questions.map((q) => ({
+      id: q.id,
+      title: q.titleSnapshot,
+      content: q.contentSnapshot,
+      type: q.typeSnapshot,
+      sortOrder: q.sortOrder,
+      maxScore: q.points.toNumber(),
+      correctAnswer: formatCorrectAnswer(q),
+      explanation: q.explanationSnapshot,
+      options: q.optionSnapshots.map((option) => ({
+        id: option.id,
+        label: option.labelSnapshot,
+        content: option.contentSnapshot,
+      })),
+      answer:
+        detail.answers.find((answer) => answer.assignmentQuestionId === q.id) ??
+        null,
+    })),
+    canManageGrading: blockedReason === null,
+    gradingBlockedReason: blockedReason,
+  };
 }
 
 export async function saveManualAnswerGrade(
@@ -350,10 +482,17 @@ export async function saveManualAnswerGrade(
         assignmentQuestion: {
           select: { typeSnapshot: true, points: true },
         },
-        submission: { select: { status: true } },
+        submission: { select: { status: true, studentId: true } },
       },
     });
     if (!answer) throw new ResourceNotFoundError("待批改答案不存在");
+    await assertGradingWritable(
+      transaction,
+      teacherId,
+      assignmentId,
+      answer.submission.studentId,
+      submissionId,
+    );
     const isProgramming =
       answer.assignmentQuestion.typeSnapshot ===
       QuestionType.PYTHON_PROGRAMMING;
@@ -461,6 +600,13 @@ export async function completeSubmissionGrading(
       include: gradingDetailInclude,
     });
     if (!submission) throw new ResourceNotFoundError("提交记录不存在");
+    await assertGradingWritable(
+      transaction,
+      teacherId,
+      assignmentId,
+      submission.studentId,
+      submissionId,
+    );
     if (
       submission.status === SubmissionStatus.GRADED ||
       submission.status === SubmissionStatus.PUBLISHED
@@ -667,8 +813,23 @@ export async function publishAssignmentResults(
 ): Promise<PublishAssignmentResultsResult> {
   const result = await runAssignmentSerializable<PublishTransactionResult>(
     async (transaction) => {
+      const lifecycle = await lockAssignmentLifecycle(
+        transaction,
+        assignmentId,
+        teacherId,
+      );
+      const capability = assignmentCapabilities({
+        ...lifecycle,
+        activeMakeupCount: await countUsableGrants(transaction, assignmentId),
+      });
+      if (!capability.canPublishResults)
+        throw new AssignmentOperationError(
+          capability.publicationBlockedReason ?? "当前状态不能公布成绩",
+          409,
+        );
+      await touchAssignmentLifecycle(transaction, assignmentId);
       const assignment = await transaction.assignment.findFirst({
-        where: { id: assignmentId, teacherId },
+        where: { id: assignmentId, teacherId, deletedAt: null },
         select: {
           id: true,
           title: true,
@@ -833,11 +994,14 @@ export async function getAssignmentPublicationState(
   assignmentId: string,
 ) {
   const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, teacherId },
+    where: { id: assignmentId, teacherId, deletedAt: null },
     select: {
       status: true,
+      publishedAt: true,
+      dueAt: true,
       classroom: {
         select: {
+          status: true,
           memberships: {
             where: { status: "ACTIVE" },
             select: { studentId: true },
@@ -881,12 +1045,50 @@ export async function getAssignmentPublicationState(
           item.maxScore === null ||
           item.gradedAt === null)),
   ).length;
+  const grantWindow = await usableGrantWindow(prisma, assignmentId);
+  const capability = assignmentCapabilities({
+    ...assignment,
+    activeMakeupCount: grantWindow.count,
+  });
+  const deadlines =
+    assignment.classroom.status === "ACTIVE"
+      ? [assignment.dueAt, grantWindow.nextAt].filter(
+          (date): date is Date => date !== null && date > new Date(),
+        )
+      : [];
+  const refreshAt = deadlines.length
+    ? new Date(Math.min(...deadlines.map((date) => date.getTime())))
+    : null;
+  const availableAt =
+    assignment.classroom.status === "ACTIVE" &&
+    !capability.gradingBlockedReason &&
+    refreshAt
+      ? new Date(
+          Math.max(
+            assignment.dueAt?.getTime() ?? 0,
+            grantWindow.lastAt?.getTime() ?? 0,
+          ),
+        )
+      : null;
+  const gradedCount = latest.filter((item) => item.status === "GRADED").length;
+  const blockedReason =
+    capability.publicationBlockedReason ??
+    (pendingCount
+      ? `还有 ${pendingCount} 份最新提交未完成批改`
+      : !gradedCount
+        ? latest.length
+          ? "成绩已全部公布"
+          : "暂无可公布成绩"
+        : null);
   return {
+    ...(refreshAt ? { refreshAt } : {}),
+    ...(availableAt ? { availableAt } : {}),
+    blockedReason,
     pendingCount,
     gradedCount: latest.filter((item) => item.status === "GRADED").length,
     publishedCount: latest.filter((item) => item.status === "PUBLISHED").length,
     canPublish:
-      ["PUBLISHED", "CLOSED"].includes(assignment.status) &&
+      capability.canPublishResults &&
       pendingCount === 0 &&
       latest.some((item) => item.status === "GRADED"),
   };

@@ -56,7 +56,7 @@ export function RandomStudentPicker({ students }: { students: Candidate[] }) {
           type="button"
           onClick={draw}
           disabled={students.length === 0}
-          className="rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="rounded-lg bg-sky-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           {remaining.length === 0 ? "开始新一轮" : "随机选人"}
         </button>

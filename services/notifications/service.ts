@@ -1,10 +1,12 @@
 import "server-only";
+import { withStudentNotificationActions } from "./student-actions";
 
 import type { Role } from "@prisma/client";
 
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import {
   findOwnedNotification,
+  dismissOwnedNotifications,
   insertNotifications,
   loadActiveRecipientIds,
   loadNotificationPage,
@@ -17,6 +19,7 @@ import {
 import {
   notificationCreateInputSchema,
   type NotificationCreateInput,
+  type NotificationDismissRequest,
   type NotificationListQuery,
 } from "@/services/notifications/schemas";
 import type {
@@ -70,7 +73,7 @@ export async function getUserNotifications(
     now,
   );
   return {
-    items: records,
+    items: await withStudentNotificationActions(recipientId, records, now),
     pagination: {
       page: query.page,
       pageSize: query.pageSize,
@@ -93,7 +96,10 @@ export async function getUserNotification(
 ) {
   const notification = await findOwnedNotification(recipientId, notificationId);
   if (!notification) throw new ResourceNotFoundError("通知不存在");
-  return notification;
+  const [resolved] = await withStudentNotificationActions(recipientId, [
+    notification,
+  ]);
+  return resolved;
 }
 
 export async function markNotificationRead(
@@ -118,4 +124,17 @@ export async function markAllNotificationsRead(
 ): Promise<{ updatedCount: number }> {
   const result = await markAllOwnedNotificationsRead(recipientId, now);
   return { updatedCount: result.count };
+}
+
+export async function dismissUserNotifications(
+  recipientId: string,
+  input: NotificationDismissRequest,
+  now = new Date(),
+) {
+  const result = await dismissOwnedNotifications(
+    recipientId,
+    input.scope === "SELECTED" ? input.ids : undefined,
+    now,
+  );
+  return { dismissedCount: result.count };
 }

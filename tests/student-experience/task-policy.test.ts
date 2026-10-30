@@ -68,3 +68,21 @@ test("已开始重新作答优先显示进行中，未开始重做不自动成�
     "SUBMITTED",
   );
 });
+
+test("教师授权重做后仍可从待完成列表进入，授权消失后保留原提交", () => {
+  const assignment = {
+    dueAt: new Date(now.getTime() + 1000),
+    latestSubmissionId: "old",
+    inProgressSubmissionId: null,
+    makeupKind: "REDO" as const,
+  };
+  assert.equal(studentAssignmentState(assignment, now), "PENDING");
+  assert.equal(
+    studentAssignmentState({ ...assignment, makeupKind: null }, now),
+    "SUBMITTED",
+  );
+  assert.equal(
+    studentAssignmentState({ ...assignment, historyOnly: true }, now),
+    "SUBMITTED",
+  );
+});

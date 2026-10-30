@@ -1,3 +1,4 @@
+import { studentScoreLabel } from "@/services/recommendations/scoring";
 import { FeedbackLink } from "@/components/dashboard/feedback-link";
 import { SubmissionStatus } from "@prisma/client";
 import { BarChart3 } from "lucide-react";
@@ -73,11 +74,11 @@ export function StudentSubmissionHistory({
                     {result.submittedAt?.toLocaleString("zh-CN") ?? "—"}
                   </td>
                   <td className="px-4 py-4 font-medium">
-                    {result.score === null || result.maxScore === null
+                    {result.status !== SubmissionStatus.PUBLISHED
                       ? result.status === SubmissionStatus.GRADED
                         ? "待发布"
                         : "待批改"
-                      : `${result.score} / ${result.maxScore}`}
+                      : studentScoreLabel(result.score, result.maxScore)}
                   </td>
                   <td className="px-4 py-4">
                     {result.percentage === null ? "—" : `${result.percentage}%`}

@@ -168,7 +168,7 @@ export function QuestionBulkImport({
       ) : null}
       <div className="flex flex-wrap gap-3">
         <button
-          className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           disabled={busy || !questions.length || !knowledgePointIds.length}
           onClick={() => void submit()}
           type="button"

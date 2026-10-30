@@ -3,6 +3,7 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import {
   distributeAssignmentPoints,
+  distributePointsByType,
   selectAssignmentQuestions,
 } from "@/services/assignments/editor-helpers";
 import { latestEffectiveSubmissions } from "@/services/assignments/latest-submissions";
@@ -120,5 +121,39 @@ test("publication and todos only consume latest effective attempts, preserving h
       ]),
     ),
     { pendingReviewCount: 1, publishableCount: 0 },
+  );
+});
+
+test("typed subtotals allocate exact cents and preserve locked items", () => {
+  const questions = [
+    { id: "a", type: "choice", points: 10 },
+    { id: "b", type: "choice", points: 10 },
+    { id: "c", type: "choice", points: 10 },
+    { id: "d", type: "written", points: 7 },
+  ] as const;
+  assert.deepEqual(
+    distributePointsByType(questions, 100, { choice: 39.99, written: 60.01 }, [
+      "a",
+    ]),
+    [10, 15, 14.99, 60.01],
+  );
+  assert.throws(
+    () =>
+      distributePointsByType(questions, 100, { choice: 30, written: 50 }, []),
+    /目标总分/,
+  );
+  assert.throws(
+    () =>
+      distributePointsByType(questions, 100, { choice: 9, written: 91 }, ["a"]),
+    /锁定/,
+  );
+  assert.throws(
+    () =>
+      distributePointsByType(questions, 100, { choice: 35, written: 65 }, [
+        "a",
+        "b",
+        "c",
+      ]),
+    /锁定/,
   );
 });

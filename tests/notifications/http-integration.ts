@@ -314,8 +314,91 @@ async function main(): Promise<void> {
       401,
     );
 
+    const remove = (cookie: string | undefined, body: unknown) =>
+      requestJson("/api/notifications", cookie, "DELETE", body);
+    const clear = { scope: "ALL" };
+    assert.equal((await remove(undefined, clear)).status, 401);
+    assert.equal((await remove(adminCookie, clear)).status, 403);
+    assert.equal(
+      (await remove(teacherCookie, { scope: "SELECTED", ids: [] })).status,
+      400,
+    );
+    const foreign = await remove(studentCookie, {
+      scope: "SELECTED",
+      ids: [teacherNotification.id],
+    });
+    assert.deepEqual(
+      ((await foreign.json()) as ApiSuccess<{ dismissedCount: number }>).data,
+      { dismissedCount: 0 },
+    );
+    const selected = { scope: "SELECTED", ids: [studentNotification.id] };
+    const removed = await remove(studentCookie, selected);
+    assert.equal(removed.status, 200);
+    assert.deepEqual(
+      ((await removed.json()) as ApiSuccess<{ dismissedCount: number }>).data,
+      { dismissedCount: 1 },
+    );
+    const repeatedRemoval = await remove(studentCookie, selected);
+    assert.deepEqual(
+      ((await repeatedRemoval.json()) as ApiSuccess<{ dismissedCount: number }>)
+        .data,
+      { dismissedCount: 0 },
+    );
+    assert.equal(
+      (
+        await requestJson(
+          `/api/notifications/${studentNotification.id}/read`,
+          studentCookie,
+          "PATCH",
+        )
+      ).status,
+      404,
+    );
+    const studentRemaining = await prisma.notification.count({
+      where: { recipientId: student.id, dismissedAt: null },
+    });
+    assert.equal((await remove(teacherCookie, clear)).status, 200);
+    const teacherCleared = await requestJson(
+      "/api/notifications",
+      teacherCookie,
+    );
+    const clearedList = (await teacherCleared.json()) as ApiSuccess<{
+      items: unknown[];
+    }>;
+    assert.deepEqual(clearedList.data.items, []);
+    assert.equal(
+      await prisma.notification.count({
+        where: { recipientId: student.id, dismissedAt: null },
+      }),
+      studentRemaining,
+    );
+    assert.ok(
+      (
+        await prisma.notification.findUniqueOrThrow({
+          where: { id: teacherNotification.id },
+        })
+      ).dismissedAt,
+    );
+    assert.equal(
+      (
+        await prisma.notification.createMany({
+          data: {
+            recipientId: teacher.id,
+            type: teacherNotification.type,
+            title: teacherNotification.title,
+            content: teacherNotification.content,
+            sourceType: teacherNotification.sourceType,
+            sourceId: teacherNotification.sourceId,
+            deduplicationKey: teacherNotification.deduplicationKey,
+          },
+          skipDuplicates: true,
+        })
+      ).count,
+      0,
+    );
+
     console.log(
-      "Notification HTTP integration checks passed: authentication, disabled-user rejection, ownership isolation, safe DTOs, read idempotency, unread counts, admin announcement RBAC, publish idempotency, audit logging, and internal job secret rejection.",
+      "Notification HTTP integration checks passed: personal removal, idempotency, unread and cross-account isolation, plus authentication, disabled-user rejection, ownership isolation, safe DTOs, read idempotency, unread counts, admin announcement RBAC, publish idempotency, audit logging, and internal job secret rejection.",
     );
   } finally {
     if (announcementId) {

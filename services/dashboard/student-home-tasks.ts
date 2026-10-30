@@ -1,18 +1,27 @@
-import { nextCourseSurveyChangeAt } from "@/services/course-surveys/availability";
+import {
+  courseSurveyAvailability,
+  nextCourseSurveyChangeAt,
+} from "@/services/course-surveys/availability";
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { listStudentCourseSurveys } from "@/services/course-surveys/service";
 
-export async function getStudentHomeTasks(studentId: string) {
-  const now = new Date();
+export async function getStudentHomeTasks(
+  studentId: string,
+  now = new Date(),
+  scope?: { courseId: string; classroomId: string },
+) {
   const [surveys, attendance] = await Promise.all([
-    listStudentCourseSurveys(studentId),
+    listStudentCourseSurveys(studentId, scope?.courseId, scope?.classroomId),
     prisma.attendanceRecord.findMany({
       where: {
         studentId,
         currentStatus: "PENDING",
         session: {
+          ...(scope
+            ? { courseId: scope.courseId, classroomId: scope.classroomId }
+            : {}),
           status: "OPEN",
           signInOpensAt: { lte: now },
           signInClosesAt: { gte: now },
@@ -37,12 +46,16 @@ export async function getStudentHomeTasks(studentId: string) {
       orderBy: { session: { signInClosesAt: "asc" } },
     }),
   ]);
+  const currentSurveys = surveys.map((survey) => {
+    const availability = courseSurveyAvailability(survey, now);
+    return { ...survey, availability, isOpen: availability === "OPEN" };
+  });
   return {
-    surveys: surveys.filter((survey) => survey.availability === "OPEN"),
-    scheduledSurveys: surveys.filter(
+    surveys: currentSurveys.filter((survey) => survey.availability === "OPEN"),
+    scheduledSurveys: currentSurveys.filter(
       (survey) => survey.availability === "SCHEDULED",
     ),
-    nextSurveyChangeAt: nextCourseSurveyChangeAt(surveys, now),
+    nextSurveyChangeAt: nextCourseSurveyChangeAt(currentSurveys, now),
     attendance,
   };
 }

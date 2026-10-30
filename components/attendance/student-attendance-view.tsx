@@ -148,7 +148,7 @@ export function StudentAttendanceView({
       </div>
       {records.length === 0 ? (
         <div className="rounded-xl border bg-white p-6 text-sm text-gray-500">
-          暂无签到记录。
+          {courseId && classroomId ? "本班暂无签到记录。" : "暂无签到记录。"}
         </div>
       ) : (
         records.map((record) => (
@@ -173,7 +173,7 @@ export function StudentAttendanceView({
                   "AVAILABLE" &&
                 record.currentStatus === "PENDING" ? (
                   <button
-                    className="mt-2 rounded-lg bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                    className="mt-2 rounded-lg bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
                     type="button"
                     disabled={pending !== null}
                     onClick={() => void sign(record.session.id)}

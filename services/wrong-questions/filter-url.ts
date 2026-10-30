@@ -22,6 +22,7 @@ export function wrongQuestionFilterUrl(
   ] as const) {
     if (query[key] !== undefined) params.set(key, String(query[key]));
   }
+  if (query.isMastered === undefined) params.set("isMastered", "all");
   if (keyword.trim()) params.set("keyword", keyword.trim());
   if (value) params.set(name, value);
   else params.delete(name);

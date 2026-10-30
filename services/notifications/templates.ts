@@ -86,6 +86,31 @@ export function recommendationReadyTemplate(input: {
   );
 }
 
+/**
+ * 课程通知保留教师填写的换行：正文是自由文本，折叠成单行会破坏排版。
+ * 只折叠行内多余空白与连续空行，并裁掉控制字符。
+ */
+function multilineText(value: string, maxLength: number): string {
+  const cleaned = value
+    .replace(/\r\n?/gu, "\n")
+    .replace(/[^\S\n]+/gu, " ")
+    .replace(/\n{3,}/gu, "\n\n")
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/gu, "")
+    .trim();
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+export function courseAnnouncementTemplate(input: {
+  title: string;
+  content: string;
+}): NotificationTemplate {
+  return {
+    title: plainText(input.title, NOTIFICATION_MAX_TITLE_LENGTH),
+    content: multilineText(input.content, NOTIFICATION_MAX_CONTENT_LENGTH),
+  };
+}
+
 export function systemAnnouncementTemplate(input: {
   title: string;
   content: string;

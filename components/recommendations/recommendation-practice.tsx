@@ -1,11 +1,12 @@
 "use client";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 
+import { studentScoreLabel } from "@/services/recommendations/scoring";
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { requestApi } from "@/components/courses/request-api";
 import { recommendationDetailApiPath } from "@/lib/api/recommendations";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { QuestionType, RecommendationStatus } from "@prisma/client";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -36,6 +37,10 @@ interface Props {
   recommendation: RecommendationDetailView;
   embedded?: boolean;
   onCompleted?: (id: string) => void;
+  onProgrammingQueued?: (
+    id: string,
+    attempt: NonNullable<RecommendationDetailView["programmingAttempt"]>,
+  ) => void;
   onDraftChange?: (id: string, answer: QuestionAnswerState) => void;
   initialAnswer?: QuestionAnswerState;
   batchBusy?: boolean;
@@ -94,13 +99,17 @@ function PracticeResult({
             </dd>
           </div>
           <div>
-            <dt className="text-emerald-700">正确率</dt>
-            <dd className="mt-1 text-lg font-semibold">{result.percentage}%</dd>
+            <dt className="text-emerald-700">本题得分率</dt>
+            <dd className="mt-1 text-lg font-semibold">
+              {result.percentage === null
+                ? "缺少完整成绩"
+                : `${result.percentage}%`}
+            </dd>
           </div>
           <div>
-            <dt className="text-emerald-700">得分</dt>
+            <dt className="text-emerald-700">本题成绩（百分制）</dt>
             <dd className="mt-1 text-lg font-semibold">
-              {result.score} / {result.maxScore}
+              {studentScoreLabel(result.score, result.maxScore)}
             </dd>
           </div>
           <div>
@@ -164,6 +173,7 @@ export function RecommendationPractice({
   recommendation,
   embedded,
   onCompleted,
+  onProgrammingQueued,
   onDraftChange,
   initialAnswer,
   batchBusy,
@@ -183,9 +193,11 @@ export function RecommendationPractice({
     recommendation.programmingAttempt?.id ?? null,
   );
   const [code, setCode] = useState(
-    initialAnswer?.kind === "CODE"
-      ? initialAnswer.value
-      : (recommendation.starterCode ?? ""),
+    recommendation.programmingAttempt && recommendation.savedAnswer != null
+      ? recommendation.savedAnswer
+      : initialAnswer?.kind === "CODE"
+        ? initialAnswer.value
+        : (recommendation.starterCode ?? ""),
   );
   const [programmingPending, setProgrammingPending] = useState(false);
   const form = useForm<
@@ -209,6 +221,7 @@ export function RecommendationPractice({
   useEffect(() => {
     if (
       recommendation.type === "PYTHON_PROGRAMMING" &&
+      !recommendation.programmingAttempt &&
       !initialAnswer &&
       recommendation.starterCode
     ) {
@@ -221,6 +234,7 @@ export function RecommendationPractice({
     recommendation.id,
     recommendation.type,
     recommendation.starterCode,
+    recommendation.programmingAttempt,
     initialAnswer,
     onDraftChange,
   ]);
@@ -281,18 +295,34 @@ export function RecommendationPractice({
       return;
     }
     setProgrammingAttemptId(response.data.attemptId);
+    onProgrammingQueued?.(recommendation.id, {
+      id: response.data.attemptId,
+      status: response.data.status,
+      progress: 0,
+    });
   }
 
+  const favorite = (
+    <FavoriteButton
+      questionId={recommendation.questionId}
+      source={{ kind: "RECOMMENDATION", id: recommendation.id }}
+    />
+  );
+  const questionClass = embedded
+    ? "min-w-0"
+    : "min-w-0 rounded-xl border bg-white p-4 sm:p-6";
+  const submitClass = embedded
+    ? "min-h-11 rounded-lg border border-sky-200 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-700 disabled:opacity-50"
+    : "rounded-md bg-sky-700 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50";
   return (
     <section className="min-w-0 space-y-6" aria-busy={batchBusy}>
       {!embedded && (
         <header className="min-w-0">
-          <Link
-            className="text-sm text-gray-500 hover:underline"
+          <StudentBackLink
             href={`/student/recommendations/${recommendation.id}`}
           >
-            ← 返回推荐详情
-          </Link>
+            返回推荐详情
+          </StudentBackLink>
           <h1 className="mt-2 text-2xl font-semibold break-words">推荐练习</h1>
           <p className="mt-2 text-sm text-gray-600">
             作答结果由服务端判分，并同步更新错题与知识掌握度。
@@ -300,12 +330,7 @@ export function RecommendationPractice({
         </header>
       )}
 
-      <div className="flex justify-end">
-        <FavoriteButton
-          questionId={recommendation.questionId}
-          source={{ kind: "RECOMMENDATION", id: recommendation.id }}
-        />
-      </div>
+      {!embedded && <div className="flex justify-end">{favorite}</div>}
       {result ? (
         <PracticeResult result={result} />
       ) : recommendation.status === RecommendationStatus.COMPLETED ? (
@@ -317,9 +342,14 @@ export function RecommendationPractice({
         </div>
       ) : recommendation.type === QuestionType.PYTHON_PROGRAMMING ? (
         <div className="space-y-5">
-          <article className="rounded-xl border bg-white p-5">
-            <h2 className="font-semibold">{recommendation.title}</h2>
-            <p className="mt-4 text-sm leading-7 whitespace-pre-wrap">
+          <article className={questionClass}>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="min-w-0 font-semibold [overflow-wrap:anywhere]">
+                {recommendation.title}
+              </h2>
+              {embedded && <div className="shrink-0">{favorite}</div>}
+            </div>
+            <p className="mt-4 text-sm leading-7 [overflow-wrap:anywhere] whitespace-pre-wrap">
               {recommendation.content}
             </p>
             <textarea
@@ -345,6 +375,7 @@ export function RecommendationPractice({
             <ProgrammingAttemptStatus
               assignmentQuestionId={recommendation.questionId}
               attemptId={programmingAttemptId}
+              displayMaxScore={recommendation.assignedPoints}
               onComplete={() => {
                 void requestApi<RecommendationDetailView>(
                   recommendationDetailApiPath(recommendation.id),
@@ -362,12 +393,16 @@ export function RecommendationPractice({
             />
           ) : (
             <button
-              className="rounded-md bg-sky-600 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              className={submitClass}
               disabled={programmingPending || !code.trim()}
               onClick={() => void submitProgramming()}
               type="button"
             >
-              {programmingPending ? "正在提交判题…" : "提交 Python 判题"}
+              {programmingPending
+                ? "正在提交判题…"
+                : embedded
+                  ? "提交本题"
+                  : "提交 Python 判题"}
             </button>
           )}
           <p className="text-sm text-gray-500">
@@ -375,11 +410,14 @@ export function RecommendationPractice({
           </p>
         </div>
       ) : (
-        <form className="space-y-5" onSubmit={form.handleSubmit(submit)}>
-          <article className="min-w-0 rounded-xl border bg-white p-4 sm:p-6">
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <form
+          className="min-w-0 space-y-5"
+          onSubmit={form.handleSubmit(submit)}
+        >
+          <article className={questionClass}>
+            <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="font-semibold break-words">
+                <h2 className="font-semibold [overflow-wrap:anywhere]">
                   {recommendation.title}
                 </h2>
                 <p className="mt-2 text-sm text-gray-500">
@@ -387,11 +425,15 @@ export function RecommendationPractice({
                   {difficultyLabel(recommendation.difficulty)}
                 </p>
               </div>
-              <span className="w-fit shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
-                进行中
-              </span>
+              {embedded ? (
+                <div className="shrink-0">{favorite}</div>
+              ) : (
+                <span className="w-fit shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
+                  进行中
+                </span>
+              )}
             </div>
-            <p className="mt-5 text-sm leading-7 break-words whitespace-pre-wrap">
+            <p className="mt-5 text-sm leading-7 [overflow-wrap:anywhere] whitespace-pre-wrap">
               {recommendation.content}
             </p>
             <QuestionAnswerInput
@@ -429,11 +471,15 @@ export function RecommendationPractice({
             </p>
           ) : null}
           <button
-            className="rounded-md bg-sky-600 px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className={submitClass}
             disabled={form.formState.isSubmitting}
             type="submit"
           >
-            {form.formState.isSubmitting ? "正在提交并判分…" : "提交当前题"}
+            {form.formState.isSubmitting
+              ? "正在提交并判分…"
+              : embedded
+                ? "提交本题"
+                : "提交当前题"}
           </button>
         </form>
       )}

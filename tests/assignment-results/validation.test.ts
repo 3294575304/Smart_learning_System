@@ -40,6 +40,7 @@ test("results query rejects invalid pagination and identifiers", () => {
 
 test("teacher results overview query validates classroom pagination", () => {
   assert.deepEqual(teacherResultsOverviewQuerySchema.parse({}), {
+    section: "ALL",
     page: 1,
     pageSize: 10,
   });
@@ -77,4 +78,18 @@ test("all classrooms selection preserves pagination", () => {
   assert.equal(parsed.classroomId, undefined);
   assert.equal(parsed.courseId, undefined);
   assert.equal(parsed.page, 2);
+});
+
+test("教学范围兼容旧链接并拒绝未知范围", () => {
+  for (const section of ["ALL", "CURRENT", "HISTORY"]) {
+    assert.equal(
+      teacherResultsOverviewQuerySchema.parse({ section }).section,
+      section,
+    );
+  }
+  assert.equal(
+    teacherResultsOverviewQuerySchema.safeParse({ section: "COMPLETED" })
+      .success,
+    false,
+  );
 });

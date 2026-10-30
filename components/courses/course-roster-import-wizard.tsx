@@ -70,7 +70,7 @@ function WizardSteps({ currentStep }: { currentStep: number }) {
             aria-current={active ? "step" : undefined}
             className={`rounded-lg border p-3 ${
               active
-                ? "border-sky-600 bg-sky-600 text-white"
+                ? "border-sky-600 bg-sky-700 text-white"
                 : complete
                   ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                   : "bg-white text-gray-600"
@@ -710,7 +710,7 @@ export function CourseRosterImportWizard({
 
           <div className="flex justify-end">
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-60"
               disabled={
                 isPreviewing ||
                 isUploading ||
@@ -824,7 +824,7 @@ export function CourseRosterImportWizard({
               调整字段映射
             </button>
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={
                 isExecuting ||
                 !preview.batch.summary.canImport ||

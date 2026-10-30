@@ -16,6 +16,7 @@ import { CourseAttentionConcepts } from "@/components/courses/course-attention-c
 import type { TeacherResultOverviewItem } from "@/services/assignment-results/types";
 import type { TeacherCourseAnalytics } from "@/services/course-analytics/service";
 import { withClassroomQuery } from "@/lib/course-classroom";
+import { REPORTING_SECTION_LABELS } from "@/services/assignments/reporting";
 
 const assignmentStatusLabel: Record<string, string> = {
   DRAFT: "草稿",
@@ -442,6 +443,12 @@ export function TeacherCourseAnalyticsView({
   const scoreTrend = data.assignmentScoreTrend;
   const assignmentParams = new URLSearchParams({ courseId: data.course.id });
   if (classroomId) assignmentParams.set("classroomId", classroomId);
+  if (data.reportingSection !== "ALL")
+    assignmentParams.set("section", data.reportingSection);
+  const showCurrentTasks =
+    data.reportingSection !== "HISTORY" &&
+    (!data.reportingClassroomStatus ||
+      data.reportingClassroomStatus === "ACTIVE");
 
   return (
     <div className="space-y-6">
@@ -651,7 +658,7 @@ export function TeacherCourseAnalyticsView({
             </div>
             <p className="mt-4 text-sm text-slate-500">
               {statistics.assignmentCount} 项作业 · {statistics.studentCount}{" "}
-              名有效学生
+              名有效学生 · {REPORTING_SECTION_LABELS[data.reportingSection]}范围
             </p>
             {statistics.assignmentCount === 0 ? (
               <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
@@ -673,6 +680,12 @@ export function TeacherCourseAnalyticsView({
                     <p className="mt-2 text-sm text-slate-600">
                       已完成 {statistics.completedSubmissionCount} /{" "}
                       {statistics.eligibleSubmissionCount} 个学生·作业组合
+                    </p>
+                    <p className="mt-2 text-xs text-slate-600">
+                      未交 {statistics.unsubmittedCount} · 逾期未交{" "}
+                      {statistics.overdueCount} · 待批改{" "}
+                      {statistics.pendingReviewCount} · 已移出学生历史提交{" "}
+                      {statistics.historicalSubmittedCount}
                     </p>
                   </article>
                   <article className="rounded-xl bg-emerald-50/70 p-4 sm:p-5">
@@ -746,53 +759,55 @@ export function TeacherCourseAnalyticsView({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-5 sm:p-6">
-        <div className="flex items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-sky-700 shadow-sm">
-            <Sparkles aria-hidden="true" className="size-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold text-slate-900">
-              本阶段教学待办
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              系统按课程建设、学习证据和结课评价的依赖顺序排列。
-            </p>
+      {showCurrentTasks && (
+        <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-sky-700 shadow-sm">
+              <Sparkles aria-hidden="true" className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-semibold text-slate-900">
+                本阶段教学待办
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                系统按课程建设、学习证据和结课评价的依赖顺序排列。
+              </p>
+            </div>
           </div>
-        </div>
-        {data.nextActions.length > 0 ? (
-          <div className="mt-5 grid gap-3 lg:grid-cols-2">
-            {data.nextActions.map((action, index) => (
-              <Link
-                key={action.key}
-                href={action.href}
-                className="group flex gap-3 rounded-xl border border-white bg-white/90 p-4 shadow-sm transition hover:border-sky-200 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
-              >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-700">
-                  {index + 1}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium text-slate-900">
-                    {action.title}
+          {data.nextActions.length > 0 ? (
+            <div className="mt-5 grid gap-3 lg:grid-cols-2">
+              {data.nextActions.map((action, index) => (
+                <Link
+                  key={action.key}
+                  href={action.href}
+                  className="group flex gap-3 rounded-xl border border-white bg-white/90 p-4 shadow-sm transition hover:border-sky-200 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                >
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-700">
+                    {index + 1}
                   </span>
-                  <span className="mt-1 block text-sm leading-5 text-slate-500">
-                    {action.detail}
+                  <span className="min-w-0 flex-1">
+                    <span className="font-medium text-slate-900">
+                      {action.title}
+                    </span>
+                    <span className="mt-1 block text-sm leading-5 text-slate-500">
+                      {action.detail}
+                    </span>
                   </span>
-                </span>
-                <ArrowRight
-                  aria-hidden="true"
-                  className="mt-1 size-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-sky-700"
-                />
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-5 flex items-center gap-3 rounded-xl bg-white/90 p-4 text-sm text-emerald-800 shadow-sm">
-            <CheckCircle2 aria-hidden="true" className="size-5" />
-            当前课程关键环节均已完成，可继续观察学生学习变化。
-          </div>
-        )}
-      </section>
+                  <ArrowRight
+                    aria-hidden="true"
+                    className="mt-1 size-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-sky-700"
+                  />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-5 flex items-center gap-3 rounded-xl bg-white/90 p-4 text-sm text-emerald-800 shadow-sm">
+              <CheckCircle2 aria-hidden="true" className="size-5" />
+              当前课程关键环节均已完成，可继续观察学生学习变化。
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

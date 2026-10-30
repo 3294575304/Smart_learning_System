@@ -1,4 +1,8 @@
 "use client";
+import {
+  ASSIGNMENT_CATEGORY_LABELS,
+  type AssignmentCategoryValue,
+} from "@/services/assignments/category";
 import { useRememberedSelection } from "@/components/dashboard/navigation-memory";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -49,7 +53,15 @@ type Workspace = {
   };
   items: Item[];
   students: Student[];
-  assignments: Array<{ id: string; title: string; status: string }>;
+  assignments: Array<{
+    id: string;
+    title: string;
+    status: string;
+    category: AssignmentCategoryValue;
+    categoryNeedsReview: boolean;
+    syncBlockedReasons: Record<string, string | null>;
+    legacyBindingWarning: boolean;
+  }>;
   currentPublication: { versionNumber: number; publishedAt: string } | null;
 };
 
@@ -381,7 +393,7 @@ export function GradebookWorkspace({
           <div className="flex gap-2">
             <button
               disabled={busy}
-              className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white"
+              className="rounded-md bg-sky-700 px-4 py-2 text-sm text-white"
             >
               {busy ? "保存中…" : "保存修订"}
             </button>
@@ -434,7 +446,7 @@ export function GradebookWorkspace({
           </button>
           <button
             disabled={busy || !data.students.length}
-            className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm text-white disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-sky-700 px-4 py-2.5 text-sm text-white disabled:opacity-50"
             onClick={() =>
               void action(`/api/teacher/gradebooks/${gradebookId}/publish`)
             }
@@ -476,7 +488,7 @@ export function GradebookWorkspace({
               key={value}
               aria-pressed={section === value}
               onClick={() => setSection(value)}
-              className={`rounded-lg px-5 py-2.5 text-sm ${section === value ? "bg-sky-600 font-medium text-white" : "text-slate-600 hover:bg-sky-50"}`}
+              className={`rounded-lg px-5 py-2.5 text-sm ${section === value ? "bg-sky-700 font-medium text-white" : "text-slate-600 hover:bg-sky-50"}`}
             >
               {label}
             </button>
@@ -496,7 +508,7 @@ export function GradebookWorkspace({
       >
         <h2 className="font-semibold">同步平台作业成绩</h2>
         <p className="mt-2 text-sm text-slate-500">
-          选择考核项目与作业，将已发布的作答成绩同步到台账。
+          总评占比来自台账绑定的正式考核方案。仅同步已公布的最新有效成绩；每份作业百分制换算后等权平均。规则未确认或原台账冲突时不可同步。
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <select
@@ -525,12 +537,21 @@ export function GradebookWorkspace({
               .filter((item) => item.status !== "DRAFT")
               .map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.title}
+                  {ASSIGNMENT_CATEGORY_LABELS[item.category]} · {item.title}
+                  {item.legacyBindingWarning ? "（原台账待核对）" : ""}
                 </option>
               ))}
           </select>
           <button
-            disabled={busy || !componentId || !assignmentId}
+            disabled={
+              busy ||
+              !componentId ||
+              !assignmentId ||
+              Boolean(
+                data.assignments.find((item) => item.id === assignmentId)
+                  ?.syncBlockedReasons[componentId],
+              )
+            }
             className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
             onClick={() =>
               void action(
@@ -542,6 +563,23 @@ export function GradebookWorkspace({
             同步正式结果
           </button>
         </div>
+        {assignmentId &&
+        componentId &&
+        data.assignments.find((item) => item.id === assignmentId)
+          ?.syncBlockedReasons[componentId] ? (
+          <p role="status" className="mt-2 text-sm text-amber-800">
+            {
+              data.assignments.find((item) => item.id === assignmentId)
+                ?.syncBlockedReasons[componentId]
+            }{" "}
+            请到考核方案审核并发布新版本；旧台账仍使用原正式版本，需明确创建对应新版本台账。
+          </p>
+        ) : null}
+        {data.assignments.some((item) => item.legacyBindingWarning) ? (
+          <p className="mt-2 text-xs text-amber-800">
+            存在旧作业分类与原台账规则不一致的记录，原关联和历史成绩保留，不会自动迁移。
+          </p>
+        ) : null}
       </section>
       <section
         hidden={section !== "grades"}
@@ -757,7 +795,7 @@ export function GradebookWorkspace({
               disabled={
                 busy || preview.invalidRows > 0 || preview.validRows === 0
               }
-              className="mt-3 rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+              className="mt-3 rounded-md bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
               onClick={() =>
                 void action(`/api/teacher/grade-imports/${preview.id}/execute`)
               }

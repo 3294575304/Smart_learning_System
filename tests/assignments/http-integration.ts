@@ -217,6 +217,75 @@ async function main(): Promise<void> {
       id: string;
     }>;
     assignmentId = created.data.id;
+    const categoryPath = `/api/teacher/assignments/${assignmentId}/category`;
+    const categoryInput = {
+      category: "COURSE_ASSIGNMENT",
+      expectedCategory: "PRACTICE",
+      reason: "独立环境核对历史分类",
+    };
+    assert.equal(
+      (await requestJson(categoryPath, undefined, "PATCH", categoryInput))
+        .status,
+      401,
+    );
+    assert.equal(
+      (await requestJson(categoryPath, studentCookie, "PATCH", categoryInput))
+        .status,
+      403,
+    );
+    assert.equal(
+      (
+        await requestJson(
+          categoryPath,
+          teacherTwoCookie,
+          "PATCH",
+          categoryInput,
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await requestJson(categoryPath, teacherCookie, "PATCH", {
+          ...categoryInput,
+          category: "INVALID",
+        })
+      ).status,
+      400,
+    );
+    await prisma.assignment.update({
+      where: { id: assignmentId },
+      data: { categoryNeedsReview: true },
+    });
+    assert.equal(
+      (await requestJson(categoryPath, teacherCookie, "PATCH", categoryInput))
+        .status,
+      200,
+    );
+    assert.equal(
+      (await requestJson(categoryPath, teacherCookie, "PATCH", categoryInput))
+        .status,
+      200,
+    );
+    assert.equal(
+      await prisma.auditLog.count({
+        where: {
+          action: AuditAction.ASSIGNMENT_CATEGORY_CORRECTED,
+          targetId: assignmentId,
+        },
+      }),
+      1,
+    );
+    assert.equal(
+      (
+        await requestJson(categoryPath, teacherCookie, "PATCH", {
+          ...categoryInput,
+          category: "COURSE_EXPERIMENT",
+        })
+      ).status,
+      409,
+    );
+
     assert.equal(
       (
         await requestJson(
@@ -606,10 +675,27 @@ async function main(): Promise<void> {
       isPublished: boolean;
       score: number | null;
       answers: unknown[];
+      submittedAnswers: Array<{
+        assignmentQuestionId: string;
+        studentAnswer: string;
+      }>;
     }>;
     assert.equal(pendingResult.data.isPublished, false);
     assert.equal(pendingResult.data.score, null);
     assert.deepEqual(pendingResult.data.answers, []);
+    const ownAnswer = pendingResult.data.submittedAnswers.find(
+      (answer) => answer.assignmentQuestionId === manualSubjective.id,
+    );
+    assert.ok(ownAnswer);
+    assert.equal(ownAnswer.studentAnswer, "这是学生的简答题作答");
+    assert.deepEqual(Object.keys(ownAnswer).sort(), [
+      "assignmentQuestionId",
+      "content",
+      "sortOrder",
+      "studentAnswer",
+      "title",
+      "type",
+    ]);
 
     const submissionsPath = `/api/teacher/assignments/${manualAssignmentId}/submissions`;
     assert.equal((await requestJson(submissionsPath)).status, 401);
@@ -643,6 +729,19 @@ async function main(): Promise<void> {
       (await requestJson(gradingDetailPath, teacherTwoCookie)).status,
       404,
     );
+    const pendingPersonalResponse = await requestJson(
+      `/teacher/assignments/${manualAssignmentId}/submissions/${manualAttempt.data.id}`,
+      teacherCookie,
+    );
+    const pendingPersonalHtml = await pendingPersonalResponse.text();
+    assert.match(pendingPersonalHtml, /未评分不记零/);
+    assert.match(
+      pendingPersonalHtml,
+      /<button[^>]*disabled=""[^>]*>完成整份批改<\/button>/,
+    );
+    for (const inputTag of pendingPersonalHtml.match(/<input[^>]*>/g) ?? [])
+      if (/name="score"/.test(inputTag))
+        assert.doesNotMatch(inputTag, /value="0"/);
     const subjectiveAnswer = await prisma.studentAnswer.findUniqueOrThrow({
       where: {
         submissionId_assignmentQuestionId: {
@@ -750,6 +849,14 @@ async function main(): Promise<void> {
       14,
     );
 
+    assert.equal(
+      (await requestJson(publishResultsPath, teacherCookie, "POST")).status,
+      409,
+    );
+    await prisma.assignment.update({
+      where: { id: manualAssignmentId },
+      data: { dueAt: new Date(Date.now() - 1) },
+    });
     const publishResultsResponse = await requestJson(
       publishResultsPath,
       teacherCookie,
@@ -800,6 +907,109 @@ async function main(): Promise<void> {
         },
       }),
       2,
+    );
+    const mergedResponse = await requestJson(
+      `${submissionsPath}?status=GRADED`,
+      teacherCookie,
+    );
+    assert.equal(mergedResponse.status, 200);
+    const mergedData = (await mergedResponse.json()) as ApiSuccess<{
+      items: Array<{
+        status: string;
+        objectivePercentage: number;
+        objectiveCorrectCount: number;
+        objectiveCount: number;
+        displayStatus: string;
+      }>;
+    }>;
+    assert.ok(
+      mergedData.data.items.some((item) => item.status === "PUBLISHED"),
+    );
+    assert.equal(mergedData.data.items[0].displayStatus, "已批改");
+    assert.equal(mergedData.data.items[0].objectivePercentage, 100);
+    assert.equal(mergedData.data.items[0].objectiveCorrectCount, 1);
+    const submissionsPage = `/teacher/assignments/${manualAssignmentId}/submissions`;
+    const pageResponse = await requestJson(submissionsPage, teacherCookie);
+    assert.equal(pageResponse.status, 200);
+    const pageHtml = await pageResponse.text();
+    assert.match(pageHtml, /100\.00/);
+    assert.doesNotMatch(pageHtml, /<th[^>]*>人工批改<\/th>/);
+    assert.doesNotMatch(pageHtml, />已发布<\/a>/);
+    const legacyPage = await fetch(
+      `${baseUrl}${submissionsPage}?status=PUBLISHED&pageSize=1`,
+      { headers: { cookie: teacherCookie }, redirect: "manual" },
+    );
+    // App Router may stream a meta redirect after the shared layout has flushed.
+    assert.ok([200, 307].includes(legacyPage.status));
+    const redirectTarget =
+      legacyPage.headers.get("location") ?? (await legacyPage.text());
+    assert.match(redirectTarget, /status=GRADED/);
+    assert.match(redirectTarget, /pageSize=1/);
+    if (legacyPage.status === 200)
+      assert.match(redirectTarget, /NEXT_REDIRECT|http-equiv="refresh"/);
+    const personalPage = `/teacher/assignments/${manualAssignmentId}/submissions/${manualAttempt.data.id}`;
+    const personalResponse = await requestJson(personalPage, teacherCookie);
+    assert.equal(personalResponse.status, 200);
+    const personalHtml = await personalResponse.text();
+    assert.match(personalHtml, /<h1[^>]*>个人作答详情<\/h1>/);
+    assert.match(personalHtml, /成绩已公布/);
+    assert.match(personalHtml, /原始得分/);
+    assert.match(personalHtml, /解析与评分要点/);
+    const wrongHtml = await (
+      await requestJson(`${personalPage}?filter=WRONG`, teacherCookie)
+    ).text();
+    assert.match(wrongHtml, /部分得分/);
+    const pendingHtml = await (
+      await requestJson(`${personalPage}?filter=PENDING_REVIEW`, teacherCookie)
+    ).text();
+    assert.match(pendingHtml, /filter=ALL/);
+    const oldPersonal = await fetch(
+      `${baseUrl}/teacher/assignments/${manualAssignmentId}/results?studentId=${student.id}&submissionId=${manualAttempt.data.id}`,
+      { headers: { cookie: teacherCookie }, redirect: "manual" },
+    );
+    const oldTarget =
+      oldPersonal.headers.get("location") ?? (await oldPersonal.text());
+    assert.match(
+      oldTarget,
+      new RegExp(`/submissions/${manualAttempt.data.id}`),
+    );
+    const forgedBack = await (
+      await requestJson(
+        `${personalPage}?returnTo=${encodeURIComponent("https://evil.example")}`,
+        teacherCookie,
+      )
+    ).text();
+    assert.doesNotMatch(forgedBack, /href="https:\/\/evil\.example/);
+    assert.equal(
+      (
+        await requestJson(
+          "/api/teacher/assignments?category=INVALID",
+          teacherCookie,
+        )
+      ).status,
+      400,
+    );
+    const categoryResult = await requestJson(
+      "/api/teacher/assignments?category=PRACTICE&pageSize=1",
+      teacherCookie,
+    );
+    assert.equal(categoryResult.status, 200);
+    const categoryData = (await categoryResult.json()) as ApiSuccess<{
+      items: Array<{ category: string }>;
+    }>;
+    assert.ok(
+      categoryData.data.items.every((item) => item.category === "PRACTICE"),
+    );
+    const categoryHtml = await (
+      await requestJson("/teacher/assignments?category=PRACTICE", teacherCookie)
+    ).text();
+    assert.match(categoryHtml, /name="category"/);
+    assert.match(categoryHtml, /全部类别/);
+    console.info(
+      "Personal work HTTP checks passed: unified title, result redirect, score/publication, filters and safe return fallback.",
+    );
+    console.info(
+      "Stage two HTTP checks passed: normalized objective score, merged published filter and legacy redirect.",
     );
     console.info(
       "Assignment HTTP integration checks passed: auth, ownership, snapshots, autosave, objective grading, manual grading, publish visibility, idempotency, and audits.",

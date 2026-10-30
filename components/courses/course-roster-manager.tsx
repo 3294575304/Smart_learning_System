@@ -184,7 +184,7 @@ export function CourseRosterManager({
           </div>
           <button
             type="button"
-            className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white disabled:opacity-50"
             disabled={!data.classrooms.length || busy || loading}
             onClick={() => {
               setError("");
@@ -381,7 +381,7 @@ export function CourseRosterManager({
             <div className="flex gap-2">
               <button
                 disabled={busy}
-                className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white"
+                className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
               >
                 {busy ? "保存中…" : "保存"}
               </button>

@@ -1,4 +1,9 @@
 import "server-only";
+import {
+  readPracticeManagement,
+  assertPracticeGroupWritable,
+} from "@/services/practice-sets/management";
+import { runPracticeSerializable } from "@/services/recommendations/transactions";
 
 import {
   Prisma,
@@ -17,7 +22,11 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { recommendQuestions } from "@/services/recommendations/algorithm";
 import { RecommendationOperationError } from "@/services/recommendations/errors";
 import { assertCanAccessRecommendation } from "@/services/recommendations/policy";
-import { practiceResultFromRecord } from "@/services/recommendations/practice-presentation";
+import {
+  studentAnswer,
+  practiceAnswerFeedback,
+  practiceResultFromRecord,
+} from "@/services/recommendations/practice-presentation";
 import {
   buildRecommendationRequest,
   createRecommendationCycleKey,
@@ -30,7 +39,6 @@ import {
   loadRecommendationStudentContext,
   persistRecommendations,
   recommendationCursorBelongsToStudent,
-  startPendingRecommendation,
   type RecommendationViewRecord,
 } from "@/services/recommendations/repository";
 import {
@@ -127,9 +135,21 @@ export async function createPersonalizedRecommendations(
     items: enhanced.items,
     now,
   });
-  const persistedQuestionIdSet = new Set(persisted.questionIds);
-  const persistedItems = enhanced.items.filter((item) =>
-    persistedQuestionIdSet.has(item.questionId),
+  const stored = await loadRecommendationsByCycle(request.studentId, cycleKey);
+  const persistedItems = stored.map(
+    (record, index) =>
+      enhanced.items.find((item) => item.questionId === record.question.id) ?? {
+        rank: index + 1,
+        questionId: record.question.id,
+        title: record.question.title,
+        type: record.question.type,
+        difficulty: record.question.difficulty,
+        score: 0,
+        primaryKnowledgePointId: null,
+        matchedKnowledgePoints: [],
+        reasonCodes: [],
+        reason: record.reason,
+      },
   );
   const relaxedConstraints = [...algorithmResult.metadata.relaxedConstraints];
   if (persistedItems.length < enhanced.items.length) {
@@ -171,6 +191,8 @@ function listItemFromRecord(
         }))
       : record.question.knowledgePointLinks.map((link) => link.knowledgePoint),
     reason: record.reason,
+    assignedPoints: record.assignedPoints?.toNumber() ?? null,
+    scoringRuleVersion: record.scoringRuleVersion,
     status: record.status,
     createdAt: record.createdAt.toISOString(),
     expiresAt: record.expiresAt?.toISOString() ?? null,
@@ -182,6 +204,18 @@ function detailFromRecord(
 ): RecommendationDetailView {
   return {
     ...listItemFromRecord(record),
+    readOnly:
+      ![RecommendationStatus.PENDING, RecommendationStatus.STARTED].some(
+        (status) => status === record.status,
+      ) ||
+      record.question.status !== QuestionStatus.ACTIVE ||
+      record.question.deletedAt !== null,
+    historyFeedback: !["PENDING", "STARTED"].includes(record.status)
+      ? practiceAnswerFeedback(record)
+      : null,
+    savedAnswer: record.practiceAnswer
+      ? studentAnswer(record)
+      : (record.programmingAttempts[0]?.sourceCode ?? null),
     options: record.question.options.map((option) => ({
       id: option.id,
       label: option.label,
@@ -258,6 +292,17 @@ export async function createOrGetPersonalizedRecommendations(
     targetDifficulty: result.targetDifficulty,
     source: result.source,
     generatedAt: result.generatedAt.toISOString(),
+    scoringSummary: {
+      totalPoints: records.every((record) => record.assignedPoints !== null)
+        ? records.reduce(
+            (sum, record) =>
+              sum + Math.round((record.assignedPoints?.toNumber() ?? 0) * 100),
+            0,
+          ) / 100
+        : null,
+      actualCount: records.length,
+      ruleVersion: records[0]?.scoringRuleVersion ?? null,
+    },
     items,
     metadata: {
       ...result.metadata,
@@ -305,7 +350,14 @@ export async function getRecommendationDetail(
   await expireStudentRecommendations(record.studentId, now);
   const current = await loadRecommendationById(recommendationId);
   if (!current) throw new ResourceNotFoundError("推荐记录不存在");
-  return detailFromRecord(current);
+  const detail = detailFromRecord(current);
+  const management = await readPracticeManagement(actor.id, current.cycleKey);
+  return {
+    ...detail,
+    management,
+    readOnly:
+      detail.readOnly || Boolean(management.endedAt || management.trashedAt),
+  };
 }
 
 export async function startRecommendation(
@@ -319,37 +371,46 @@ export async function startRecommendation(
   assertCanAccessRecommendation(actor, initial.studentId);
   await expireStudentRecommendations(initial.studentId, now);
 
-  const current = await loadRecommendationById(recommendationId);
-  if (!current) throw new ResourceNotFoundError("推荐记录不存在");
-  if (current.status === RecommendationStatus.STARTED) {
-    return detailFromRecord(current);
-  }
-  if (current.status !== RecommendationStatus.PENDING) {
-    throw new RecommendationOperationError("当前推荐状态不能开始练习", 409);
-  }
-  if (
-    current.question.status !== QuestionStatus.ACTIVE ||
-    current.question.deletedAt !== null
-  ) {
-    throw new RecommendationOperationError("推荐题目当前不可用", 409);
-  }
-  if (
-    !isAutoGradableQuestionType(current.question.type) &&
-    current.question.type !== "PYTHON_PROGRAMMING" &&
-    current.question.type !== "SHORT_ANSWER"
-  ) {
-    throw new RecommendationOperationError("当前题型暂不支持推荐练习", 409);
-  }
-
-  const started = await startPendingRecommendation({
-    recommendationId,
-    studentId: actor.id,
-    now,
+  await runPracticeSerializable(async (tx) => {
+    await assertPracticeGroupWritable(tx, actor.id, recommendationId);
+    const current = await tx.personalizedRecommendation.findUnique({
+      where: { id: recommendationId },
+      select: {
+        status: true,
+        expiresAt: true,
+        question: {
+          select: {
+            type: true,
+            status: true,
+            deletedAt: true,
+            isAssignmentOnly: true,
+          },
+        },
+      },
+    });
+    if (!current) throw new ResourceNotFoundError("推荐记录不存在");
+    if (current.status === "STARTED") return;
+    if (
+      current.status !== "PENDING" ||
+      (current.expiresAt && current.expiresAt <= now)
+    )
+      throw new RecommendationOperationError("当前推荐状态不能开始练习", 409);
+    if (
+      current.question.status !== "ACTIVE" ||
+      current.question.deletedAt !== null ||
+      current.question.isAssignmentOnly
+    )
+      throw new RecommendationOperationError("推荐题目当前不可用", 409);
+    if (
+      !isAutoGradableQuestionType(current.question.type) &&
+      current.question.type !== "PYTHON_PROGRAMMING" &&
+      current.question.type !== "SHORT_ANSWER"
+    )
+      throw new RecommendationOperationError("当前题型暂不支持推荐练习", 409);
+    await tx.personalizedRecommendation.update({
+      where: { id: recommendationId },
+      data: { status: "STARTED", startedAt: now },
+    });
   });
-  const latest = await loadRecommendationById(recommendationId);
-  if (!latest) throw new ResourceNotFoundError("推荐记录不存在");
-  if (started || latest.status === RecommendationStatus.STARTED) {
-    return detailFromRecord(latest);
-  }
-  throw new RecommendationOperationError("推荐状态已发生变化", 409);
+  return getRecommendationDetail(actor, recommendationId, now);
 }

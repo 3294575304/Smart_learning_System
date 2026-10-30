@@ -65,7 +65,7 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
       <PageHeader
         actions={
           <Link
-            className="inline-flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
+            className="inline-flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
             href="/admin/questions/import"
           >
             <FileUp aria-hidden="true" className="h-4 w-4" />

@@ -1,3 +1,4 @@
+import { AssignmentRevokedError } from "./errors";
 import {
   AssignmentStatus,
   ClassroomStatus,
@@ -47,6 +48,8 @@ export function assertAssignmentIsVisible(
   },
   now: Date,
 ): void {
+  if (assignment.status === AssignmentStatus.REVOKED)
+    throw new AssignmentRevokedError();
   if (
     assignment.status !== AssignmentStatus.PUBLISHED ||
     !assignment.publishedAt ||

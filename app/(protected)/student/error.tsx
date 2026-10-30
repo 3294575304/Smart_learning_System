@@ -1,5 +1,7 @@
 "use client";
 
-import { RouteError } from "@/components/feedback/route-error";
+import { StudentPageError } from "@/components/feedback/student-page-error";
 
-export default RouteError;
+export default function StudentRouteError() {
+  return <StudentPageError />;
+}

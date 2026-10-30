@@ -281,7 +281,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
         <div className="mt-4 rounded-lg border border-dashed p-4 text-sm">
           <p>当前教学大纲尚未解析。</p>
           <button
-            className="mt-3 rounded-md bg-sky-600 px-3 py-2 text-white disabled:opacity-60"
+            className="mt-3 rounded-md bg-sky-700 px-3 py-2 text-white disabled:opacity-60"
             disabled={parsing}
             onClick={() => void parse()}
             type="button"
@@ -978,7 +978,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
               {saving ? "保存中..." : "保存审核稿"}
             </button>
             <button
-              className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               disabled={publishing || saving || dirty || !state?.review}
               onClick={() => void publish()}
               type="button"

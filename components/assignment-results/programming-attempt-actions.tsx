@@ -1,4 +1,5 @@
 "use client";
+import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-workspace-refresh";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -51,6 +52,7 @@ export function ProgrammingAttemptActions({ attempt }: Props) {
       setError(result.error);
       return;
     }
+    markTeacherWorkspaceDirty();
     router.refresh();
   }
 
@@ -80,6 +82,7 @@ export function ProgrammingAttemptActions({ attempt }: Props) {
       setError(result.error);
       return;
     }
+    markTeacherWorkspaceDirty();
     router.refresh();
   }
 

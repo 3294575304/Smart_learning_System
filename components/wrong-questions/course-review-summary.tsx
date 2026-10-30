@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import type { QuestionType } from "@prisma/client";
 import type { summarizeWrongCourses } from "@/services/wrong-questions/service";
@@ -24,6 +24,8 @@ const questionTypeOptions: Array<{ value: PracticeType; label: string }> = [
 ];
 
 export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
+  const inFlight = useRef(false);
+  const requests = useRef(new Map<string, string>());
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [selectedConcepts, setSelectedConcepts] = useState<
     Record<string, string[]>
@@ -42,6 +44,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
   if (!summaries.length) return null;
 
   async function generate(course: Summary[number]) {
+    if (inFlight.current) return;
     const classroomId =
       classroomByCourse[course.courseId] ?? course.classrooms[0]?.id;
     const recommendedConcepts = course.knowledgePoints
@@ -88,6 +91,19 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
       return;
     }
 
+    const payload = {
+      classroomId,
+      chapterIds: conceptIds.length ? [] : chapterIds,
+      conceptIds,
+      questionTypes,
+      count,
+      difficulty,
+      mode: "PRACTICE",
+    };
+    const signature = JSON.stringify([course.courseId, payload]);
+    const requestId = requests.current.get(signature) ?? crypto.randomUUID();
+    requests.current.set(signature, requestId);
+    inFlight.current = true;
     setPendingCourseId(course.courseId);
     setFeedback((current) => ({ ...current, [course.courseId]: "" }));
     try {
@@ -96,15 +112,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            classroomId,
-            chapterIds: conceptIds.length ? [] : chapterIds,
-            conceptIds,
-            questionTypes,
-            count,
-            difficulty,
-            mode: "PRACTICE",
-          }),
+          body: JSON.stringify({ ...payload, requestId }),
         },
       );
       const body: unknown = await response.json();
@@ -144,6 +152,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
         [course.courseId]: "网络连接异常，请稍后重试。",
       }));
     } finally {
+      inFlight.current = false;
       setPendingCourseId(null);
     }
   }
@@ -151,7 +160,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
   return (
     <details className="rounded-xl border border-sky-100 bg-white px-4 py-3">
       <summary className="cursor-pointer text-sm font-medium text-sky-800">
-        错题分析与针对性练习
+        按薄弱范围练习
       </summary>
       <p className="mt-2 text-xs leading-5 text-slate-500">
         按课程汇总全部错题，不受列表筛选影响。薄弱章节来自当前课程正式图谱；生成时仍会校验教学班归属、题目审核状态和可用题量。
@@ -254,7 +263,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
                   </label>
                 ) : null}
                 <button
-                  className="min-h-10 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-10 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
                   type="button"
                   disabled={
                     pendingCourseId !== null || !course.classrooms.length
@@ -269,7 +278,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
                   className="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm text-sky-800 hover:bg-sky-50"
                   href={`/student/recommendations?${params}`}
                 >
-                  打开练习中心 →
+                  打开自主练习 →
                 </Link>
                 {!course.classrooms.length ? (
                   <span className="text-sm text-amber-800">
@@ -386,7 +395,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
                       {course.knowledgePoints.length > 12 ? (
                         <p className="mt-2 text-xs text-slate-500">
                           这里只展示错题最多的 12
-                          个知识点；生成练习中心可继续调整范围。
+                          个知识点；生成自主练习可继续调整范围。
                         </p>
                       ) : null}
                     </fieldset>

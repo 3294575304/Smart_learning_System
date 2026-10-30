@@ -1,7 +1,6 @@
 import { getStudentClassroomContext } from "@/services/courses/student-access";
 import { Role } from "@prisma/client";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { notFound } from "next/navigation";
 import { KnowledgeGraphPublishedView } from "@/components/courses/knowledge-graph-published-view";
 import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
@@ -43,13 +42,11 @@ export default async function StudentCourseKnowledgeGraphPage({
     <section className="space-y-6">
       <PageHeader
         actions={
-          <Link
-            className="inline-flex items-center gap-2 rounded-md border bg-white px-4 py-2 text-sm"
-            href={`/student/courses/${parsed.data}/learning-center${classroomId ? `?classroomId=${encodeURIComponent(classroomId)}` : ""}`}
+          <StudentBackLink
+            href={`/student/courses/${parsed.data}/learning-center?tab=knowledge${classroomId ? `&classroomId=${encodeURIComponent(classroomId)}` : ""}`}
           >
-            <ArrowLeft aria-hidden="true" className="size-4" />
             返回课程学习中心
-          </Link>
+          </StudentBackLink>
         }
         description={
           result.published

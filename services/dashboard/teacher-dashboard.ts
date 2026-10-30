@@ -147,8 +147,9 @@ export async function getTeacherDashboard(
         where: {
           teacherId,
           classroomId: { in: classroomIds },
+          deletedAt: null,
           classroom: { teacherId, courseId },
-          status: { not: "ARCHIVED" },
+          status: { notIn: ["ARCHIVED", "REVOKED"] },
         },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
         select: {
@@ -159,7 +160,15 @@ export async function getTeacherDashboard(
           updatedAt: true,
           publishedAt: true,
           createdAt: true,
-          classroom: { select: { id: true, name: true } },
+          classroom: { select: { id: true, name: true, status: true } },
+          makeupGrants: {
+            where: {
+              status: "ACTIVE",
+              expiresAt: { gt: new Date() },
+              student: { status: "ACTIVE" },
+            },
+            select: { studentId: true },
+          },
           submissions: {
             where: {
               status: {
@@ -320,6 +329,14 @@ export async function getTeacherDashboard(
         ...submission,
         manualAnswerCount: submission._count.answers,
       })),
+      {
+        ...assignment,
+        activeMakeupCount: assignment.makeupGrants.filter((g) =>
+          (membersByClass.get(assignment.classroom.id) ?? []).includes(
+            g.studentId,
+          ),
+        ).length,
+      },
     );
     pendingReviewCount += state.pendingReviewCount;
     publishableCount += state.publishableCount;
@@ -454,6 +471,14 @@ export async function getTeacherDashboard(
               ...submission,
               manualAnswerCount: submission._count.answers,
             })),
+            {
+              ...item,
+              activeMakeupCount: item.makeupGrants.filter((g) =>
+                (membersByClass.get(item.classroom.id) ?? []).includes(
+                  g.studentId,
+                ),
+              ).length,
+            },
           ),
         );
         return {

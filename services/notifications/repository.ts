@@ -21,6 +21,8 @@ const notificationListSelect = Prisma.validator<Prisma.NotificationSelect>()({
   content: true,
   priority: true,
   actionUrl: true,
+  sourceType: true,
+  sourceId: true,
   readAt: true,
   createdAt: true,
   expiresAt: true,
@@ -33,6 +35,7 @@ function activeNotificationWhere(
 ): Prisma.NotificationWhereInput {
   return {
     recipientId,
+    dismissedAt: null,
     OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
     ...(query.status === "UNREAD"
       ? { readAt: null }
@@ -70,6 +73,7 @@ export function countUnreadNotifications(
   return prisma.notification.count({
     where: {
       recipientId,
+      dismissedAt: null,
       readAt: null,
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
     },
@@ -81,7 +85,7 @@ export function findOwnedNotification(
   notificationId: string,
 ) {
   return prisma.notification.findFirst({
-    where: { id: notificationId, recipientId },
+    where: { id: notificationId, recipientId, dismissedAt: null },
     select: notificationListSelect,
   });
 }
@@ -92,7 +96,7 @@ export async function markOwnedNotificationRead(
   readAt: Date,
 ): Promise<void> {
   await prisma.notification.updateMany({
-    where: { id: notificationId, recipientId, readAt: null },
+    where: { id: notificationId, recipientId, readAt: null, dismissedAt: null },
     data: { readAt },
   });
 }
@@ -104,10 +108,26 @@ export function markAllOwnedNotificationsRead(
   return prisma.notification.updateMany({
     where: {
       recipientId,
+      dismissedAt: null,
       readAt: null,
       OR: [{ expiresAt: null }, { expiresAt: { gt: readAt } }],
     },
     data: { readAt },
+  });
+}
+
+export function dismissOwnedNotifications(
+  recipientId: string,
+  ids: string[] | undefined,
+  dismissedAt: Date,
+) {
+  return prisma.notification.updateMany({
+    where: {
+      recipientId,
+      dismissedAt: null,
+      ...(ids ? { id: { in: ids } } : {}),
+    },
+    data: { dismissedAt },
   });
 }
 

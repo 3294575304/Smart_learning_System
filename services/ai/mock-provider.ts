@@ -149,6 +149,16 @@ export class MockAIProvider implements AIProvider {
     };
   }
 
+  async assembleAssignment(
+    input: import("@/services/assignments/editor-assistance-schemas").AssemblyProviderInput,
+  ) {
+    return {
+      picks: input.candidates
+        .slice(0, input.count)
+        .map(({ key }) => ({ key, reason: "覆盖所选知识点，参考历史用题" })),
+    };
+  }
+
   async generateQuestions(
     input: QuestionGenerationAIInput,
     options: AIProviderOptions,

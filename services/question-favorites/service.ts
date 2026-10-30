@@ -1,3 +1,4 @@
+import { PRACTICE_SCORING_RULE } from "@/services/recommendations/scoring";
 import {
   listReviewChapters,
   reviewChapterConcepts,
@@ -384,6 +385,18 @@ export async function listFavorites(
 ): Promise<FavoriteList> {
   assertRole(actor, [Role.STUDENT]);
   const query = favoriteQuerySchema.parse(rawQuery);
+  if (query.courseId && query.courseId !== "GENERAL") {
+    const [ownHistory, membership] = await Promise.all([
+      prisma.studentQuestionFavorite.count({
+        where: { studentId: actor.id, courseId: query.courseId },
+      }),
+      prisma.classMembership.count({
+        where: { studentId: actor.id, classroom: { courseId: query.courseId } },
+      }),
+    ]);
+    if (!ownHistory && !membership)
+      throw new ResourceNotFoundError("课程不存在或无权访问");
+  }
   const where: Prisma.StudentQuestionFavoriteWhereInput = {
     studentId: actor.id,
     ...(query.courseId === "GENERAL"
@@ -606,6 +619,8 @@ export async function practiceFavorite(
         studentId: actor.id,
         questionId,
         cycleKey,
+        assignedPoints: 100,
+        scoringRuleVersion: PRACTICE_SCORING_RULE,
         status: "PENDING",
         source: "RULE",
         reason: "你主动收藏的题目，用于自主复习；本次作答不计入正式课程成绩。",

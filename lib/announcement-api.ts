@@ -7,7 +7,7 @@ import {
 
 export function announcementApiError(error: unknown) {
   if (error instanceof AnnouncementOperationError) {
-    return apiError(error.message, error.status);
+    return apiError(error.message, error.status, undefined, error.code);
   }
   const status = getErrorStatus(error);
   if (status === 500) console.error("Announcement API request failed");

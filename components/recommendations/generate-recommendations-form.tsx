@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 import { runGenerateRecommendations } from "@/components/recommendations/recommendation-actions";
 import { generateRecommendations } from "@/lib/api/recommendations";
@@ -41,12 +41,20 @@ export function GenerateRecommendationsForm({
     message: string;
   } | null>(null);
 
+  const generationRequest = useRef<{ classroomId: string; id: string } | null>(
+    null,
+  );
+  const generationBusy = useRef(false);
   async function generate() {
-    if (pending || !classroomId) return;
+    if (pending || generationBusy.current || !classroomId) return;
+    if (generationRequest.current?.classroomId !== classroomId)
+      generationRequest.current = { classroomId, id: crypto.randomUUID() };
+    generationBusy.current = true;
     setPending(true);
     setFeedback(null);
     const result = await runGenerateRecommendations(
       {
+        requestId: generationRequest.current.id,
         studentId,
         classroomId,
         recommendedDifficulty: 3,
@@ -55,6 +63,8 @@ export function GenerateRecommendationsForm({
       { generate: generateRecommendations, refresh: () => router.refresh() },
     );
     setFeedback(result);
+    if (result.kind === "success") generationRequest.current = null;
+    generationBusy.current = false;
     setPending(false);
   }
 
@@ -86,7 +96,7 @@ export function GenerateRecommendationsForm({
         ) : null}
         <button
           aria-busy={pending}
-          className="h-10 rounded-md bg-sky-600 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-10 rounded-md bg-sky-700 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
           disabled={isGenerateRecommendationDisabled(
             pending,
             classrooms.length,

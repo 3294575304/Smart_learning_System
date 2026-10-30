@@ -27,6 +27,7 @@ interface Props {
   disabled?: boolean;
   onChange: (answer: QuestionAnswerState) => void;
   question: AnswerableQuestion;
+  roomy?: boolean;
 }
 
 export function createEmptyQuestionAnswer(
@@ -48,6 +49,7 @@ export function createEmptyQuestionAnswer(
 }
 
 export function QuestionAnswerInput({
+  roomy = false,
   answer,
   disabled = false,
   onChange,
@@ -163,7 +165,7 @@ export function QuestionAnswerInput({
           {label}
         </label>
         <textarea
-          className="min-h-28 w-full max-w-full rounded-md border p-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+          className={`w-full max-w-full rounded-md border p-3 text-sm leading-6 disabled:cursor-not-allowed disabled:opacity-60 ${roomy ? "min-h-56" : "min-h-28"}`}
           disabled={disabled}
           id={`${question.id}-answer`}
           onChange={(event) =>

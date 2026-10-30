@@ -1,7 +1,7 @@
 "use client";
+import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-workspace-refresh";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -12,8 +12,9 @@ import {
   type ManualGradeAnswerData,
 } from "@/services/assignments/schemas";
 import type { TeacherSubmissionDetail } from "@/services/assignments/types";
+import type { GradingMutationProps } from "./submission-grading-workspace";
 
-interface Props {
+interface Props extends GradingMutationProps {
   answerId: string;
   assignmentId: string;
   initialFeedback: string;
@@ -29,8 +30,11 @@ export function ManualGradeForm({
   initialScore,
   maxScore,
   submissionId,
+  mutationBusy,
+  beginMutation,
+  endMutation,
+  onUpdated,
 }: Props) {
-  const router = useRouter();
   const [serverMessage, setServerMessage] = useState<{
     kind: "success" | "error";
     text: string;
@@ -42,27 +46,33 @@ export function ManualGradeForm({
   >({
     resolver: zodResolver(manualGradeAnswerSchema),
     defaultValues: {
-      score: initialScore ?? 0,
+      score: initialScore ?? undefined,
       feedback: initialFeedback,
     },
   });
 
   async function submit(input: ManualGradeAnswerData) {
+    if (!beginMutation()) return;
     setServerMessage(null);
-    const result = await requestAssignmentApi<TeacherSubmissionDetail>(
-      `/api/teacher/assignments/${assignmentId}/submissions/${submissionId}/answers/${answerId}`,
-      {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(input),
-      },
-    );
-    if (!result.success) {
-      setServerMessage({ kind: "error", text: result.error });
-      return;
+    try {
+      const result = await requestAssignmentApi<TeacherSubmissionDetail>(
+        `/api/teacher/assignments/${assignmentId}/submissions/${submissionId}/answers/${answerId}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      );
+      if (!result.success) {
+        setServerMessage({ kind: "error", text: result.error });
+        return;
+      }
+      setServerMessage({ kind: "success", text: "该题评分已保存" });
+      markTeacherWorkspaceDirty();
+      onUpdated(result.data);
+    } finally {
+      endMutation();
     }
-    setServerMessage({ kind: "success", text: "该题评分已保存" });
-    router.refresh();
   }
 
   return (
@@ -116,8 +126,8 @@ export function ManualGradeForm({
         </p>
       ) : null}
       <button
-        className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        disabled={form.formState.isSubmitting}
+        className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        disabled={form.formState.isSubmitting || mutationBusy}
         type="submit"
       >
         {form.formState.isSubmitting ? "保存中…" : "保存单题评分"}

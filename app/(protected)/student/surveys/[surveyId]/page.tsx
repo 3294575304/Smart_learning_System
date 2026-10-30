@@ -1,3 +1,7 @@
+import {
+  studentTaskScopeSchema,
+  studentTaskHref,
+} from "@/services/student-experience/task-scope";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import { Role } from "@prisma/client";
 import Link from "next/link";
@@ -12,21 +16,30 @@ import { getStudentCourseSurvey } from "@/services/course-surveys/service";
 
 export default async function StudentSurveyPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ surveyId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const student = await requirePageRole(Role.STUDENT);
   const surveyId = courseSurveyIdSchema.safeParse((await params).surveyId);
   if (!surveyId.success) notFound();
+  const scope = studentTaskScopeSchema.safeParse(await searchParams);
+  if (!scope.success) notFound();
   try {
     const survey = await getStudentCourseSurvey(student.id, surveyId.data);
+    if (
+      (scope.data.courseId && scope.data.courseId !== survey.course.id) ||
+      (scope.data.classroomId && scope.data.classroomId !== survey.classroom.id)
+    )
+      notFound();
     return (
       <section className="space-y-6">
         <PageHeader
           actions={
             <Link
               className="rounded-md border bg-white px-4 py-2 text-sm"
-              href="/student/surveys"
+              href={studentTaskHref("/student/surveys", scope.data)}
             >
               返回问卷列表
             </Link>

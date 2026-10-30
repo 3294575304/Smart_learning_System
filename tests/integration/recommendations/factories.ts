@@ -434,6 +434,9 @@ export class RecommendationTestFactory {
 
   async cleanup(): Promise<void> {
     if (this.userIds.length === 0) return;
+    await integrationPrisma.practiceSetManagement.deleteMany({
+      where: { studentId: { in: this.userIds } },
+    });
     await integrationPrisma.notification.deleteMany({
       where: { recipientId: { in: this.userIds } },
     });

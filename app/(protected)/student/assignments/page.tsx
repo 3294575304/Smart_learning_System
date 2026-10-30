@@ -1,4 +1,11 @@
-import { StudentClassroomFilter } from "@/components/dashboard/student-classroom-filter";
+import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
+import { studentScoreLabel } from "@/services/recommendations/scoring";
+import { StudentTaskScope } from "@/components/dashboard/student-task-scope";
+import {
+  studentTaskScopeSchema,
+  studentTaskHref,
+} from "@/services/student-experience/task-scope";
 import { listStudentTaskClassrooms } from "@/services/courses/student-access";
 import { StudentAssignmentTabs } from "@/components/assignments/student-assignment-tabs";
 import { StudentSubmissionHistory } from "@/components/assignment-results/student-submission-history";
@@ -18,20 +25,16 @@ import {
   studentAssignmentListQuerySchema,
   type StudentAssignmentListQuery,
 } from "@/services/assignments/schemas";
-import { listStudentAssignments } from "@/services/assignments/service";
+import { listStudentAssignmentPage } from "@/services/assignments/service";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { courseIdSchema } from "@/services/courses/schemas";
 import { getStudentCourseContext } from "@/services/courses/student-access";
-
-const PAGE_SIZE = 8;
 
 const FILTERS: Array<{
   value: StudentAssignmentListQuery["status"];
   label: string;
 }> = [
   { value: "ALL", label: "全部" },
-  { value: "PENDING", label: "待完成" },
-  { value: "IN_PROGRESS", label: "进行中" },
+  { value: "TODO", label: "待完成" },
   { value: "SUBMITTED", label: "已提交" },
   { value: "EXPIRED", label: "已截止" },
 ];
@@ -42,9 +45,12 @@ interface Props {
 
 const assignmentState = studentAssignmentState;
 
-function stateLabel(state: ReturnType<typeof assignmentState>): string {
-  return FILTERS.find((filter) => filter.value === state)?.label ?? state;
-}
+const STATE_LABELS: Record<ReturnType<typeof assignmentState>, string> = {
+  PENDING: "未开始",
+  IN_PROGRESS: "进行中",
+  SUBMITTED: "已提交",
+  EXPIRED: "已截止",
+};
 
 function pageHref(
   query: StudentAssignmentListQuery,
@@ -64,23 +70,18 @@ function pageHref(
 export default async function StudentAssignmentsPage({ searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
-  const rawCourseId =
-    typeof raw.courseId === "string" ? raw.courseId : undefined;
-  const parsedCourseId =
-    rawCourseId !== undefined ? courseIdSchema.safeParse(rawCourseId) : null;
-  if (parsedCourseId && !parsedCourseId.success) notFound();
+  const scopeResult = studentTaskScopeSchema.safeParse(raw);
+  if (!scopeResult.success) notFound();
+  const { courseId, classroomId } = scopeResult.data;
   let course: Awaited<ReturnType<typeof getStudentCourseContext>> | null = null;
-  if (parsedCourseId?.success) {
+  if (courseId) {
     try {
-      course = await getStudentCourseContext(student.id, parsedCourseId.data);
+      course = await getStudentCourseContext(student.id, courseId);
     } catch (error) {
       if (error instanceof ResourceNotFoundError) notFound();
       throw error;
     }
   }
-  const classroomId =
-    typeof raw.classroomId === "string" ? raw.classroomId : undefined;
-  if (raw.classroomId !== undefined && !classroomId) notFound();
   const classrooms = await listStudentTaskClassrooms(student.id, course?.id);
   if (classroomId && !classrooms.some((item) => item.id === classroomId))
     notFound();
@@ -115,16 +116,22 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
           description="统一查看提交记录、批改进度与正式成绩；历史班级保留本人记录，未发布成绩不提前显示。"
           eyebrow={course?.name}
           actions={
-            <Link
-              className="rounded-md border bg-white px-3 py-2 text-sm"
-              href="/student/results?view=course"
-            >
-              查看课程总评
-            </Link>
+            course && classroomId ? (
+              <StudentCourseReturnLink
+                courseId={course.id}
+                classroomId={classroomId}
+                tab="tasks"
+              />
+            ) : (
+              <StudentBackLink href="/student/results?view=course">
+                查看课程总评
+              </StudentBackLink>
+            )
           }
         />
-        <StudentClassroomFilter
+        <StudentTaskScope
           classrooms={classrooms}
+          courseId={course?.id}
           selectedId={classroomId}
           summary={`共 ${results.pagination.total} 条提交记录`}
         />
@@ -142,49 +149,49 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
       </section>
     );
   }
-  const assignments = await listStudentAssignments(
+  const now = new Date();
+  const result = await listStudentAssignmentPage(
     student.id,
+    query,
     course?.id,
     classroomId,
+    now,
   );
-  const now = new Date();
-  const filtered = assignments.filter(
-    (assignment) =>
-      query.status === "ALL" ||
-      assignmentState(assignment, now) === query.status,
-  );
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const page = Math.min(query.page, Math.max(totalPages, 1));
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const {
+    items: pageItems,
+    pagination: { page, totalPages, total },
+  } = result;
 
   return (
     <section className="space-y-4">
       <PageHeader
         actions={
-          <Link
-            className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
-            href={
-              course
-                ? `/student/courses/${course.id}/learning-center${classroomId ? `?classroomId=${encodeURIComponent(classroomId)}` : ""}`
-                : "/student/tasks"
-            }
-          >
-            {course ? "返回课程学习中心" : "返回学习任务"}
-          </Link>
+          course ? (
+            <StudentCourseReturnLink
+              courseId={course.id}
+              classroomId={classroomId}
+              tab="tasks"
+            />
+          ) : (
+            <StudentBackLink href="/student/tasks">
+              返回学习任务
+            </StudentBackLink>
+          )
         }
         description={
           course
-            ? `仅显示「${course.name}」中分配给你的作业。`
-            : "从作答到提交、批改和成绩统一查看；已结束班级的本人提交记录会继续保留。"
+            ? "查看当前课程的全部作业、提交记录与成绩，最新发布的作业排在前面。"
+            : "查看各门课程的全部作业、提交记录与成绩。待处理任务集中在学习任务中。"
         }
         eyebrow={course?.name}
         title="我的作业"
       />
 
-      <StudentClassroomFilter
+      <StudentTaskScope
         classrooms={classrooms}
+        courseId={course?.id}
         selectedId={classroomId}
-        summary={`当前 ${filtered.length} 项作业`}
+        summary={`当前 ${total} 项作业 · 最新发布在前`}
       />
       <StudentAssignmentTabs
         view="work"
@@ -200,7 +207,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
             aria-current={query.status === filter.value ? "page" : undefined}
             className={`shrink-0 rounded-full border px-4 py-2 text-sm ${
               query.status === filter.value
-                ? "border-sky-600 bg-sky-600 text-white"
+                ? "border-sky-600 bg-sky-700 text-white"
                 : "bg-white hover:bg-gray-50"
             }`}
             href={pageHref(
@@ -235,28 +242,33 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
           }
           description={
             query.status === "ALL"
-              ? "当前没有已发布且可访问的作业。"
+              ? course && classroomId
+                ? "本班暂无已发布且可访问的作业。"
+                : "当前没有已发布且可访问的作业。"
               : "当前筛选状态下没有作业。"
           }
           icon={ClipboardList}
-          title="暂无作业"
+          title={course && classroomId ? "本班暂无作业" : "暂无作业"}
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
           {pageItems.map((assignment) => {
             const state = assignmentState(assignment, now);
             return (
               <Link
-                className="rounded-xl border bg-white p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600"
-                href={
+                className="min-w-0 rounded-xl border bg-white p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600"
+                href={studentTaskHref(
                   state === "SUBMITTED" && assignment.latestSubmissionId
                     ? `/student/submissions/${assignment.latestSubmissionId}/result`
-                    : `/student/assignments/${assignment.id}`
-                }
+                    : `/student/assignments/${assignment.id}`,
+                  scopeResult.data,
+                )}
                 key={assignment.id}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <h2 className="font-semibold">{assignment.title}</h2>
+                  <h2 className="min-w-0 font-semibold break-words">
+                    {assignment.title}
+                  </h2>
                   <span
                     className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${
                       state === "PENDING" || state === "IN_PROGRESS"
@@ -264,15 +276,15 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
                         : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    {stateLabel(state)}
+                    {STATE_LABELS[state]}
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-gray-500">
                   {assignment.classroomName} · {assignment.questionCount} 题 ·{" "}
-                  {assignment.totalPoints} 分
+                  百分制展示 · 原始满分 {assignment.totalPoints} 分
                 </p>
                 <p className="mt-1 text-xs text-gray-500">
-                  开始：{assignment.publishedAt.toLocaleString("zh-CN")}
+                  发布：{assignment.publishedAt.toLocaleString("zh-CN")}
                 </p>
                 <p className="mt-1 text-xs text-gray-500">
                   截止：{assignment.dueAt.toLocaleString("zh-CN")}
@@ -285,7 +297,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
                 {assignment.latestSubmissionStatus ? (
                   <p className="mt-3 text-sm font-medium text-slate-700">
                     {assignment.latestSubmissionStatus === "PUBLISHED"
-                      ? `已发布成绩：${assignment.latestPublishedScore ?? "—"} / ${assignment.totalPoints}`
+                      ? `已发布成绩：${studentScoreLabel(assignment.latestPublishedScore ?? null, assignment.totalPoints)}`
                       : assignment.latestSubmissionStatus === "GRADED"
                         ? "批改完成 · 成绩待发布"
                         : assignment.latestSubmissionStatus === "PENDING_REVIEW"

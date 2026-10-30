@@ -34,6 +34,7 @@ export async function appendRecommendationPracticeLearningEvent(
         select: {
           id: true,
           studentId: true,
+          assignedPoints: true,
           courseCycle: { select: { courseId: true } },
           conceptSnapshots: {
             where: {
@@ -68,7 +69,36 @@ export async function appendRecommendationPracticeLearningEvent(
   ) {
     return null;
   }
+  // Display points must not multiply a practice answer's historical evidence weight.
+  let evidenceScore = answer.score;
+  let evidenceMax = answer.maxScore;
+  if (answer.recommendation.assignedPoints !== null) {
+    evidenceScore = answer.score
+      .div(answer.maxScore)
+      .toDecimalPlaces(CONCEPT_EVIDENCE_SCORE_SCALE);
+    evidenceMax = new Prisma.Decimal(1);
+    if (answer.assessmentRevisionKey) {
+      const attempt = await transaction.programmingAttempt.findFirst({
+        where: {
+          id: answer.assessmentRevisionKey,
+          recommendationId: answer.recommendation.id,
+          status: "SUCCEEDED",
+        },
+        select: { score: true, maxScore: true },
+      });
+      if (attempt?.score !== null && attempt?.score !== undefined) {
+        evidenceScore = attempt.score;
+        evidenceMax = attempt.maxScore;
+      }
+    }
+  }
   const fingerprint = conceptMasteryFingerprint({
+    ...(answer.recommendation.assignedPoints !== null
+      ? {
+          evidenceScore: evidenceScore.toFixed(CONCEPT_EVIDENCE_SCORE_SCALE),
+          evidenceMax: evidenceMax.toFixed(CONCEPT_EVIDENCE_SCORE_SCALE),
+        }
+      : {}),
     recommendationPracticeAnswerId: answer.id,
     recommendationId: answer.recommendation.id,
     score: answer.score.toFixed(CONCEPT_EVIDENCE_SCORE_SCALE),
@@ -122,15 +152,15 @@ export async function appendRecommendationPracticeLearningEvent(
           conceptId: snapshot.conceptId,
           bindingType: snapshot.bindingType,
           recommendationConceptSnapshotId: snapshot.id,
-          score: answer.score,
-          maxScore: answer.maxScore,
+          score: evidenceScore,
+          maxScore: evidenceMax,
         })),
       },
     },
     select: { id: true },
   });
-  const normalizedScore = answer.score
-    .div(answer.maxScore)
+  const normalizedScore = evidenceScore
+    .div(evidenceMax)
     .mul(100)
     .toDecimalPlaces(CONCEPT_EVIDENCE_SCORE_SCALE);
   const previousEvidence =
@@ -158,8 +188,8 @@ export async function appendRecommendationPracticeLearningEvent(
         revision: (previous?.revision ?? 0) + 1,
         inputFingerprint: fingerprint,
         status: ConceptEvidenceStatus.VALID,
-        score: answer.score,
-        maxScore: answer.maxScore,
+        score: evidenceScore,
+        maxScore: evidenceMax,
         normalizedScore,
         gradedAt: answer.updatedAt,
         supersedesEvidenceId: previous?.id ?? null,

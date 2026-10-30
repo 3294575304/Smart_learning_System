@@ -165,7 +165,7 @@ export function AttendanceWorkspace({
           <div className="flex gap-2">
             <button
               disabled={busy}
-              className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white"
+              className="rounded-md bg-sky-700 px-4 py-2 text-sm text-white"
             >
               保存纠正
             </button>

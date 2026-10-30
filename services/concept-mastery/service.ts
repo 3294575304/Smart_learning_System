@@ -48,7 +48,7 @@ async function latestConceptEvidence(
   courseId: string,
 ): Promise<EffectiveEvidence[]> {
   const rows = await transaction.studentAnswerConceptEvidence.findMany({
-    where: { studentId, courseId },
+    where: { studentId, courseId, assignment: { status: { not: "REVOKED" } } },
     orderBy: [
       { studentAnswerId: "asc" },
       { conceptId: "asc" },

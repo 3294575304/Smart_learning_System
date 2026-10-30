@@ -38,6 +38,8 @@ export type AnnouncementViewRecord = Prisma.AnnouncementGetPayload<{
 
 export async function loadAnnouncementPage(query: AnnouncementListQuery) {
   const where: Prisma.AnnouncementWhereInput = {
+    // 管理端只看系统公告；教师课程通知按班级投递，不在此页出现。
+    classroomId: null,
     ...(query.status ? { status: query.status } : {}),
     ...(query.targetType ? { targetType: query.targetType } : {}),
   };

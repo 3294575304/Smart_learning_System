@@ -218,7 +218,7 @@ export function CoursePracticeSession({ session }: Props) {
             className="mt-5 inline-block text-sky-700 hover:underline"
             href="/student/recommendations"
           >
-            返回练习中心
+            返回自主练习
           </Link>
         </section>
       </main>
@@ -233,7 +233,7 @@ export function CoursePracticeSession({ session }: Props) {
           className="text-sm text-gray-500 hover:underline"
           href="/student/recommendations"
         >
-          ← 返回练习中心
+          ← 返回自主练习
         </Link>
         <h1 className="mt-3 text-2xl font-semibold">
           {session.mode === "TEST" ? "课程测试" : "课程练习"}
@@ -331,7 +331,7 @@ export function CoursePracticeSession({ session }: Props) {
         </section>
       ) : null}
       <button
-        className="rounded-md bg-sky-600 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+        className="rounded-md bg-sky-700 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
         disabled={busy || Boolean(programmingAttemptId)}
         onClick={() => {
           if (feedback) {

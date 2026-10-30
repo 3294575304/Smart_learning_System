@@ -216,7 +216,7 @@ export async function verifyClassroomCompletion(ids: {
   );
   await assert.rejects(
     createAssignmentBatch(ids.teacherId, { ...batch, requestId: randomUUID() }),
-    /班级不存在/,
+    /已结课|已关闭/,
   );
   await assert.rejects(
     createTeacherAttendanceSession(

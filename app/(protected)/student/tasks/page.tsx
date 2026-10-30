@@ -1,152 +1,193 @@
-import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
-import { studentAssignmentState } from "@/services/student-experience/task-policy";
 import { Role } from "@prisma/client";
-import { CalendarCheck, ClipboardCheck, ClipboardList } from "lucide-react";
+import { ArrowRight, CalendarClock, CircleCheck } from "lucide-react";
 import Link from "next/link";
-
+import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
-import { getStudentHomeTasks } from "@/services/dashboard/student-home-tasks";
+import {
+  StudentTaskList,
+  STUDENT_TASK_PRESENTATION,
+} from "@/components/dashboard/student-task-list";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { listStudentAssignments } from "@/services/assignments/service";
+import { getStudentTaskOverview } from "@/services/dashboard/student-task-service";
+import {
+  studentTaskContext,
+  studentTaskDate,
+  type StudentTaskKind,
+} from "@/services/dashboard/student-task-overview";
+
+const groups: Array<{
+  kind: StudentTaskKind;
+  href: string;
+}> = [
+  {
+    kind: "assignment",
+    href: "/student/assignments?status=ALL",
+  },
+  {
+    kind: "attendance",
+    href: "/student/attendance",
+  },
+  {
+    kind: "survey",
+    href: "/student/surveys",
+  },
+];
 
 export default async function StudentTasksPage() {
   const student = await requirePageRole(Role.STUDENT);
-  const [
-    assignments,
-    {
-      attendance: attendanceItems,
-      surveys: surveyItems,
-      scheduledSurveys,
-      nextSurveyChangeAt,
-    },
-  ] = await Promise.all([
-    listStudentAssignments(student.id),
-    getStudentHomeTasks(student.id),
-  ]);
-  const now = new Date();
-  const assignmentItems = assignments.filter((assignment) =>
-    ["PENDING", "IN_PROGRESS"].includes(
-      studentAssignmentState(assignment, now),
-    ),
-  );
-  const pendingAssignments = assignmentItems.length;
-  const pendingAttendance = attendanceItems.length;
-  const pendingSurveys = surveyItems.length;
-  const tasks = [
-    {
-      href: "/student/assignments?status=ALL",
-      label: "课程作业",
-      count: pendingAssignments,
-      items: assignmentItems.slice(0, 3).map((assignment) => ({
-        id: assignment.id,
-        title: assignment.title,
-        detail: `${assignment.classroomName} · 截止 ${assignment.dueAt.toLocaleString("zh-CN")}`,
-        href: `/student/assignments/${encodeURIComponent(assignment.id)}`,
-      })),
-      detail: "查看各门课程的作业进度，继续作答或查看已提交记录。",
-      action: "查看作业",
-      icon: ClipboardList,
-    },
-    {
-      href: "/student/attendance",
-      label: "签到与出勤",
-      count: pendingAttendance,
-      items: attendanceItems
-        .sort(
-          (left, right) =>
-            left.session.startsAt.getTime() - right.session.startsAt.getTime(),
-        )
-        .slice(0, 3)
-        .map((record) => ({
-          id: record.id,
-          title: record.session.title,
-          detail: `${record.session.course.name} · ${record.session.classroom.name} · ${record.session.startsAt.toLocaleString("zh-CN")}`,
-          href: `/student/attendance?courseId=${encodeURIComponent(record.session.course.id)}&classroomId=${encodeURIComponent(record.session.classroom.id)}`,
-        })),
-      detail: "集中处理课堂签到，并查看各门课程的出勤记录。",
-      action: "查看出勤",
-      icon: CalendarCheck,
-    },
-    {
-      href: "/student/surveys",
-      label: "课程问卷",
-      count: pendingSurveys,
-      items: [...surveyItems, ...scheduledSurveys]
-        .slice(0, 3)
-        .map((survey) => ({
-          id: survey.id,
-          title: survey.title,
-          detail: `${survey.course.name} · ${survey.availability === "SCHEDULED" ? `待开放：${survey.opensAt.toLocaleString("zh-CN")}` : `截止 ${survey.dueAt.toLocaleString("zh-CN")}`}`,
-          href: `/student/surveys/${encodeURIComponent(survey.id)}`,
-        })),
-      detail: `填写已开放的课程自评问卷；问卷不计入课程成绩。${scheduledSurveys.length ? `另有 ${scheduledSurveys.length} 份待开放问卷。` : ""}`,
-      action: "查看问卷",
-      icon: ClipboardCheck,
-    },
-  ];
-  const totalPending = pendingAssignments + pendingAttendance + pendingSurveys;
-
+  const overview = await getStudentTaskOverview(student.id);
   return (
-    <section className="space-y-4">
-      <SurveyAvailabilityRefresh at={nextSurveyChangeAt?.toISOString()} />
+    <section className="space-y-5">
+      <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
       <PageHeader
-        description="把各门课程需要处理的作业、签到和问卷放在一起，查看进度后再进入对应课程。"
         title="学习任务"
+        description="集中处理各门课程的全部待办，也可查看作业、签到和问卷记录。"
       />
-      <p className="rounded-xl border border-sky-100 bg-sky-50/70 px-4 py-3 text-sm text-slate-700">
-        当前有 <strong>{totalPending}</strong>{" "}
-        项待处理任务。课程任务也可以从「我的课程」进入对应课程查看。
-      </p>
-      <div className="grid gap-4 lg:grid-cols-3">
-        {tasks.map((task) => {
-          const Icon = task.icon;
-          return (
-            <article
-              className="flex min-w-0 flex-col rounded-xl border bg-white p-5"
-              key={task.href}
+      <div className="@container">
+        <div className="grid items-start gap-4 @min-[52rem]:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="min-w-0 space-y-4">
+            <section
+              aria-labelledby="student-pending-tasks"
+              className="rounded-2xl border bg-white"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Icon aria-hidden="true" className="size-5 text-sky-700" />
-                  <h2 className="font-semibold">{task.label}</h2>
+              <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-100 px-4 py-4 sm:px-5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2
+                    id="student-pending-tasks"
+                    className="text-lg font-semibold text-slate-950"
+                  >
+                    我的待办
+                  </h2>
+                  <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-800 tabular-nums">
+                    {overview.total} 项待处理
+                  </span>
                 </div>
-                <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-800">
-                  {task.count} 项待处理
-                </span>
-              </div>
-              <p className="mt-3 flex-1 text-sm leading-6 text-gray-600">
-                {task.detail}
-              </p>
-              {task.items.length ? (
-                <ul className="mt-4 space-y-3 border-t pt-3">
-                  {task.items.map((item) => (
-                    <li key={item.id}>
+                {overview.total > 1 && (
+                  <p className="text-xs leading-5 text-slate-600">
+                    签到优先，其余按截止时间排序
+                  </p>
+                )}
+              </header>
+              {overview.items.length ? (
+                <StudentTaskList
+                  items={overview.items}
+                  priorityId={overview.items[0]?.id}
+                  layout="workspace"
+                />
+              ) : (
+                <div className="flex items-start gap-3 px-4 py-5 sm:px-5">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <CircleCheck aria-hidden="true" className="size-5" />
+                  </span>
+                  <div>
+                    <p className="font-semibold text-slate-900">暂无待办</p>
+                    <p className="mt-0.5 text-sm leading-5 text-slate-600">
+                      可以继续查看作业、出勤和问卷记录。
+                    </p>
+                  </div>
+                </div>
+              )}
+            </section>
+            {overview.scheduledSurveys.length > 0 && (
+              <section
+                aria-labelledby="scheduled-surveys-heading"
+                className="rounded-2xl border bg-white px-4 py-4 sm:px-5"
+              >
+                <h2
+                  id="scheduled-surveys-heading"
+                  className="flex items-center gap-2 font-semibold text-slate-950"
+                >
+                  <CalendarClock
+                    aria-hidden="true"
+                    className="size-5 shrink-0 text-violet-700"
+                  />
+                  待开放问卷
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  开放后显示在待办中，问卷不计入成绩。
+                </p>
+                <ul className="mt-2 divide-y divide-slate-100">
+                  {overview.scheduledSurveys.map((survey) => (
+                    <li key={survey.id} className="py-1 last:pb-0">
                       <Link
-                        className="text-sm font-medium text-sky-800 hover:underline"
-                        href={item.href}
+                        className="group flex min-h-11 items-center gap-3 rounded-lg py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+                        href={survey.href}
                       >
-                        {item.title}
+                        <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                          <p className="text-sm font-medium text-slate-900 group-hover:text-sky-800">
+                            {survey.title}
+                          </p>
+                          <p className="mt-0.5 text-xs leading-5 text-slate-600">
+                            {studentTaskContext(survey)} ·{" "}
+                            <time dateTime={survey.opensAt.toISOString()}>
+                              {studentTaskDate(survey.opensAt)}
+                            </time>{" "}
+                            开放
+                          </p>
+                        </div>
+                        <ArrowRight
+                          aria-hidden="true"
+                          className="size-4 shrink-0 text-sky-700"
+                        />
                       </Link>
-                      <p className="mt-1 text-xs leading-5 text-gray-500">
-                        {item.detail}
-                      </p>
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="mt-4 border-t pt-3 text-sm text-gray-500">
-                  当前没有待处理事项。
-                </p>
-              )}
-              <Link
-                className="mt-5 inline-flex w-fit rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:outline-none"
-                href={task.href}
-              >
-                {task.action}
-              </Link>
-            </article>
-          );
-        })}
+              </section>
+            )}
+          </div>
+          <section
+            aria-labelledby="student-task-records"
+            className="rounded-2xl border bg-white p-4"
+          >
+            <h2
+              id="student-task-records"
+              className="px-1 text-base font-semibold text-slate-950"
+            >
+              课程任务入口
+            </h2>
+            <ul className="mt-2 divide-y divide-slate-100">
+              {groups.map(({ kind, href }) => {
+                const {
+                  icon: Icon,
+                  label,
+                  color,
+                } = STUDENT_TASK_PRESENTATION[kind];
+                const count = overview.counts[kind];
+                return (
+                  <li
+                    key={kind}
+                    id={kind}
+                    className="scroll-mt-24 py-1.5 last:pb-0"
+                  >
+                    <Link
+                      href={href}
+                      className="group flex min-h-12 items-center gap-3 rounded-lg px-1 py-1.5 transition-colors hover:bg-sky-50/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+                    >
+                      <span
+                        className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${color}`}
+                      >
+                        <Icon aria-hidden="true" className="size-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-900">
+                          {label}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-600 tabular-nums">
+                          {count} 项待办
+                        </p>
+                      </div>
+                      <ArrowRight
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-sky-700"
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </div>
       </div>
     </section>
   );

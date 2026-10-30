@@ -1,3 +1,13 @@
+import { QuestionText } from "@/components/assignments/question-text";
+import { CategoryCorrection } from "@/components/assignments/category-correction";
+import { AssignmentCategoryBadge } from "@/components/assignments/category-badge";
+import { HistoricalAssignmentCopy } from "@/components/assignments/historical-assignment-copy";
+import {
+  canCopyHistoricalAssignment,
+  getAssignmentCopyTargets,
+} from "@/services/assignments/creation-context";
+import { AssignmentMakeupControls } from "@/components/assignments/makeup-controls";
+import { getAssignmentMakeupManagement } from "@/services/assignments/makeup-service";
 import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import { Role } from "@prisma/client";
 import Link from "next/link";
@@ -27,12 +37,23 @@ export default async function TeacherAssignmentPage({
       teacher.id,
       id.data,
     );
+    const [makeup, copyTargets] = await Promise.all([
+      getAssignmentMakeupManagement(teacher.id, id.data),
+      canCopyHistoricalAssignment(assignment)
+        ? getAssignmentCopyTargets(
+            teacher.id,
+            assignment.classroom.id,
+            !assignment.submissionTask && assignment.questions.length > 0,
+            Boolean(assignment.submissionTask?.resourceFileIds?.length),
+          )
+        : [],
+    ]);
     return (
       <section className="space-y-5">
         <TeacherBackLink
           href={
             assignment.classroom.status === "ACTIVE" &&
-            assignment.status !== "ARCHIVED" &&
+            !["ARCHIVED", "REVOKED"].includes(assignment.status) &&
             assignment.status !== "CLOSED"
               ? "/teacher/assignments"
               : "/teacher/assignments?section=HISTORY"
@@ -54,14 +75,25 @@ export default async function TeacherAssignmentPage({
                 · 满分{assignment.totalPoints}分
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="ms-auto flex flex-wrap items-center gap-3">
+              <AssignmentCategoryBadge
+                category={assignment.category ?? "PRACTICE"}
+              />
               <span className="rounded-full bg-sky-50 px-3 py-1 text-xs text-sky-800">
-                {assignment.classroom.status === "ACTIVE"
+                {assignment.status === "REVOKED" ||
+                assignment.classroom.status === "ACTIVE"
                   ? ASSIGNMENT_FILTER_LABELS[
                       assignmentDisplayStatus(assignment)
                     ]
                   : CLASSROOM_STATUS_LABELS[assignment.classroom.status]}
               </span>
+              {copyTargets.length > 0 && (
+                <HistoricalAssignmentCopy
+                  assignmentId={assignment.id}
+                  sourceClassroomId={assignment.classroom.id}
+                  targets={copyTargets}
+                />
+              )}
               {assignment.status === "DRAFT" &&
               assignment.classroom.status === "ACTIVE" ? (
                 <Link
@@ -92,6 +124,20 @@ export default async function TeacherAssignmentPage({
               {assignment.description}
             </p>
           ) : null}
+          {assignment.categoryNeedsReview &&
+          !["ARCHIVED", "REVOKED"].includes(assignment.status) ? (
+            <CategoryCorrection
+              id={assignment.id}
+              category={assignment.category ?? "PRACTICE"}
+            />
+          ) : null}
+          {assignment.status === "REVOKED" ? (
+            <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+              作业已撤销。原题、作答和评分仅供查看，本次作业不计入应交统计。
+            </p>
+          ) : (
+            <AssignmentMakeupControls data={makeup} />
+          )}
         </header>
         <TeacherAssignmentNav assignmentId={assignment.id} active="content" />
         <p className="text-xs leading-5 text-slate-500">
@@ -143,7 +189,7 @@ export default async function TeacherAssignmentPage({
               >
                 <div className="flex items-start justify-between gap-3">
                   <h2
-                    className="line-clamp-1 min-w-0 font-semibold break-words"
+                    className="min-w-0 font-semibold [overflow-wrap:anywhere] whitespace-pre-wrap"
                     title={question.title}
                   >
                     {question.order}. {question.title}
@@ -155,14 +201,14 @@ export default async function TeacherAssignmentPage({
                 <p className="mt-1 text-xs text-slate-500">
                   {QUESTION_TYPE_LABELS[question.type]}
                 </p>
-                <p className="mt-3 text-sm leading-7 break-words whitespace-pre-wrap">
-                  {question.content}
-                </p>
+                <div className="mt-3 min-w-0">
+                  <QuestionText text={question.content} />
+                </div>
                 {question.options.length ? (
                   <ul className="mt-3 space-y-2">
                     {question.options.map((option) => (
                       <li
-                        className="rounded-lg bg-slate-50 px-3 py-2 text-sm break-words"
+                        className="min-w-0 rounded-lg bg-slate-50 px-3 py-2 text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
                         key={option.id}
                       >
                         {option.label}. {option.content}

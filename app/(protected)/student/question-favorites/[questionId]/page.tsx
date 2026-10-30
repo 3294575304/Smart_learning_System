@@ -1,5 +1,6 @@
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
+import { reviewReturnUrl } from "@/services/review/navigation";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { FavoritePracticeButton } from "@/components/question-favorites/favorite-practice-button";
@@ -12,21 +13,19 @@ import {
 import { getFavoriteDetail } from "@/services/question-favorites/service";
 export default async function FavoriteDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ questionId: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }) {
   const student = await requirePageRole(Role.STUDENT);
+  const returnTo = reviewReturnUrl((await searchParams).returnTo, true);
   try {
     const detail = await getFavoriteDetail(student, (await params).questionId);
     const { favorite, question } = detail;
     return (
       <section className="space-y-5">
-        <Link
-          href="/student/wrong-questions"
-          className="inline-flex rounded-lg border bg-white px-3 py-2 text-sm text-sky-700 hover:bg-sky-50"
-        >
-          ← 返回我的收藏
-        </Link>
+        <StudentBackLink href={returnTo}>返回我的收藏</StudentBackLink>
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs text-slate-500">

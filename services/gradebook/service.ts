@@ -1,3 +1,4 @@
+import { assignmentSyncIssue } from "@/services/assignments/category";
 import { createHash } from "node:crypto";
 import {
   AuditAction,
@@ -482,6 +483,12 @@ export async function syncTeacherPlatformAssignmentGrades(
         gradebookId,
         transaction,
       );
+      if (!gradebook.scheme.sourcePublishedSyllabusStructureId)
+        throw new GradebookOperationError(
+          "尚无正式教学大纲来源，请先确认考核方案后再同步。",
+          409,
+          "FORMAL_SYLLABUS_REQUIRED",
+        );
       const component = gradebook.scheme.components.find(
         (item) => item.id === componentId,
       );
@@ -495,16 +502,41 @@ export async function syncTeacherPlatformAssignmentGrades(
           "PLATFORM_COMPONENT_REQUIRED",
         );
       }
+      await transaction.$queryRaw`SELECT id FROM "Assignment" WHERE id = ${assignmentId} AND "teacherId" = ${teacherId} FOR UPDATE`;
       const assignment = await transaction.assignment.findFirst({
         where: {
           id: assignmentId,
           classroomId: gradebook.classroomId,
           teacherId,
-          status: { not: "DRAFT" },
+          status: { in: ["PUBLISHED", "CLOSED", "ARCHIVED"] },
         },
-        select: { id: true, title: true, totalPoints: true },
+        select: { id: true, title: true, totalPoints: true, category: true },
       });
       if (!assignment) throw new ResourceNotFoundError("作业不存在。");
+      const categoryIssue = assignmentSyncIssue(assignment.category, component);
+      if (categoryIssue)
+        throw new GradebookOperationError(
+          categoryIssue,
+          409,
+          "ASSIGNMENT_CATEGORY_RULE_REQUIRED",
+        );
+      const incompatibleItems = await transaction.gradeItem.count({
+        where: {
+          gradebookId,
+          componentId,
+          OR: [
+            { sourceType: { not: "PLATFORM_ASSIGNMENT" } },
+            { itemWeight: { not: 1 } },
+            { assignment: { category: { not: assignment.category } } },
+          ],
+        },
+      });
+      if (incompatibleItems)
+        throw new GradebookOperationError(
+          "当前项目已有其他来源、不同类别或非等权成绩项，请先核对原台账；系统不会覆盖或重分配。",
+          409,
+          "ASSIGNMENT_COMPONENT_MIXED",
+        );
       if (assignment.totalPoints.lessThanOrEqualTo(0)) {
         throw new GradebookOperationError("作业满分必须大于 0。", 409);
       }
@@ -551,9 +583,14 @@ export async function syncTeacherPlatformAssignmentGrades(
         where: {
           assignmentId,
           studentId: { in: memberships.map((item) => item.studentId) },
-          status: SubmissionStatus.PUBLISHED,
-          score: { not: null },
-          maxScore: { not: null },
+          status: {
+            in: [
+              SubmissionStatus.SUBMITTED,
+              SubmissionStatus.PENDING_REVIEW,
+              SubmissionStatus.GRADED,
+              SubmissionStatus.PUBLISHED,
+            ],
+          },
         },
         orderBy: [{ studentId: "asc" }, { attemptNumber: "desc" }],
       });
@@ -566,6 +603,12 @@ export async function syncTeacherPlatformAssignmentGrades(
       let synced = 0;
       let reused = 0;
       for (const submission of latest.values()) {
+        if (
+          submission.status !== SubmissionStatus.PUBLISHED ||
+          submission.score === null ||
+          submission.maxScore === null
+        )
+          continue;
         const result = await appendGradeRevision(transaction, {
           gradebookId,
           gradeItemId: item.id,
@@ -601,7 +644,12 @@ export async function syncTeacherPlatformAssignmentGrades(
           assignmentId,
           componentId,
           gradeItemId: item.id,
-          publishedSubmissionCount: latest.size,
+          publishedSubmissionCount: [...latest.values()].filter(
+            (item) =>
+              item.status === SubmissionStatus.PUBLISHED &&
+              item.score !== null &&
+              item.maxScore !== null,
+          ).length,
           syncedCount: synced,
           reusedCount: reused,
         },
@@ -609,7 +657,12 @@ export async function syncTeacherPlatformAssignmentGrades(
       });
       return {
         gradeItemId: item.id,
-        publishedSubmissionCount: latest.size,
+        publishedSubmissionCount: [...latest.values()].filter(
+          (item) =>
+            item.status === SubmissionStatus.PUBLISHED &&
+            item.score !== null &&
+            item.maxScore !== null,
+        ).length,
         syncedCount: synced,
         reusedCount: reused,
       };
@@ -951,7 +1004,11 @@ export async function getTeacherGradebookWorkspace(
         orderBy: { versionNumber: "desc" },
       }),
       prisma.assignment.findMany({
-        where: { classroomId: gradebook.classroomId },
+        where: {
+          classroomId: gradebook.classroomId,
+          deletedAt: null,
+          status: { not: "REVOKED" },
+        },
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
@@ -959,6 +1016,8 @@ export async function getTeacherGradebookWorkspace(
           status: true,
           totalPoints: true,
           publishedAt: true,
+          category: true,
+          categoryNeedsReview: true,
         },
       }),
     ]);
@@ -976,7 +1035,24 @@ export async function getTeacherGradebookWorkspace(
       displayName: membership.student.profile?.displayName ?? "未命名学生",
       latestGrade: latestByStudent.get(membership.studentId) ?? null,
     })),
-    assignments,
+    assignments: assignments.map((assignment) => ({
+      ...assignment,
+      syncBlockedReasons: Object.fromEntries(
+        gradebook.scheme.components.map((component) => [
+          component.id,
+          assignmentSyncIssue(assignment.category, component),
+        ]),
+      ),
+      legacyBindingWarning: items.some(
+        (item) =>
+          item.assignmentId === assignment.id &&
+          gradebook.scheme.components.some(
+            (component) =>
+              component.id === item.componentId &&
+              assignmentSyncIssue(assignment.category, component),
+          ),
+      ),
+    })),
     currentPublication:
       publications.find((item) => item.id === gradebook.currentPublicationId) ??
       null,

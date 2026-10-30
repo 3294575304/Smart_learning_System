@@ -3,6 +3,11 @@ import { practiceSetEntry, practiceSetStatus, type PracticeSet } from "./types";
 export interface PracticeSetRecord {
   id: string;
   status: RecommendationStatus;
+  assignedPoints?: { toNumber(): number } | null;
+  score?: { toNumber(): number } | null;
+  maxScore?: { toNumber(): number } | null;
+  programmingAttempts?: Array<{ status: string }>;
+
   createdAt: Date;
   courseCycle: {
     course: { id: string; name: string };
@@ -10,6 +15,8 @@ export interface PracticeSetRecord {
   } | null;
   conceptSnapshots: Array<{ resolvedNode: { name: string } }>;
   question: {
+    status?: string;
+    deletedAt?: Date | null;
     title: string;
     type: QuestionType;
     knowledgePointLinks: Array<{ knowledgePoint: { name: string } }>;
@@ -23,6 +30,15 @@ export function buildPracticeSet(records: PracticeSetRecord[]): PracticeSet {
     title: record.question.title,
     type: record.question.type,
     status: record.status,
+    readOnly:
+      !["PENDING", "STARTED"].includes(record.status) ||
+      (record.question.status !== undefined &&
+        record.question.status !== "ACTIVE") ||
+      record.question.deletedAt != null,
+    assignedPoints: record.assignedPoints?.toNumber() ?? null,
+    score: record.score?.toNumber() ?? null,
+    maxScore: record.maxScore?.toNumber() ?? null,
+    judgingStatus: record.programmingAttempts?.[0]?.status ?? null,
   }));
   const snapshot = first.courseCycle?.requestSnapshot;
   const test =

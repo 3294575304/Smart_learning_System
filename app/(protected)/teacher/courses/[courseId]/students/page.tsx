@@ -46,7 +46,7 @@ export default async function CourseStudentsPage({
               返回课程
             </TeacherBackLink>
             <Link
-              className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white"
+              className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
               href={withClassroomQuery(
                 `/teacher/courses/${id.data}/students/import`,
                 classroom?.id,

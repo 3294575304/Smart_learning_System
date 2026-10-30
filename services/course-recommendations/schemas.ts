@@ -25,6 +25,7 @@ export const courseTeachingProgressSchema = z
 
 export const courseRecommendationGenerationSchema = z
   .object({
+    requestId: z.string().uuid().optional(),
     classroomId: idSchema,
     chapterIds: z.array(idSchema).max(50).optional(),
     mode: z.enum(["PRACTICE", "TEST"]).optional(),

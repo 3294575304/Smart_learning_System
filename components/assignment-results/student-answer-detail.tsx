@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { hundredPointScore } from "@/services/assignments/presentation";
 import { SubmissionStatus } from "@prisma/client";
 
@@ -13,6 +13,8 @@ interface StudentAnswerDetailProps {
   page: number;
   pageSize: number;
   detail: SelectedStudentDetail;
+  returnTo?: string;
+  attachmentsEnabled?: boolean;
 }
 
 function formatScore(score: number | null, maxScore: number | null): string {
@@ -43,6 +45,7 @@ function attemptHref(
   submissionId: string,
   page: number,
   pageSize: number,
+  returnTo?: string,
 ): string {
   const params = new URLSearchParams({
     page: String(page),
@@ -50,7 +53,8 @@ function attemptHref(
     studentId,
     submissionId,
   });
-  return `/teacher/assignments/${assignmentId}/results?${params.toString()}#student-detail`;
+  if (returnTo) params.set("returnTo", returnTo);
+  return `/teacher/assignments/${assignmentId}/results?${params.toString()}`;
 }
 
 export function StudentAnswerDetail({
@@ -58,6 +62,8 @@ export function StudentAnswerDetail({
   page,
   pageSize,
   detail,
+  returnTo,
+  attachmentsEnabled = false,
 }: StudentAnswerDetailProps) {
   return (
     <section
@@ -72,17 +78,11 @@ export function StudentAnswerDetail({
             {detail.student.studentNo ?? "无学号"} · {detail.student.email}
           </p>
         </div>
-        <Link
-          className="text-muted-foreground text-sm underline"
-          href={`/teacher/assignments/${assignmentId}/results?page=${page}&pageSize=${pageSize}`}
-        >
-          关闭详情
-        </Link>
       </div>
 
       {detail.attempts.length === 0 ? (
         <div className="text-muted-foreground mt-5 rounded-lg border border-dashed p-8 text-center text-sm">
-          该学生尚未提交作业。
+          该学生尚未提交作业，暂无个人作答。
         </div>
       ) : (
         <>
@@ -90,7 +90,7 @@ export function StudentAnswerDetail({
             {detail.attempts.map((attempt) => {
               const selected = detail.selectedSubmission?.id === attempt.id;
               return (
-                <Link
+                <a
                   className={
                     selected
                       ? "bg-primary text-primary-foreground rounded-md px-3 py-2 text-sm"
@@ -102,11 +102,12 @@ export function StudentAnswerDetail({
                     attempt.id,
                     page,
                     pageSize,
+                    returnTo,
                   )}
                   key={attempt.id}
                 >
                   第 {attempt.attemptNumber} 次 · {formatAttemptScore(attempt)}
-                </Link>
+                </a>
               );
             })}
           </div>
@@ -159,17 +160,24 @@ export function StudentAnswerDetail({
                   <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                     <div className="rounded-md bg-sky-50/70 p-3">
                       <dt className="text-muted-foreground">学生答案</dt>
-                      <dd className="mt-1 whitespace-pre-wrap">
+                      <dd className="mt-1 break-words whitespace-pre-wrap">
                         {answer.studentAnswer}
                       </dd>
                     </div>
                     <div className="rounded-md bg-sky-50/70 p-3">
                       <dt className="text-muted-foreground">正确/参考答案</dt>
-                      <dd className="mt-1 whitespace-pre-wrap">
+                      <dd className="mt-1 break-words whitespace-pre-wrap">
                         {answer.correctAnswer}
                       </dd>
                     </div>
                   </dl>
+                  {attachmentsEnabled && detail.selectedSubmission && (
+                    <SubmissionAttachments
+                      submissionId={detail.selectedSubmission.id}
+                      questionId={answer.assignmentQuestionId}
+                    />
+                  )}
+
                   <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
                     <span>
                       判定：

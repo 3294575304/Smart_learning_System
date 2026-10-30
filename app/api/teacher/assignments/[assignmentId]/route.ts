@@ -1,3 +1,19 @@
+import { revalidatePath } from "next/cache";
+import { auditRequestContext } from "@/services/audit/request-context";
+import {
+  assignmentDraftActionSchema,
+  manageAssignmentDraft,
+} from "@/services/assignments/draft-management";
+import { z } from "zod";
+import {
+  copyRevokedAssignmentSchema,
+  revokeAssignment,
+  revokeAssignmentSchema,
+} from "@/services/assignments/revocation";
+import {
+  copyHistoricalAssignment,
+  copyRevokedAssignment,
+} from "@/services/assignments/service";
 import { Role } from "@prisma/client";
 
 import { apiError, apiSuccess } from "@/lib/api-response";
@@ -11,6 +27,7 @@ import {
 import {
   getTeacherAssignment,
   updateDraftAssignment,
+  updateDraftAssignmentBatch,
 } from "@/services/assignments/service";
 
 interface Context {
@@ -46,9 +63,69 @@ export async function PATCH(request: Request, context: Context) {
   }
   try {
     const teacher = await requireAuthenticatedUser([Role.TEACHER]);
+    const applyToBatch = new URL(request.url).searchParams.get("batch") === "1";
+    if (applyToBatch) {
+      const result = await updateDraftAssignmentBatch(
+        teacher.id,
+        id.data,
+        input.data,
+      );
+      revalidatePath("/teacher/assignments");
+      return apiSuccess(result);
+    }
     return apiSuccess(
       await updateDraftAssignment(teacher.id, id.data, input.data),
     );
+  } catch (error: unknown) {
+    return assignmentApiError(error);
+  }
+}
+
+export async function POST(request: Request, context: Context) {
+  try {
+    const teacher = await requireAuthenticatedUser([Role.TEACHER]);
+    const id = await parseId(context);
+    const input = z
+      .union([
+        assignmentDraftActionSchema,
+        revokeAssignmentSchema,
+        copyRevokedAssignmentSchema,
+        z
+          .object({
+            action: z.literal("COPY_HISTORY"),
+            requestId: z.string().uuid(),
+            classroomId: z.string().cuid(),
+          })
+          .strict(),
+      ])
+      .safeParse(await request.json().catch(() => null));
+    if (!id.success || !input.success) return apiError("作业操作参数无效", 400);
+    const audit = auditRequestContext(request);
+    const result =
+      input.data.action === "REVOKE"
+        ? await revokeAssignment(teacher.id, id.data, input.data, audit)
+        : input.data.action === "COPY_REVOKED"
+          ? await copyRevokedAssignment(
+              teacher.id,
+              id.data,
+              input.data.requestId,
+            )
+          : input.data.action === "COPY_HISTORY"
+            ? await copyHistoricalAssignment(
+                teacher.id,
+                id.data,
+                input.data.requestId,
+                input.data.classroomId,
+              )
+            : await manageAssignmentDraft(
+                teacher.id,
+                id.data,
+                input.data,
+                audit,
+              );
+    revalidatePath("/teacher/assignments");
+    revalidatePath(`/teacher/assignments/${id.data}`);
+    return apiSuccess(result);
   } catch (error: unknown) {
     return assignmentApiError(error);
   }

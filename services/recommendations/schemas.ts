@@ -32,6 +32,7 @@ export const teacherPracticeScopeSchema = z
 
 export const recommendationRequestSchema = z
   .object({
+    requestId: z.string().uuid().optional(),
     studentId: recommendationResourceIdSchema,
     classroomId: recommendationResourceIdSchema,
     recommendedDifficulty: z.number().int().min(1).max(5),
@@ -46,6 +47,7 @@ export type RecommendationRequest = z.output<
 
 export const recommendationGenerationApiSchema = z
   .object({
+    requestId: z.string().uuid().optional(),
     studentId: recommendationResourceIdSchema,
     classroomId: recommendationResourceIdSchema.optional(),
     recommendedDifficulty: z.number().int().min(1).max(5).default(3),

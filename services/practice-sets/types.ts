@@ -1,7 +1,10 @@
+import type { PracticeManagementView } from "./management-schemas";
 import type { QuestionType, RecommendationStatus } from "@prisma/client";
 import { z } from "zod";
 export const practiceSetQuerySchema = z
   .object({
+    section: z.enum(["ACTIVE", "HISTORY", "TRASH"]).optional(),
+    keyword: z.string().trim().max(100).optional(),
     page: z.coerce.number().int().min(1).max(10000).default(1),
     courseId: z.string().trim().min(1).max(128).optional(),
     status: z.enum(["ACTIVE", "COMPLETED", "EXPIRED"]).optional(),
@@ -12,8 +15,14 @@ export interface PracticeSetQuestion {
   title: string;
   type: QuestionType;
   status: RecommendationStatus;
+  readOnly?: boolean;
+  assignedPoints?: number | null;
+  score?: number | null;
+  maxScore?: number | null;
+  judgingStatus?: string | null;
 }
 export interface PracticeSet {
+  management?: PracticeManagementView;
   id: string;
   courseId: string | null;
   courseName: string;
@@ -27,6 +36,9 @@ export interface PracticeSet {
   questions: PracticeSetQuestion[];
 }
 export interface PracticeSetList {
+  section?: "ACTIVE" | "HISTORY" | "TRASH";
+  counts?: { ACTIVE: number; HISTORY: number; TRASH: number };
+  page?: number;
   items: PracticeSet[];
   courses: Array<{ id: string; name: string }>;
   nextPage: number | null;
@@ -48,5 +60,14 @@ export function practiceSetEntry(questions: PracticeSetQuestion[]): string {
     questions.find((item) => item.status === "COMPLETED")?.id ??
     questions[0]?.id ??
     ""
+  );
+}
+
+export function canAnswerPractice(item: {
+  status: RecommendationStatus;
+  readOnly?: boolean;
+}) {
+  return (
+    !item.readOnly && (item.status === "PENDING" || item.status === "STARTED")
   );
 }

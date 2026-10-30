@@ -16,6 +16,8 @@ export interface AssignmentQuestionInputView {
 }
 
 export interface TeacherAssignmentView {
+  category?: import("./category").AssignmentCategoryValue;
+  categoryNeedsReview?: boolean;
   allowAttachments?: boolean;
   submissionTask?: {
     prompt: string;
@@ -28,6 +30,8 @@ export interface TeacherAssignmentView {
   title: string;
   description: string;
   status: AssignmentStatus;
+  /** 同一次多班级保存生成的作业共享该标识；单班作业为空。 */
+  batchId?: string | null;
   classroom: { id: string; name: string; status: ClassroomStatus };
   totalPoints: number;
   allowResubmission: boolean;
@@ -39,6 +43,9 @@ export interface TeacherAssignmentView {
 }
 
 export interface StudentAssignmentListItem {
+  originalDueAt?: Date;
+  makeupKind?: "MAKEUP" | "REDO" | null;
+  canWrite?: boolean;
   id: string;
   title: string;
   description: string;
@@ -71,6 +78,15 @@ export interface StudentQuestionView {
   }>;
 }
 
+export interface SubmittedAnswerView {
+  assignmentQuestionId: string;
+  title: string;
+  content: string;
+  type: QuestionType;
+  sortOrder: number;
+  studentAnswer: string;
+}
+
 export interface SubmissionResultView {
   id: string;
   assignmentId: string;
@@ -82,6 +98,13 @@ export interface SubmissionResultView {
   maxScore: number | null;
   percentage: number | null;
   isPublished: boolean;
+  submittedAnswers: SubmittedAnswerView[];
+  attachments: Array<{
+    id: string;
+    assignmentQuestionId: string;
+    originalName: string;
+    sizeBytes: number;
+  }>;
   programmingAttempts: Array<{
     id: string;
     assignmentQuestionId: string;
@@ -111,6 +134,7 @@ export interface SubmissionResultView {
 }
 
 export interface TeacherSubmissionListItem {
+  gradingBlockedReason: string | null;
   id: string;
   student: {
     id: string;
@@ -124,6 +148,12 @@ export interface TeacherSubmissionListItem {
   gradedAt: Date | null;
   publishedAt: Date | null;
   objectiveScore: number;
+  objectiveMaxScore: number;
+  objectiveCount: number;
+  objectiveJudgedCount: number;
+  objectiveCorrectCount: number;
+  objectivePercentage: number | null;
+  displayStatus: string;
   currentScore: number | null;
   maxScore: number;
   requiresManualReview: boolean;
@@ -132,6 +162,8 @@ export interface TeacherSubmissionListItem {
 export interface TeacherSubmissionListResult {
   totalSubmitted: number;
   assignment: {
+    allowAttachments?: boolean;
+    category?: import("./category").AssignmentCategoryValue;
     id: string;
     title: string;
     classroomName: string;
@@ -147,6 +179,8 @@ export interface TeacherSubmissionListResult {
 }
 
 export interface TeacherSubmissionAnswerView {
+  finalScore: number | null;
+  options: Array<{ id: string; label: string; content: string }>;
   id: string;
   assignmentQuestionId: string;
   title: string;
@@ -174,6 +208,29 @@ export interface TeacherSubmissionAnswerView {
 }
 
 export interface TeacherSubmissionDetail {
+  snapshotAt: number;
+  isLatestEffective: boolean;
+  attempts: Array<{
+    id: string;
+    attemptNumber: number;
+    submittedAt: Date | null;
+    status: SubmissionStatus;
+  }>;
+  questions: Array<{
+    id: string;
+    title: string;
+    content: string;
+    type: QuestionType;
+    sortOrder: number;
+    maxScore: number;
+    correctAnswer: string;
+    explanation: string;
+    options: Array<{ id: string; label: string; content: string }>;
+    answer: TeacherSubmissionAnswerView | null;
+  }>;
+
+  canManageGrading: boolean;
+  gradingBlockedReason: string | null;
   id: string;
   status: SubmissionStatus;
   attemptNumber: number;
@@ -184,6 +241,8 @@ export interface TeacherSubmissionDetail {
   maxScore: number;
   percentage: number | null;
   assignment: {
+    allowAttachments?: boolean;
+    category?: import("./category").AssignmentCategoryValue;
     id: string;
     title: string;
     classroomId: string;

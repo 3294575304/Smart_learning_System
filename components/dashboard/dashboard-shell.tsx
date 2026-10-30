@@ -1,4 +1,5 @@
 "use client";
+import { safeStudentReturn } from "@/services/assignments/student-query";
 
 import { Role } from "@prisma/client";
 import {
@@ -22,6 +23,7 @@ import {
 import { LogoutButton } from "@/components/auth/logout-button";
 import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
 import { buildBreadcrumbs } from "@/components/dashboard/breadcrumbs";
+import { FeedbackLink } from "@/components/dashboard/feedback-link";
 import {
   getDashboardPageTitle,
   isNavigationItemActive,
@@ -55,42 +57,100 @@ function displayUserName(user: AuthenticatedUser): string {
 function Breadcrumbs({ pathname }: { pathname: string }) {
   const searchParams = useSearchParams();
   const classroomId = searchParams.get("classroomId");
-  const crumbs = buildBreadcrumbs(pathname).map((crumb) =>
+  const returnTo = searchParams.get("returnTo");
+  const studentQueryHref = safeStudentReturn(returnTo ?? undefined);
+  const crumbs = buildBreadcrumbs(pathname, undefined, {
+    studentId: searchParams.get("studentId"),
+    view: searchParams.get("view"),
+    studentQueryHref,
+  }).map((crumb) =>
     classroomId &&
     crumb.href.startsWith("/student/courses/") &&
     crumb.href.endsWith("/learning-center")
       ? {
           ...crumb,
-          href: `${crumb.href}?classroomId=${encodeURIComponent(classroomId)}`,
+          href: `${crumb.href}?${new URLSearchParams({
+            classroomId,
+            ...(pathname.endsWith("/knowledge-graph")
+              ? { tab: "growth", section: "knowledge" }
+              : pathname.endsWith("/profile")
+                ? {
+                    tab: "growth",
+                    section: searchParams.has("conceptId")
+                      ? "knowledge"
+                      : "profile",
+                  }
+                : {}),
+          })}`,
         }
       : crumb,
   );
 
+  const nativeBreadcrumbs = pathname.startsWith("/student");
+  const breadcrumbClassName =
+    "inline-flex min-w-0 items-center gap-1 truncate rounded px-1 py-0.5 font-medium text-sky-700 underline-offset-4 transition hover:bg-sky-100 hover:underline focus-visible:outline-2 focus-visible:outline-sky-600";
+  if (!crumbs.length) return null;
   return (
     <nav aria-label="面包屑" className="min-w-0 overflow-hidden">
       <ol className="text-muted-foreground flex items-center gap-1 overflow-hidden text-xs">
-        {crumbs.map((crumb, index) => (
-          <li className="flex min-w-0 items-center gap-1" key={crumb.href}>
-            {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0" /> : null}
-            {crumb.linkable ? (
-              <Link
-                className="truncate rounded px-1 py-0.5 font-medium text-sky-700 underline-offset-4 transition hover:bg-sky-100 hover:underline focus-visible:outline-2 focus-visible:outline-sky-600"
-                href={crumb.href}
-              >
-                {crumb.label}
-              </Link>
-            ) : (
-              <span
-                aria-current={index === crumbs.length - 1 ? "page" : undefined}
-                className="truncate"
-              >
-                {crumb.label}
-              </span>
-            )}
-          </li>
-        ))}
+        {crumbs.map((crumb, index) => {
+          const isCurrent = index === crumbs.length - 1;
+          return (
+            <li
+              key={crumb.href}
+              // 当前页在桌面由面包屑末项承担，移动端交给顶栏标题，避免同一名称出现两次。
+              className={`min-w-0 items-center gap-1 ${isCurrent ? "hidden lg:flex" : "flex"}`}
+            >
+              {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0" /> : null}
+              {crumb.linkable && !isCurrent ? (
+                nativeBreadcrumbs ? (
+                  <a className={breadcrumbClassName} href={crumb.href}>
+                    {crumb.label}
+                  </a>
+                ) : (
+                  <FeedbackLink
+                    className={breadcrumbClassName}
+                    href={crumb.href}
+                    label={crumb.label}
+                    arrow={false}
+                    preserveLabel
+                  />
+                )
+              ) : (
+                <span
+                  aria-current={isCurrent ? "page" : undefined}
+                  className={
+                    isCurrent
+                      ? "truncate text-sm font-semibold text-slate-900"
+                      : "truncate"
+                  }
+                >
+                  {crumb.label}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ol>
     </nav>
+  );
+}
+
+function ContextPageTitle({
+  pathname,
+  groups,
+}: {
+  pathname: string;
+  groups: NavigationGroup[];
+}) {
+  const query = useSearchParams();
+  return (
+    <p className="truncate text-sm font-semibold">
+      {buildBreadcrumbs(pathname, undefined, {
+        studentId: query.get("studentId"),
+        view: query.get("view"),
+      }).at(-1)?.label ?? getDashboardPageTitle(pathname, groups)}
+    </p>
   );
 }
 
@@ -105,6 +165,7 @@ function SidebarNavigation({
   student?: boolean;
   onNavigate?: () => void;
 }) {
+  const NavigationLink = student ? "a" : Link;
   return (
     <nav aria-label="主导航" className="space-y-5 px-3 py-4">
       {groups.map((group) => (
@@ -123,7 +184,7 @@ function SidebarNavigation({
               const Icon = item.icon;
               const active = isNavigationItemActive(pathname, item);
               return (
-                <Link
+                <NavigationLink
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:outline-none",
@@ -145,7 +206,7 @@ function SidebarNavigation({
                   ) : null}
                   <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
                   <span>{item.label}</span>
-                </Link>
+                </NavigationLink>
               );
             })}
           </div>
@@ -167,6 +228,8 @@ export function DashboardShell({
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [joinClassroomDialogOpen, setJoinClassroomDialogOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const menuDialogRef = useRef<HTMLDivElement>(null);
+  const menuOpenButtonRef = useRef<HTMLButtonElement>(null);
   const navigationGroups = NAVIGATION[user.role];
   const userName = displayUserName(user);
   const currentPageTitle = useMemo(
@@ -187,6 +250,52 @@ export function DashboardShell({
       document.body.style.overflow = "";
     };
   }, [joinClassroomDialogOpen, mobileMenuOpen]);
+
+  // 移动端导航抽屉：Esc 关闭、焦点移入并在抽屉内循环，关闭后归还给触发按钮。
+  // 没有这一段时，Tab 会跑到遮罩之后的正文，Esc 也关不掉。
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const dialog = menuDialogRef.current;
+    if (!dialog) return;
+    // 遮罩上的「关闭菜单」全屏按钮位于容器内、视觉之外，焦点与 Tab 循环只限定在面板内部。
+    const panel =
+      dialog.querySelector<HTMLElement>("#mobile-navigation-dialog") ?? dialog;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const opener = menuOpenButtonRef.current;
+    const focusables = () =>
+      Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.offsetParent !== null);
+    (focusables()[0] ?? panel).focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileMenuOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusables();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      (opener ?? previousFocus)?.focus?.();
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -226,6 +335,13 @@ export function DashboardShell({
 
   return (
     <div className="via-background min-h-screen bg-gradient-to-br from-sky-50/80 to-emerald-50/60">
+      {/* 键盘用户可直接跳过整组侧栏导航，不必每页 Tab 穿过全部入口。 */}
+      <a
+        href="#dashboard-main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:border focus:border-sky-200 focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-sky-800 focus:shadow-lg focus:outline-2 focus:outline-offset-2 focus:outline-sky-700"
+      >
+        跳到正文
+      </a>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-sky-100 bg-white/95 lg:flex lg:flex-col">
         <div className="flex h-16 items-center border-b px-6">
           <Link
@@ -253,14 +369,21 @@ export function DashboardShell({
       </aside>
 
       {mobileMenuOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div ref={menuDialogRef} className="fixed inset-0 z-40 lg:hidden">
           <button
             aria-label="关闭菜单"
             className="absolute inset-0 bg-sky-950/20"
             onClick={() => setMobileMenuOpen(false)}
             type="button"
           />
-          <aside className="bg-background relative flex h-full w-[min(20rem,86vw)] flex-col shadow-xl">
+          <aside
+            id="mobile-navigation-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="导航菜单"
+            tabIndex={-1}
+            className="bg-background relative flex h-full w-[min(20rem,86vw)] flex-col shadow-xl"
+          >
             <div className="flex h-16 items-center justify-between border-b px-5">
               <Link
                 className="flex items-center gap-2 font-semibold"
@@ -322,7 +445,10 @@ export function DashboardShell({
         <header className="bg-background/95 sticky top-0 z-20 border-b backdrop-blur">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
             <button
+              ref={menuOpenButtonRef}
               aria-expanded={mobileMenuOpen}
+              aria-haspopup="dialog"
+              aria-controls="mobile-navigation-dialog"
               aria-label="打开菜单"
               className="rounded-md border p-2 lg:hidden"
               onClick={() => setMobileMenuOpen(true)}
@@ -330,10 +456,22 @@ export function DashboardShell({
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">
-                {currentPageTitle}
-              </p>
+            <div className="flex min-w-0 flex-1 flex-col justify-center">
+              {/* 桌面端侧栏已高亮当前模块、面包屑末项也给出当前位置，标题只服务于移动端。 */}
+              <div className="lg:hidden">
+                <Suspense
+                  fallback={
+                    <p className="truncate text-sm font-semibold">
+                      {currentPageTitle}
+                    </p>
+                  }
+                >
+                  <ContextPageTitle
+                    pathname={pathname}
+                    groups={navigationGroups}
+                  />
+                </Suspense>
+              </div>
               <Suspense fallback={null}>
                 <Breadcrumbs pathname={pathname} />
               </Suspense>
@@ -410,11 +548,12 @@ export function DashboardShell({
         </header>
         <main
           id="dashboard-main"
+          tabIndex={-1}
           data-workspace-role={user.role}
           className={cn(
             "mx-auto w-full min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8",
             user.role === Role.STUDENT
-              ? "max-w-[1440px]"
+              ? "max-w-7xl"
               : user.role === Role.TEACHER && pathname === "/teacher"
                 ? "max-w-none lg:py-5"
                 : "max-w-7xl",

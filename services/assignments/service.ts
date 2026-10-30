@@ -1,8 +1,22 @@
+import { lockAssignmentLifecycle } from "./lifecycle-lock";
+import { groupKnowledgeChapters } from "@/services/knowledge-graph/chapter-groups";
+import {
+  assignmentEditorClassroomWhere,
+  canCopyHistoricalAssignment,
+} from "./creation-context";
+import { canRevokeAssignment } from "./draft-action";
+import { EFFECTIVE_SUBMISSION_STATUSES } from "./reporting";
+import { publishedResultsWhere } from "./work-access";
+import {
+  assertStudentWorkAccess,
+  readStudentWorkAccess,
+  bindMakeupDraft,
+} from "./work-access";
 import { assertClassroomWorkAllowed } from "./classroom-work";
 import { assignmentSectionWhere } from "@/services/assignments/presentation";
 import "server-only";
 import { assignmentStatusWhere } from "./presentation";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   validateAssignmentResourceFiles,
   listAssignmentResourceFiles,
@@ -33,12 +47,14 @@ import {
   formatStudentAnswer,
 } from "@/services/assignments/answer-presentation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { AssignmentOperationError } from "@/services/assignments/errors";
+import {
+  AssignmentOperationError,
+  AssignmentRevokedError,
+} from "@/services/assignments/errors";
 import { gradeAnswer, savedAnswerInput } from "@/services/assignments/grading";
 import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import {
   assertActiveMembership,
-  assertAssignmentAcceptsWork,
   assertAssignmentIsVisible,
   assertCanStartAttempt,
   assertDraftAssignment,
@@ -52,7 +68,6 @@ import type {
   SavedAnswerInput,
 } from "@/services/assignments/schemas";
 import type {
-  StudentAssignmentListItem,
   SubmissionResultView,
   TeacherAssignmentView,
 } from "@/services/assignments/types";
@@ -61,9 +76,15 @@ import { freezeAssignmentProgrammingConfigs } from "@/services/programming-quest
 import { createFormalProgrammingAttempt } from "@/services/programming-attempts/service";
 import { appendAssessmentLearningEventsAndProjectEvidence } from "@/services/learning-events/assessment";
 import { notifyAssignmentPublished } from "@/services/notifications/events/assignment";
-import { getStudentCourseContext } from "@/services/courses/student-access";
 
 const teacherAssignmentInclude = {
+  _count: {
+    select: {
+      gradeItems: true,
+      sourceGradeRevisions: true,
+      submissions: { where: publishedResultsWhere },
+    },
+  },
   classroom: { select: { id: true, name: true, status: true } },
   questions: {
     orderBy: { sortOrder: "asc" as const },
@@ -107,9 +128,12 @@ function teacherView(
 ): TeacherAssignmentView {
   return {
     id: assignment.id,
+    category: assignment.category,
+    categoryNeedsReview: assignment.categoryNeedsReview,
     title: assignment.title,
     description: assignment.description ?? "",
     status: assignment.status,
+    batchId: assignment.batchId ?? null,
     classroom: assignment.classroom,
     totalPoints: assignment.totalPoints.toNumber(),
     allowResubmission: assignment.allowResubmission,
@@ -131,11 +155,12 @@ function teacherView(
   };
 }
 
-async function assertAssignmentResources(
+export async function assertAssignmentResources(
   transaction: Prisma.TransactionClient,
   teacherId: string,
   input: AssignmentUpsertData,
   assignmentId?: string,
+  verifyStorage = false,
 ) {
   const classroom = await transaction.classroom.findUnique({
     where: { id: input.classroomId },
@@ -155,6 +180,7 @@ async function assertAssignmentResources(
     teacherId,
     classroom.courseId,
     input.submissionTask?.resourceFileIds ?? [],
+    verifyStorage,
   );
 
   const questionIds = input.questions.map((item) => item.questionId);
@@ -186,6 +212,8 @@ async function assertAssignmentResources(
       (question) =>
         !canTeacherUseQuestion(question) ||
         (classroom.course &&
+          // Private task sources are scoped to this owned assignment by the query above.
+          !(question.isAssignmentOnly && question.creatorId === teacherId) &&
           question.questionCategoryId !== classroom.course.questionCategoryId),
     )
   ) {
@@ -312,7 +340,7 @@ async function replaceQuestionSnapshots(
 export async function getTeacherAssignmentEditorOptions(teacherId: string) {
   const [classrooms, questions, courses] = await Promise.all([
     prisma.classroom.findMany({
-      where: { teacherId, status: "ACTIVE" },
+      where: assignmentEditorClassroomWhere(teacherId),
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -379,6 +407,24 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
       ...classroom,
       questionCategoryId: course?.questionCategoryId ?? null,
     })),
+    assemblyChapters: Object.fromEntries(
+      courses.flatMap((course) => {
+        const graph = course.currentPublishedKnowledgeGraphVersion;
+        return graph
+          ? [
+              [
+                course.id,
+                groupKnowledgeChapters(graph.nodes, graph.edges),
+              ] as const,
+            ]
+          : [];
+      }),
+    ),
+    publicationCourses: courses.map(({ id, name, term }) => ({
+      id,
+      name,
+      term,
+    })),
     courses: buildEditorCourseOptions(
       courses,
       new Set(
@@ -413,6 +459,8 @@ export async function listTeacherAssignments(
   }
   const where: Prisma.AssignmentWhereInput = {
     teacherId,
+    deletedAt: null,
+    ...(query.category ? { category: query.category } : {}),
     ...(query.courseId
       ? { classroom: { courseId: query.courseId, teacherId } }
       : {}),
@@ -448,8 +496,9 @@ export async function listTeacherAssignments(
         orderBy: { status: "asc" },
         where: {
           teacherId,
+          deletedAt: null,
           AND: [assignmentSectionWhere(query.section)],
-          status: { in: ["CLOSED", "ARCHIVED"] },
+          status: { in: ["CLOSED", "ARCHIVED", "REVOKED"] },
           ...(query.courseId
             ? { classroom: { courseId: query.courseId, teacherId } }
             : {}),
@@ -461,6 +510,7 @@ export async function listTeacherAssignments(
         orderBy: { classroomId: "asc" },
         where: {
           teacherId,
+          deletedAt: null,
           AND: [assignmentSectionWhere(query.section)],
           ...(query.courseId
             ? { classroom: { courseId: query.courseId, teacherId } }
@@ -468,8 +518,33 @@ export async function listTeacherAssignments(
         },
       }),
     ]);
+  const eligible = assignments.filter(
+    (assignment) =>
+      canRevokeAssignment(assignment) &&
+      Object.values(assignment._count).every((count) => count === 0),
+  );
+  const submissionCounts = new Map(
+    eligible.map((assignment) => [assignment.id, 0]),
+  );
+  if (eligible.length) {
+    const groups = await prisma.submission.groupBy({
+      by: ["assignmentId", "studentId"],
+      where: {
+        assignmentId: { in: eligible.map((assignment) => assignment.id) },
+        status: { in: EFFECTIVE_SUBMISSION_STATUSES },
+      },
+    });
+    for (const group of groups)
+      submissionCounts.set(
+        group.assignmentId,
+        (submissionCounts.get(group.assignmentId) ?? 0) + 1,
+      );
+  }
   return {
-    items: assignments.map(teacherView),
+    items: assignments.map((assignment) => ({
+      ...teacherView(assignment),
+      revocableSubmissionCount: submissionCounts.get(assignment.id),
+    })),
     availableClassroomIds: classroomGroups.map((item) => item.classroomId),
     availableHistoryStatuses: historyStatuses.map((item) => item.status),
     pagination: {
@@ -486,7 +561,7 @@ export async function getTeacherAssignment(
   assignmentId: string,
 ): Promise<TeacherAssignmentView> {
   const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, teacherId },
+    where: { id: assignmentId, teacherId, deletedAt: null },
     include: teacherAssignmentInclude,
   });
   if (!assignment) throw new ResourceNotFoundError("作业不存在");
@@ -499,11 +574,59 @@ export async function getTeacherAssignment(
   };
 }
 
+export interface AssignmentBatchMember {
+  id: string;
+  classroomId: string;
+  classroomName: string;
+  classroomStatus: string;
+  status: AssignmentStatus;
+}
+
+/**
+ * 读取与指定作业同批的成员（含自身）。历史单班作业没有 batchId，返回空 members，
+ * 编辑页据此决定是否提示「本次修改会同时保存到多个班级」。
+ */
+export async function getAssignmentBatchDrafts(
+  teacherId: string,
+  assignmentId: string,
+): Promise<{
+  batchId: string | null;
+  members: AssignmentBatchMember[];
+}> {
+  const current = await prisma.assignment.findFirst({
+    where: { id: assignmentId, teacherId, deletedAt: null },
+    select: { batchId: true },
+  });
+  if (!current) throw new ResourceNotFoundError("作业不存在");
+  if (!current.batchId) return { batchId: null, members: [] };
+  const rows = await prisma.assignment.findMany({
+    where: { teacherId, batchId: current.batchId, deletedAt: null },
+    select: {
+      id: true,
+      classroomId: true,
+      status: true,
+      classroom: { select: { name: true, status: true } },
+    },
+    orderBy: [{ classroomId: "asc" }, { id: "asc" }],
+  });
+  return {
+    batchId: current.batchId,
+    members: rows.map((row) => ({
+      id: row.id,
+      classroomId: row.classroomId,
+      classroomName: row.classroom.name,
+      classroomStatus: row.classroom.status,
+      status: row.status,
+    })),
+  };
+}
+
 async function createDraftInTransaction(
   transaction: Prisma.TransactionClient,
   teacherId: string,
   input: AssignmentUpsertData,
   fixedId?: string,
+  batchId?: string | null,
 ): Promise<string> {
   await assertAssignmentResources(transaction, teacherId, input);
   const assignment = await transaction.assignment.create({
@@ -511,6 +634,8 @@ async function createDraftInTransaction(
       ...(fixedId ? { id: fixedId } : {}),
       classroomId: input.classroomId,
       teacherId,
+      ...(batchId ? { batchId } : {}),
+      category: input.category ?? "PRACTICE",
       title: input.title,
       description: input.description || null,
       allowResubmission: input.allowResubmission,
@@ -534,6 +659,91 @@ async function createDraftInTransaction(
   return assignment.id;
 }
 
+export async function copyHistoricalAssignment(
+  teacherId: string,
+  assignmentId: string,
+  requestId: string,
+  classroomId?: string,
+) {
+  const id =
+    "c" +
+    createHash("sha256")
+      .update(`revoked-copy:${teacherId}:${assignmentId}:${requestId}`)
+      .digest("hex")
+      .slice(0, 24);
+  await runAssignmentSerializable(async (tx) => {
+    await lockAssignmentLifecycle(tx, assignmentId, teacherId);
+    const source = await tx.assignment.findUniqueOrThrow({
+      where: { id: assignmentId },
+      include: teacherAssignmentInclude,
+    });
+    if (
+      classroomId
+        ? !canCopyHistoricalAssignment(source)
+        : source.status !== "REVOKED" || source.classroom.status !== "ACTIVE"
+    )
+      throw new AssignmentOperationError(
+        "仅可复制已开放且已截止或转入历史的作业",
+      );
+    const targetId = classroomId ?? source.classroomId;
+    await tx.$queryRaw`SELECT id FROM "Classroom" WHERE id = ${targetId} AND "teacherId" = ${teacherId} FOR SHARE`;
+    const target = await tx.classroom.findFirst({
+      where: { ...assignmentEditorClassroomWhere(teacherId), id: targetId },
+      select: { id: true },
+    });
+    if (!target) throw new ResourceNotFoundError("班级不存在");
+    const existing = await tx.assignment.findUnique({
+      where: { id },
+      select: { status: true, deletedAt: true, classroomId: true },
+    });
+    if (existing) {
+      if (
+        existing.deletedAt ||
+        existing.status !== "DRAFT" ||
+        existing.classroomId !== targetId
+      )
+        throw new AssignmentOperationError("此复制请求已处理，请重新发起");
+      return;
+    }
+    const task = source.submissionTask
+      ? assignmentTaskSchema.parse(source.submissionTask)
+      : undefined;
+    await createDraftInTransaction(
+      tx,
+      teacherId,
+      {
+        category: source.category,
+        classroomId: targetId,
+        title: `${source.title.slice(0, 116)}（副本）`,
+        description: source.description ?? "",
+        allowResubmission: source.allowResubmission,
+        allowAttachments: source.allowAttachments,
+        submissionTask: task,
+        questions: task
+          ? []
+          : source.questions.map((question) => ({
+              questionId: question.questionId,
+              sortOrder: question.sortOrder,
+              points: question.points.toNumber(),
+            })),
+      },
+      id,
+    );
+  }, "复制请求发生冲突，请重试");
+  return { assignmentId: id };
+}
+
+export async function copyRevokedAssignment(
+  teacherId: string,
+  assignmentId: string,
+  requestId: string,
+) {
+  return {
+    action: "COPY_REVOKED" as const,
+    ...(await copyHistoricalAssignment(teacherId, assignmentId, requestId)),
+  };
+}
+
 export async function createDraftAssignment(
   teacherId: string,
   input: AssignmentUpsertData,
@@ -549,7 +759,8 @@ export async function updateDraftAssignment(
   assignmentId: string,
   input: AssignmentUpsertData,
 ): Promise<TeacherAssignmentView> {
-  await prisma.$transaction(async (transaction) => {
+  await runAssignmentSerializable(async (transaction) => {
+    await lockAssignmentLifecycle(transaction, assignmentId, teacherId);
     const assignment = await transaction.assignment.findUnique({
       where: { id: assignmentId },
       select: { teacherId: true, status: true },
@@ -565,6 +776,7 @@ export async function updateDraftAssignment(
       where: { id: assignmentId },
       data: {
         classroomId: input.classroomId,
+        ...(input.category ? { category: input.category } : {}),
         title: input.title,
         description: input.description || null,
         allowResubmission: input.allowResubmission,
@@ -575,8 +787,73 @@ export async function updateDraftAssignment(
         totalPoints,
       },
     });
-  });
+  }, "作业已被其他操作更新，请刷新后重试");
   return getTeacherAssignment(teacherId, assignmentId);
+}
+
+/**
+ * 一次编辑、一次提交，把同一份内容写入同批的全部草稿。
+ * 单班作业（无 batchId）直接回退到原有单条更新，行为保持不变。
+ */
+export async function updateDraftAssignmentBatch(
+  teacherId: string,
+  assignmentId: string,
+  input: AssignmentUpsertData,
+  options: { applyToBatch?: boolean } = {},
+): Promise<{ primary: TeacherAssignmentView; updatedIds: string[] }> {
+  const applyToBatch = options.applyToBatch ?? true;
+  const current = await prisma.assignment.findFirst({
+    where: { id: assignmentId, teacherId, deletedAt: null },
+    select: { batchId: true },
+  });
+  if (!applyToBatch || !current?.batchId) {
+    const primary = await updateDraftAssignment(teacherId, assignmentId, input);
+    return { primary, updatedIds: [assignmentId] };
+  }
+  const batchId = current.batchId;
+  const updatedIds = await runAssignmentSerializable(async (transaction) => {
+    await lockAssignmentLifecycle(transaction, assignmentId, teacherId);
+    const targets = await transaction.assignment.findMany({
+      where: {
+        teacherId,
+        batchId,
+        status: AssignmentStatus.DRAFT,
+        deletedAt: null,
+      },
+      select: { id: true, classroomId: true },
+      orderBy: [{ id: "asc" }],
+    });
+    if (!targets.length)
+      throw new AssignmentOperationError("同批作业都已发布，无法继续编辑", 409);
+    for (const target of targets) {
+      await lockAssignmentLifecycle(transaction, target.id, teacherId);
+      const totalPoints = await replaceQuestionSnapshots(
+        transaction,
+        target.id,
+        teacherId,
+        { ...input, classroomId: target.classroomId },
+      );
+      await transaction.assignment.update({
+        where: { id: target.id },
+        data: {
+          ...(input.category ? { category: input.category } : {}),
+          title: input.title,
+          description: input.description || null,
+          allowResubmission: input.allowResubmission,
+          allowAttachments: input.allowAttachments ?? false,
+          submissionTask: input.submissionTask ?? Prisma.DbNull,
+          publishedAt: input.publishedAt,
+          dueAt: input.dueAt,
+          totalPoints,
+        },
+      });
+    }
+    return targets.map((target) => target.id);
+  }, "同批作业正在保存，请使用原请求重试");
+  return {
+    primary: await getTeacherAssignment(teacherId, assignmentId),
+    updatedIds,
+  };
 }
 
 async function publishInTransaction(
@@ -617,7 +894,11 @@ async function publishInTransaction(
       },
     },
   });
-  if (!assignment || assignment.teacherId !== teacherId) {
+  if (
+    !assignment ||
+    assignment.teacherId !== teacherId ||
+    assignment.deletedAt
+  ) {
     throw new ResourceNotFoundError("作业不存在");
   }
   if (assignment.status === AssignmentStatus.PUBLISHED) return;
@@ -644,6 +925,7 @@ async function publishInTransaction(
     task?.resourceFileIds ?? [],
   );
   const snapshotInput: AssignmentUpsertData = {
+    category: assignment.category,
     title: assignment.title,
     description: assignment.description ?? "",
     classroomId: assignment.classroomId,
@@ -676,6 +958,7 @@ async function publishInTransaction(
     {
       assignmentId: assignment.id,
       assignmentTitle: assignment.title,
+      publicationKey: randomUUID(),
       teacherName:
         assignment.teacher.profile?.displayName ??
         assignment.teacher.email ??
@@ -693,110 +976,59 @@ export async function publishAssignment(
   teacherId: string,
   assignmentId: string,
 ): Promise<TeacherAssignmentView> {
-  await runAssignmentSerializable(
-    (transaction) => publishInTransaction(transaction, teacherId, assignmentId),
-    "作业发布状态已发生变化，请刷新后重试",
-  );
+  await runAssignmentSerializable(async (transaction) => {
+    await lockAssignmentLifecycle(transaction, assignmentId, teacherId);
+    await publishInTransaction(transaction, teacherId, assignmentId);
+  }, "作业发布状态已发生变化，请刷新后重试");
   return getTeacherAssignment(teacherId, assignmentId);
 }
 
-export async function listStudentAssignments(
-  studentId: string,
-  courseId?: string,
-  classroomId?: string,
-): Promise<StudentAssignmentListItem[]> {
-  if (courseId) await getStudentCourseContext(studentId, courseId);
-  const now = new Date();
-  const assignments = await prisma.assignment.findMany({
-    where: {
-      status: { in: [AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED] },
-      publishedAt: { lte: now },
-      ...(courseId ? { classroom: { courseId } } : {}),
-      ...(classroomId ? { classroomId } : {}),
-      OR: [
-        {
-          status: AssignmentStatus.PUBLISHED,
-          classroom: {
-            status: "ACTIVE",
-            memberships: {
-              some: { studentId, status: MembershipStatus.ACTIVE },
-            },
-          },
-        },
-        {
-          submissions: {
-            some: {
-              studentId,
-              status: {
-                in: [
-                  SubmissionStatus.SUBMITTED,
-                  SubmissionStatus.PENDING_REVIEW,
-                  SubmissionStatus.GRADED,
-                  SubmissionStatus.PUBLISHED,
-                ],
-              },
-            },
-          },
-        },
-      ],
-    },
-    include: {
-      classroom: {
-        select: {
-          status: true,
-          name: true,
-          memberships: { where: { studentId }, select: { status: true } },
-        },
-      },
-      _count: { select: { questions: true } },
-      submissions: {
-        where: { studentId, status: { not: SubmissionStatus.WITHDRAWN } },
-        orderBy: { attemptNumber: "desc" },
-        select: { id: true, status: true, attemptNumber: true, score: true },
-      },
-    },
-    orderBy: [{ dueAt: "asc" }, { publishedAt: "desc" }],
+/**
+ * 一次发布同批全部草稿。单班作业回退到原有发布流程。
+ */
+export async function publishAssignmentBatch(
+  teacherId: string,
+  assignmentId: string,
+): Promise<{ primary: TeacherAssignmentView; publishedIds: string[] }> {
+  const current = await prisma.assignment.findFirst({
+    where: { id: assignmentId, teacherId, deletedAt: null },
+    select: { batchId: true },
   });
-  return assignments.flatMap((assignment) => {
-    if (!assignment.publishedAt || !assignment.dueAt) return [];
-    const historyOnly =
-      assignment.status === AssignmentStatus.CLOSED ||
-      assignment.classroom.status !== "ACTIVE" ||
-      assignment.classroom.memberships[0]?.status !== MembershipStatus.ACTIVE;
-    const inProgress = historyOnly
-      ? undefined
-      : assignment.submissions.find(
-          (submission) => submission.status === SubmissionStatus.IN_PROGRESS,
-        );
-    const latest = assignment.submissions.find(
-      (submission) => submission.status !== SubmissionStatus.IN_PROGRESS,
-    );
-    return [
-      {
-        id: assignment.id,
-        title: assignment.title,
-        description: assignment.description ?? "",
-        classroomName: assignment.classroom.name,
-        totalPoints: assignment.totalPoints.toNumber(),
-        questionCount: assignment._count.questions,
-        publishedAt: assignment.publishedAt,
-        dueAt: assignment.dueAt,
-        allowResubmission: assignment.allowResubmission,
-        attemptCount: assignment.submissions.filter(
-          (submission) => submission.status !== SubmissionStatus.IN_PROGRESS,
-        ).length,
-        inProgressSubmissionId: inProgress?.id ?? null,
-        latestSubmissionId: latest?.id ?? null,
-        historyOnly,
-        latestSubmissionStatus: latest?.status ?? null,
-        latestPublishedScore:
-          latest?.status === SubmissionStatus.PUBLISHED
-            ? decimalNumber(latest.score)
-            : null,
+  if (!current?.batchId) {
+    const primary = await publishAssignment(teacherId, assignmentId);
+    return { primary, publishedIds: [assignmentId] };
+  }
+  const batchId = current.batchId;
+  const publishedIds = await runAssignmentSerializable(async (transaction) => {
+    await lockAssignmentLifecycle(transaction, assignmentId, teacherId);
+    const drafts = await transaction.assignment.findMany({
+      where: {
+        teacherId,
+        batchId,
+        status: AssignmentStatus.DRAFT,
+        deletedAt: null,
       },
-    ];
-  });
+      select: { id: true },
+      orderBy: [{ id: "asc" }],
+    });
+    if (!drafts.length)
+      throw new AssignmentOperationError("同批作业已发布，请刷新后查看", 409);
+    for (const draft of drafts)
+      await publishInTransaction(transaction, teacherId, draft.id);
+    return drafts.map((draft) => draft.id);
+  }, "同批作业正在发布，请使用原请求重试");
+  return {
+    primary: await getTeacherAssignment(teacherId, assignmentId),
+    publishedIds,
+  };
 }
+
+export {
+  listStudentAssignments,
+  listStudentAssignmentPage,
+  listStudentPendingAssignments,
+  studentAssignmentActionContexts,
+} from "./student-list";
 
 async function requireStudentAssignment(
   studentId: string,
@@ -837,6 +1069,7 @@ export async function getStudentAssignment(
   assignmentId: string,
 ) {
   const assignment = await requireStudentAssignment(studentId, assignmentId);
+  const work = await readStudentWorkAccess(assignmentId, studentId);
   return {
     id: assignment.id,
     title: assignment.title,
@@ -846,7 +1079,17 @@ export async function getStudentAssignment(
     publishedAt: assignment.publishedAt,
     dueAt: assignment.dueAt,
     allowResubmission: assignment.allowResubmission,
-    isExpired: !assignment.dueAt || assignment.dueAt <= new Date(),
+    isExpired: !work.canWrite,
+    canWrite:
+      work.canWrite &&
+      (Boolean(work.grant) ||
+        assignment.allowResubmission ||
+        assignment.submissions.every(
+          (item) => item.status === SubmissionStatus.IN_PROGRESS,
+        )),
+    writeBlockedReason: work.reason,
+    effectiveDueAt: work.dueAt,
+    makeupKind: work.grant?.kind ?? null,
     questions: assignment.questions.map((question) => ({
       id: question.id,
       title: question.titleSnapshot,
@@ -870,69 +1113,79 @@ async function createAttempt(
   assignmentId: string,
   idempotencyKey: string,
 ) {
-  return prisma.$transaction(
-    async (transaction) => {
-      const keyed = await transaction.submission.findUnique({
-        where: { idempotencyKey },
-        select: { id: true, studentId: true, assignmentId: true },
-      });
-      const assignment = await transaction.assignment.findUnique({
-        where: { id: assignmentId },
-        include: {
-          classroom: {
-            select: {
-              status: true,
-              memberships: {
-                where: { studentId },
-                select: { status: true },
-              },
+  return runAssignmentSerializable(async (transaction) => {
+    const keyed = await transaction.submission.findUnique({
+      where: { idempotencyKey },
+      select: { id: true, studentId: true, assignmentId: true },
+    });
+    const assignment = await transaction.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        classroom: {
+          select: {
+            status: true,
+            memberships: {
+              where: { studentId },
+              select: { status: true },
             },
           },
-          submissions: {
-            where: { studentId, status: { not: SubmissionStatus.WITHDRAWN } },
-            orderBy: { attemptNumber: "desc" },
-            select: { id: true, status: true, attemptNumber: true },
-          },
         },
-      });
-      if (!assignment) throw new ResourceNotFoundError("作业不存在");
-      assertActiveMembership(assignment.classroom.memberships[0] ?? null);
-      assertAssignmentAcceptsWork(assignment, new Date());
-      await assertClassroomWorkAllowed(transaction, assignment.classroomId);
-      if (keyed) {
-        if (
-          keyed.studentId !== studentId ||
-          keyed.assignmentId !== assignmentId
-        ) {
-          throw new AssignmentOperationError("幂等键已被其他作答使用", 409);
-        }
-        return keyed.id;
+        submissions: {
+          where: { studentId, status: { not: SubmissionStatus.WITHDRAWN } },
+          orderBy: { attemptNumber: "desc" },
+          select: { id: true, status: true, attemptNumber: true },
+        },
+      },
+    });
+    if (!assignment) throw new ResourceNotFoundError("作业不存在");
+    assertActiveMembership(assignment.classroom.memberships[0] ?? null);
+    const work = await assertStudentWorkAccess(
+      transaction,
+      assignmentId,
+      studentId,
+    );
+    await assertClassroomWorkAllowed(transaction, assignment.classroomId);
+    if (keyed) {
+      if (
+        keyed.studentId !== studentId ||
+        keyed.assignmentId !== assignmentId
+      ) {
+        throw new AssignmentOperationError("幂等键已被其他作答使用", 409);
       }
+      return keyed.id;
+    }
 
-      const inProgress = assignment.submissions.find(
-        (submission) => submission.status === SubmissionStatus.IN_PROGRESS,
-      );
-      if (inProgress) return inProgress.id;
-      const submittedCount = assignment.submissions.length;
+    const submittedCount = assignment.submissions.filter(
+      (item) => item.status !== SubmissionStatus.IN_PROGRESS,
+    ).length;
+    if (!work.grant)
       assertCanStartAttempt(assignment.allowResubmission, submittedCount);
-      const attemptNumber =
-        Math.max(
-          0,
-          ...assignment.submissions.map((item) => item.attemptNumber),
-        ) + 1;
-      const submission = await transaction.submission.create({
-        data: {
-          assignmentId,
-          studentId,
-          attemptNumber,
-          idempotencyKey,
-        },
-        select: { id: true },
-      });
-      return submission.id;
-    },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-  );
+    const inProgress = assignment.submissions.find(
+      (item) => item.status === SubmissionStatus.IN_PROGRESS,
+    );
+    if (inProgress) {
+      if (work.grant)
+        await bindMakeupDraft(transaction, work.grant.id, inProgress.id);
+      return inProgress.id;
+    }
+    const sequence = await transaction.submission.aggregate({
+      where: { assignmentId, studentId },
+      _max: { attemptNumber: true },
+    });
+    const attemptNumber = (sequence._max.attemptNumber ?? 0) + 1;
+    const submission = await transaction.submission.create({
+      data: {
+        assignmentId,
+        studentId,
+        attemptNumber,
+        idempotencyKey,
+      },
+      select: { id: true },
+    });
+    if (work.grant)
+      await bindMakeupDraft(transaction, work.grant.id, submission.id);
+    return submission.id;
+  }, "开始作答发生并发冲突，请重试");
 }
 
 export async function startOrResumeAttempt(
@@ -1006,11 +1259,18 @@ export async function getStudentSubmissionDraft(
     (item) => item.studentId === studentId,
   );
   assertActiveMembership(membership ?? null);
+  if (submission.assignment.status === "REVOKED")
+    throw new AssignmentRevokedError();
   if (submission.assignment.classroom.status !== "ACTIVE")
     throw new AssignmentOperationError(
       "班级已结课或已关闭，请返回作业页面查看历史提交与成绩",
     );
   assertAssignmentIsVisible(submission.assignment, new Date());
+  const work = await readStudentWorkAccess(
+    submission.assignmentId,
+    studentId,
+    submission.id,
+  );
   return {
     id: submission.id,
     assignmentId: submission.assignmentId,
@@ -1020,7 +1280,10 @@ export async function getStudentSubmissionDraft(
     status: submission.status,
     version: submission.saveVersion,
     lastSavedAt: submission.lastSavedAt,
-    dueAt: submission.assignment.dueAt,
+    dueAt: work.dueAt,
+    canWrite: work.canWrite,
+    writeBlockedReason: work.reason,
+    makeupKind: work.grant?.kind ?? null,
     questions: submission.assignment.questions.map((question) => ({
       id: question.id,
       title: question.titleSnapshot,
@@ -1113,7 +1376,12 @@ export async function saveStudentAnswers(
     assertActiveMembership(
       submission.assignment.classroom.memberships[0] ?? null,
     );
-    assertAssignmentAcceptsWork(submission.assignment, now);
+    await assertStudentWorkAccess(
+      transaction,
+      submission.assignmentId,
+      studentId,
+      submissionId,
+    );
     await assertClassroomWorkAllowed(
       transaction,
       submission.assignment.classroomId,
@@ -1301,8 +1569,13 @@ export async function submitStudentAssignment(
       (item) => item.studentId === studentId,
     );
     assertActiveMembership(membership ?? null);
+    const work = await assertStudentWorkAccess(
+      transaction,
+      submission.assignmentId,
+      studentId,
+      submissionId,
+    );
     const now = new Date();
-    assertAssignmentAcceptsWork(submission.assignment, now);
     await assertClassroomWorkAllowed(
       transaction,
       submission.assignment.classroomId,
@@ -1316,6 +1589,19 @@ export async function submitStudentAssignment(
       data: { status: SubmissionStatus.SUBMITTED, submittedAt: now },
     });
     if (claimed.count !== 1) return;
+    if (work.grant) {
+      const consumed = await transaction.assignmentMakeupGrant.updateMany({
+        where: {
+          id: work.grant.id,
+          status: "ACTIVE",
+          expiresAt: { gt: now },
+          submissionId,
+        },
+        data: { status: "USED", usedAt: now },
+      });
+      if (consumed.count !== 1)
+        throw new AssignmentOperationError("补交授权已失效，请刷新后重试", 409);
+    }
 
     const answerMap = new Map(
       submission.answers.map((answer) => [answer.assignmentQuestionId, answer]),
@@ -1442,7 +1728,31 @@ export async function getStudentSubmissionResult(
       },
     },
     include: {
-      assignment: { select: { title: true } },
+      assignment: {
+        select: {
+          title: true,
+          status: true,
+          classroom: {
+            select: {
+              memberships: {
+                where: { studentId, status: "ACTIVE" },
+                select: { id: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      },
+      attachments: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          assignmentQuestionId: true,
+          originalName: true,
+          sizeBytes: true,
+        },
+      },
       answers: {
         orderBy: { assignmentQuestion: { sortOrder: "asc" } },
         include: {
@@ -1481,6 +1791,8 @@ export async function getStudentSubmissionResult(
     },
   });
   if (!submission) throw new ResourceNotFoundError("提交结果不存在");
+  if (submission.assignment.status === "REVOKED")
+    throw new AssignmentRevokedError();
   // Ownership is established in the query. Leaving a class does not erase personal submitted history.
   // This read path does not grant access to current assignments or allow new work.
   if (submission.status === SubmissionStatus.IN_PROGRESS) {
@@ -1498,6 +1810,22 @@ export async function getStudentSubmissionResult(
     maxScore: isPublished ? decimalNumber(submission.maxScore) : null,
     percentage: isPublished ? decimalNumber(submission.percentage) : null,
     isPublished,
+    submittedAnswers: isPublished
+      ? []
+      : submission.answers.map((answer) => ({
+          assignmentQuestionId: answer.assignmentQuestionId,
+          title: answer.assignmentQuestion.titleSnapshot,
+          content: answer.assignmentQuestion.contentSnapshot,
+          type: answer.assignmentQuestion.typeSnapshot,
+          sortOrder: answer.assignmentQuestion.sortOrder,
+          studentAnswer: formatStudentAnswer(
+            answer,
+            answer.assignmentQuestion.typeSnapshot,
+          ),
+        })),
+    attachments: submission.assignment.classroom.memberships.length
+      ? submission.attachments
+      : [],
     programmingAttempts: submission.answers.flatMap((answer) =>
       answer.programmingAttempts.flatMap((attempt) =>
         attempt.assignmentQuestionId
@@ -1563,18 +1891,59 @@ export async function createAssignmentBatch(
         .digest("hex")
         .slice(0, 24),
   );
+  // 多班级一次保存：同批作业共享 batchId，之后可在草稿阶段一次编辑并一次发布。
+  // 单班级不写该字段，保持原有单班行为完全不变。
+  const batchId =
+    classroomIds.length > 1
+      ? "b" +
+        createHash("sha256")
+          .update(`batch:${signature}`)
+          .digest("hex")
+          .slice(0, 24)
+      : null;
   return runAssignmentSerializable(
     async (tx) => {
+      // Coordinate publication with class completion/closure in a stable lock order.
+      await tx.$queryRaw`SELECT id FROM "Classroom" WHERE id IN (${Prisma.join(classroomIds)}) AND "teacherId" = ${teacherId} ORDER BY id FOR SHARE`;
       const classrooms = await tx.classroom.findMany({
-        where: { id: { in: classroomIds }, teacherId, status: "ACTIVE" },
+        where: { id: { in: classroomIds }, teacherId },
         select: {
           id: true,
+          name: true,
+          status: true,
           courseId: true,
           course: { select: { teacherId: true, status: true } },
         },
       });
       if (classrooms.length !== classroomIds.length)
         throw new ResourceNotFoundError("班级不存在");
+      const existing = await tx.assignment.findMany({
+        where: { id: { in: ids }, teacherId },
+        include: teacherAssignmentInclude,
+      });
+      if (existing.length === ids.length) {
+        if (
+          existing.some(
+            (item) =>
+              item.deletedAt ||
+              item.status === AssignmentStatus.REVOKED ||
+              (input.publish && item.status === AssignmentStatus.DRAFT),
+          )
+        )
+          throw new AssignmentOperationError(
+            "原批次中有作业已删除或取消预约，或已撤销，请重新发起操作",
+            409,
+          );
+        return { assignments: existing.map(teacherView), reused: true };
+      }
+      if (existing.length)
+        throw new AssignmentOperationError("批次状态异常，请刷新后重试", 409);
+      const inactive = classrooms.filter((item) => item.status !== "ACTIVE");
+      if (inactive.length)
+        throw new AssignmentOperationError(
+          `以下班级已结课、已关闭或已归档，不能保存或发布作业：${inactive.map((item) => item.name).join("、")}`,
+          409,
+        );
       if (
         classrooms.some(
           (item) =>
@@ -1598,20 +1967,13 @@ export async function createAssignmentBatch(
           "批量发布仅支持本人同一课程下的有效班级",
           400,
         );
-      const existing = await tx.assignment.findMany({
-        where: { id: { in: ids }, teacherId },
-        include: teacherAssignmentInclude,
-      });
-      if (existing.length === ids.length)
-        return { assignments: existing.map(teacherView), reused: true };
-      if (existing.length)
-        throw new AssignmentOperationError("批次状态异常，请刷新后重试", 409);
       for (let index = 0; index < classroomIds.length; index++) {
         await createDraftInTransaction(
           tx,
           teacherId,
           { ...input.assignment, classroomId: classroomIds[index] },
           ids[index],
+          batchId,
         );
         if (input.publish)
           await publishInTransaction(tx, teacherId, ids[index]);

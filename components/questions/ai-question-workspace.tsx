@@ -380,7 +380,7 @@ export function AIQuestionWorkspace({
       <div className="space-y-6">
         <div className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-6 flex items-center gap-3 text-sm font-semibold">
-            <span className="grid size-8 place-items-center rounded-full bg-sky-600 text-white">
+            <span className="grid size-8 place-items-center rounded-full bg-sky-700 text-white">
               1
             </span>{" "}
             出题要求 <span className="h-px flex-1 bg-slate-200" />
@@ -610,7 +610,7 @@ export function AIQuestionWorkspace({
             </label>
           </div>
           <button
-            className="mt-6 rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="mt-6 rounded-lg bg-sky-700 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             type="button"
             disabled={busy || !courseId}
             onClick={() => void generate()}
@@ -1090,7 +1090,7 @@ function CandidateReview({
           ) : null}
           <button
             disabled={busy}
-            className="rounded bg-sky-600 px-3 py-2 text-white"
+            className="rounded bg-sky-700 px-3 py-2 text-white"
             onClick={() => void save()}
           >
             保存修改

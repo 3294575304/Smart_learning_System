@@ -6,6 +6,7 @@ import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
+import { safeStudentReturn } from "@/services/assignments/student-query";
 
 Object.assign(globalThis, { React });
 const root = path.resolve("app/(protected)/teacher");
@@ -73,6 +74,15 @@ function resolveHrefTargets(
   }
   if (
     ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+  ) {
+    return [
+      ...resolveHrefTargets(expression.left, tree, visited),
+      ...resolveHrefTargets(expression.right, tree, visited),
+    ];
+  }
+  if (
+    ts.isBinaryExpression(expression) &&
     expression.operatorToken.kind === ts.SyntaxKind.PlusToken
   ) {
     const left = resolveHrefTargets(expression.left, tree, visited);
@@ -85,6 +95,15 @@ function resolveHrefTargets(
     return [];
   }
   if (ts.isCallExpression(expression) && expression.arguments[0]) {
+    if (
+      ts.isIdentifier(expression.expression) &&
+      expression.expression.text === "safeStudentReturn"
+    ) {
+      return [
+        safeStudentReturn(),
+        safeStudentReturn("/teacher/assignments?view=STUDENTS&page=2"),
+      ];
+    }
     return resolveHrefTargets(expression.arguments[0], tree, visited);
   }
   if (ts.isIdentifier(expression) && !visited.has(expression.text)) {

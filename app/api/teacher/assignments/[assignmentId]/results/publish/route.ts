@@ -28,6 +28,12 @@ export async function POST(request: Request, context: Context) {
     revalidatePath("/teacher/assignments");
     revalidatePath(`/teacher/assignments/${assignmentId.data}/results`);
     revalidatePath(`/teacher/assignments/${assignmentId.data}/submissions`);
+    revalidatePath("/teacher/results");
+    revalidatePath(`/teacher/assignments/${assignmentId.data}`);
+    revalidatePath("/teacher/assignments/students/[studentId]", "page");
+    revalidatePath("/student/assignments");
+    revalidatePath(`/student/assignments/${assignmentId.data}`);
+    revalidatePath("/student/submissions/[submissionId]/result", "page");
     revalidatePath("/student/results");
     return apiSuccess(result);
   } catch (error: unknown) {
