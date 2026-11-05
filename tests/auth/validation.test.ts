@@ -7,8 +7,11 @@ import {
   registerSchema,
 } from "@/services/auth/schemas";
 
+const testSchoolId = "school_nuist";
+
 test("登录邮箱会去除空格并转为小写", () => {
   const result = loginSchema.parse({
+    schoolId: testSchoolId,
     email: "  Student@Example.COM ",
     password: "Student123!",
   });
@@ -17,6 +20,7 @@ test("登录邮箱会去除空格并转为小写", () => {
 
 test("登录账号支持学号文本", () => {
   const result = loginSchema.parse({
+    schoolId: testSchoolId,
     email: "  202400000001 ",
     password: "Student123!",
   });
@@ -26,6 +30,7 @@ test("登录账号支持学号文本", () => {
 test("学生注册需要强密码和相同的确认密码", () => {
   assert.equal(
     registerSchema.safeParse({
+      schoolId: testSchoolId,
       studentNo: "  py2026001 ",
       displayName: "测试学生",
       email: "new-student@example.com",
@@ -37,6 +42,7 @@ test("学生注册需要强密码和相同的确认密码", () => {
 
   assert.equal(
     registerSchema.safeParse({
+      schoolId: testSchoolId,
       studentNo: "  py2026001 ",
       displayName: "测试学生",
       email: "new-student@example.com",
@@ -47,6 +53,7 @@ test("学生注册需要强密码和相同的确认密码", () => {
   );
 
   const normalized = registerSchema.parse({
+    schoolId: testSchoolId,
     studentNo: "  py2026001 ",
     displayName: " 测试学生 ",
     email: "NEW-STUDENT@example.com",

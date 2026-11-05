@@ -117,6 +117,8 @@ async function main(): Promise<void> {
         where: { email: "student@example.com" },
       }),
     ]);
+    const registrationSchoolId = teacher.schoolId ?? admin.schoolId;
+    assert.ok(registrationSchoolId);
     assert.equal(await compare("Student123!", student.passwordHash), true);
 
     const [adminSession, teacherSession, studentSession] = await Promise.all([
@@ -187,6 +189,7 @@ async function main(): Promise<void> {
       email: string,
       overrides: Record<string, unknown> = {},
     ) => ({
+      schoolId: registrationSchoolId,
       studentNo,
       displayName: "HTTP 认领学生",
       email,

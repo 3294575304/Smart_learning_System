@@ -69,12 +69,24 @@ export async function loginAction(
   }
 
   const user = parsed.data.email.includes("@")
-    ? await prisma.user.findUnique({
-        where: { email: parsed.data.email },
+    ? await prisma.user.findFirst({
+        where: {
+          email: parsed.data.email,
+          schoolId: parsed.data.schoolId,
+        },
       })
-    : await prisma.user.findFirst({
-        where: { profile: { studentNo: parsed.data.email } },
-      });
+    : await prisma.user
+        .findMany({
+          where: {
+            schoolId: parsed.data.schoolId,
+            OR: [
+              { profile: { studentNo: parsed.data.email } },
+              { profile: { teacherNo: parsed.data.email } },
+            ],
+          },
+          take: 2,
+        })
+        .then((matches) => (matches.length === 1 ? matches[0] : null));
   const passwordIsValid = await verifyPassword(
     parsed.data.password,
     user?.passwordHash ?? null,
@@ -83,7 +95,7 @@ export async function loginAction(
   if (!user || !passwordIsValid || user.status !== UserStatus.ACTIVE) {
     return {
       success: false,
-      error: "邮箱或密码错误，或账号当前不可用",
+      error: "账号、密码或所选学校错误，或账号当前不可用",
       status: 401,
     };
   }

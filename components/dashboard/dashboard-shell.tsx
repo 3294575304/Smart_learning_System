@@ -5,7 +5,6 @@ import { Role } from "@prisma/client";
 import {
   ChevronDown,
   ChevronRight,
-  GraduationCap,
   Menu,
   Users,
   UserPlus,
@@ -20,6 +19,7 @@ import {
   NavigationMemory,
   NavigationMemoryProvider,
 } from "@/components/dashboard/navigation-memory";
+import { SchoolIdentity } from "@/components/dashboard/school-identity";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
 import { buildBreadcrumbs } from "@/components/dashboard/breadcrumbs";
@@ -196,6 +196,7 @@ export function DashboardShell({
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const navigationGroups = NAVIGATION[user.role];
   const userName = displayUserName(user);
+  const schoolName = user.schoolName?.trim() || platformName;
   const currentPageTitle = useMemo(
     () => getDashboardPageTitle(pathname, navigationGroups),
     [navigationGroups, pathname],
@@ -255,14 +256,13 @@ export function DashboardShell({
     <div className="via-background min-h-screen bg-gradient-to-br from-sky-50/80 to-emerald-50/60">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-sky-100 bg-white/95 lg:flex lg:flex-col">
         <div className="flex h-16 items-center border-b px-6">
-          <Link
-            className="flex items-center gap-2 font-semibold"
-            href="/dashboard"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-emerald-500 text-white">
-              <GraduationCap className="h-5 w-5" />
-            </span>
-            <span>{platformName}</span>
+          <Link className="w-full min-w-0" href="/dashboard">
+            <SchoolIdentity
+              compact
+              logoUrl={user.schoolLogoUrl}
+              name={schoolName}
+              nameImageUrl={user.schoolNameImageUrl}
+            />
           </Link>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -290,14 +290,16 @@ export function DashboardShell({
           <aside className="bg-background relative flex h-full w-[min(20rem,86vw)] flex-col shadow-xl">
             <div className="flex h-16 items-center justify-between border-b px-5">
               <Link
-                className="flex items-center gap-2 font-semibold"
+                className="min-w-0 flex-1"
                 href="/dashboard"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-emerald-500 text-white">
-                  <GraduationCap className="h-5 w-5" />
-                </span>
-                {platformName}
+                <SchoolIdentity
+                  compact
+                  logoUrl={user.schoolLogoUrl}
+                  name={schoolName}
+                  nameImageUrl={user.schoolNameImageUrl}
+                />
               </Link>
               <button
                 aria-label="关闭菜单"

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AuditAction, Prisma, UserStatus } from "@prisma/client";
+import { AuditAction, Prisma, Role, UserStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { AdminUserOperationError } from "@/services/admin/users/errors";
@@ -38,6 +38,20 @@ import type {
 } from "@/services/audit/types";
 
 const SERIALIZABLE_RETRY_LIMIT = 3;
+
+async function requireAdminSchoolId(
+  transaction: Prisma.TransactionClient,
+  actorId: string,
+): Promise<string> {
+  const actor = await transaction.user.findUnique({
+    where: { id: actorId },
+    select: { role: true, schoolId: true },
+  });
+  if (actor?.role !== Role.ADMIN || !actor.schoolId) {
+    throw new AdminUserOperationError("当前管理员尚未绑定学校，无法管理用户");
+  }
+  return actor.schoolId;
+}
 
 function toAdminUserView(record: AdminUserRecord): AdminUserView {
   return {
@@ -140,6 +154,7 @@ export async function createAdminUser(
   const passwordHash = await hashPassword(input.password);
   try {
     const created = await serializableTransaction(async (transaction) => {
+      const schoolId = await requireAdminSchoolId(transaction, actorId);
       if (await findUserWithEmail(transaction, input.email)) {
         throw new AdminUserOperationError("该邮箱已被其他用户使用");
       }
@@ -148,6 +163,7 @@ export async function createAdminUser(
         email: input.email,
         passwordHash,
         role: input.role,
+        schoolId,
       });
       await writeUserAuditLog(transaction, {
         actorId,
@@ -174,6 +190,7 @@ export async function updateAdminUser(
 ): Promise<AdminUserView> {
   try {
     const updated = await serializableTransaction(async (transaction) => {
+      const schoolId = await requireAdminSchoolId(transaction, actorId);
       const before = await findAdminUserById(userId, transaction);
       if (!before) throw new ResourceNotFoundError("用户不存在");
 
@@ -214,6 +231,7 @@ export async function updateAdminUser(
           ? { email: nextEmail, displayName: nextDisplayName }
           : {}),
         ...(roleChanged ? { role: nextRole } : {}),
+        ...(roleChanged ? { schoolId } : {}),
         ...(statusChanged ? { status: nextStatus } : {}),
       });
       if (statusChanged && nextStatus === UserStatus.INACTIVE) {

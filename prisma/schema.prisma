@@ -641,6 +641,7 @@ model User {
   passwordHash         String
   role                 Role
   status               UserStatus              @default(ACTIVE)
+  schoolId             String?
   mustChangePassword   Boolean                 @default(false)
   passwordChangedAt    DateTime?
   lastLoginAt          DateTime?
@@ -648,6 +649,7 @@ model User {
   updatedAt            DateTime                @updatedAt
 
   profile                            UserProfile?
+  school                             School?                              @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   taughtClassrooms                   Classroom[]                          @relation("ClassroomTeacher")
   taughtCourses                      Course[]                             @relation("CourseTeacher")
   classMemberships                   ClassMembership[]                    @relation("ClassMembershipStudent")
@@ -728,8 +730,24 @@ model User {
   identifiedCourseSurveyResponses    CourseSurveyResponse[]               @relation("CourseSurveyIdentifiedRespondent")
 
   @@index([role, status])
+  @@index([schoolId])
   @@index([mustChangePassword])
   @@index([createdAt])
+}
+
+model School {
+  id             String   @id @default(cuid())
+  key            String   @unique
+  name           String
+  logoUrl        String?
+  logoStorageKey String?
+  nameImageStorageKey String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  admins User[]
+
+  @@index([name])
 }
 
 model Notification {

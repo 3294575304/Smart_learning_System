@@ -4,8 +4,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { Fragment } from "react";
 
 import { requestAdminApi } from "@/components/admin/request-api";
+import { SchoolBindingSettings } from "@/components/admin/system-config/school-binding-settings";
+import type { AdminSchoolBindingView } from "@/services/schools/service";
 import {
   systemConfigDefinitions,
   systemConfigValuesSchema,
@@ -224,8 +227,10 @@ function ConfigCategoryForm({
 
 export function SystemConfigEditor({
   initialView,
+  initialSchool,
 }: {
   initialView: SystemConfigAdminView;
+  initialSchool: AdminSchoolBindingView;
 }) {
   const [metadata, setMetadata] = useState({
     updatedAt: initialView.updatedAt,
@@ -248,17 +253,21 @@ export function SystemConfigEditor({
           : "当前使用系统默认配置，尚无数据库更新记录。"}
       </p>
       {initialView.categories.map((category) => (
-        <ConfigCategoryForm
-          category={category}
-          initialValues={initialView.values}
-          key={category.key}
-          onReload={(view) =>
-            setMetadata({
-              updatedAt: view.updatedAt,
-              updatedBy: view.updatedBy,
-            })
-          }
-        />
+        <Fragment key={category.key}>
+          <ConfigCategoryForm
+            category={category}
+            initialValues={initialView.values}
+            onReload={(view) =>
+              setMetadata({
+                updatedAt: view.updatedAt,
+                updatedBy: view.updatedBy,
+              })
+            }
+          />
+          {category.key === "GENERAL" ? (
+            <SchoolBindingSettings initialSchool={initialSchool} />
+          ) : null}
+        </Fragment>
       ))}
     </div>
   );

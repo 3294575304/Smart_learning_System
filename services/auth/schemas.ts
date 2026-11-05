@@ -20,7 +20,9 @@ const loginIdentifierSchema = z
   .min(1, "请输入登录账号")
   .max(254, "登录账号长度不能超过 254 个字符")
   .transform((value) =>
-    value.includes("@") ? value.toLowerCase() : value.normalize("NFKC"),
+    value.includes("@")
+      ? value.toLowerCase()
+      : value.normalize("NFKC").toLocaleUpperCase("zh-CN"),
   );
 
 export const strongPasswordSchema = z
@@ -33,6 +35,7 @@ export const strongPasswordSchema = z
   .refine(fitsBcryptLimit, "密码的 UTF-8 长度不能超过 72 字节");
 
 export const loginSchema = z.object({
+  schoolId: z.string().trim().min(1, "请选择已有学校"),
   email: loginIdentifierSchema,
   password: z
     .string()
@@ -43,6 +46,7 @@ export const loginSchema = z.object({
 
 export const registerSchema = z
   .object({
+    schoolId: z.string().trim().min(1, "请选择已有学校"),
     studentNo: z
       .string()
       .transform(normalizeStudentNo)

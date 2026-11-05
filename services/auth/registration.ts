@@ -3,6 +3,7 @@ import {
   Prisma,
   Role,
   StudentIdentityStatus,
+  UserStatus,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -62,12 +63,28 @@ export async function claimStudentAccount(
         },
       );
 
+      const selectedSchool = await transaction.school.findUnique({
+        where: { id: input.schoolId },
+        select: { id: true },
+      });
+      if (!selectedSchool) {
+        throw new StudentClaimError("请选择有效学校", 400, {
+          schoolId: ["请选择有效学校"],
+        });
+      }
+
       await transaction.$queryRaw`SELECT "id" FROM "StudentIdentity" WHERE "studentNo" = ${input.studentNo} FOR UPDATE`;
       const identity = await transaction.studentIdentity.findUnique({
         where: { studentNo: input.studentNo },
         include: {
           assignments: {
-            select: { classroomId: true, withdrawnAt: true },
+            select: {
+              classroomId: true,
+              withdrawnAt: true,
+              classroom: {
+                select: { teacher: { select: { schoolId: true } } },
+              },
+            },
           },
         },
       });
@@ -103,11 +120,46 @@ export async function claimStudentAccount(
         });
       }
 
+      const assignedSchoolIds = [
+        ...new Set(
+          identity.assignments
+            .map((assignment) => assignment.classroom.teacher.schoolId)
+            .filter((schoolId): schoolId is string => schoolId !== null),
+        ),
+      ];
+      if (assignedSchoolIds.length > 1) {
+        throw new StudentClaimError(
+          "名册分配到多个学校，请联系管理员核实",
+          409,
+        );
+      }
+      if (assignedSchoolIds[0] && assignedSchoolIds[0] !== input.schoolId) {
+        throw new StudentClaimError("所选学校与学生名册不一致", 409, {
+          schoolId: ["所选学校与学生名册不一致"],
+        });
+      }
+      const fallbackAdmin = assignedSchoolIds.length
+        ? null
+        : await transaction.user.findFirst({
+            where: {
+              role: Role.ADMIN,
+              status: UserStatus.ACTIVE,
+              schoolId: input.schoolId,
+            },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            select: { schoolId: true },
+          });
+      const schoolId = assignedSchoolIds[0] ?? fallbackAdmin?.schoolId;
+      if (!schoolId) {
+        throw new StudentClaimError("暂时无法确定所属学校，请联系管理员", 409);
+      }
+
       const user = await transaction.user.create({
         data: {
           email: input.email,
           passwordHash,
           role: Role.STUDENT,
+          schoolId,
           profile: {
             create: {
               displayName: normalizeStudentName(input.displayName),

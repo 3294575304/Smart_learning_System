@@ -4,6 +4,7 @@ import { RegisterForm } from "@/components/auth/register-form";
 import { roleHomePath } from "@/services/auth/authorization";
 import { getCurrentUser } from "@/services/auth/session";
 import { getPublicSystemConfig } from "@/services/system-config/service";
+import { getAvailableSchools } from "@/services/schools/service";
 
 export default async function RegisterPage() {
   const user = await getCurrentUser();
@@ -15,7 +16,10 @@ export default async function RegisterPage() {
         : roleHomePath(user.role),
     );
   }
-  const config = await getPublicSystemConfig();
+  const [config, schools] = await Promise.all([
+    getPublicSystemConfig(),
+    getAvailableSchools(),
+  ]);
   if (config.maintenanceMode) redirect("/maintenance");
 
   return (
@@ -31,7 +35,7 @@ export default async function RegisterPage() {
           学生账号仅限已导入名单中的学生注册。请使用教师提供的学号，并填写与名单一致的姓名。
         </p>
         {config.allowSelfRegistration ? (
-          <RegisterForm />
+          <RegisterForm schools={schools} />
         ) : (
           <div className="mt-8 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             系统当前未开放自主注册，请联系管理员创建账号。

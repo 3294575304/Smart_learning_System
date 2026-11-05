@@ -59,7 +59,7 @@ export const getCurrentUser = cache(
       where: { tokenHash: hashSessionToken(token) },
       include: {
         user: {
-          include: { profile: true },
+          include: { profile: true, school: true },
         },
       },
     });
@@ -82,6 +82,15 @@ export const getCurrentUser = cache(
       role: session.user.role,
       displayName: session.user.profile?.displayName ?? session.user.email,
       mustChangePassword: session.user.mustChangePassword,
+      schoolName: session.user.school?.name ?? null,
+      schoolLogoUrl: session.user.school
+        ? session.user.school.logoStorageKey
+          ? `/api/admin/school-binding/logo?v=${session.user.school.updatedAt.getTime()}`
+          : (session.user.school.logoUrl ?? null)
+        : null,
+      schoolNameImageUrl: session.user.school?.nameImageStorageKey
+        ? `/api/admin/school-binding/name-image?v=${session.user.school.updatedAt.getTime()}`
+        : null,
     };
   },
 );

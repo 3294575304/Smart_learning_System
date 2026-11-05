@@ -117,6 +117,7 @@ export async function createAdminManagedUser(
     email: string;
     passwordHash: string;
     role: Role;
+    schoolId: string;
   },
 ): Promise<AdminUserRecord> {
   return transaction.user.create({
@@ -125,6 +126,7 @@ export async function createAdminManagedUser(
       passwordHash: input.passwordHash,
       role: input.role,
       status: UserStatus.ACTIVE,
+      school: { connect: { id: input.schoolId } },
       profile: { create: { displayName: input.displayName } },
     },
     select: adminUserSelect,
@@ -138,6 +140,7 @@ export async function updateAdminManagedUser(
     displayName?: string | null;
     email?: string | null;
     role?: Role;
+    schoolId?: string;
     status?: UserStatus;
   },
 ): Promise<AdminUserRecord> {
@@ -145,7 +148,14 @@ export async function updateAdminManagedUser(
     where: { id: userId },
     data: {
       ...(input.email ? { email: input.email } : {}),
-      ...(input.role ? { role: input.role } : {}),
+      ...(input.role
+        ? {
+            role: input.role,
+            ...(input.schoolId
+              ? { school: { connect: { id: input.schoolId } } }
+              : {}),
+          }
+        : {}),
       ...(input.status ? { status: input.status } : {}),
       ...(input.displayName
         ? {

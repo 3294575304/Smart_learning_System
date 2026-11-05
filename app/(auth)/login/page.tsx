@@ -4,6 +4,7 @@ import { LoginForm } from "@/components/auth/login-form";
 import { roleHomePath } from "@/services/auth/authorization";
 import { getCurrentUser } from "@/services/auth/session";
 import { getPublicSystemConfig } from "@/services/system-config/service";
+import { getAvailableSchools } from "@/services/schools/service";
 
 export default async function LoginPage() {
   const user = await getCurrentUser();
@@ -15,7 +16,10 @@ export default async function LoginPage() {
         : roleHomePath(user.role),
     );
   }
-  const config = await getPublicSystemConfig();
+  const [config, schools] = await Promise.all([
+    getPublicSystemConfig(),
+    getAvailableSchools(),
+  ]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-100/70 via-white to-emerald-100/60 px-6 py-12">
@@ -38,6 +42,7 @@ export default async function LoginPage() {
           allowRegistration={
             config.allowSelfRegistration && !config.maintenanceMode
           }
+          schools={schools}
         />
       </section>
     </main>

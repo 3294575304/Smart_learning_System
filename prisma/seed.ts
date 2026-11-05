@@ -26,6 +26,7 @@
 import { hash } from "bcryptjs";
 
 import { assertSafeSeedDatabase } from "./seed-safety";
+import { DEFAULT_ADMIN_SCHOOL } from "../services/schools/constants";
 
 const prisma = new PrismaClient();
 
@@ -104,20 +105,28 @@ const seedUsers: SeedUser[] = [
   },
 ];
 
-async function upsertUser(seedUser: SeedUser) {
+async function upsertUser(seedUser: SeedUser, fallbackSchoolId: string) {
   const passwordHash = await hash(seedUser.password, 12);
+  const existingUser = await prisma.user.findUnique({
+    where: { email: seedUser.email },
+    select: { schoolId: true },
+  });
+  const schoolId = existingUser?.schoolId ?? fallbackSchoolId;
+
   const user = await prisma.user.upsert({
     where: { email: seedUser.email },
     update: {
       passwordHash,
       role: seedUser.role,
       status: UserStatus.ACTIVE,
+      schoolId,
     },
     create: {
       email: seedUser.email,
       passwordHash,
       role: seedUser.role,
       status: UserStatus.ACTIVE,
+      schoolId,
     },
   });
 
@@ -225,7 +234,7 @@ async function upsertAnalysisInsight(input: {
   await prisma.aIAnalysisInsight.create({ data: input });
 }
 
-async function seedUniversityDemo(): Promise<void> {
+async function seedUniversityDemo(schoolId: string): Promise<void> {
   type NetworkQuestionSeed = SeedQuestion & {
     key: string;
     knowledgePointCodes: string[];
@@ -376,7 +385,9 @@ async function seedUniversityDemo(): Promise<void> {
   ];
 
   const [networkTeacher, networkStudentA, networkStudentB, networkStudentC] =
-    await Promise.all(networkSeedUsers.map(upsertUser));
+    await Promise.all(
+      networkSeedUsers.map((seedUser) => upsertUser(seedUser, schoolId)),
+    );
   const networkUsersByEmail = new Map<
     string,
     Awaited<ReturnType<typeof upsertUser>>
@@ -2512,7 +2523,21 @@ async function main(): Promise<void> {
     where: { expiresAt: { lt: new Date() } },
   });
 
-  const users = await Promise.all(seedUsers.map(upsertUser));
+  const defaultSchool = await prisma.school.upsert({
+    where: { key: DEFAULT_ADMIN_SCHOOL.key },
+    update: {},
+    create: DEFAULT_ADMIN_SCHOOL,
+  });
+  const currentAdmin = await prisma.user.findFirst({
+    where: { role: Role.ADMIN, schoolId: { not: null } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { schoolId: true },
+  });
+  const seedSchoolId = currentAdmin?.schoolId ?? defaultSchool.id;
+
+  const users = await Promise.all(
+    seedUsers.map((seedUser) => upsertUser(seedUser, seedSchoolId)),
+  );
   const [admin, teacher, teacherTwo, student, studentTwo, studentThree] = users;
 
   await prisma.systemConfig.upsert({
@@ -3495,7 +3520,7 @@ async function main(): Promise<void> {
   );
   console.info(`Unenrolled permission-test student: ${studentThree.email!}`);
 
-  await seedUniversityDemo();
+  await seedUniversityDemo(seedSchoolId);
 }
 
 main()

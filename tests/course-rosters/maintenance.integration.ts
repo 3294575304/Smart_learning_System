@@ -19,6 +19,8 @@ async function main() {
     student = await prisma.user.findUniqueOrThrow({
       where: { email: "student@example.com" },
     });
+  const teacherSchoolId = teacher.schoolId;
+  assert.ok(teacherSchoolId);
   const other = await prisma.user.create({
     data: {
       email: `other-${randomUUID()}@example.invalid`,
@@ -148,6 +150,7 @@ async function main() {
     registerSchema.parse({
       studentNo: "ROSTER002",
       displayName: "名单纠正学生",
+      schoolId: teacherSchoolId,
       email: `claim-${randomUUID()}@example.invalid`,
       password: "Student123!",
       confirmPassword: "Student123!",

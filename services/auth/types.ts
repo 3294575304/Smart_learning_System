@@ -6,4 +6,7 @@ export interface AuthenticatedUser {
   role: Role;
   displayName: string | null;
   mustChangePassword: boolean;
+  schoolName?: string | null;
+  schoolLogoUrl?: string | null;
+  schoolNameImageUrl?: string | null;
 }
