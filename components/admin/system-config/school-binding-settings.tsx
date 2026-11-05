@@ -13,6 +13,7 @@ import {
 import { requestAdminApi } from "@/components/admin/request-api";
 import { MAX_SCHOOL_LOGO_BYTES } from "@/services/schools/constants";
 import type { AdminSchoolBindingView } from "@/services/schools/service";
+import { PROVINCES } from "@/services/schools/provinces";
 
 export function SchoolBindingSettings({
   initialSchool,
@@ -24,6 +25,9 @@ export function SchoolBindingSettings({
   const nameImageInputRef = useRef<HTMLInputElement>(null);
   const [school, setSchool] = useState(initialSchool);
   const [name, setName] = useState(initialSchool.name);
+  const [provinceCode, setProvinceCode] = useState(
+    initialSchool.provinceCode ?? "",
+  );
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [nameImageFile, setNameImageFile] = useState<File | null>(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
@@ -37,13 +41,17 @@ export function SchoolBindingSettings({
   } | null>(null);
 
   const dirty =
-    name.trim() !== school.name || logoFile !== null || nameImageFile !== null;
+    name.trim() !== school.name ||
+    provinceCode !== (school.provinceCode ?? "") ||
+    logoFile !== null ||
+    nameImageFile !== null;
   const previewUrl = localPreviewUrl ?? school.logoUrl;
   const nameImagePreviewUrl = localNameImagePreviewUrl ?? school.nameImageUrl;
 
   useEffect(() => {
     setSchool(initialSchool);
     setName(initialSchool.name);
+    setProvinceCode(initialSchool.provinceCode ?? "");
   }, [initialSchool]);
 
   useEffect(() => {
@@ -103,6 +111,7 @@ export function SchoolBindingSettings({
     setIsSubmitting(true);
     const body = new FormData();
     body.set("schoolName", name);
+    body.set("provinceCode", provinceCode);
     if (logoFile) body.set("logo", logoFile);
     if (nameImageFile) body.set("nameImage", nameImageFile);
 
@@ -118,13 +127,14 @@ export function SchoolBindingSettings({
 
     setSchool(result.data);
     setName(result.data.name);
+    setProvinceCode(result.data.provinceCode ?? "");
     setLogoFile(null);
     setNameImageFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (nameImageInputRef.current) nameImageInputRef.current.value = "";
     setFeedback({
       type: "success",
-      message: "学校信息已保存，顶部校徽和校名已更新。",
+      message: "学校信息已保存，学校标识与地区信息已更新。",
     });
     router.refresh();
   }
@@ -203,6 +213,33 @@ export function SchoolBindingSettings({
             required
             value={name}
           />
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.3fr)] md:gap-6">
+          <div>
+            <label
+              htmlFor="admin-school-province"
+              className="text-sm font-medium"
+            >
+              所在省级地区
+            </label>
+            <p className="text-muted-foreground mt-1 text-sm">
+              用于系统应用展示地图的省份归属。
+            </p>
+          </div>
+          <select
+            id="admin-school-province"
+            className="w-full self-start rounded-md border bg-white px-3 py-2 text-sm"
+            value={provinceCode}
+            onChange={(event) => setProvinceCode(event.target.value)}
+          >
+            <option value="">暂未设置</option>
+            {PROVINCES.map((province) => (
+              <option key={province.code} value={province.code}>
+                {province.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.3fr)] md:gap-6">

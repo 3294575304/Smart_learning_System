@@ -158,7 +158,7 @@ export async function adminLoginAction(
   ) {
     return {
       success: false,
-      error: "账号、密码或学校错误，或管理员账号当前不可用",
+      error: "账号或密码错误，或管理员账号当前不可用",
       status: 401,
     };
   }

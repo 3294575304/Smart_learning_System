@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Home,
+  MapPinned,
   Library,
   Megaphone,
   NotebookPen,
@@ -35,6 +36,12 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
     {
       items: [
         { href: "/super-admin", label: "超级管理员工作台", icon: ShieldCheck },
+        { href: "/super-admin/schools", label: "学校与管理员", icon: School },
+        {
+          href: "/super-admin/showcase",
+          label: "系统应用展示",
+          icon: MapPinned,
+        },
       ],
     },
   ],
@@ -128,6 +135,9 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
 };
 
 export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
+  "super-admin": "超级管理员工作台",
+  schools: "学校与管理员",
+  showcase: "系统应用展示",
   admin: "平台概览",
   users: "用户管理",
   "audit-logs": "审计日志",
@@ -206,7 +216,12 @@ export function getSegmentLabels(
 }
 
 function isCurrentPath(pathname: string, href: string): boolean {
-  if (href === "/teacher" || href === "/student" || href === "/admin") {
+  if (
+    href === "/teacher" ||
+    href === "/student" ||
+    href === "/admin" ||
+    href === "/super-admin"
+  ) {
     return pathname === href;
   }
   return pathname === href || pathname.startsWith(`${href}/`);

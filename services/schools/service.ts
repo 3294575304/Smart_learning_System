@@ -10,6 +10,7 @@ import { writeSystemConfigAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { MAX_SCHOOL_LOGO_BYTES } from "@/services/schools/constants";
 import type { SchoolOption } from "@/services/schools/types";
+import { schoolProvinceSchema } from "@/services/schools/provinces";
 import { getStorageService } from "@/services/storage";
 
 export const schoolBindingNameSchema = z
@@ -36,6 +37,7 @@ export interface SchoolImageUpload {
 export interface AdminSchoolBindingView {
   id: string | null;
   name: string;
+  provinceCode: string | null;
   logoUrl: string | null;
   nameImageUrl: string | null;
 }
@@ -82,6 +84,7 @@ function schoolImageExtension(
 function adminSchoolView(school: {
   id: string;
   name: string;
+  provinceCode: string | null;
   logoUrl: string | null;
   logoStorageKey: string | null;
   nameImageStorageKey: string | null;
@@ -90,6 +93,7 @@ function adminSchoolView(school: {
   return {
     id: school.id,
     name: school.name,
+    provinceCode: school.provinceCode,
     logoUrl: school.logoStorageKey
       ? `/api/admin/school-binding/logo?v=${school.updatedAt.getTime()}`
       : school.logoUrl,
@@ -110,7 +114,13 @@ export async function getAdminSchoolBinding(
     throw new SchoolBindingOperationError("管理员账号不存在。", 404);
   }
   if (!admin.school) {
-    return { id: null, name: "", logoUrl: null, nameImageUrl: null };
+    return {
+      id: null,
+      name: "",
+      provinceCode: null,
+      logoUrl: null,
+      nameImageUrl: null,
+    };
   }
   return adminSchoolView(admin.school);
 }
@@ -119,12 +129,14 @@ export async function updateAdminSchoolBinding(
   adminId: string,
   input: {
     name: string;
+    provinceCode?: string | null;
     logo?: SchoolImageUpload;
     nameImage?: SchoolImageUpload;
   },
   context: AuditRequestContext,
 ): Promise<AdminSchoolBindingView> {
   const name = schoolBindingNameSchema.parse(input.name);
+  const provinceCode = schoolProvinceSchema.parse(input.provinceCode);
   let savedLogoKey: string | null = null;
   let savedNameImageKey: string | null = null;
 
@@ -183,6 +195,7 @@ export async function updateAdminSchoolBinding(
               select: {
                 id: true,
                 name: true,
+                provinceCode: true,
                 logoUrl: true,
                 logoStorageKey: true,
                 nameImageStorageKey: true,
@@ -201,6 +214,7 @@ export async function updateAdminSchoolBinding(
         const before = {
           schoolId: admin.schoolId,
           schoolName: admin.school?.name ?? null,
+          provinceCode: admin.school?.provinceCode ?? null,
           hasSchoolLogo: Boolean(
             admin.school?.logoUrl ?? admin.school?.logoStorageKey,
           ),
@@ -208,7 +222,11 @@ export async function updateAdminSchoolBinding(
         };
 
         if (school) {
-          if (savedLogoKey || savedNameImageKey) {
+          if (
+            savedLogoKey ||
+            savedNameImageKey ||
+            (provinceCode !== undefined && provinceCode !== school.provinceCode)
+          ) {
             replacedLogoKey = savedLogoKey ? school.logoStorageKey : null;
             replacedNameImageKey = savedNameImageKey
               ? school.nameImageStorageKey
@@ -216,6 +234,7 @@ export async function updateAdminSchoolBinding(
             school = await transaction.school.update({
               where: { id: school.id },
               data: {
+                ...(provinceCode !== undefined ? { provinceCode } : {}),
                 ...(savedLogoKey
                   ? { logoStorageKey: savedLogoKey, logoUrl: null }
                   : {}),
@@ -230,6 +249,7 @@ export async function updateAdminSchoolBinding(
             data: {
               key: schoolKey(name),
               name,
+              provinceCode: provinceCode ?? null,
               logoStorageKey: savedLogoKey ?? admin.school?.logoStorageKey,
               logoUrl: savedLogoKey ? null : (admin.school?.logoUrl ?? null),
               nameImageStorageKey:
@@ -254,6 +274,7 @@ export async function updateAdminSchoolBinding(
           afterData: {
             schoolId: school.id,
             schoolName: school.name,
+            provinceCode: school.provinceCode,
             hasSchoolLogo: Boolean(school.logoUrl ?? school.logoStorageKey),
             hasSchoolNameImage: Boolean(school.nameImageStorageKey),
           },

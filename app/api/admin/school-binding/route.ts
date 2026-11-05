@@ -15,6 +15,7 @@ import {
   updateAdminSchoolBinding,
 } from "@/services/schools/service";
 import { MAX_SCHOOL_LOGO_BYTES } from "@/services/schools/constants";
+import { schoolProvinceSchema } from "@/services/schools/provinces";
 
 function schoolBindingApiError(error: unknown) {
   if (error instanceof SchoolBindingOperationError) {
@@ -50,6 +51,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const parsedProvince = schoolProvinceSchema.safeParse(
+      form.has("provinceCode") ? form.get("provinceCode") : undefined,
+    );
+    if (!parsedProvince.success) return apiError("请选择有效的省级地区。", 422);
+
     const logoValue = form.get("logo");
     const file = formDataFile(logoValue);
     if (logoValue !== null && !file) {
@@ -76,6 +82,7 @@ export async function POST(request: Request) {
         admin.id,
         {
           name: parsedName.data,
+          provinceCode: parsedProvince.data,
           ...(file
             ? {
                 logo: {
