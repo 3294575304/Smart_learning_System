@@ -72,6 +72,7 @@ export function getSafeErrorMessage(error: unknown): string {
 
 export function roleHomePath(role: Role): string {
   const paths: Record<Role, string> = {
+    SUPER_ADMIN: "/super-admin",
     ADMIN: "/admin",
     TEACHER: "/teacher",
     STUDENT: "/student",

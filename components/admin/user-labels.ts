@@ -1,6 +1,7 @@
 import type { AuditAction, Role, UserStatus } from "@prisma/client";
 
 export const ROLE_LABELS: Record<Role, string> = {
+  SUPER_ADMIN: "超级管理员",
   ADMIN: "管理员",
   TEACHER: "教师",
   STUDENT: "学生",

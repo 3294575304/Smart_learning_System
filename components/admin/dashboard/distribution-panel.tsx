@@ -10,6 +10,7 @@ import type {
 } from "@/services/admin/dashboard/types";
 
 const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: "超级管理员",
   ADMIN: "管理员",
   TEACHER: "教师",
   STUDENT: "学生",

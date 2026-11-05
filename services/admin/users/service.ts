@@ -9,6 +9,7 @@ import {
   assertCanChangeUserStatus,
   assertRoleTransitionHasNoBoundData,
 } from "@/services/admin/users/policy";
+import { ADMIN_MANAGED_ROLES } from "@/services/admin/users/schemas";
 import {
   countActiveAdmins,
   createAdminManagedUser,
@@ -20,6 +21,7 @@ import {
   type AdminUserRecord,
 } from "@/services/admin/users/repository";
 import type {
+  AdminManagedRole,
   AdminUserListQuery,
   CreateAdminUserData,
   UpdateAdminUserData,
@@ -39,6 +41,10 @@ import type {
 
 const SERIALIZABLE_RETRY_LIMIT = 3;
 
+function isAdminManagedRole(role: Role): role is AdminManagedRole {
+  return ADMIN_MANAGED_ROLES.some((managedRole) => managedRole === role);
+}
+
 async function requireAdminSchoolId(
   transaction: Prisma.TransactionClient,
   actorId: string,
@@ -54,6 +60,10 @@ async function requireAdminSchoolId(
 }
 
 function toAdminUserView(record: AdminUserRecord): AdminUserView {
+  if (!isAdminManagedRole(record.role)) {
+    throw new ResourceNotFoundError("用户不存在");
+  }
+
   return {
     id: record.id,
     displayName: record.profile?.displayName ?? record.email,

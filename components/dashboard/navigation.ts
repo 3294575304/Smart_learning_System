@@ -31,6 +31,13 @@ export interface NavigationGroup {
 }
 
 export const NAVIGATION: Record<Role, NavigationGroup[]> = {
+  SUPER_ADMIN: [
+    {
+      items: [
+        { href: "/super-admin", label: "超级管理员工作台", icon: ShieldCheck },
+      ],
+    },
+  ],
   ADMIN: [
     {
       items: [

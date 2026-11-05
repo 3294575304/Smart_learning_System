@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { LoginForm } from "@/components/auth/login-form";
 import { roleHomePath } from "@/services/auth/authorization";
@@ -31,7 +32,7 @@ export default async function LoginPage() {
           登录{config.platformName}
         </h1>
         <p className="text-muted-foreground mt-2 text-sm">
-          使用管理员、教师或学生账号继续。
+          使用教师或学生账号继续。
         </p>
         {config.platformAnnouncement ? (
           <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -44,6 +45,14 @@ export default async function LoginPage() {
           }
           schools={schools}
         />
+        <p className="mt-6 border-t border-sky-100 pt-4 text-center text-sm">
+          <Link
+            className="font-medium text-sky-700 underline"
+            href="/admin-login"
+          >
+            管理员入口
+          </Link>
+        </p>
       </section>
     </main>
   );

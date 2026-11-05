@@ -92,7 +92,7 @@ export function AuthSelectField({
           disabled={options.length === 0}
           id={id}
         >
-          <option value="" disabled>
+          <option disabled value="">
             {options.length > 0 ? emptyLabel : "暂无可选学校"}
           </option>
           {options.map((school) => (

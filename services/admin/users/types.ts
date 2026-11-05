@@ -1,4 +1,5 @@
-import type { Role, UserStatus } from "@prisma/client";
+import type { UserStatus } from "@prisma/client";
+import type { AdminManagedRole } from "@/services/admin/users/schemas";
 
 export interface AdminUserRoleSummary {
   studentNo: string | null;
@@ -12,7 +13,7 @@ export interface AdminUserView {
   id: string;
   displayName: string | null;
   email: string | null;
-  role: Role;
+  role: AdminManagedRole;
   status: UserStatus;
   lastLoginAt: Date | null;
   createdAt: Date;

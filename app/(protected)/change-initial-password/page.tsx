@@ -1,4 +1,5 @@
 import { ChangeInitialPasswordForm } from "@/components/auth/change-initial-password-form";
+import { Role } from "@prisma/client";
 import { SchoolIdentity } from "@/components/dashboard/school-identity";
 import { requireAuthenticatedPageUser } from "@/services/auth/page-authorization";
 import { getPublicSystemConfig } from "@/services/system-config/service";
@@ -12,11 +13,17 @@ export default async function ChangeInitialPasswordPage() {
   return (
     <main className="bg-muted/40 flex min-h-screen flex-col px-6 py-12">
       <header className="flex h-16 shrink-0 items-center">
-        <SchoolIdentity
-          logoUrl={user.schoolLogoUrl}
-          name={user.schoolName ?? "未绑定学校"}
-          nameImageUrl={user.schoolNameImageUrl}
-        />
+        {user.role === Role.SUPER_ADMIN ? (
+          <span className="text-base font-semibold text-slate-900">
+            {config.platformName} · 超级管理员
+          </span>
+        ) : (
+          <SchoolIdentity
+            logoUrl={user.schoolLogoUrl}
+            name={user.schoolName ?? "未绑定学校"}
+            nameImageUrl={user.schoolNameImageUrl}
+          />
+        )}
       </header>
       <div className="flex flex-1 items-center justify-center">
         <section className="bg-card w-full max-w-md rounded-xl border p-8 shadow-sm">

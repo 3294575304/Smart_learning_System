@@ -44,6 +44,15 @@ export const loginSchema = z.object({
     .refine(fitsBcryptLimit, "密码的 UTF-8 长度不能超过 72 字节"),
 });
 
+export const adminLoginSchema = z.object({
+  email: normalizedEmailSchema,
+  password: z
+    .string()
+    .min(1, "请输入密码")
+    .max(72, "密码长度不能超过 72 个字符")
+    .refine(fitsBcryptLimit, "密码的 UTF-8 长度不能超过 72 字节"),
+});
+
 export const registerSchema = z
   .object({
     schoolId: z.string().trim().min(1, "请选择已有学校"),
@@ -86,6 +95,7 @@ export const changeInitialPasswordSchema = z
 export const classroomIdSchema = z.string().cuid("班级 ID 格式无效");
 
 export type LoginInput = z.input<typeof loginSchema>;
+export type AdminLoginInput = z.input<typeof adminLoginSchema>;
 export type RegisterInput = z.input<typeof registerSchema>;
 export type RegisterData = z.output<typeof registerSchema>;
 export type ChangeInitialPasswordInput = z.input<

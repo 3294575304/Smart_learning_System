@@ -26,6 +26,7 @@
 import { hash } from "bcryptjs";
 
 import { assertSafeSeedDatabase } from "./seed-safety";
+import { ensureSuperAdminAccount } from "./bootstrap-super-admin-account";
 import { DEFAULT_ADMIN_SCHOOL } from "../services/schools/constants";
 
 const prisma = new PrismaClient();
@@ -2539,6 +2540,13 @@ async function main(): Promise<void> {
     seedUsers.map((seedUser) => upsertUser(seedUser, seedSchoolId)),
   );
   const [admin, teacher, teacherTwo, student, studentTwo, studentThree] = users;
+
+  const superAdmin = await ensureSuperAdminAccount(prisma);
+  if (superAdmin.created) {
+    console.info(`超级管理员账号：${superAdmin.email}`);
+    console.info(`初始密码：${superAdmin.password}`);
+    console.info("首次登录后必须修改初始密码。");
+  }
 
   await prisma.systemConfig.upsert({
     where: { singletonKey: "default" },

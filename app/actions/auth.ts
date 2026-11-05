@@ -1,6 +1,6 @@
 "use server";
 
-import { UserStatus } from "@prisma/client";
+import { Role, UserStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -14,6 +14,7 @@ import {
   StudentClaimError,
 } from "@/services/auth/registration";
 import {
+  adminLoginSchema,
   changeInitialPasswordSchema,
   loginSchema,
   registerSchema,
@@ -24,6 +25,7 @@ import {
   getCurrentUser,
 } from "@/services/auth/session";
 import type {
+  AdminLoginInput,
   ChangeInitialPasswordInput,
   LoginInput,
   RegisterInput,
@@ -73,12 +75,14 @@ export async function loginAction(
         where: {
           email: parsed.data.email,
           schoolId: parsed.data.schoolId,
+          role: { in: [Role.TEACHER, Role.STUDENT] },
         },
       })
     : await prisma.user
         .findMany({
           where: {
             schoolId: parsed.data.schoolId,
+            role: { in: [Role.TEACHER, Role.STUDENT] },
             OR: [
               { profile: { studentNo: parsed.data.email } },
               { profile: { teacherNo: parsed.data.email } },
@@ -95,7 +99,7 @@ export async function loginAction(
   if (!user || !passwordIsValid || user.status !== UserStatus.ACTIVE) {
     return {
       success: false,
-      error: "账号、密码或所选学校错误，或账号当前不可用",
+      error: "账号、密码或所选学校错误，或师生账号当前不可用",
       status: 401,
     };
   }
@@ -117,6 +121,65 @@ export async function loginAction(
     };
   } catch (error: unknown) {
     console.error("Failed to create login session", error);
+    return {
+      success: false,
+      error: getSafeErrorMessage(error),
+      status: 500,
+    };
+  }
+}
+
+export async function adminLoginAction(
+  input: AdminLoginInput,
+): Promise<ActionResult<RedirectResult>> {
+  const parsed = adminLoginSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "请检查登录信息",
+      status: 400,
+      fieldErrors: fieldErrors(parsed.error.flatten().fieldErrors),
+    };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: parsed.data.email },
+  });
+  const passwordIsValid = await verifyPassword(
+    parsed.data.password,
+    user?.passwordHash ?? null,
+  );
+
+  if (
+    !user ||
+    (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN) ||
+    !passwordIsValid ||
+    user.status !== UserStatus.ACTIVE
+  ) {
+    return {
+      success: false,
+      error: "账号、密码或学校错误，或管理员账号当前不可用",
+      status: 401,
+    };
+  }
+
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+    await createSession(user.id);
+
+    return {
+      success: true,
+      data: {
+        redirectTo: user.mustChangePassword
+          ? "/change-initial-password"
+          : roleHomePath(user.role),
+      },
+    };
+  } catch (error: unknown) {
+    console.error("Failed to create administrator login session", error);
     return {
       success: false,
       error: getSafeErrorMessage(error),

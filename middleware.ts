@@ -8,7 +8,9 @@ export function middleware(request: NextRequest) {
   }
 
   const loginUrl = request.nextUrl.clone();
-  loginUrl.pathname = "/login";
+  loginUrl.pathname = request.nextUrl.pathname.startsWith("/super-admin")
+    ? "/admin-login"
+    : "/login";
   loginUrl.search = "";
   loginUrl.searchParams.set(
     "next",
@@ -24,6 +26,7 @@ export const config = {
     "/admin/:path*",
     "/teacher/:path*",
     "/student/:path*",
+    "/super-admin/:path*",
     "/notifications/:path*",
   ],
 };

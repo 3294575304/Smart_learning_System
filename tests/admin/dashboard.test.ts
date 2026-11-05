@@ -133,7 +133,7 @@ const overviewFixture: DashboardOverview = {
   timeZone: "Asia/Shanghai",
   users: {
     total: 12,
-    byRole: { ADMIN: 1, TEACHER: 3, STUDENT: 8 },
+    byRole: { SUPER_ADMIN: 0, ADMIN: 1, TEACHER: 3, STUDENT: 8 },
     byStatus: { ACTIVE: 11, INACTIVE: 1 },
     newLast7Days: 2,
     newLast30Days: 5,

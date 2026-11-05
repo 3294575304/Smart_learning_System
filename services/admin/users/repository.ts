@@ -3,7 +3,10 @@ import "server-only";
 import { Prisma, Role, UserStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import type { AdminUserListQuery } from "@/services/admin/users/schemas";
+import {
+  ADMIN_MANAGED_ROLES,
+  type AdminUserListQuery,
+} from "@/services/admin/users/schemas";
 
 const adminUserSelect = Prisma.validator<Prisma.UserSelect>()({
   id: true,
@@ -46,6 +49,7 @@ export async function loadAdminUserPage(query: AdminUserListQuery): Promise<{
   records: AdminUserRecord[];
 }> {
   const where: Prisma.UserWhereInput = {
+    role: query.role ?? { in: [...ADMIN_MANAGED_ROLES] },
     ...(query.keyword
       ? {
           OR: [
@@ -65,7 +69,6 @@ export async function loadAdminUserPage(query: AdminUserListQuery): Promise<{
           ],
         }
       : {}),
-    ...(query.role ? { role: query.role } : {}),
     ...(query.status ? { status: query.status } : {}),
   };
   const orderBy = {
@@ -89,8 +92,8 @@ export function findAdminUserById(
   userId: string,
   client: DatabaseClient = prisma,
 ): Promise<AdminUserRecord | null> {
-  return client.user.findUnique({
-    where: { id: userId },
+  return client.user.findFirst({
+    where: { id: userId, role: { in: [...ADMIN_MANAGED_ROLES] } },
     select: adminUserSelect,
   });
 }

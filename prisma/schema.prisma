@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   TEACHER
   STUDENT
@@ -736,14 +737,14 @@ model User {
 }
 
 model School {
-  id             String   @id @default(cuid())
-  key            String   @unique
-  name           String
-  logoUrl        String?
-  logoStorageKey String?
+  id                  String   @id @default(cuid())
+  key                 String   @unique
+  name                String
+  logoUrl             String?
+  logoStorageKey      String?
   nameImageStorageKey String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   admins User[]
 
@@ -2420,37 +2421,37 @@ model KnowledgePoint {
 }
 
 model AIQuestionGenerationBatch {
-  id                    String   @id @default(cuid())
-  courseId              String
-  teacherId             String
-  jobId                 String?  @unique
-  idempotencyKey        String   @unique @db.VarChar(191)
-  questionCategoryId    String
-  graphVersionId        String?
-  syllabusStructureId   String?
-  mode                  String   @db.VarChar(20)
-  status                String   @default("PENDING") @db.VarChar(20)
-  request               Json
-  generationRevision    Int      @default(1)
-  requestedCount        Int
-  generatedCount        Int      @default(0)
-  failedCount           Int      @default(0)
-  errorCode             String?  @db.VarChar(100)
-  failureDetails        Json     @default("[]")
-  provider              String?  @db.VarChar(100)
-  model                 String?  @db.VarChar(191)
-  promptVersion         String   @db.VarChar(50)
-  ruleVersion           String   @db.VarChar(50)
-  sourceFileName        String?  @db.VarChar(255)
-  sourceFileFormat      String?  @db.VarChar(20)
-  sourceFileStorageKey  String?  @unique @db.VarChar(191)
-  sourceFileChecksum    String?  @db.Char(64)
-  sourceFileSizeBytes   Int?
-  sourceFileExpiresAt   DateTime?
-  sourceFileDeletedAt   DateTime?
-  deletedAt             DateTime?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  courseId             String
+  teacherId            String
+  jobId                String?   @unique
+  idempotencyKey       String    @unique @db.VarChar(191)
+  questionCategoryId   String
+  graphVersionId       String?
+  syllabusStructureId  String?
+  mode                 String    @db.VarChar(20)
+  status               String    @default("PENDING") @db.VarChar(20)
+  request              Json
+  generationRevision   Int       @default(1)
+  requestedCount       Int
+  generatedCount       Int       @default(0)
+  failedCount          Int       @default(0)
+  errorCode            String?   @db.VarChar(100)
+  failureDetails       Json      @default("[]")
+  provider             String?   @db.VarChar(100)
+  model                String?   @db.VarChar(191)
+  promptVersion        String    @db.VarChar(50)
+  ruleVersion          String    @db.VarChar(50)
+  sourceFileName       String?   @db.VarChar(255)
+  sourceFileFormat     String?   @db.VarChar(20)
+  sourceFileStorageKey String?   @unique @db.VarChar(191)
+  sourceFileChecksum   String?   @db.Char(64)
+  sourceFileSizeBytes  Int?
+  sourceFileExpiresAt  DateTime?
+  sourceFileDeletedAt  DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   course     Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
   teacher    User                            @relation("AIQuestionGenerationBatchCreator", fields: [teacherId], references: [id], onDelete: Restrict)

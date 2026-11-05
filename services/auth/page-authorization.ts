@@ -10,6 +10,7 @@ import { getSystemConfig } from "@/services/system-config/service";
 
 interface RequirePageUserOptions {
   allowInitialPasswordChange?: boolean;
+  loginPath?: string;
 }
 
 export async function requireAuthenticatedPageUser(
@@ -18,7 +19,7 @@ export async function requireAuthenticatedPageUser(
   const user = await getCurrentUser();
 
   if (!user) {
-    redirect("/login");
+    redirect(options.loginPath ?? "/login");
   }
 
   if (user.mustChangePassword && !options.allowInitialPasswordChange) {
@@ -30,7 +31,11 @@ export async function requireAuthenticatedPageUser(
   }
 
   const config = await getSystemConfig();
-  if (config.maintenanceMode && user.role !== "ADMIN") {
+  if (
+    config.maintenanceMode &&
+    user.role !== "ADMIN" &&
+    user.role !== "SUPER_ADMIN"
+  ) {
     redirect("/maintenance");
   }
 

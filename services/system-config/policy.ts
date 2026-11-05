@@ -10,7 +10,11 @@ export function assertSystemAvailableForUser(
   user: AuthenticatedUser,
   config: { maintenanceMode: boolean; maintenanceMessage: string },
 ): void {
-  if (config.maintenanceMode && user.role !== Role.ADMIN) {
+  if (
+    config.maintenanceMode &&
+    user.role !== Role.ADMIN &&
+    user.role !== Role.SUPER_ADMIN
+  ) {
     throw new MaintenanceModeError(config.maintenanceMessage);
   }
 }

@@ -16,6 +16,7 @@ import {
   type UpdateAdminUserData,
   type UpdateAdminUserInput,
 } from "@/services/admin/users/schemas";
+import { ADMIN_MANAGED_ROLES } from "@/services/admin/users/schemas";
 import type { AdminUserView } from "@/services/admin/users/types";
 
 const formFields = ["displayName", "email", "role", "status"] as const;
@@ -103,7 +104,7 @@ export function EditUserForm({
             className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2 disabled:bg-sky-100/70"
             disabled={isSelf && user.role === Role.ADMIN}
           >
-            {Object.values(Role).map((role) => (
+            {ADMIN_MANAGED_ROLES.map((role) => (
               <option key={role} value={role}>
                 {ROLE_LABELS[role]}
               </option>

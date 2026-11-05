@@ -261,7 +261,8 @@ MVP 已完成演示验收，V1.0 迭代一至六保留既有专项验收结论�
 
 ## 登录与权限
 
-- 管理员、教师和学生登录后分别进入 `/admin`、`/teacher`、`/student`。
+- 师生从 `/login` 登录后分别进入 `/teacher`、`/student`；该入口拒绝管理员账号。
+- 管理员和超级管理员从 `/admin-login` 登录，不选择学校；登录后分别进入 `/admin` 与 `/super-admin`。
 - `/register` 只允许已由教师或管理员预导入名单的学生按唯一学号和名单姓名认领账号；客户端不能指定角色，并受管理员自主注册开关控制。
 - 名单导入不会为新学生创建默认密码账号，而是保存待认领身份和班级预分配关系；认领成功后自动建立正式班级成员关系。
 - 会话令牌保存在 `HttpOnly` Cookie 中，数据库只保存令牌摘要。
@@ -275,8 +276,11 @@ MVP 已完成演示验收，V1.0 迭代一至六保留既有专项验收结论�
 | 管理员 | `admin@example.com`   | `Admin123!`   |
 | 教师   | `teacher@example.com` | `Teacher123!` |
 | 学生   | `student@example.com` | `Student123!` |
+| 超级管理员 | `superadmin@example.com` | 首次初始化时随机生成并在终端显示 |
 
-这些默认密码仅供本地开发，部署前必须通过 `SEED_*` 环境变量修改。
+超级管理员通过 `/admin-login` 登录，不需要选择学校。首次初始化账号时必须修改随机初始密码；运行 `npm run prisma:seed` 时会在首次创建后输出凭据。也可单独运行 `npm run prisma:bootstrap-super-admin` 创建该账号，重复运行不会重置已有密码。部署环境应通过 `SEED_SUPER_ADMIN_EMAIL` 与 `SEED_SUPER_ADMIN_PASSWORD` 配置账号，并保护初始化凭据。
+
+其他默认密码仅供本地开发，部署前必须通过 `SEED_*` 环境变量修改。
 
 ## 数据库初始化
 
@@ -296,6 +300,12 @@ npm run prisma:migrate
 
 ```bash
 npm run prisma:seed
+```
+
+仅创建超级管理员账号（首次创建时会生成并显示一次性密码）：
+
+```bash
+npm run prisma:bootstrap-super-admin
 ```
 
 seed 账号由 `.env` 中的 `SEED_*` 环境变量控制。模板中的密码仅供本地开发，禁止用于生产环境。

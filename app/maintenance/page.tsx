@@ -15,6 +15,7 @@ export default async function MaintenancePage() {
     redirect(user ? roleHomePath(user.role) : "/login");
   }
   if (user?.role === "ADMIN") redirect("/admin/system-config");
+  if (user?.role === "SUPER_ADMIN") redirect("/super-admin");
 
   return (
     <main className="bg-muted/40 flex min-h-screen items-center justify-center px-6 py-12">
@@ -30,8 +31,11 @@ export default async function MaintenancePage() {
           {user ? (
             <LogoutButton />
           ) : (
-            <Link className="rounded-md border px-4 py-2 text-sm" href="/login">
-              管理员登录
+            <Link
+              className="rounded-md border px-4 py-2 text-sm"
+              href="/admin-login"
+            >
+              管理员入口
             </Link>
           )}
         </div>

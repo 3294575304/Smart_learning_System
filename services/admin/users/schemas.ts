@@ -40,6 +40,14 @@ const initialPasswordSchema = z
   .regex(/\d/, "初始密码必须包含数字")
   .refine(fitsBcryptLimit, "初始密码的 UTF-8 长度不能超过 72 字节");
 
+export const ADMIN_MANAGED_ROLES = [
+  Role.ADMIN,
+  Role.TEACHER,
+  Role.STUDENT,
+] as const;
+export type AdminManagedRole = (typeof ADMIN_MANAGED_ROLES)[number];
+const adminManagedRoleSchema = z.enum(ADMIN_MANAGED_ROLES);
+
 export const adminUserIdSchema = z.string().cuid("用户 ID 格式无效");
 
 export const adminUserListQuerySchema = z
@@ -52,7 +60,7 @@ export const adminUserListQuerySchema = z
     ),
     role: z.preprocess(
       (value) => (value === "" ? undefined : value),
-      z.nativeEnum(Role).optional(),
+      adminManagedRoleSchema.optional(),
     ),
     status: z.preprocess(
       (value) => (value === "" ? undefined : value),
@@ -70,7 +78,7 @@ export const createAdminUserSchema = z
     displayName: displayNameSchema,
     email: normalizedEmailSchema,
     password: initialPasswordSchema,
-    role: z.nativeEnum(Role),
+    role: adminManagedRoleSchema,
   })
   .strict();
 
@@ -78,7 +86,7 @@ export const updateAdminUserSchema = z
   .object({
     displayName: optionalDisplayNameSchema,
     email: optionalNormalizedEmailSchema,
-    role: z.nativeEnum(Role).optional(),
+    role: adminManagedRoleSchema.optional(),
     status: z.nativeEnum(UserStatus).optional(),
   })
   .strict()

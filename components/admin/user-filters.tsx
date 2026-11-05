@@ -1,6 +1,6 @@
 "use client";
 
-import { Role, UserStatus } from "@prisma/client";
+import { UserStatus } from "@prisma/client";
 import Link from "next/link";
 
 import {
@@ -8,6 +8,7 @@ import {
   USER_STATUS_LABELS,
 } from "@/components/admin/user-labels";
 import type { AdminUserListQuery } from "@/services/admin/users/schemas";
+import { ADMIN_MANAGED_ROLES } from "@/services/admin/users/schemas";
 
 export function UserFilters({ query }: { query: AdminUserListQuery }) {
   return (
@@ -35,7 +36,7 @@ export function UserFilters({ query }: { query: AdminUserListQuery }) {
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
         <option value="">全部角色</option>
-        {Object.values(Role).map((role) => (
+        {ADMIN_MANAGED_ROLES.map((role) => (
           <option key={role} value={role}>
             {ROLE_LABELS[role]}
           </option>

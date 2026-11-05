@@ -13,6 +13,7 @@ import {
   type CreateAdminUserData,
   type CreateAdminUserInput,
 } from "@/services/admin/users/schemas";
+import { ADMIN_MANAGED_ROLES } from "@/services/admin/users/schemas";
 import type { AdminUserView } from "@/services/admin/users/types";
 
 const formFields = ["displayName", "email", "password", "role"] as const;
@@ -83,7 +84,7 @@ export function CreateUserForm() {
             {...register("role")}
             className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2"
           >
-            {Object.values(Role).map((role) => (
+            {ADMIN_MANAGED_ROLES.map((role) => (
               <option key={role} value={role}>
                 {ROLE_LABELS[role]}
               </option>
