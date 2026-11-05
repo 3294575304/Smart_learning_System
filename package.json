@@ -21,6 +21,7 @@
     "test:teaching-workflows": "tsx tests/integration/teaching-workflows/run.ts",
     "test:teacher-dashboard": "tsx tests/integration/teacher-dashboard/run.ts",
     "test:integration": "tsx tests/integration/recommendations/run.ts",
+    "test:super-admin": "tsx tests/integration/super-admin/run.ts",
     "test:all": "npm test && npm run test:integration",
     "test:sandbox-capabilities": "node --conditions=react-server --import tsx scripts/verify-sandbox-capabilities.ts",
     "test:programming-runtime": "tsx tests/programming-attempts/real-runtime.ts",

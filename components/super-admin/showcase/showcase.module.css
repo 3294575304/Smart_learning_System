@@ -3,16 +3,16 @@
   overflow: hidden;
   min-height: 70vh;
   padding: clamp(18px, 2vw, 28px);
-  border: 1px solid #dce8ef;
+  border: 1px solid #d6eaf5;
   border-radius: 16px;
   color: #203545;
-  background: #f6fafc;
+  background: #f3faff;
 }
 .screen:fullscreen {
   overflow-y: auto;
   border-radius: 0;
   padding: 28px 3vw;
-  background: #f6fafc;
+  background: #f3faff;
 }
 .header {
   display: flex;
@@ -46,9 +46,9 @@
   justify-content: center;
   gap: 7px;
   padding: 9px 13px;
-  border: 1px solid #ccdde7;
+  border: 1px solid #b5d9ed;
   border-radius: 8px;
-  color: #3d627a;
+  color: #167eaf;
   background: #fff;
   font-size: 13px;
   transition:
@@ -56,8 +56,13 @@
     border-color 0.15s;
 }
 .actions button:hover {
-  background: #edf7fc;
-  border-color: #95bfd6;
+  background: #e9f7ff;
+  border-color: #8bc5e4;
+}
+.actions button:last-child {
+  background: #e8f6ff;
+  border-color: #b5dff5;
+  color: #147eb0;
 }
 .actions button:disabled {
   opacity: 0.55;
@@ -88,6 +93,30 @@
 .metric p {
   color: #687f90;
   font-size: 13px;
+}
+.metric:nth-child(1) {
+  background: #f1f9ff;
+  border-color: #cfe8f8;
+}
+.metric:nth-child(1) strong,
+.metric:nth-child(1) > svg {
+  color: #087ebc;
+}
+.metric:nth-child(2) {
+  background: #f1fbf7;
+  border-color: #d4eee3;
+}
+.metric:nth-child(2) strong,
+.metric:nth-child(2) > svg {
+  color: #148d78;
+}
+.metric:nth-child(3) {
+  background: #f3f9fd;
+  border-color: #d3e8f3;
+}
+.metric:nth-child(3) strong,
+.metric:nth-child(3) > svg {
+  color: #167ca1;
 }
 .metric strong {
   display: block;
@@ -150,7 +179,7 @@
 }
 .mapArea {
   position: relative;
-  background: #fbfdfe;
+  background: #f8fcff;
 }
 .map {
   display: block;
@@ -176,10 +205,10 @@
   box-shadow: 0 2px 6px #2b567608;
 }
 .mapHint svg {
-  color: #609ebf;
+  color: #3395c7;
 }
 .mapHint strong {
-  color: #355f79;
+  color: #2374a0;
   font-weight: 600;
 }
 .mapHint small {
@@ -189,21 +218,7 @@
 .province {
   cursor: pointer;
   outline: none;
-  transition:
-    fill 0.2s,
-    stroke 0.15s;
-}
-.province:hover {
-  stroke: #8eafc4;
-  stroke-width: 1;
-}
-.province[aria-pressed="true"]:hover {
-  stroke: #6b9fb9;
-  stroke-width: 1.15;
-}
-.province:focus-visible {
-  stroke: #4f88a9;
-  stroke-width: 1.4;
+  transition: fill 0.2s;
 }
 .label {
   cursor: pointer;
@@ -225,7 +240,7 @@
   width: 125px;
   height: 7px;
   border-radius: 3px;
-  background: linear-gradient(90deg, #edf3f8, #a9d6ee, #1c6ba5);
+  background: linear-gradient(90deg, #e4f2fc, #7fcaf1, #1471c1);
 }
 .legend > small {
   color: #8da1af;
@@ -251,10 +266,10 @@
   width: calc(100% - 40px);
   margin: 18px 20px 0;
   padding: 10px 12px;
-  border: 1px solid #d9e6ef;
+  border: 1px solid #c9e4f3;
   border-radius: 7px;
-  background: #f7fafc;
-  color: #3e647e;
+  background: #f0f9ff;
+  color: #286b94;
   font-size: 13px;
   color-scheme: light;
 }
@@ -271,12 +286,12 @@
 }
 .provinceSummary h3 {
   margin-top: 5px;
-  color: #284a60;
+  color: #285a79;
   font-size: 21px;
   font-weight: 600;
 }
 .provinceSummary strong {
-  color: #3684aa;
+  color: #148bc0;
   font-size: 26px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -298,9 +313,9 @@
   gap: 12px;
   margin-top: 10px;
   padding: 16px 14px;
-  border: 1px solid #e3edf3;
+  border: 1px solid #d4ebf8;
   border-radius: 9px;
-  background: #f8fbfd;
+  background: #f0f9ff;
 }
 .schoolCard:first-child {
   margin-top: 0;
@@ -310,11 +325,11 @@
   width: 19px;
   height: 19px;
   margin-top: 3px;
-  color: #81aac2;
+  color: #4c9fc8;
   stroke-width: 1.5;
 }
 .schoolCard h4 {
-  color: #31546b;
+  color: #29648b;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.7;
@@ -325,7 +340,7 @@
   flex-wrap: wrap;
   gap: 7px;
   margin: 6px 0 5px;
-  color: #829caa;
+  color: #6d94aa;
   font-size: 11px;
 }
 .connectedDot {
@@ -333,7 +348,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #62aa98;
+  background: #27a983;
 }
 .schoolCard small {
   color: #a0b1bd;
@@ -397,7 +412,7 @@
 }
 .rankRow:hover,
 .rankRow[aria-pressed="true"] {
-  background: #f2f8fb;
+  background: #edf8ff;
 }
 .rankRow:focus-visible {
   outline: 2px solid #7db2ce;
@@ -405,7 +420,7 @@
 }
 .rankRow > span {
   min-width: 12px;
-  color: #91a8b6;
+  color: #548daa;
   font-size: 12px;
 }
 .rankRow > div {
@@ -419,7 +434,7 @@
   font-size: 12px;
 }
 .rankRow strong {
-  color: #4d86a4;
+  color: #2688b5;
   font-weight: 500;
 }
 .rankRow small {
@@ -431,12 +446,12 @@
   height: 4px;
   margin-top: 9px;
   border-radius: 3px;
-  background: #edf3f7;
+  background: #e7f3fb;
 }
 .rankTrack > div {
   height: 100%;
   border-radius: 3px;
-  background: #8bbbd2;
+  background: #5aa9d1;
 }
 .noRanking {
   padding: 22px 20px;

@@ -99,7 +99,26 @@ test("地图含全部34省级地区及南海边界，几何和标注没有无效
       false,
     );
     assert.ok(province.label.every(Number.isFinite));
+    assert.equal(province.capital.length, 2);
+    assert.ok(province.capital.every(Number.isFinite));
+    assert.ok(
+      (province.capital[0] ?? -1) >= 0 &&
+        (province.capital[0] ?? Infinity) <= map.width,
+    );
+    assert.ok(
+      (province.capital[1] ?? -1) >= 0 &&
+        (province.capital[1] ?? Infinity) <= map.height,
+    );
   }
+  const innerMongolia = map.provinces.find(
+    (province) => province.code === "150000",
+  );
+  assert.ok(innerMongolia);
+  assert.notDeepEqual(innerMongolia.capital, innerMongolia.center);
+  assert.ok(
+    (innerMongolia.capital[1] ?? 0) > (innerMongolia.center[1] ?? 0),
+    "呼和浩特位于省域几何中心以南，圆点不能使用省域中心",
+  );
 });
 
 test("学校地区只接收合法省级代码，兼容旧请求与未设置地区", () => {
@@ -111,17 +130,17 @@ test("学校地区只接收合法省级代码，兼容旧请求与未设置地�
     assert.equal(schoolProvinceSchema.safeParse(value).success, false);
 });
 
-test("系统应用展示具有独立导航及标题，不会同时高亮工作台", () => {
+test("系统应用情况具有独立导航及标题，不会同时高亮工作台", () => {
   const active = NAVIGATION.SUPER_ADMIN.flatMap((group) => group.items).filter(
     (item) => isNavigationItemActive("/super-admin/showcase", item),
   );
   assert.deepEqual(
     active.map((item) => item.label),
-    ["系统应用展示"],
+    ["系统应用情况"],
   );
   assert.equal(
     getDashboardPageTitle("/super-admin/showcase", NAVIGATION.SUPER_ADMIN),
-    "系统应用展示",
+    "系统应用情况",
   );
   for (const role of ["ADMIN", "TEACHER", "STUDENT"] as const)
     assert.ok(

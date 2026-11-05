@@ -3,7 +3,6 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { AuditAction, Prisma, Role, type School } from "@prisma/client";
 import { Buffer } from "node:buffer";
-import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { writeSystemConfigAuditLog } from "@/services/audit/repository";
@@ -12,12 +11,9 @@ import { MAX_SCHOOL_LOGO_BYTES } from "@/services/schools/constants";
 import type { SchoolOption } from "@/services/schools/types";
 import { schoolProvinceSchema } from "@/services/schools/provinces";
 import { getStorageService } from "@/services/storage";
+import { schoolBindingNameSchema } from "@/services/schools/schemas";
 
-export const schoolBindingNameSchema = z
-  .string()
-  .trim()
-  .min(2, "请输入学校名称")
-  .max(120, "学校名称不能超过 120 个字符");
+export { schoolBindingNameSchema } from "@/services/schools/schemas";
 
 export class SchoolBindingOperationError extends Error {
   constructor(
@@ -363,7 +359,7 @@ export function readCurrentSchoolNameImage(userId: string) {
   return readCurrentSchoolImage(userId, "nameImage");
 }
 
-async function deleteSchoolAssetIfUnused(
+export async function deleteSchoolAssetIfUnused(
   key: string,
   field: "logoStorageKey" | "nameImageStorageKey",
 ): Promise<void> {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import map from "@/data/maps/china-provinces.json";
 import { provinceFill } from "@/services/super-admin/showcase-metrics";
 import styles from "./showcase.module.css";
@@ -9,6 +9,7 @@ interface ChinaMapProps {
   counts: Record<string, number>;
   maxCount: number;
   selected: string;
+  hovered: string | null;
   onSelect: (code: string) => void;
   onHover: (code: string | null) => void;
 }
@@ -17,17 +18,24 @@ export function ChinaMap({
   counts,
   maxCount,
   selected,
+  hovered,
   onSelect,
   onHover,
 }: ChinaMapProps) {
   const uid = useId().replace(/:/g, "");
+  const [focused, setFocused] = useState<string | null>(null);
   const active = map.provinces.find((province) => province.code === selected);
+  const outlines = [selected, focused, hovered].filter(
+    (code, index, codes): code is string =>
+      code !== null && codes.lastIndexOf(code) === index,
+  );
   return (
     <svg
       viewBox="0 0 1000 730"
       className={styles.map}
       role="group"
       aria-label="中国各省级地区系统使用高校分布，点击省份查看高校列表"
+      onPointerLeave={() => onHover(null)}
     >
       <defs>
         <clipPath id={`${uid}-main`}>
@@ -45,8 +53,8 @@ export function ChinaMap({
               d={province.path}
               fill={provinceFill(counts[province.code] ?? 0, maxCount)}
               fillRule="evenodd"
-              stroke={selected === province.code ? "#6b9fb9" : "#c1d4e1"}
-              strokeWidth={selected === province.code ? 1.15 : 0.6}
+              stroke="#b3d1e4"
+              strokeWidth={0.6}
               strokeLinejoin="round"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
@@ -58,8 +66,14 @@ export function ChinaMap({
               onClick={() => onSelect(province.code)}
               onPointerEnter={() => onHover(province.code)}
               onPointerLeave={() => onHover(null)}
-              onFocus={() => onHover(province.code)}
-              onBlur={() => onHover(null)}
+              onFocus={() => {
+                setFocused(province.code);
+                onHover(province.code);
+              }}
+              onBlur={() => {
+                setFocused(null);
+                onHover(null);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
@@ -84,6 +98,8 @@ export function ChinaMap({
               key={province.code}
               className={styles.label}
               onClick={() => onSelect(province.code)}
+              onPointerEnter={() => onHover(province.code)}
+              onPointerLeave={() => onHover(null)}
             >
               {province.label[0] !== province.center[0] ||
               province.label[1] !== province.center[1] ? (
@@ -115,21 +131,48 @@ export function ChinaMap({
             </g>
           ))}
         </g>
+        {/* Draw interaction outlines last so neighboring fills cannot cover half the stroke. */}
+        <g aria-hidden="true" pointerEvents="none">
+          {outlines.map((code) => {
+            const province = map.provinces.find((item) => item.code === code);
+            if (!province) return null;
+            const color =
+              code === hovered
+                ? code === selected
+                  ? "#4d95bf"
+                  : "#7facc8"
+                : code === focused
+                  ? "#377fa7"
+                  : "#4d95bf";
+            return (
+              <path
+                key={code}
+                d={province.path}
+                fill="none"
+                stroke={color}
+                strokeWidth={1.15}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          })}
+        </g>
         {active ? (
           <g pointerEvents="none" aria-hidden="true">
             <circle
-              cx={active.center[0]}
-              cy={(active.center[1] ?? 0) - 18}
+              cx={active.capital[0]}
+              cy={active.capital[1]}
               r="7"
               fill="white"
-              stroke="#6a9fbb"
+              stroke="#75afd0"
               strokeWidth="1.5"
             />
             <circle
-              cx={active.center[0]}
-              cy={(active.center[1] ?? 0) - 18}
+              cx={active.capital[0]}
+              cy={active.capital[1]}
               r="3"
-              fill="#3684aa"
+              fill="#0284c7"
               stroke="white"
               strokeWidth="1.5"
             />

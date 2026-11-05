@@ -44,10 +44,10 @@ export function buildSchoolDistribution(schools: ShowcaseSchool[]) {
 
 // A continuous light-to-dark scale; zero remains distinct from every nonzero count.
 export function provinceFill(count: number, maxCount: number): string {
-  if (count <= 0) return "#edf3f8";
+  if (count <= 0) return "#e4f2fc";
   const ratio = Math.min(1, count / Math.max(1, maxCount));
-  const from = [169, 214, 238],
-    to = [28, 107, 165];
+  const from = [127, 202, 241],
+    to = [20, 113, 193];
   return (
     "#" +
     from

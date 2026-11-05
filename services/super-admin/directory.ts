@@ -34,10 +34,21 @@ export async function getSchoolAdminDirectory(
             name: true,
             provinceCode: true,
             createdAt: true,
-            _count: { select: { admins: { where: { role: Role.ADMIN } } } },
+            _count: { select: { admins: true } },
+            admins: { where: { role: Role.ADMIN }, select: { id: true } },
           },
         });
-        return { view: "SCHOOLS" as const, items, total, totalPages, page };
+        return {
+          view: "SCHOOLS" as const,
+          items: items.map(({ admins, _count, ...school }) => ({
+            ...school,
+            adminCount: admins.length,
+            boundUsers: _count.admins,
+          })),
+          total,
+          totalPages,
+          page,
+        };
       }
       const where: Prisma.UserWhereInput = {
         role: Role.ADMIN,

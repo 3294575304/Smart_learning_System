@@ -97,6 +97,7 @@ const provinces = regions.map((feature) => {
     name: feature.properties.name,
     shortName: short[code] ?? feature.properties.name.replace(/[省市]$/, ""),
     center,
+    capital: rounded(main(feature.properties.center)),
     label: rounded([center[0] + offset[0], center[1] + offset[1]]),
     path: path(feature, main),
     insetPath: path(feature, inset),

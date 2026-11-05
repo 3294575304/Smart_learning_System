@@ -1,7 +1,8 @@
-import { Building2, Search, ShieldCheck } from "lucide-react";
+import { Building2, Plus, Search, ShieldCheck, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { PageIndex } from "@/components/dashboard/page-index";
 import { RefreshOverview } from "@/components/super-admin/refresh-overview";
+import { DeleteSchoolButton } from "@/components/super-admin/delete-school-button";
 import { provinceName } from "@/services/schools/provinces";
 import type { SchoolAdminDirectoryData } from "@/services/super-admin/directory";
 import {
@@ -33,10 +34,26 @@ export function SchoolAdminDirectory({
             学校与管理员
           </h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            查看学校接入情况、管理员账号及学校绑定关系。
+            添加合作学校，创建并绑定高校管理员账号。
           </p>
         </div>
-        <RefreshOverview />
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshOverview />
+          <Link
+            href="/super-admin/schools/new-school"
+            className="flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            添加合作学校
+          </Link>
+          <Link
+            href="/super-admin/schools/new-admin"
+            className="flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
+          >
+            <UserPlus className="size-4" aria-hidden="true" />
+            新建管理员
+          </Link>
+        </div>
       </header>
       <nav
         aria-label="管理对象"
@@ -132,6 +149,7 @@ export function SchoolAdminDirectory({
                     "所在地区",
                     "绑定管理员",
                     "接入时间（北京时间）",
+                    "操作",
                   ].map((label) => (
                     <th key={label} className="px-5 py-4 font-medium">
                       {label}
@@ -148,9 +166,16 @@ export function SchoolAdminDirectory({
                     <td className="px-5 py-4">
                       {provinceName(school.provinceCode)}
                     </td>
-                    <td className="px-5 py-4">{school._count.admins} 人</td>
+                    <td className="px-5 py-4">{school.adminCount} 人</td>
                     <td className="px-5 py-4 text-slate-500">
                       {date(school.createdAt)}
+                    </td>
+                    <td className="px-5 py-4">
+                      <DeleteSchoolButton
+                        schoolId={school.id}
+                        schoolName={school.name}
+                        boundUsers={school.boundUsers}
+                      />
                     </td>
                   </tr>
                 ))}

@@ -86,7 +86,7 @@ export function ApplicationShowcase({
     >
       <header className={styles.header}>
         <div>
-          <h1 id="showcase-title">系统应用展示</h1>
+          <h1 id="showcase-title">系统应用情况</h1>
           <p className={styles.subtitle}>
             全国高校接入情况，点击省份查看学校。
           </p>
@@ -183,6 +183,7 @@ export function ApplicationShowcase({
               counts={counts}
               maxCount={data.maxCount}
               selected={selected}
+              hovered={hovered}
               onSelect={selectProvince}
               onHover={setHovered}
             />

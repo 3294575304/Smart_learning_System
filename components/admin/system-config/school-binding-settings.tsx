@@ -224,7 +224,7 @@ export function SchoolBindingSettings({
               所在省级地区
             </label>
             <p className="text-muted-foreground mt-1 text-sm">
-              用于系统应用展示地图的省份归属。
+              用于系统应用情况地图的省份归属。
             </p>
           </div>
           <select
