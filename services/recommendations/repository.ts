@@ -1,3 +1,4 @@
+import { schoolQuestionAccessWhere } from "@/services/questions/access";
 import "server-only";
 import {
   practicePointAllocation,
@@ -221,6 +222,7 @@ export async function buildRecommendationRequest(
 
   const candidateQuestions = await prisma.question.findMany({
     where: {
+      ...schoolQuestionAccessWhere(input.studentId),
       status: QuestionStatus.ACTIVE,
       isAssignmentOnly: false,
       deletedAt: null,
@@ -495,6 +497,7 @@ export async function loadEligibleRecommendationCandidates(
   if (allowedTypes.length === 0) return [];
   const questions = await prisma.question.findMany({
     where: {
+      ...schoolQuestionAccessWhere(teacherId),
       id: {
         in: request.teacherScope.candidateQuestionIds,
         ...(excludedQuestionIds.length > 0
@@ -720,6 +723,7 @@ export async function loadRecommendationPage(
   return prisma.personalizedRecommendation.findMany({
     where: {
       studentId,
+      question: schoolQuestionAccessWhere(studentId),
       ...(query.status ? { status: query.status } : {}),
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -732,8 +736,21 @@ export async function loadRecommendationPage(
 export async function loadRecommendationById(
   recommendationId: string,
 ): Promise<RecommendationViewRecord | null> {
-  return prisma.personalizedRecommendation.findUnique({
-    where: { id: recommendationId },
+  return prisma.personalizedRecommendation.findFirst({
+    where: {
+      id: recommendationId,
+      question: {
+        creator: {
+          school: {
+            admins: {
+              some: {
+                personalizedRecommendations: { some: { id: recommendationId } },
+              },
+            },
+          },
+        },
+      },
+    },
     select: recommendationViewSelect,
   });
 }
@@ -750,6 +767,7 @@ export async function startPendingRecommendation(input: {
       status: RecommendationStatus.PENDING,
       OR: [{ expiresAt: null }, { expiresAt: { gt: input.now } }],
       question: {
+        ...schoolQuestionAccessWhere(input.studentId),
         status: QuestionStatus.ACTIVE,
         isAssignmentOnly: false,
         deletedAt: null,

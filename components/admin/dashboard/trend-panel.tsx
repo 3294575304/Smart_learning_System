@@ -50,7 +50,7 @@ function TrendBars({
       </div>
       <div className="overflow-x-auto pb-2">
         <div
-          className="flex h-52 min-w-full items-end gap-1 border-b px-1 pt-6"
+          className="flex h-64 min-w-full items-end gap-1 border-b px-1 pt-6"
           style={{ width: `${Math.max(640, points.length * 18)}px` }}
         >
           {points.map((point, index) => (
@@ -58,7 +58,7 @@ function TrendBars({
               className="flex h-full min-w-3 flex-1 flex-col justify-end"
               key={point.date}
             >
-              <div className="flex h-40 items-end justify-center gap-px">
+              <div className="flex h-52 items-end justify-center gap-px">
                 {series.map((item) => {
                   const value = point[item.key];
                   return (

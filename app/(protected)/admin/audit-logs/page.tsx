@@ -39,14 +39,14 @@ function pageHref(query: AuditLogListQuery, page: number): string {
 export default async function AuditLogsPage({
   searchParams,
 }: AuditLogsPageProps) {
-  await requirePageRole(Role.ADMIN);
+  const admin = await requirePageRole(Role.ADMIN);
   const parsed = auditLogListQuerySchema.safeParse(
     firstValues(await searchParams),
   );
   const query = parsed.success
     ? parsed.data
     : auditLogListQuerySchema.parse({});
-  const logs = await listAuditLogs(query);
+  const logs = await listAuditLogs(admin.id, query);
   return (
     <section className="space-y-6">
       <PageHeader

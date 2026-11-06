@@ -1,3 +1,4 @@
+import { schoolQuestionAccessWhere } from "@/services/questions/access";
 import "server-only";
 import { latestEffectiveSubmissions } from "@/services/assignments/latest-submissions";
 
@@ -217,6 +218,7 @@ export async function getTeacherDashboard(
       }),
       prisma.question.count({
         where: {
+          ...schoolQuestionAccessWhere(teacherId),
           deletedAt: null,
           isAssignmentOnly: false,
           status: "ACTIVE",

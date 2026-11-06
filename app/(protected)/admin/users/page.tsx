@@ -48,7 +48,7 @@ export default async function AdminUsersPage({
   const query = parsed.success
     ? parsed.data
     : adminUserListQuerySchema.parse({});
-  const users = await listAdminUsers(query);
+  const users = await listAdminUsers(admin.id, query);
 
   return (
     <section className="space-y-6">
@@ -62,7 +62,7 @@ export default async function AdminUsersPage({
             创建用户
           </Link>
         }
-        description="查询、创建和维护平台账号。所有重要变更都会写入审计日志。"
+        description="查询、创建和维护本校账号。所有重要变更都会写入审计日志。"
         title="用户管理"
       />
       <UserFilters query={query} />

@@ -20,7 +20,11 @@ async function main() {
     where: { role: "ADMIN" },
   });
   const other = await prisma.user.create({
-    data: { role: "TEACHER", passwordHash: teacher.passwordHash },
+    data: {
+      role: "TEACHER",
+      passwordHash: teacher.passwordHash,
+      schoolId: teacher.schoolId,
+    },
   });
   const student = await prisma.user.findFirstOrThrow({
     where: { role: "STUDENT" },
@@ -135,6 +139,7 @@ async function main() {
       categoryId: firstCategory.id,
       keyword: "课程分类测试",
     }),
+    admin.schoolId ?? "",
   );
   assert.equal(adminList.total, 3);
   console.log(

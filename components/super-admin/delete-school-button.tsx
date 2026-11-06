@@ -35,27 +35,29 @@ export function DeleteSchoolButton({
     router.refresh();
   }
   return (
-    <div className="min-w-32">
-      <button
-        type="button"
-        onClick={remove}
-        disabled={pending || boundUsers > 0}
-        title={
-          boundUsers > 0
-            ? `仍有 ${boundUsers} 个绑定账号，请先处理绑定关系`
-            : `删除合作学校 ${schoolName}`
-        }
-        aria-label={`删除合作学校 ${schoolName}`}
-        className="inline-flex items-center gap-1.5 rounded-md border border-red-100 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
-      >
-        <Trash2 aria-hidden="true" className="size-3.5" />
-        {pending ? "正在删除…" : "删除"}
-      </button>
-      {boundUsers > 0 ? (
-        <p className="mt-1 text-xs text-slate-400">
-          已有 {boundUsers} 个绑定账号
-        </p>
-      ) : null}
+    <div className="min-w-[15rem]">
+      <div className="flex items-center gap-3 whitespace-nowrap">
+        <button
+          type="button"
+          onClick={remove}
+          disabled={pending || boundUsers > 0}
+          title={
+            boundUsers > 0
+              ? `仍有 ${boundUsers} 个绑定账号，请先处理绑定关系`
+              : `删除合作学校 ${schoolName}`
+          }
+          aria-label={`删除合作学校 ${schoolName}`}
+          className="inline-flex items-center gap-1.5 rounded-md border border-red-100 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+        >
+          <Trash2 aria-hidden="true" className="size-3.5" />
+          {pending ? "正在删除…" : "删除"}
+        </button>
+        {boundUsers > 0 ? (
+          <span className="text-xs text-slate-400">
+            已有 {boundUsers} 个绑定账号
+          </span>
+        ) : null}
+      </div>
       {feedback ? (
         <p role="status" className="mt-2 max-w-xs text-xs text-slate-600">
           {feedback}

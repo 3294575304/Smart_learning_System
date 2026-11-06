@@ -47,7 +47,7 @@ export function ActivityPanel({
 }) {
   return (
     <DashboardPanel
-      description="最多展示 10 条必要摘要，不包含审计详情、提示词或原始 AI 错误。"
+      description="最多展示 5 条必要摘要，不包含审计详情、提示词或原始 AI 错误。"
       title="最近动态"
     >
       {loading && !data ? (

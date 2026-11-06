@@ -1,3 +1,9 @@
+import {
+  listAdminQuestions,
+  getAdminQuestion,
+  disableAdminQuestion,
+} from "../../../services/admin/questions/service";
+import { adminQuestionListQuerySchema } from "../../../services/admin/questions/schemas";
 import assert from "node:assert/strict";
 import test, { before, after } from "node:test";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -18,6 +24,28 @@ import {
 } from "../../../services/super-admin/provisioning";
 import { ProvisioningError } from "../../../services/super-admin/provisioning-errors";
 import { assertIsolatedIntegrationEnvironment } from "../database";
+import {
+  listAdminUsers,
+  getAdminUser,
+  updateAdminUser,
+} from "../../../services/admin/users/service";
+import { adminUserListQuerySchema } from "../../../services/admin/users/schemas";
+import {
+  getDashboardOverview,
+  getDashboardTrends,
+  getDashboardDistributions,
+  getDashboardActivities,
+} from "../../../services/admin/dashboard/service";
+import {
+  listAdminClassrooms,
+  getAdminClassroom,
+  closeAdminClassroom,
+} from "../../../services/admin/classrooms/service";
+import { adminClassroomListQuerySchema } from "../../../services/admin/classrooms/schemas";
+import {
+  updateAdminSchoolBinding,
+  SchoolBindingOperationError,
+} from "../../../services/schools/service";
 
 assertIsolatedIntegrationEnvironment("SUPER_ADMIN_PROVISIONING_SCHEMA");
 const context = { ipAddress: null, userAgent: "isolated-provisioning-check" };
@@ -53,6 +81,169 @@ function adminInput(schoolId: string) {
     confirmPassword: initial,
   };
 }
+
+test("高校管理员只读取本校师生和统计，拒绝跨校编辑、班级操作及重新绑定学校", async () => {
+  const ownSchool = await school();
+  const otherSchool = await school();
+  const admin = await createSchoolAdmin(
+    actorId,
+    adminInput(ownSchool.id),
+    context,
+  );
+  const otherAdmin = await createSchoolAdmin(
+    actorId,
+    adminInput(otherSchool.id),
+    context,
+  );
+  async function person(
+    schoolId: string,
+    role: typeof Role.TEACHER | typeof Role.STUDENT,
+  ) {
+    return prisma.user.create({
+      data: {
+        schoolId,
+        role,
+        email: email(),
+        passwordHash: fixtureHash,
+        profile: { create: { displayName: `隔离${randomUUID()}` } },
+      },
+    });
+  }
+  const ownTeacher = await person(ownSchool.id, Role.TEACHER);
+  const ownStudent = await person(ownSchool.id, Role.STUDENT);
+  const otherTeacher = await person(otherSchool.id, Role.TEACHER);
+  const otherStudent = await person(otherSchool.id, Role.STUDENT);
+  const ownClass = await prisma.classroom.create({
+    data: {
+      teacherId: ownTeacher.id,
+      name: "本校班级",
+      joinCode: randomUUID(),
+    },
+  });
+  const otherClass = await prisma.classroom.create({
+    data: {
+      teacherId: otherTeacher.id,
+      name: "其他学校班级",
+      joinCode: randomUUID(),
+    },
+  });
+  const users = await listAdminUsers(
+    admin.id,
+    adminUserListQuerySchema.parse({}),
+  );
+  assert.deepEqual(
+    new Set(users.items.map((user) => user.id)),
+    new Set([admin.id, ownTeacher.id, ownStudent.id]),
+  );
+  for (const target of [otherAdmin, otherTeacher, otherStudent]) {
+    await assert.rejects(
+      getAdminUser(admin.id, target.id),
+      ResourceNotFoundError,
+    );
+    await assert.rejects(
+      updateAdminUser(
+        admin.id,
+        target.id,
+        { status: UserStatus.INACTIVE },
+        context,
+      ),
+      ResourceNotFoundError,
+    );
+    assert.equal(
+      (await prisma.user.findUniqueOrThrow({ where: { id: target.id } }))
+        .schoolId,
+      otherSchool.id,
+    );
+  }
+  const classes = await listAdminClassrooms(
+    admin.id,
+    adminClassroomListQuerySchema.parse({}),
+  );
+  assert.deepEqual(
+    classes.items.map((item) => item.id),
+    [ownClass.id],
+  );
+  await assert.rejects(
+    getAdminClassroom(admin.id, otherClass.id),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    closeAdminClassroom(admin.id, otherClass.id, context, "跨校关闭"),
+    ResourceNotFoundError,
+  );
+  const category = await prisma.questionCourseCategory.create({
+    data: { name: name(), normalizedName: randomUUID() },
+  });
+  const ownQuestion = await prisma.question.create({
+    data: {
+      creatorId: ownTeacher.id,
+      questionCategoryId: category.id,
+      title: "本校题目",
+      content: "1 == 1",
+      type: "TRUE_FALSE",
+      difficulty: 1,
+      explanation: "相等",
+      correctBoolean: true,
+    },
+  });
+  const otherQuestion = await prisma.question.create({
+    data: {
+      creatorId: otherTeacher.id,
+      questionCategoryId: category.id,
+      title: "其他学校题目",
+      content: "2 == 2",
+      type: "TRUE_FALSE",
+      difficulty: 1,
+      explanation: "相等",
+      correctBoolean: true,
+    },
+  });
+  const bank = await listAdminQuestions(
+    admin.id,
+    adminQuestionListQuerySchema.parse({}),
+  );
+  assert.deepEqual(
+    bank.items.map((item) => item.id),
+    [ownQuestion.id],
+  );
+  await assert.rejects(
+    getAdminQuestion(admin.id, otherQuestion.id),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    disableAdminQuestion(admin.id, otherQuestion.id, context),
+    ResourceNotFoundError,
+  );
+  const overview = await getDashboardOverview(admin.id);
+  assert.equal(overview.teaching.questionTotal, 1);
+  assert.equal(overview.users.total, 3);
+  assert.equal(overview.users.byRole.TEACHER, 1);
+  assert.equal(overview.users.byRole.STUDENT, 1);
+  assert.equal(overview.teaching.classroomTotal, 1);
+  const distribution = await getDashboardDistributions(admin.id);
+  assert.equal(
+    distribution.roles.reduce((sum, row) => sum + row.count, 0),
+    3,
+  );
+  const trends = await getDashboardTrends(admin.id, { range: "7d" });
+  assert.equal(
+    trends.points.reduce((sum, point) => sum + point.users, 0),
+    3,
+  );
+  const activity = await getDashboardActivities(admin.id, {
+    type: "USER_CREATED",
+    limit: 10,
+  });
+  assert.equal(activity.items.length, 2);
+  await assert.rejects(
+    updateAdminSchoolBinding(admin.id, { name: otherSchool.name }, context),
+    SchoolBindingOperationError,
+  );
+  assert.equal(
+    (await prisma.user.findUniqueOrThrow({ where: { id: admin.id } })).schoolId,
+    ownSchool.id,
+  );
+});
 
 test("先登记合作学校再开通管理员，账号绑定、改密要求和审计完整且不泄露密码", async () => {
   const partner = await school();

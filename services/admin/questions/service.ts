@@ -1,3 +1,4 @@
+import { requireAdminSchoolId } from "@/services/admin/school-scope";
 import "server-only";
 
 import { AuditAction, AuditTargetType, QuestionStatus } from "@prisma/client";
@@ -55,9 +56,13 @@ function toView(record: AdminQuestionRecord): AdminQuestionView {
 }
 
 export async function listAdminQuestions(
+  actorId: string,
   query: AdminQuestionListQuery,
 ): Promise<AdminQuestionListResult> {
-  const { total, records } = await loadAdminQuestionPage(query);
+  const { total, records } = await loadAdminQuestionPage(
+    query,
+    await requireAdminSchoolId(actorId),
+  );
   return {
     items: records.map(toView),
     pagination: {
@@ -70,17 +75,23 @@ export async function listAdminQuestions(
 }
 
 export async function getAdminQuestion(
+  actorId: string,
   questionId: string,
 ): Promise<AdminQuestionView> {
-  const question = await findAdminQuestionById(questionId);
+  const question = await findAdminQuestionById(
+    questionId,
+    await requireAdminSchoolId(actorId),
+  );
   if (!question) throw new ResourceNotFoundError("题目不存在");
   return toView(question);
 }
 
-export async function listAdminQuestionCreators(): Promise<
-  AdminQuestionCreatorOption[]
-> {
-  return (await loadQuestionCreatorOptions()).map((creator) => ({
+export async function listAdminQuestionCreators(
+  actorId: string,
+): Promise<AdminQuestionCreatorOption[]> {
+  return (
+    await loadQuestionCreatorOptions(await requireAdminSchoolId(actorId))
+  ).map((creator) => ({
     id: creator.id,
     displayName: creator.profile?.displayName ?? creator.email,
     email: creator.email,
@@ -94,7 +105,11 @@ export async function disableAdminQuestion(
   context: AuditRequestContext,
 ): Promise<AdminQuestionView> {
   await prisma.$transaction(async (transaction) => {
-    const before = await findAdminQuestionById(questionId, transaction);
+    const before = await findAdminQuestionById(
+      questionId,
+      await requireAdminSchoolId(actorId, transaction),
+      transaction,
+    );
     if (!before) throw new ResourceNotFoundError("题目不存在");
     if (before.status !== QuestionStatus.ACTIVE) {
       throw new GovernanceOperationError("只有正常状态的题目可以停用");
@@ -120,7 +135,7 @@ export async function disableAdminQuestion(
       context,
     });
   });
-  return getAdminQuestion(questionId);
+  return getAdminQuestion(actorId, questionId);
 }
 
 export async function restoreAdminQuestion(
@@ -129,7 +144,11 @@ export async function restoreAdminQuestion(
   context: AuditRequestContext,
 ): Promise<AdminQuestionView> {
   await prisma.$transaction(async (transaction) => {
-    const before = await findAdminQuestionById(questionId, transaction);
+    const before = await findAdminQuestionById(
+      questionId,
+      await requireAdminSchoolId(actorId, transaction),
+      transaction,
+    );
     if (!before) throw new ResourceNotFoundError("题目不存在");
     if (
       before.status !== QuestionStatus.ARCHIVED ||
@@ -163,5 +182,5 @@ export async function restoreAdminQuestion(
       context,
     });
   });
-  return getAdminQuestion(questionId);
+  return getAdminQuestion(actorId, questionId);
 }

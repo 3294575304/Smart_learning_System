@@ -1,3 +1,4 @@
+import { courseQuestionSchoolWhere } from "@/services/questions/access";
 import "server-only";
 
 import { QuestionType, Prisma } from "@prisma/client";
@@ -240,6 +241,7 @@ async function loadEvidence(batch: {
   if (batch.mode === "ANALOGY" && request.sourceQuestionId) {
     const question = await prisma.question.findFirst({
       where: {
+        ...courseQuestionSchoolWhere(batch.courseId),
         id: request.sourceQuestionId,
         questionCategoryId: batch.questionCategoryId,
         status: "ACTIVE",
@@ -420,6 +422,7 @@ export async function executeClaimedAIQuestionGenerationJob(
     );
     const categoryQuestions = await prisma.question.findMany({
       where: {
+        ...courseQuestionSchoolWhere(batch.courseId),
         questionCategoryId: batch.questionCategoryId,
         deletedAt: null,
         status: "ACTIVE",

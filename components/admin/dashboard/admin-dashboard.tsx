@@ -11,7 +11,6 @@ import {
 
 import { ActivityPanel } from "@/components/admin/dashboard/activity-panel";
 import { DistributionPanel } from "@/components/admin/dashboard/distribution-panel";
-import { HealthPanel } from "@/components/admin/dashboard/health-panel";
 import { OverviewPanel } from "@/components/admin/dashboard/overview-panel";
 import { TrendPanel } from "@/components/admin/dashboard/trend-panel";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -23,7 +22,6 @@ import type {
   DashboardRange,
   DashboardTrends,
 } from "@/services/admin/dashboard/types";
-import type { SystemHealthResult } from "@/services/system-health/types";
 
 interface SectionState<T> {
   data: T | null;
@@ -60,8 +58,6 @@ export function AdminDashboard() {
     useState<SectionState<DashboardDistributions>>(initialState);
   const [activities, setActivities] =
     useState<SectionState<DashboardActivities>>(initialState);
-  const [health, setHealth] =
-    useState<SectionState<SystemHealthResult>>(initialState);
 
   const loadCore = useCallback(async (signal?: AbortSignal) => {
     await Promise.allSettled([
@@ -72,11 +68,10 @@ export function AdminDashboard() {
         signal,
       ),
       loadSection(
-        "/api/admin/dashboard/activities?limit=10&type=ALL",
+        "/api/admin/dashboard/activities?limit=5&type=ALL",
         setActivities,
         signal,
       ),
-      loadSection("/api/admin/system-health", setHealth, signal),
     ]);
   }, []);
   const loadTrends = useCallback(
@@ -104,8 +99,7 @@ export function AdminDashboard() {
     overview.loading ||
     trends.loading ||
     distributions.loading ||
-    activities.loading ||
-    health.loading;
+    activities.loading;
   const refresh = () => {
     void Promise.allSettled([loadCore(), loadTrends()]);
   };
@@ -127,30 +121,23 @@ export function AdminDashboard() {
             刷新数据
           </button>
         }
-        description="基于平台真实业务数据查看用户、教学、AI 与系统运行状态。"
+        description="查看本校用户、教学、题库与 AI 使用情况。"
         eyebrow="Admin dashboard"
-        title="平台仪表盘"
+        title="学校仪表盘"
       />
       <OverviewPanel
         data={overview.data}
         error={overview.error}
         loading={overview.loading}
       />
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,0.8fr)]">
-        <TrendPanel
-          data={trends.data}
-          error={trends.error}
-          loading={trends.loading}
-          onRangeChange={setRange}
-          range={range}
-        />
-        <HealthPanel
-          data={health.data}
-          error={health.error}
-          loading={health.loading}
-        />
-      </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <TrendPanel
+        data={trends.data}
+        error={trends.error}
+        loading={trends.loading}
+        onRangeChange={setRange}
+        range={range}
+      />
+      <div className="grid items-stretch gap-6 xl:grid-cols-2">
         <DistributionPanel
           data={distributions.data}
           error={distributions.error}

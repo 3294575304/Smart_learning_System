@@ -48,7 +48,7 @@ function pageHref(query: AdminQuestionListQuery, page: number): string {
 }
 
 export default async function AdminQuestionsPage({ searchParams }: PageProps) {
-  await requirePageRole(Role.ADMIN);
+  const admin = await requirePageRole(Role.ADMIN);
   const parsed = adminQuestionListQuerySchema.safeParse(
     firstValues(await searchParams),
   );
@@ -56,8 +56,8 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
     ? parsed.data
     : adminQuestionListQuerySchema.parse({});
   const [questions, creators, courses] = await Promise.all([
-    listAdminQuestions(query),
-    listAdminQuestionCreators(),
+    listAdminQuestions(admin.id, query),
+    listAdminQuestionCreators(admin.id),
     listQuestionImportCourses(),
   ]);
   return (

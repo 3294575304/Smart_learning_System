@@ -39,8 +39,12 @@ export type AdminClassroomRecord = Prisma.ClassroomGetPayload<{
 }>;
 type DatabaseClient = typeof prisma | Prisma.TransactionClient;
 
-export async function loadAdminClassroomPage(query: AdminClassroomListQuery) {
+export async function loadAdminClassroomPage(
+  query: AdminClassroomListQuery,
+  schoolId: string,
+) {
   const where: Prisma.ClassroomWhereInput = {
+    teacher: { schoolId },
     ...(query.status ? { status: query.status } : {}),
     ...(query.keyword
       ? {
@@ -82,10 +86,11 @@ export async function loadAdminClassroomPage(query: AdminClassroomListQuery) {
 
 export function findAdminClassroomById(
   classroomId: string,
+  schoolId: string,
   client: DatabaseClient = prisma,
 ): Promise<AdminClassroomRecord | null> {
-  return client.classroom.findUnique({
-    where: { id: classroomId },
+  return client.classroom.findFirst({
+    where: { id: classroomId, teacher: { schoolId } },
     select: adminClassroomSelect,
   });
 }

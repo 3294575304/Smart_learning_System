@@ -10,8 +10,12 @@ import { requireAuthenticatedUser } from "@/services/auth/authorization";
 
 export async function GET() {
   try {
-    await requireAuthenticatedUser([Role.ADMIN]);
-    return apiSuccess(await getDashboardOverview(), 200, privateNoStoreHeaders);
+    const admin = await requireAuthenticatedUser([Role.ADMIN]);
+    return apiSuccess(
+      await getDashboardOverview(admin.id),
+      200,
+      privateNoStoreHeaders,
+    );
   } catch (error: unknown) {
     return dashboardApiError(error);
   }

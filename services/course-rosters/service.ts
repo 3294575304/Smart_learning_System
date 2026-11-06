@@ -1,3 +1,4 @@
+import { assertSchoolMembership } from "@/services/schools/membership-scope";
 import "server-only";
 import { AuditAction, AuditTargetType, Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -209,6 +210,7 @@ export async function mutateCourseRoster(
                   "该身份不能作为在读学生添加",
                   409,
                 );
+              await assertSchoolMembership(input.classroomId, user.id, db);
               const member = await db.classMembership.upsert({
                 where: {
                   classroomId_studentId: {

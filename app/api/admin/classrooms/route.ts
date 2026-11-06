@@ -8,12 +8,12 @@ import { requireAuthenticatedUser } from "@/services/auth/authorization";
 
 export async function GET(request: Request) {
   try {
-    await requireAuthenticatedUser([Role.ADMIN]);
+    const admin = await requireAuthenticatedUser([Role.ADMIN]);
     const parsed = adminClassroomListQuerySchema.safeParse(
       Object.fromEntries(new URL(request.url).searchParams),
     );
     if (!parsed.success) return apiError("请检查班级筛选条件", 400);
-    return apiSuccess(await listAdminClassrooms(parsed.data));
+    return apiSuccess(await listAdminClassrooms(admin.id, parsed.data));
   } catch (error: unknown) {
     return adminGovernanceApiError(error);
   }

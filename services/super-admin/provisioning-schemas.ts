@@ -18,9 +18,19 @@ export const createPartnerSchoolSchema = z
   })
   .strict();
 
+const initialSchoolAdminPasswordSchema = z
+  .string()
+  .min(1, "请输入初始密码")
+  .max(72, "初始密码长度不能超过 72 个字符")
+  .refine(
+    (password) => new TextEncoder().encode(password).length <= 72,
+    "初始密码的 UTF-8 长度不能超过 72 字节",
+  );
+
 export const createSchoolAdminSchema = createAdminUserSchema
-  .pick({ displayName: true, email: true, password: true })
+  .pick({ displayName: true, email: true })
   .extend({
+    password: initialSchoolAdminPasswordSchema,
     schoolId: z
       .string()
       .trim()

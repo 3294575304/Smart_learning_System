@@ -18,7 +18,7 @@ export default async function EditAdminUserPage({
   if (!parsedId.success) notFound();
   let user;
   try {
-    user = await getAdminUser(parsedId.data);
+    user = await getAdminUser(admin.id, parsedId.data);
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) notFound();
     throw error;

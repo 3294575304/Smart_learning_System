@@ -3,6 +3,7 @@ import { PROVINCES } from "@/services/schools/provinces";
 export interface ShowcaseSchool {
   id: string;
   name: string;
+  logoUrl?: string | null;
   provinceCode: string | null;
   joinedAt: string;
   learners: number;

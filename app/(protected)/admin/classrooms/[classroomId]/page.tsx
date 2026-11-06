@@ -14,12 +14,12 @@ interface PageProps {
 }
 
 export default async function AdminClassroomDetailPage({ params }: PageProps) {
-  await requirePageRole(Role.ADMIN);
+  const admin = await requirePageRole(Role.ADMIN);
   const id = adminClassroomIdSchema.safeParse((await params).classroomId);
   if (!id.success) notFound();
   let classroom;
   try {
-    classroom = await getAdminClassroom(id.data);
+    classroom = await getAdminClassroom(admin.id, id.data);
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) notFound();
     throw error;

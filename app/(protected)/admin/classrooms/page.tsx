@@ -34,18 +34,18 @@ function pageHref(query: AdminClassroomListQuery, page: number): string {
 }
 
 export default async function AdminClassroomsPage({ searchParams }: PageProps) {
-  await requirePageRole(Role.ADMIN);
+  const admin = await requirePageRole(Role.ADMIN);
   const parsed = adminClassroomListQuerySchema.safeParse(
     firstValues(await searchParams),
   );
   const query = parsed.success
     ? parsed.data
     : adminClassroomListQuerySchema.parse({});
-  const classrooms = await listAdminClassrooms(query);
+  const classrooms = await listAdminClassrooms(admin.id, query);
   return (
     <section className="space-y-6">
       <PageHeader
-        description="查看平台班级运行状态，并在必要时软关闭异常班级。"
+        description="查看本校班级运行状态，并在必要时软关闭异常班级。"
         title="班级治理"
       />
       <ClassroomGovernanceFilters query={query} />

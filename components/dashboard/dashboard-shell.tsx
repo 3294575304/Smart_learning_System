@@ -257,7 +257,13 @@ export function DashboardShell({
   return (
     <div className="via-background min-h-screen bg-gradient-to-br from-sky-50/80 to-emerald-50/60">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-sky-100 bg-white/95 lg:flex lg:flex-col">
-        <div className="flex h-16 items-center border-b px-6">
+        <div
+          className={
+            user.role === Role.SUPER_ADMIN
+              ? "flex h-16 items-center border-b px-6"
+              : "flex h-16 items-center justify-center border-b px-2"
+          }
+        >
           {user.role === Role.SUPER_ADMIN ? (
             <Link
               className="flex items-center gap-2 font-semibold"
@@ -302,7 +308,13 @@ export function DashboardShell({
             type="button"
           />
           <aside className="bg-background relative flex h-full w-[min(20rem,86vw)] flex-col shadow-xl">
-            <div className="flex h-16 items-center justify-between border-b px-5">
+            <div
+              className={
+                user.role === Role.SUPER_ADMIN
+                  ? "relative flex h-16 items-center justify-between border-b px-5"
+                  : "relative flex h-16 items-center justify-center border-b px-10"
+              }
+            >
               {user.role === Role.SUPER_ADMIN ? (
                 <Link
                   className="flex min-w-0 flex-1 items-center gap-2 font-semibold"
@@ -330,7 +342,11 @@ export function DashboardShell({
               )}
               <button
                 aria-label="关闭菜单"
-                className="rounded-md p-2 hover:bg-gray-100"
+                className={
+                  user.role === Role.SUPER_ADMIN
+                    ? "rounded-md p-2 hover:bg-gray-100"
+                    : "absolute top-3 right-2 rounded-md p-2 hover:bg-gray-100"
+                }
                 onClick={() => setMobileMenuOpen(false)}
                 type="button"
               >

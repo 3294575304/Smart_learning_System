@@ -1,3 +1,4 @@
+import { schoolQuestionAccessWhere } from "@/services/questions/access";
 import { studentWorkWindow } from "./work-window";
 import {
   assertStudentWorkAccess,
@@ -165,6 +166,7 @@ async function assertAssignmentResources(
   const questionIds = input.questions.map((item) => item.questionId);
   const questions = await transaction.question.findMany({
     where: {
+      ...schoolQuestionAccessWhere(teacherId),
       id: { in: questionIds },
       OR: [
         { isAssignmentOnly: false },
@@ -337,6 +339,7 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
     }),
     prisma.question.findMany({
       where: {
+        ...schoolQuestionAccessWhere(teacherId),
         status: QuestionStatus.ACTIVE,
         isAssignmentOnly: false,
         deletedAt: null,

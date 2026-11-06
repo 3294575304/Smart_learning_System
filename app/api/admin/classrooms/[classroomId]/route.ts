@@ -12,12 +12,12 @@ interface RouteContext {
 
 export async function GET(_: Request, context: RouteContext) {
   try {
-    await requireAuthenticatedUser([Role.ADMIN]);
+    const admin = await requireAuthenticatedUser([Role.ADMIN]);
     const id = adminClassroomIdSchema.safeParse(
       (await context.params).classroomId,
     );
     if (!id.success) return apiError("班级 ID 格式无效", 400);
-    return apiSuccess(await getAdminClassroom(id.data));
+    return apiSuccess(await getAdminClassroom(admin.id, id.data));
   } catch (error: unknown) {
     return adminGovernanceApiError(error);
   }

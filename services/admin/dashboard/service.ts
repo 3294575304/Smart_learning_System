@@ -44,6 +44,7 @@ import {
   type DashboardTrends,
 } from "@/services/admin/dashboard/types";
 import { getSystemConfig } from "@/services/system-config/service";
+import { requireAdminSchoolId } from "@/services/admin/school-scope";
 
 function countFor<T extends string>(
   rows: Array<{ status: T; _count: { _all: number } }>,
@@ -71,26 +72,30 @@ function statusMap(
 }
 
 export async function getDashboardOverview(
+  actorId: string,
   now = new Date(),
 ): Promise<DashboardOverview> {
+  const schoolId = await requireAdminSchoolId(actorId);
   const range7 = createDashboardDateRange("7d", now);
   const range30 = createDashboardDateRange("30d", now);
   const previous7 = previousDashboardPeriod(range7);
   const [users, teaching, learning, ai, config] = await Promise.all([
     loadUserOverview({
+      schoolId,
       current7Start: range7.start,
       current7End: range7.end,
       previous7Start: previous7.start,
       previous7End: previous7.end,
       current30Start: range30.start,
     }),
-    loadTeachingOverview(),
+    loadTeachingOverview(schoolId),
     loadLearningOverview({
+      schoolId,
       current7Start: range7.start,
       current30Start: range30.start,
       end: range7.end,
     }),
-    loadAIOverview({ start7: range7.start, end: range7.end }),
+    loadAIOverview({ schoolId, start7: range7.start, end: range7.end }),
     getSystemConfig(),
   ]);
 
@@ -177,12 +182,14 @@ export async function getDashboardOverview(
 }
 
 export async function getDashboardTrends(
+  actorId: string,
   rawQuery: unknown,
   now = new Date(),
 ): Promise<DashboardTrends> {
   const query = dashboardTrendQuerySchema.parse(rawQuery);
   const range = createDashboardDateRange(query.range, now);
-  const raw = await loadTrendCounts(range.start, range.end);
+  const schoolId = await requireAdminSchoolId(actorId);
+  const raw = await loadTrendCounts(range.start, range.end, schoolId);
   const points = fillDashboardTrendPoints(range.dateKeys, raw);
   return {
     range: query.range,
@@ -194,9 +201,11 @@ export async function getDashboardTrends(
 }
 
 export async function getDashboardDistributions(
+  actorId: string,
   now = new Date(),
 ): Promise<DashboardDistributions> {
-  const raw = await loadDistributions();
+  const schoolId = await requireAdminSchoolId(actorId);
+  const raw = await loadDistributions(schoolId);
   return {
     generatedAt: now.toISOString(),
     roles: raw.roles.map((row) => ({
@@ -241,7 +250,7 @@ export async function getDashboardDistributions(
 
 const ACTIVITY_LOADERS: Record<
   Exclude<DashboardActivityType, "ALL">,
-  (limit: number) => Promise<DashboardActivity[]>
+  (limit: number, schoolId: string) => Promise<DashboardActivity[]>
 > = {
   USER_CREATED: loadRecentUsers,
   ASSIGNMENT_PUBLISHED: loadRecentAssignments,
@@ -252,19 +261,21 @@ const ACTIVITY_LOADERS: Record<
 };
 
 export async function getDashboardActivities(
+  actorId: string,
   rawQuery: unknown,
 ): Promise<DashboardActivities> {
   const query = dashboardActivityQuerySchema.parse(rawQuery);
+  const schoolId = await requireAdminSchoolId(actorId);
   const activities =
     query.type === "ALL"
       ? (
           await Promise.all(
             Object.values(ACTIVITY_LOADERS).map((loader) =>
-              loader(query.limit),
+              loader(query.limit, schoolId),
             ),
           )
         ).flat()
-      : await ACTIVITY_LOADERS[query.type](query.limit);
+      : await ACTIVITY_LOADERS[query.type](query.limit, schoolId);
   return {
     items: activities
       .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))

@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { schoolIdentityLayout } from "./school-identity-layout";
 
 export function SchoolIdentity({
   name,
@@ -14,30 +15,60 @@ export function SchoolIdentity({
   nameImageUrl?: string | null;
   compact?: boolean;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(224);
+  const [imageSize, setImageSize] = useState<{
+    url: string;
+    ratio: number;
+  } | null>(null);
   const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
   const [failedNameImageUrl, setFailedNameImageUrl] = useState<string | null>(
     null,
   );
   const displayLogoUrl = logoUrl?.trim() || null;
   const displayNameImageUrl = nameImageUrl?.trim() || null;
+  const ratio =
+    imageSize?.url === displayNameImageUrl
+      ? imageSize.ratio
+      : Math.max(2, Array.from(name).length * 0.9);
+  const layout = schoolIdentityLayout(width, ratio, compact);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const measure = () => {
+      if (container.clientWidth > 0) setWidth(container.clientWidth);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    measure();
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div
+      ref={containerRef}
+      title={name}
+      className="flex w-full min-w-0 items-center justify-center"
+      style={{ gap: layout.gap }}
+    >
       {displayLogoUrl && failedLogoUrl !== displayLogoUrl ? (
         <Image
           alt={`${name}校徽`}
-          className="h-8 w-8 shrink-0 rounded-full object-contain"
-          height={32}
+          className="shrink-0 object-contain"
+          style={{ width: layout.logoSize, height: layout.logoSize }}
+          width={128}
+          height={128}
           loading="eager"
           onError={() => setFailedLogoUrl(displayLogoUrl)}
           src={displayLogoUrl}
           unoptimized
-          width={32}
         />
       ) : (
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-900 text-xs font-semibold text-white"
+          className="flex shrink-0 items-center justify-center rounded-full bg-blue-900 text-base font-semibold text-white"
+          style={{ width: layout.logoSize, height: layout.logoSize }}
         >
           {name.trim().slice(0, 1) || "校"}
         </span>
@@ -45,25 +76,35 @@ export function SchoolIdentity({
       {displayNameImageUrl && failedNameImageUrl !== displayNameImageUrl ? (
         <Image
           alt={`${name}校名`}
-          className={
-            compact
-              ? "h-10 w-[min(10rem,44vw)] shrink object-contain object-left mix-blend-multiply"
-              : "h-9 w-[min(13rem,48vw)] shrink object-contain object-left mix-blend-multiply"
-          }
-          height={40}
+          className="shrink-0 object-contain object-center mix-blend-multiply"
+          style={{ width: layout.nameWidth, height: layout.nameHeight }}
+          width={640}
+          height={128}
           loading="eager"
+          onLoad={(event) => {
+            const image = event.currentTarget;
+            if (image.naturalWidth && image.naturalHeight)
+              setImageSize({
+                url: displayNameImageUrl,
+                ratio: image.naturalWidth / image.naturalHeight,
+              });
+          }}
           onError={() => setFailedNameImageUrl(displayNameImageUrl)}
           src={displayNameImageUrl}
           unoptimized
-          width={compact ? 160 : 220}
         />
       ) : (
         <span
-          className="truncate text-base font-semibold text-blue-950 sm:text-lg"
+          className="shrink-0 text-center leading-tight font-semibold whitespace-nowrap text-blue-950"
           style={{
+            width: layout.nameWidth,
+            fontSize: Math.min(
+              24,
+              layout.nameWidth / Math.max(1, Array.from(name).length) / 1.08,
+            ),
             fontFamily:
-              '"STKaiti", "KaiTi", "楷体", "Noto Serif CJK SC", serif',
-            letterSpacing: "0.08em",
+              '\"STKaiti\", \"KaiTi\", \"楷体\", \"Noto Serif CJK SC\", serif',
+            letterSpacing: "0.04em",
           }}
         >
           {name}

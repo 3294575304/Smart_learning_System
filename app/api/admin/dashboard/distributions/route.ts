@@ -10,9 +10,9 @@ import { requireAuthenticatedUser } from "@/services/auth/authorization";
 
 export async function GET() {
   try {
-    await requireAuthenticatedUser([Role.ADMIN]);
+    const admin = await requireAuthenticatedUser([Role.ADMIN]);
     return apiSuccess(
-      await getDashboardDistributions(),
+      await getDashboardDistributions(admin.id),
       200,
       privateNoStoreHeaders,
     );

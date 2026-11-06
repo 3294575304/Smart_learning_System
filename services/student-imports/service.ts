@@ -1,3 +1,4 @@
+import { assertSchoolMembership } from "@/services/schools/membership-scope";
 import {
   AuditAction,
   AuditTargetType,
@@ -15,6 +16,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 
 import { prisma } from "@/lib/prisma";
+import { requireAdminSchoolId } from "@/services/admin/school-scope";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type {
@@ -266,10 +268,9 @@ interface StudentImportExecutionDependencies {
 
 type DatabaseClient = typeof prisma | Prisma.TransactionClient;
 
-interface StudentImportActor {
-  id: string;
-  role: typeof Role.ADMIN | typeof Role.TEACHER;
-}
+type StudentImportActor =
+  | { id: string; role: typeof Role.TEACHER }
+  | { id: string; role: typeof Role.ADMIN; schoolId: string };
 
 export interface ImportExecutionFailure {
   code: string;
@@ -1949,7 +1950,7 @@ async function loadExecutionBatchForActor(
       id: batchId,
       ...(actor.role === Role.TEACHER
         ? { course: { teacherId: actor.id } }
-        : {}),
+        : { course: { teacher: { schoolId: actor.schoolId } } }),
     },
     select: executionBatchSelect,
   });
@@ -2137,6 +2138,7 @@ async function ensureActiveMembership(
   now: Date,
   rowNumber: number,
 ): Promise<{ membershipId: string; alreadyActive: boolean }> {
+  await assertSchoolMembership(classroomId, studentId, transaction);
   const existing = await importDatabaseOperation(
     "FIND_CLASS_MEMBERSHIP",
     rowNumber,
@@ -2410,7 +2412,7 @@ async function executeClaimedImportBatch(
         ],
         ...(actor.role === Role.TEACHER
           ? { course: { teacherId: actor.id } }
-          : {}),
+          : { course: { teacher: { schoolId: actor.schoolId } } }),
       },
       data: {
         status: StudentImportBatchStatus.PROCESSING,
@@ -3035,14 +3037,15 @@ export function executeTeacherStudentImportBatch(
   );
 }
 
-export function executeAdminStudentImportBatch(
+export async function executeAdminStudentImportBatch(
   adminId: string,
   batchId: string,
   context: AuditRequestContext,
   dependencies: StudentImportExecutionDependencies = {},
 ): Promise<StudentImportExecutionResult> {
+  const schoolId = await requireAdminSchoolId(adminId);
   return executeStudentImportBatchForActor(
-    { id: adminId, role: Role.ADMIN },
+    { id: adminId, role: Role.ADMIN, schoolId },
     batchId,
     context,
     dependencies,

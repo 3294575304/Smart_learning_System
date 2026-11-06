@@ -1,6 +1,13 @@
 import "server-only";
 
-import { AIRecordStatus, Prisma, Role, SubmissionStatus } from "@prisma/client";
+import {
+  AIRecordStatus,
+  AuditAction,
+  AuditTargetType,
+  Prisma,
+  Role,
+  SubmissionStatus,
+} from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import type { DashboardActivity } from "@/services/admin/dashboard/types";
@@ -32,6 +39,7 @@ interface KnowledgeCoverageRow {
 }
 
 export async function loadUserOverview(input: {
+  schoolId: string;
   current7Start: Date;
   current7End: Date;
   previous7Start: Date;
@@ -40,21 +48,32 @@ export async function loadUserOverview(input: {
 }) {
   const [total, roles, statuses, current7, previous7, current30] =
     await Promise.all([
-      prisma.user.count(),
-      prisma.user.groupBy({ by: ["role"], _count: { _all: true } }),
-      prisma.user.groupBy({ by: ["status"], _count: { _all: true } }),
+      prisma.user.count({ where: { schoolId: input.schoolId } }),
+      prisma.user.groupBy({
+        by: ["role"],
+        where: { schoolId: input.schoolId },
+        _count: { _all: true },
+      }),
+      prisma.user.groupBy({
+        by: ["status"],
+        where: { schoolId: input.schoolId },
+        _count: { _all: true },
+      }),
       prisma.user.count({
         where: {
+          schoolId: input.schoolId,
           createdAt: { gte: input.current7Start, lt: input.current7End },
         },
       }),
       prisma.user.count({
         where: {
+          schoolId: input.schoolId,
           createdAt: { gte: input.previous7Start, lt: input.previous7End },
         },
       }),
       prisma.user.count({
         where: {
+          schoolId: input.schoolId,
           createdAt: { gte: input.current30Start, lt: input.current7End },
         },
       }),
@@ -62,7 +81,7 @@ export async function loadUserOverview(input: {
   return { total, roles, statuses, current7, previous7, current30 };
 }
 
-export async function loadTeachingOverview() {
+export async function loadTeachingOverview(schoolId: string) {
   const [
     classroomTotal,
     activeClassroomCount,
@@ -72,21 +91,32 @@ export async function loadTeachingOverview() {
     gradedSubmissionCount,
     pendingReviewSubmissionCount,
   ] = await Promise.all([
-    prisma.classroom.count(),
-    prisma.classroom.count({ where: { status: "ACTIVE" } }),
-    prisma.question.count({ where: { deletedAt: null } }),
+    prisma.classroom.count({ where: { teacher: { schoolId } } }),
+    prisma.classroom.count({
+      where: { status: "ACTIVE", teacher: { schoolId } },
+    }),
+    prisma.question.count({
+      where: { deletedAt: null, creator: { schoolId } },
+    }),
     prisma.assignment.groupBy({
       by: ["status"],
+      where: { teacher: { schoolId } },
       _count: { _all: true },
     }),
     prisma.submission.count({
-      where: { status: { in: EFFECTIVE_SUBMISSION_STATUSES } },
+      where: {
+        student: { schoolId },
+        status: { in: EFFECTIVE_SUBMISSION_STATUSES },
+      },
     }),
     prisma.submission.count({
-      where: { status: { in: FINALIZED_SUBMISSION_STATUSES } },
+      where: {
+        student: { schoolId },
+        status: { in: FINALIZED_SUBMISSION_STATUSES },
+      },
     }),
     prisma.submission.count({
-      where: { status: SubmissionStatus.PENDING_REVIEW },
+      where: { student: { schoolId }, status: SubmissionStatus.PENDING_REVIEW },
     }),
   ]);
   return {
@@ -101,6 +131,7 @@ export async function loadTeachingOverview() {
 }
 
 export async function loadLearningOverview(input: {
+  schoolId: string;
   current7Start: Date;
   current30Start: Date;
   end: Date;
@@ -115,6 +146,7 @@ export async function loadLearningOverview(input: {
   ] = await Promise.all([
     prisma.submission.aggregate({
       where: {
+        student: { schoolId: input.schoolId },
         status: { in: FINALIZED_SUBMISSION_STATUSES },
         percentage: { not: null },
       },
@@ -122,19 +154,33 @@ export async function loadLearningOverview(input: {
       _avg: { percentage: true },
     }),
     prisma.studentAnswer.count({
-      where: { createdAt: { gte: input.current7Start, lt: input.end } },
+      where: {
+        submission: { student: { schoolId: input.schoolId } },
+        createdAt: { gte: input.current7Start, lt: input.end },
+      },
     }),
     prisma.studentAnswer.count({
-      where: { createdAt: { gte: input.current30Start, lt: input.end } },
+      where: {
+        submission: { student: { schoolId: input.schoolId } },
+        createdAt: { gte: input.current30Start, lt: input.end },
+      },
     }),
-    prisma.studentAnswer.count({ where: { isCorrect: false } }),
+    prisma.studentAnswer.count({
+      where: {
+        submission: { student: { schoolId: input.schoolId } },
+        isCorrect: false,
+      },
+    }),
     prisma.aIAnalysis.count({
       where: {
+        requestedBy: { schoolId: input.schoolId },
         status: { in: GENERATED_ANALYSIS_STATUSES },
         completedAt: { not: null },
       },
     }),
-    prisma.personalizedRecommendation.count(),
+    prisma.personalizedRecommendation.count({
+      where: { student: { schoolId: input.schoolId } },
+    }),
   ]);
   return {
     finalizedSubmissionCount: finalizedSubmissions._count._all,
@@ -148,7 +194,11 @@ export async function loadLearningOverview(input: {
   };
 }
 
-export async function loadAIOverview(input: { start7: Date; end: Date }) {
+export async function loadAIOverview(input: {
+  schoolId: string;
+  start7: Date;
+  end: Date;
+}) {
   const [
     analysisRecordCount,
     recommendationRecordCount,
@@ -159,24 +209,41 @@ export async function loadAIOverview(input: { start7: Date; end: Date }) {
     analysisLatency,
     tutoringLatency,
   ] = await Promise.all([
-    prisma.aIAnalysis.count(),
-    prisma.personalizedRecommendation.count(),
-    prisma.aIAnalysis.groupBy({ by: ["status"], _count: { _all: true } }),
+    prisma.aIAnalysis.count({
+      where: { requestedBy: { schoolId: input.schoolId } },
+    }),
+    prisma.personalizedRecommendation.count({
+      where: { student: { schoolId: input.schoolId } },
+    }),
+    prisma.aIAnalysis.groupBy({
+      where: { requestedBy: { schoolId: input.schoolId } },
+      by: ["status"],
+      _count: { _all: true },
+    }),
     prisma.aITutoringRecord.groupBy({
+      where: { student: { schoolId: input.schoolId } },
       by: ["status"],
       _count: { _all: true },
     }),
     prisma.aIAnalysis.count({
-      where: { createdAt: { gte: input.start7, lt: input.end } },
+      where: {
+        requestedBy: { schoolId: input.schoolId },
+        createdAt: { gte: input.start7, lt: input.end },
+      },
     }),
     prisma.aITutoringRecord.count({
-      where: { createdAt: { gte: input.start7, lt: input.end } },
+      where: {
+        student: { schoolId: input.schoolId },
+        createdAt: { gte: input.start7, lt: input.end },
+      },
     }),
     prisma.aIAnalysis.aggregate({
+      where: { requestedBy: { schoolId: input.schoolId } },
       _sum: { latencyMs: true },
       _count: { latencyMs: true },
     }),
     prisma.aITutoringRecord.aggregate({
+      where: { student: { schoolId: input.schoolId } },
       _sum: { latencyMs: true },
       _count: { latencyMs: true },
     }),
@@ -195,28 +262,32 @@ export async function loadAIOverview(input: { start7: Date; end: Date }) {
   };
 }
 
-export async function loadTrendCounts(start: Date, end: Date) {
+export async function loadTrendCounts(
+  start: Date,
+  end: Date,
+  schoolId: string,
+) {
   const [users, assignments, submissions, answers, analyses, recommendations] =
     await Promise.all([
       prisma.$queryRaw<CountByDateRow[]>(Prisma.sql`
         SELECT to_char(timezone('Asia/Shanghai', "createdAt"), 'YYYY-MM-DD') AS "date",
                COUNT(*)::bigint AS "count"
         FROM "User"
-        WHERE "createdAt" >= ${start} AND "createdAt" < ${end}
+        WHERE "schoolId" = ${schoolId} AND "createdAt" >= ${start} AND "createdAt" < ${end}
         GROUP BY 1 ORDER BY 1
       `),
       prisma.$queryRaw<CountByDateRow[]>(Prisma.sql`
         SELECT to_char(timezone('Asia/Shanghai', "publishedAt"), 'YYYY-MM-DD') AS "date",
                COUNT(*)::bigint AS "count"
         FROM "Assignment"
-        WHERE "publishedAt" >= ${start} AND "publishedAt" < ${end}
+        WHERE EXISTS (SELECT 1 FROM "User" owner WHERE owner.id = "Assignment"."teacherId" AND owner."schoolId" = ${schoolId}) AND "publishedAt" >= ${start} AND "publishedAt" < ${end}
         GROUP BY 1 ORDER BY 1
       `),
       prisma.$queryRaw<CountByDateRow[]>(Prisma.sql`
         SELECT to_char(timezone('Asia/Shanghai', "submittedAt"), 'YYYY-MM-DD') AS "date",
                COUNT(*)::bigint AS "count"
         FROM "Submission"
-        WHERE "submittedAt" >= ${start} AND "submittedAt" < ${end}
+        WHERE EXISTS (SELECT 1 FROM "User" owner WHERE owner.id = "Submission"."studentId" AND owner."schoolId" = ${schoolId}) AND "submittedAt" >= ${start} AND "submittedAt" < ${end}
           AND "status" IN ('SUBMITTED', 'PENDING_REVIEW', 'GRADED', 'PUBLISHED')
         GROUP BY 1 ORDER BY 1
       `),
@@ -224,14 +295,14 @@ export async function loadTrendCounts(start: Date, end: Date) {
         SELECT to_char(timezone('Asia/Shanghai', "createdAt"), 'YYYY-MM-DD') AS "date",
                COUNT(*)::bigint AS "count"
         FROM "StudentAnswer"
-        WHERE "createdAt" >= ${start} AND "createdAt" < ${end}
+        WHERE EXISTS (SELECT 1 FROM "Submission" sub JOIN "User" owner ON owner.id = sub."studentId" WHERE sub.id = "StudentAnswer"."submissionId" AND owner."schoolId" = ${schoolId}) AND "createdAt" >= ${start} AND "createdAt" < ${end}
         GROUP BY 1 ORDER BY 1
       `),
       prisma.$queryRaw<CountByDateRow[]>(Prisma.sql`
         SELECT to_char(timezone('Asia/Shanghai', "completedAt"), 'YYYY-MM-DD') AS "date",
                COUNT(*)::bigint AS "count"
         FROM "AIAnalysis"
-        WHERE "completedAt" >= ${start} AND "completedAt" < ${end}
+        WHERE EXISTS (SELECT 1 FROM "User" owner WHERE owner.id = "AIAnalysis"."requestedById" AND owner."schoolId" = ${schoolId}) AND "completedAt" >= ${start} AND "completedAt" < ${end}
           AND "status" IN ('SUCCEEDED', 'FALLBACK')
         GROUP BY 1 ORDER BY 1
       `),
@@ -239,7 +310,7 @@ export async function loadTrendCounts(start: Date, end: Date) {
         SELECT to_char(timezone('Asia/Shanghai', "createdAt"), 'YYYY-MM-DD') AS "date",
                COUNT(*)::bigint AS "count"
         FROM "PersonalizedRecommendation"
-        WHERE "createdAt" >= ${start} AND "createdAt" < ${end}
+        WHERE EXISTS (SELECT 1 FROM "User" owner WHERE owner.id = "PersonalizedRecommendation"."studentId" AND owner."schoolId" = ${schoolId}) AND "createdAt" >= ${start} AND "createdAt" < ${end}
         GROUP BY 1 ORDER BY 1
       `),
     ]);
@@ -253,7 +324,7 @@ export async function loadTrendCounts(start: Date, end: Date) {
   };
 }
 
-export async function loadDistributions() {
+export async function loadDistributions(schoolId: string) {
   const [
     roles,
     userStatuses,
@@ -265,26 +336,44 @@ export async function loadDistributions() {
     recommendationSources,
     knowledgePointCoverage,
   ] = await Promise.all([
-    prisma.user.groupBy({ by: ["role"], _count: { _all: true } }),
-    prisma.user.groupBy({ by: ["status"], _count: { _all: true } }),
+    prisma.user.groupBy({
+      where: { schoolId },
+      by: ["role"],
+      _count: { _all: true },
+    }),
+    prisma.user.groupBy({
+      where: { schoolId },
+      by: ["status"],
+      _count: { _all: true },
+    }),
     prisma.question.groupBy({
       by: ["type"],
-      where: { deletedAt: null },
+      where: { deletedAt: null, creator: { schoolId } },
       _count: { _all: true },
     }),
     prisma.question.groupBy({
       by: ["difficulty"],
-      where: { deletedAt: null },
+      where: { deletedAt: null, creator: { schoolId } },
       _count: { _all: true },
       orderBy: { difficulty: "asc" },
     }),
-    prisma.assignment.groupBy({ by: ["status"], _count: { _all: true } }),
-    prisma.submission.groupBy({ by: ["status"], _count: { _all: true } }),
-    prisma.personalizedRecommendation.groupBy({
+    prisma.assignment.groupBy({
+      where: { teacher: { schoolId } },
+      by: ["status"],
+      _count: { _all: true },
+    }),
+    prisma.submission.groupBy({
+      where: { student: { schoolId } },
       by: ["status"],
       _count: { _all: true },
     }),
     prisma.personalizedRecommendation.groupBy({
+      where: { student: { schoolId } },
+      by: ["status"],
+      _count: { _all: true },
+    }),
+    prisma.personalizedRecommendation.groupBy({
+      where: { student: { schoolId } },
       by: ["source"],
       _count: { _all: true },
     }),
@@ -293,6 +382,8 @@ export async function loadDistributions() {
       FROM "QuestionKnowledgePoint" qkp
       INNER JOIN "Question" q ON q."id" = qkp."questionId" AND q."deletedAt" IS NULL
       INNER JOIN "KnowledgePoint" kp ON kp."id" = qkp."knowledgePointId"
+      INNER JOIN "User" creator ON creator.id = q."creatorId"
+      WHERE creator."schoolId" = ${schoolId}
       GROUP BY kp."id", kp."name"
       ORDER BY "questionCount" DESC, kp."name" ASC
       LIMIT 10
@@ -318,32 +409,65 @@ function safeErrorCode(value: string | null): string {
 
 export async function loadRecentUsers(
   limit: number,
+  schoolId: string,
 ): Promise<DashboardActivity[]> {
-  const records = await prisma.user.findMany({
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit,
-    select: {
-      id: true,
-      email: true,
-      role: true,
-      createdAt: true,
-      profile: { select: { displayName: true } },
-    },
-  });
-  return records.map((record) => ({
-    id: `user:${record.id}`,
-    type: "USER_CREATED",
-    summary: `新增${record.role === Role.TEACHER ? "教师" : record.role === Role.STUDENT ? "学生" : "管理员"}：${record.profile?.displayName ?? record.email}`,
-    occurredAt: record.createdAt.toISOString(),
-    href: `/admin/users/${record.id}/edit`,
-  }));
+  const activities: DashboardActivity[] = [];
+  const batchSize = Math.max(limit, 10);
+  let skip = 0;
+
+  while (activities.length < limit) {
+    const records = await prisma.user.findMany({
+      where: { schoolId, role: { not: Role.SUPER_ADMIN } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip,
+      take: batchSize,
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        createdAt: true,
+        profile: { select: { displayName: true } },
+      },
+    });
+    if (records.length === 0) break;
+
+    const superAdminCreatedUserIds = new Set(
+      (
+        await prisma.auditLog.findMany({
+          where: {
+            action: AuditAction.USER_CREATED,
+            targetType: AuditTargetType.USER,
+            targetId: { in: records.map((record) => record.id) },
+            actor: { is: { role: Role.SUPER_ADMIN } },
+          },
+          select: { targetId: true },
+        })
+      ).map((record) => record.targetId),
+    );
+
+    activities.push(
+      ...records
+        .filter((record) => !superAdminCreatedUserIds.has(record.id))
+        .map((record) => ({
+          id: `user:${record.id}`,
+          type: "USER_CREATED" as const,
+          summary: `新增${record.role === Role.TEACHER ? "教师" : record.role === Role.STUDENT ? "学生" : "管理员"}：${record.profile?.displayName ?? record.email}`,
+          occurredAt: record.createdAt.toISOString(),
+          href: `/admin/users/${record.id}/edit`,
+        })),
+    );
+    skip += records.length;
+  }
+
+  return activities.slice(0, limit);
 }
 
 export async function loadRecentAssignments(
   limit: number,
+  schoolId: string,
 ): Promise<DashboardActivity[]> {
   const records = await prisma.assignment.findMany({
-    where: { publishedAt: { not: null } },
+    where: { teacher: { schoolId }, publishedAt: { not: null } },
     orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
     take: limit,
     select: {
@@ -370,9 +494,14 @@ export async function loadRecentAssignments(
 
 export async function loadRecentAnalyses(
   limit: number,
+  schoolId: string,
 ): Promise<DashboardActivity[]> {
   const records = await prisma.aIAnalysis.findMany({
-    where: { status: AIRecordStatus.SUCCEEDED, completedAt: { not: null } },
+    where: {
+      requestedBy: { schoolId },
+      status: AIRecordStatus.SUCCEEDED,
+      completedAt: { not: null },
+    },
     orderBy: [{ completedAt: "desc" }, { id: "desc" }],
     take: limit,
     select: { id: true, scope: true, completedAt: true },
@@ -394,8 +523,10 @@ export async function loadRecentAnalyses(
 
 export async function loadRecentRecommendations(
   limit: number,
+  schoolId: string,
 ): Promise<DashboardActivity[]> {
   const records = await prisma.personalizedRecommendation.findMany({
+    where: { student: { schoolId } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit,
     select: {
@@ -416,8 +547,10 @@ export async function loadRecentRecommendations(
 
 export async function loadRecentAuditLogs(
   limit: number,
+  schoolId: string,
 ): Promise<DashboardActivity[]> {
   const records = await prisma.auditLog.findMany({
+    where: { actor: { is: { schoolId, role: { not: Role.SUPER_ADMIN } } } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit,
     select: { id: true, summary: true, createdAt: true },
@@ -433,10 +566,12 @@ export async function loadRecentAuditLogs(
 
 export async function loadRecentAIFailures(
   limit: number,
+  schoolId: string,
 ): Promise<DashboardActivity[]> {
   const [analyses, tutoring] = await Promise.all([
     prisma.aIAnalysis.findMany({
       where: {
+        requestedBy: { schoolId },
         status: { in: [AIRecordStatus.FAILED, AIRecordStatus.FALLBACK] },
         errorCode: { not: null },
       },
@@ -452,6 +587,7 @@ export async function loadRecentAIFailures(
     }),
     prisma.aITutoringRecord.findMany({
       where: {
+        student: { schoolId },
         status: { in: [AIRecordStatus.FAILED, AIRecordStatus.FALLBACK] },
         errorCode: { not: null },
       },

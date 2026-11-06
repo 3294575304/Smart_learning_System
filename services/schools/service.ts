@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { AuditAction, Prisma, Role, type School } from "@prisma/client";
 import { Buffer } from "node:buffer";
 
@@ -12,6 +12,10 @@ import type { SchoolOption } from "@/services/schools/types";
 import { schoolProvinceSchema } from "@/services/schools/provinces";
 import { getStorageService } from "@/services/storage";
 import { schoolBindingNameSchema } from "@/services/schools/schemas";
+import {
+  normalizeSchoolImage,
+  SchoolImageNormalizationError,
+} from "@/services/schools/image-normalization";
 
 export { schoolBindingNameSchema } from "@/services/schools/schemas";
 
@@ -43,11 +47,6 @@ export async function getAvailableSchools(): Promise<SchoolOption[]> {
     orderBy: [{ name: "asc" }, { createdAt: "asc" }],
     select: { id: true, name: true },
   });
-}
-
-function schoolKey(name: string): string {
-  const normalized = name.normalize("NFKC").toLocaleLowerCase("zh-CN");
-  return `school_${createHash("sha256").update(normalized).digest("hex")}`;
 }
 
 function schoolImageExtension(
@@ -94,7 +93,7 @@ function adminSchoolView(school: {
       ? `/api/admin/school-binding/logo?v=${school.updatedAt.getTime()}`
       : school.logoUrl,
     nameImageUrl: school.nameImageStorageKey
-      ? `/api/admin/school-binding/name-image?v=${school.updatedAt.getTime()}`
+      ? `/api/admin/school-binding/name-image?v=${school.updatedAt.getTime()}&layout=natural`
       : null,
   };
 }
@@ -153,14 +152,44 @@ export async function updateAdminSchoolBinding(
     throw new SchoolBindingOperationError("校名图片不能超过 2 MB。", 413);
   }
 
+  const currentAdmin = await prisma.user.findUnique({
+    where: { id: adminId },
+    select: { role: true, school: true },
+  });
+  if (
+    currentAdmin?.role !== Role.ADMIN ||
+    !currentAdmin.school ||
+    currentAdmin.school.name !== name
+  ) {
+    throw new SchoolBindingOperationError(
+      "学校归属由超级管理员维护，不能自行绑定其他学校。",
+      403,
+    );
+  }
+  const existingSchool = currentAdmin.school;
+
   try {
-    if (input.logo && logoExt) {
-      savedLogoKey = `school-logos/${randomUUID()}.${logoExt}`;
-      await getStorageService().save(savedLogoKey, input.logo.data);
+    const logoData =
+      input.logo && logoExt
+        ? input.logo.data
+        : existingSchool.logoStorageKey
+          ? await getStorageService().read(existingSchool.logoStorageKey)
+          : null;
+    const nameData =
+      input.nameImage && nameImageExt
+        ? input.nameImage.data
+        : existingSchool.nameImageStorageKey
+          ? await getStorageService().read(existingSchool.nameImageStorageKey)
+          : null;
+    if (logoData) {
+      const normalized = await normalizeSchoolImage(logoData, "logo");
+      savedLogoKey = `school-logos/${randomUUID()}.png`;
+      await getStorageService().save(savedLogoKey, normalized);
     }
-    if (input.nameImage && nameImageExt) {
-      savedNameImageKey = `school-name-images/${randomUUID()}.${nameImageExt}`;
-      await getStorageService().save(savedNameImageKey, input.nameImage.data);
+    if (nameData) {
+      const normalized = await normalizeSchoolImage(nameData, "nameImage");
+      savedNameImageKey = `school-name-images/${randomUUID()}.png`;
+      await getStorageService().save(savedNameImageKey, normalized);
     }
   } catch (error: unknown) {
     if (savedLogoKey) {
@@ -173,6 +202,8 @@ export async function updateAdminSchoolBinding(
         .delete(savedNameImageKey)
         .catch(() => undefined);
     }
+    if (error instanceof SchoolImageNormalizationError)
+      throw new SchoolBindingOperationError(error.message, 422);
     throw error;
   }
 
@@ -195,6 +226,7 @@ export async function updateAdminSchoolBinding(
                 logoUrl: true,
                 logoStorageKey: true,
                 nameImageStorageKey: true,
+                updatedAt: true,
               },
             },
           },
@@ -203,8 +235,25 @@ export async function updateAdminSchoolBinding(
           throw new SchoolBindingOperationError("管理员账号不存在。", 404);
         }
 
+        if (!admin.schoolId || !admin.school || admin.school.name !== name) {
+          throw new SchoolBindingOperationError(
+            "学校归属由超级管理员维护，不能自行绑定其他学校。",
+            403,
+          );
+        }
+        if (
+          admin.school.id !== existingSchool.id ||
+          admin.school.updatedAt.getTime() !==
+            existingSchool.updatedAt.getTime()
+        ) {
+          throw new SchoolBindingOperationError(
+            "学校信息已更新，请刷新后重新保存。",
+            409,
+          );
+        }
+
         let school = await transaction.school.findFirst({
-          where: { name },
+          where: { id: admin.schoolId, name },
           orderBy: { createdAt: "asc" },
         });
         const before = {
@@ -241,24 +290,7 @@ export async function updateAdminSchoolBinding(
             });
           }
         } else {
-          school = await transaction.school.create({
-            data: {
-              key: schoolKey(name),
-              name,
-              provinceCode: provinceCode ?? null,
-              logoStorageKey: savedLogoKey ?? admin.school?.logoStorageKey,
-              logoUrl: savedLogoKey ? null : (admin.school?.logoUrl ?? null),
-              nameImageStorageKey:
-                savedNameImageKey ?? admin.school?.nameImageStorageKey,
-            },
-          });
-        }
-
-        if (admin.schoolId !== school.id) {
-          await transaction.user.update({
-            where: { id: adminId },
-            data: { schoolId: school.id },
-          });
+          throw new SchoolBindingOperationError("绑定的学校不存在。", 404);
         }
 
         await writeSystemConfigAuditLog(transaction, {
@@ -348,7 +380,14 @@ async function readCurrentSchoolImage(
       : extension === "jpg"
         ? "image/jpeg"
         : "image/webp";
-  return { data: await getStorageService().read(key), contentType };
+  const data = await getStorageService().read(key);
+  // Older saved wordmarks used a fixed canvas; remove that padding on read too.
+  return imageType === "nameImage"
+    ? {
+        data: await normalizeSchoolImage(data, "nameImage"),
+        contentType: "image/png",
+      }
+    : { data, contentType };
 }
 
 export function readCurrentSchoolLogo(userId: string) {

@@ -12,6 +12,7 @@ import {
 
 import { StatCard } from "@/components/dashboard/stat-card";
 import { RefreshOverview } from "@/components/super-admin/refresh-overview";
+import { SuperAdminSystemHealth } from "@/components/super-admin/system-health";
 import type { SuperAdminOverviewData } from "@/services/super-admin/overview";
 
 const number = (value: number) => value.toLocaleString("zh-CN");
@@ -28,23 +29,6 @@ export function SuperAdminOverview({ data }: { data: SuperAdminOverviewData }) {
     timeZone: "Asia/Shanghai",
     hour12: false,
   });
-  const settings = [
-    {
-      label: "平台访问",
-      value: data.settings.maintenanceMode ? "维护中" : "正常开放",
-      enabled: !data.settings.maintenanceMode,
-    },
-    {
-      label: "学生自主注册",
-      value: data.settings.allowSelfRegistration ? "已开放" : "已关闭",
-      enabled: data.settings.allowSelfRegistration,
-    },
-    {
-      label: "AI 学情分析",
-      value: data.settings.aiAnalysisEnabled ? "已启用" : "已关闭",
-      enabled: data.settings.aiAnalysisEnabled,
-    },
-  ];
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-5 rounded-2xl border border-sky-100 bg-gradient-to-r from-sky-50 via-white to-emerald-50 p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -95,7 +79,7 @@ export function SuperAdminOverview({ data }: { data: SuperAdminOverviewData }) {
         />
       </section>
 
-      <div className="grid items-start gap-6 xl:grid-cols-3">
+      <div className="grid items-stretch gap-6 xl:grid-cols-3">
         <section
           aria-labelledby="user-distribution-title"
           className="bg-card rounded-xl border border-sky-100 p-6 shadow-sm xl:col-span-2"
@@ -168,35 +152,7 @@ export function SuperAdminOverview({ data }: { data: SuperAdminOverviewData }) {
           </p>
         </section>
 
-        <section
-          aria-labelledby="platform-settings-title"
-          className="bg-card rounded-xl border border-sky-100 p-6 shadow-sm"
-        >
-          <h2 id="platform-settings-title" className="font-semibold">
-            平台设置状态
-          </h2>
-          <p className="text-muted-foreground mt-1 text-xs">
-            当前生效的功能开关。
-          </p>
-          <dl className="mt-5 divide-y divide-sky-100">
-            {settings.map((setting) => (
-              <div
-                key={setting.label}
-                className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm"
-              >
-                <dt className="text-slate-600">{setting.label}</dt>
-                <dd
-                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${setting.enabled ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}
-                >
-                  {setting.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          <p className="text-muted-foreground mt-4 border-t border-sky-100 pt-4 text-xs leading-5">
-            功能开关状态不代表外部 AI 服务或执行器的可用性。
-          </p>
-        </section>
+        <SuperAdminSystemHealth refreshKey={data.generatedAt} />
       </div>
 
       <section aria-labelledby="teaching-resources-title">

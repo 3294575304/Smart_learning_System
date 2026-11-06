@@ -44,11 +44,15 @@ export type AdminUserRecord = Prisma.UserGetPayload<{
 
 type DatabaseClient = typeof prisma | Prisma.TransactionClient;
 
-export async function loadAdminUserPage(query: AdminUserListQuery): Promise<{
+export async function loadAdminUserPage(
+  query: AdminUserListQuery,
+  schoolId: string,
+): Promise<{
   total: number;
   records: AdminUserRecord[];
 }> {
   const where: Prisma.UserWhereInput = {
+    schoolId,
     role: query.role ?? { in: [...ADMIN_MANAGED_ROLES] },
     ...(query.keyword
       ? {
@@ -90,10 +94,15 @@ export async function loadAdminUserPage(query: AdminUserListQuery): Promise<{
 
 export function findAdminUserById(
   userId: string,
+  schoolId: string,
   client: DatabaseClient = prisma,
 ): Promise<AdminUserRecord | null> {
   return client.user.findFirst({
-    where: { id: userId, role: { in: [...ADMIN_MANAGED_ROLES] } },
+    where: {
+      id: userId,
+      schoolId,
+      role: { in: [...ADMIN_MANAGED_ROLES] },
+    },
     select: adminUserSelect,
   });
 }
@@ -177,9 +186,10 @@ export async function updateAdminManagedUser(
 
 export function countActiveAdmins(
   transaction: Prisma.TransactionClient,
+  schoolId: string,
 ): Promise<number> {
   return transaction.user.count({
-    where: { role: Role.ADMIN, status: UserStatus.ACTIVE },
+    where: { role: Role.ADMIN, status: UserStatus.ACTIVE, schoolId },
   });
 }
 

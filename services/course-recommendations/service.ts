@@ -1,3 +1,4 @@
+import { courseQuestionSchoolWhere } from "@/services/questions/access";
 import "server-only";
 import { runPracticeSerializable } from "@/services/recommendations/transactions";
 import {
@@ -940,6 +941,7 @@ export async function createCourseRecommendations(
       );
       const questions = await transaction.question.findMany({
         where: {
+          ...courseQuestionSchoolWhere(courseId),
           status: QuestionStatus.ACTIVE,
           isAssignmentOnly: false,
           deletedAt: null,

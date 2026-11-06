@@ -1,3 +1,4 @@
+import { schoolQuestionAccessWhere } from "@/services/questions/access";
 import "server-only";
 
 import {
@@ -195,6 +196,7 @@ async function mappingSource(
   const [questions, graphVersion] = await Promise.all([
     prisma.question.findMany({
       where: {
+        ...schoolQuestionAccessWhere(teacherId),
         id: { in: questionIds },
         questionCategoryId: course.questionCategoryId,
         deletedAt: null,
@@ -560,6 +562,7 @@ export async function createQuestionMappingBatch(
   const [questions, graphVersion] = await Promise.all([
     prisma.question.findMany({
       where: {
+        ...schoolQuestionAccessWhere(teacherId),
         id: { in: input.questionIds },
         questionCategoryId: course.questionCategoryId,
         deletedAt: null,
@@ -824,6 +827,17 @@ export async function confirmQuestionMappingBatch(
         "选择中包含批次外题目或 AI 未推荐的绑定",
       );
     }
+    const selectedIds = [
+      ...new Set(input.selections.map((item) => item.questionId)),
+    ];
+    const allowedCount = await transaction.question.count({
+      where: {
+        id: { in: selectedIds },
+        ...schoolQuestionAccessWhere(teacherId),
+      },
+    });
+    if (allowedCount !== selectedIds.length)
+      throw new ResourceNotFoundError("题目不存在");
     const grouped = new Map<string, typeof input.selections>();
     for (const selection of input.selections) {
       const values = grouped.get(selection.questionId) ?? [];
@@ -946,6 +960,7 @@ export async function listUnboundTeacherQuestions(
     return { ready: false as const, course };
   }
   const where = {
+    ...schoolQuestionAccessWhere(teacherId),
     questionCategoryId: course.questionCategoryId,
     deletedAt: null,
     status: QuestionStatus.ACTIVE,

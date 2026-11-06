@@ -1,3 +1,4 @@
+import { courseQuestionSchoolWhere } from "@/services/questions/access";
 import "server-only";
 
 import {
@@ -302,6 +303,7 @@ export async function getStudentCourseLearningCenter(
     published && courseScope && conceptIds.length
       ? await prisma.question.findMany({
           where: {
+            ...courseQuestionSchoolWhere(courseId),
             status: QuestionStatus.ACTIVE,
             deletedAt: null,
             questionCategoryId: courseScope.questionCategoryId,

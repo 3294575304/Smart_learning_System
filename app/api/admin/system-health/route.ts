@@ -10,7 +10,7 @@ import { getSystemHealth } from "@/services/system-health/service";
 
 export async function GET() {
   try {
-    await requireAuthenticatedUser([Role.ADMIN]);
+    await requireAuthenticatedUser([Role.ADMIN, Role.SUPER_ADMIN]);
     return apiSuccess(await getSystemHealth(), 200, privateNoStoreHeaders);
   } catch (error: unknown) {
     return dashboardApiError(error);

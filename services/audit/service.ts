@@ -1,5 +1,7 @@
 import "server-only";
 
+import { requireAdminSchoolId } from "@/services/admin/school-scope";
+
 import { AuditTargetType } from "@prisma/client";
 
 import { auditSnapshotSchema } from "@/services/audit/schemas";
@@ -16,16 +18,21 @@ function safeSnapshot(value: unknown): AuditSnapshot | null {
 }
 
 export async function listAuditLogs(
+  actorId: string,
   query: AuditLogListQuery,
 ): Promise<AuditLogListResult> {
-  const { total, records } = await loadAuditLogPage(query);
-  const targets = await loadAuditTargetUsers([
-    ...new Set(
-      records
-        .filter((record) => record.targetType === AuditTargetType.USER)
-        .map((record) => record.targetId),
-    ),
-  ]);
+  const schoolId = await requireAdminSchoolId(actorId);
+  const { total, records } = await loadAuditLogPage(query, schoolId);
+  const targets = await loadAuditTargetUsers(
+    [
+      ...new Set(
+        records
+          .filter((record) => record.targetType === AuditTargetType.USER)
+          .map((record) => record.targetId),
+      ),
+    ],
+    schoolId,
+  );
   const targetById = new Map(targets.map((target) => [target.id, target]));
 
   return {

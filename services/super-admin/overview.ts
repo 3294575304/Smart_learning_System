@@ -3,7 +3,6 @@ import "server-only";
 import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
-import { getSystemConfig } from "@/services/system-config/service";
 import { summarizePlatformUsers } from "@/services/super-admin/metrics";
 
 export async function getSuperAdminOverview(now = new Date()) {
@@ -14,27 +13,24 @@ export async function getSuperAdminOverview(now = new Date()) {
     orderBy: [{ role: "asc" }, { status: "asc" }],
     _count: { _all: true },
   });
-  const [snapshot, config] = await Promise.all([
-    // Read related counts from one snapshot during concurrent account creation.
-    prisma.$transaction(
-      [
-        prisma.school.count(),
-        prisma.school.count({
-          where: { admins: { some: { role: Role.ADMIN } } },
-        }),
-        userGroupsQuery,
-        prisma.user.count({ where: { createdAt: { gte: since, lte: now } } }),
-        prisma.user.count({ where: { lastLoginAt: { gte: since, lte: now } } }),
-        prisma.course.count(),
-        prisma.classroom.count(),
-        prisma.classroom.count({ where: { status: "ACTIVE" } }),
-        prisma.question.count({ where: { deletedAt: null } }),
-        prisma.assignment.count(),
-      ],
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    ),
-    getSystemConfig(),
-  ]);
+  // Read related counts from one snapshot during concurrent account creation.
+  const snapshot = await prisma.$transaction(
+    [
+      prisma.school.count(),
+      prisma.school.count({
+        where: { admins: { some: { role: Role.ADMIN } } },
+      }),
+      userGroupsQuery,
+      prisma.user.count({ where: { createdAt: { gte: since, lte: now } } }),
+      prisma.user.count({ where: { lastLoginAt: { gte: since, lte: now } } }),
+      prisma.course.count(),
+      prisma.classroom.count(),
+      prisma.classroom.count({ where: { status: "ACTIVE" } }),
+      prisma.question.count({ where: { deletedAt: null } }),
+      prisma.assignment.count(),
+    ],
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+  );
   const [
     schoolTotal,
     schoolsInUse,
@@ -56,11 +52,6 @@ export async function getSuperAdminOverview(now = new Date()) {
       loggedInLast7Days,
     },
     teaching: { courses, classrooms, activeClassrooms, questions, assignments },
-    settings: {
-      maintenanceMode: config.maintenanceMode,
-      allowSelfRegistration: config.allowSelfRegistration,
-      aiAnalysisEnabled: config.aiAnalysisEnabled,
-    },
   };
 }
 

@@ -89,7 +89,7 @@ export const getCurrentUser = cache(
           : (session.user.school.logoUrl ?? null)
         : null,
       schoolNameImageUrl: session.user.school?.nameImageStorageKey
-        ? `/api/admin/school-binding/name-image?v=${session.user.school.updatedAt.getTime()}`
+        ? `/api/admin/school-binding/name-image?v=${session.user.school.updatedAt.getTime()}&layout=natural`
         : null,
     };
   },

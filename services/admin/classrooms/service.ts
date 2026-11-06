@@ -4,6 +4,7 @@ import "server-only";
 import { AuditAction, AuditTargetType, ClassroomStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { requireAdminSchoolId } from "@/services/admin/school-scope";
 import {
   findAdminClassroomById,
   loadAdminClassroomPage,
@@ -46,9 +47,11 @@ function toView(record: AdminClassroomRecord): AdminClassroomView {
 }
 
 export async function listAdminClassrooms(
+  actorId: string,
   query: AdminClassroomListQuery,
 ): Promise<AdminClassroomListResult> {
-  const { total, records } = await loadAdminClassroomPage(query);
+  const schoolId = await requireAdminSchoolId(actorId);
+  const { total, records } = await loadAdminClassroomPage(query, schoolId);
   return {
     items: records.map(toView),
     pagination: {
@@ -61,9 +64,11 @@ export async function listAdminClassrooms(
 }
 
 export async function getAdminClassroom(
+  actorId: string,
   classroomId: string,
 ): Promise<AdminClassroomView> {
-  const classroom = await findAdminClassroomById(classroomId);
+  const schoolId = await requireAdminSchoolId(actorId);
+  const classroom = await findAdminClassroomById(classroomId, schoolId);
   if (!classroom) throw new ResourceNotFoundError("班级不存在");
   return toView(classroom);
 }
@@ -76,8 +81,13 @@ export async function closeAdminClassroom(
 ): Promise<AdminClassroomView> {
   const validatedReason = closeAdminClassroomSchema.parse({ reason }).reason;
   await prisma.$transaction(async (transaction) => {
+    const schoolId = await requireAdminSchoolId(actorId, transaction);
     await transaction.$queryRaw`SELECT "id" FROM "Classroom" WHERE "id" = ${classroomId} FOR UPDATE`;
-    const before = await findAdminClassroomById(classroomId, transaction);
+    const before = await findAdminClassroomById(
+      classroomId,
+      schoolId,
+      transaction,
+    );
     if (!before) throw new ResourceNotFoundError("班级不存在");
     assertAdminCanCloseClassroom(before.status);
     const closedAt = new Date();
@@ -120,5 +130,5 @@ export async function closeAdminClassroom(
       context,
     });
   });
-  return getAdminClassroom(classroomId);
+  return getAdminClassroom(actorId, classroomId);
 }

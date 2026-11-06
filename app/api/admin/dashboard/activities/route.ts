@@ -11,12 +11,12 @@ import { requireAuthenticatedUser } from "@/services/auth/authorization";
 
 export async function GET(request: Request) {
   try {
-    await requireAuthenticatedUser([Role.ADMIN]);
+    const admin = await requireAuthenticatedUser([Role.ADMIN]);
     const rawQuery = Object.fromEntries(new URL(request.url).searchParams);
     const parsed = dashboardActivityQuerySchema.safeParse(rawQuery);
     if (!parsed.success) return apiError("请检查动态查询条件", 400);
     return apiSuccess(
-      await getDashboardActivities(parsed.data),
+      await getDashboardActivities(admin.id, parsed.data),
       200,
       privateNoStoreHeaders,
     );

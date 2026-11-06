@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Building2,
   Globe2,
@@ -31,6 +32,9 @@ export function ApplicationShowcase({
   const [keyword, setKeyword] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [failedLogoUrls, setFailedLogoUrls] = useState<Set<string>>(
+    () => new Set(),
+  );
   const province = data.provinces.find((item) => item.code === selected);
   const regionName =
     selected === "unlocated" ? "待完善地区" : (province?.name ?? "请选择省份");
@@ -86,6 +90,7 @@ export function ApplicationShowcase({
     >
       <header className={styles.header}>
         <div>
+          <p className={styles.overline}>智慧教育 · 山海相连</p>
           <h1 id="showcase-title">系统应用情况</h1>
           <p className={styles.subtitle}>
             全国高校接入情况，点击省份查看学校。
@@ -259,24 +264,46 @@ export function ApplicationShowcase({
               </div>
             ) : null}
             <div className={styles.schoolList}>
-              {visibleSchools.map((school) => (
-                <article key={school.id} className={styles.schoolCard}>
-                  <Building2 className={styles.schoolIcon} aria-hidden="true" />
-                  <div>
-                    <h4>{school.name}</h4>
-                    <p>
-                      <span className={styles.connectedDot} /> 已接入
-                      <span>·</span>师生账号 {format(school.learners)}
-                    </p>
-                    <small>
-                      {new Date(school.joinedAt).toLocaleDateString("zh-CN", {
-                        timeZone: "Asia/Shanghai",
-                      })}{" "}
-                      接入
-                    </small>
-                  </div>
-                </article>
-              ))}
+              {visibleSchools.map((school) => {
+                const logoUrl = school.logoUrl;
+                return (
+                  <article key={school.id} className={styles.schoolCard}>
+                    {logoUrl && !failedLogoUrls.has(logoUrl) ? (
+                      <Image
+                        alt={`${school.name}校徽`}
+                        className={styles.schoolLogo}
+                        height={32}
+                        onError={() =>
+                          setFailedLogoUrls((current) =>
+                            new Set(current).add(logoUrl),
+                          )
+                        }
+                        src={logoUrl}
+                        unoptimized
+                        width={32}
+                      />
+                    ) : (
+                      <Building2
+                        className={styles.schoolIcon}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <div>
+                      <h4>{school.name}</h4>
+                      <p>
+                        <span className={styles.connectedDot} /> 已接入
+                        <span>·</span>师生账号 {format(school.learners)}
+                      </p>
+                      <small>
+                        {new Date(school.joinedAt).toLocaleDateString("zh-CN", {
+                          timeZone: "Asia/Shanghai",
+                        })}{" "}
+                        接入
+                      </small>
+                    </div>
+                  </article>
+                );
+              })}
               {visibleSchools.length === 0 ? (
                 <div className={styles.empty}>
                   <Building2 aria-hidden="true" />
@@ -336,6 +363,16 @@ export function ApplicationShowcase({
         </aside>
       </div>
       <footer className={styles.footer}>
+        <p>
+          山水底图：
+          <a
+            href="https://asia-archive.si.edu/object/F1909.197/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Smithsonian · Misty Mountains（CC0）
+          </a>
+        </p>
         <p>
           统计范围：已绑定高校管理员的学校，每校计一次。
           {data.unlocated.length > 0 ? (

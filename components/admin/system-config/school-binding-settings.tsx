@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { requestAdminApi } from "@/components/admin/request-api";
+import { SchoolIdentity } from "@/components/dashboard/school-identity";
 import { MAX_SCHOOL_LOGO_BYTES } from "@/services/schools/constants";
 import type { AdminSchoolBindingView } from "@/services/schools/service";
 import { PROVINCES } from "@/services/schools/provinces";
@@ -134,7 +135,7 @@ export function SchoolBindingSettings({
     if (nameImageInputRef.current) nameImageInputRef.current.value = "";
     setFeedback({
       type: "success",
-      message: "学校信息已保存，学校标识与地区信息已更新。",
+      message: "学校信息已保存，校徽和校名图片已自动适配顶部显示比例。",
     });
     router.refresh();
   }
@@ -144,11 +145,22 @@ export function SchoolBindingSettings({
       <div>
         <h2 className="text-lg font-semibold">学校绑定</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          保存后，当前管理员所有页面顶部都会显示绑定的校徽和校名。
+          根据本校校名长短和图片比例分别调整尺寸，保持左校徽、右校名，并在顶部格子中整体居中显示。
         </p>
       </div>
 
       <form className="mt-5 space-y-5" onSubmit={save}>
+        <div className="rounded-lg border bg-white p-4">
+          <p className="text-muted-foreground mb-3 text-xs">顶部显示预览</p>
+          <div className="mx-auto flex h-16 w-full max-w-60 items-center justify-center">
+            <SchoolIdentity
+              compact
+              name={name || "学校名称"}
+              logoUrl={previewUrl}
+              nameImageUrl={nameImagePreviewUrl}
+            />
+          </div>
+        </div>
         <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.3fr)] md:gap-6">
           <div>
             <p className="text-sm font-medium">校名题字图片</p>
@@ -161,7 +173,7 @@ export function SchoolBindingSettings({
             {nameImagePreviewUrl ? (
               <Image
                 alt={`${name || "学校"}校名图片预览`}
-                className="h-12 max-w-[min(14rem,60vw)] object-contain object-left mix-blend-multiply"
+                className="h-auto max-h-16 w-auto max-w-[min(14rem,60vw)] object-contain object-left mix-blend-multiply"
                 height={48}
                 src={nameImagePreviewUrl}
                 unoptimized
@@ -211,6 +223,8 @@ export function SchoolBindingSettings({
             onChange={(event) => setName(event.target.value)}
             placeholder="请输入学校名称"
             required
+            readOnly={Boolean(school.id)}
+            title="学校归属由超级管理员维护"
             value={name}
           />
         </div>
@@ -253,7 +267,7 @@ export function SchoolBindingSettings({
             {previewUrl ? (
               <Image
                 alt={`${name || "学校"}校徽预览`}
-                className="h-16 w-16 rounded-full border bg-white object-contain p-1"
+                className="h-16 w-16 rounded-md border bg-white object-contain p-1"
                 height={64}
                 src={previewUrl}
                 unoptimized
@@ -292,10 +306,14 @@ export function SchoolBindingSettings({
         <div className="flex justify-end border-t pt-4">
           <button
             className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isSubmitting || !dirty || name.trim().length < 2}
+            disabled={
+              isSubmitting ||
+              (!dirty && !school.logoUrl && !school.nameImageUrl) ||
+              name.trim().length < 2
+            }
             type="submit"
           >
-            {isSubmitting ? "绑定中…" : "保存并绑定"}
+            {isSubmitting ? "正在适配并保存…" : "保存并绑定"}
           </button>
         </div>
       </form>

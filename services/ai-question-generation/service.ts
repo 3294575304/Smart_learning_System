@@ -1,3 +1,4 @@
+import { schoolQuestionAccessWhere } from "@/services/questions/access";
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
@@ -115,6 +116,7 @@ export async function listGenerationOptions(teacherId: string) {
   ];
   const sourceQuestions = await prisma.question.findMany({
     where: {
+      ...schoolQuestionAccessWhere(teacherId),
       questionCategoryId: { in: categories },
       deletedAt: null,
       status: QuestionStatus.ACTIVE,
@@ -224,6 +226,7 @@ export async function queueQuestionGeneration(
   if (input.mode === "ANALOGY") {
     const source = await prisma.question.findFirst({
       where: {
+        ...schoolQuestionAccessWhere(teacherId),
         id: input.sourceQuestionId!,
         questionCategoryId: course.questionCategoryId,
         status: QuestionStatus.ACTIVE,

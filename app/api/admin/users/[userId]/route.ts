@@ -17,10 +17,10 @@ interface UserRouteContext {
 
 export async function GET(_: Request, context: UserRouteContext) {
   try {
-    await requireAuthenticatedUser([Role.ADMIN]);
+    const admin = await requireAuthenticatedUser([Role.ADMIN]);
     const id = adminUserIdSchema.safeParse((await context.params).userId);
     if (!id.success) return apiError("用户 ID 格式无效", 400);
-    return apiSuccess(await getAdminUser(id.data));
+    return apiSuccess(await getAdminUser(admin.id, id.data));
   } catch (error: unknown) {
     return adminUserApiError(error);
   }

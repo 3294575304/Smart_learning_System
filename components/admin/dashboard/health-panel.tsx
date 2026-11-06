@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   CircleHelp,
   Database,
+  RefreshCw,
   Settings,
   TriangleAlert,
 } from "lucide-react";
@@ -55,13 +56,31 @@ export function HealthPanel({
   data,
   error,
   loading,
+  onRefresh,
 }: {
   data: SystemHealthResult | null;
   error: string | null;
   loading: boolean;
+  onRefresh?: () => void;
 }) {
   return (
     <DashboardPanel
+      actions={
+        onRefresh ? (
+          <button
+            className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-medium hover:bg-sky-50/70 disabled:cursor-wait disabled:opacity-60"
+            disabled={loading}
+            onClick={onRefresh}
+            type="button"
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+            />
+            重新检查
+          </button>
+        ) : undefined
+      }
       description="轻量检查数据库、AI 配置与关键数据状态，不会主动调用付费 AI 服务。"
       title="系统运行状态"
     >

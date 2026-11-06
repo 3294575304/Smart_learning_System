@@ -56,8 +56,12 @@ export type AdminQuestionRecord = Prisma.QuestionGetPayload<{
 }>;
 type DatabaseClient = typeof prisma | Prisma.TransactionClient;
 
-export async function loadAdminQuestionPage(query: AdminQuestionListQuery) {
+export async function loadAdminQuestionPage(
+  query: AdminQuestionListQuery,
+  schoolId: string,
+) {
   const where: Prisma.QuestionWhereInput = {
+    creator: { schoolId },
     isAssignmentOnly: false,
     deletedAt: null,
     ...(query.keyword
@@ -96,17 +100,19 @@ export async function loadAdminQuestionPage(query: AdminQuestionListQuery) {
 
 export function findAdminQuestionById(
   questionId: string,
+  schoolId: string,
   client: DatabaseClient = prisma,
 ): Promise<AdminQuestionRecord | null> {
   return client.question.findFirst({
-    where: { id: questionId, deletedAt: null },
+    where: { id: questionId, creator: { schoolId }, deletedAt: null },
     select: adminQuestionSelect,
   });
 }
 
-export async function loadQuestionCreatorOptions() {
+export async function loadQuestionCreatorOptions(schoolId: string) {
   return prisma.user.findMany({
     where: {
+      schoolId,
       role: { in: [Role.ADMIN, Role.TEACHER] },
       createdQuestions: { some: { deletedAt: null } },
     },

@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { assertSchoolMembership } from "@/services/schools/membership-scope";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
@@ -604,6 +605,7 @@ export async function joinClassroom(
   }
 
   assertClassroomCanAcceptStudents(classroom);
+  await assertSchoolMembership(classroom.id, studentId);
   const existing = await prisma.classMembership.findUnique({
     where: {
       classroomId_studentId: { classroomId: classroom.id, studentId },

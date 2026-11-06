@@ -1,3 +1,4 @@
+import { schoolQuestionAccessWhere } from "@/services/questions/access";
 import { PRACTICE_SCORING_RULE } from "@/services/recommendations/scoring";
 import {
   listReviewChapters,
@@ -35,6 +36,7 @@ import {
 } from "./schemas";
 
 const metadataSelect = Prisma.validator<Prisma.QuestionSelect>()({
+  creator: { select: { schoolId: true } },
   title: true,
   type: true,
   status: true,
@@ -85,6 +87,7 @@ async function studentScopes(studentId: string) {
       classroom: { status: "ACTIVE" },
     },
     select: {
+      student: { select: { schoolId: true } },
       classroom: {
         select: {
           id: true,
@@ -110,6 +113,8 @@ function available(record: FavoriteRecord, scopes: Scopes) {
         ?.classroom.course
     : null;
   const allowed = Boolean(
+    record.question.creator.schoolId &&
+    record.question.creator.schoolId === scopes[0]?.student.schoolId &&
     record.question.questionCategoryId &&
     (record.courseId
       ? course?.questionCategoryId === record.question.questionCategoryId
@@ -659,8 +664,8 @@ export async function getFavoriteDetail(
   if (!record) throw new ResourceNotFoundError("收藏不存在");
   const item = view(record, await studentScopes(actor.id));
   if (!item.available) return { favorite: item, question: null };
-  const question = await prisma.question.findUnique({
-    where: { id: questionId },
+  const question = await prisma.question.findFirst({
+    where: { id: questionId, ...schoolQuestionAccessWhere(actor.id) },
     select: {
       content: true,
       difficulty: true,

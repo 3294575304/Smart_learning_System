@@ -224,8 +224,8 @@ export function CreateSchoolAdminForm({
       schoolId: initialSchoolId,
       displayName: "",
       email: "",
-      password: "",
-      confirmPassword: "",
+      password: "123456",
+      confirmPassword: "123456",
     },
   });
   const submit = handleSubmit(async (input) => {
@@ -412,8 +412,9 @@ export function CreateSchoolAdminForm({
         id="new-admin-password-hint"
         className="text-sm leading-6 text-slate-500"
       >
-        初始密码至少 8
-        位，包含大写字母、小写字母和数字。新账号固定为高校管理员，首次登录需修改密码。
+        默认初始密码为
+        123456；也可自定义初始密码，无需大小写或数字组合要求。新账号固定为高校管理员，首次登录必须设置至少
+        8 位且包含大小写字母和数字的新密码。
       </p>
       {error ? (
         <p

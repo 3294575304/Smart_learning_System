@@ -1,3 +1,4 @@
+import { schoolQuestionAccessWhere } from "@/services/questions/access";
 import {
   AuditAction,
   AuditTargetType,
@@ -30,6 +31,7 @@ async function accessibleQuestion(
   if (!course) throw new ResourceNotFoundError("课程不存在");
   const question = await client.question.findFirst({
     where: {
+      ...schoolQuestionAccessWhere(teacherId),
       id: questionId,
       deletedAt: null,
       status: QuestionStatus.ACTIVE,
@@ -157,6 +159,7 @@ export async function listGraphConceptQuestions(
 
   const bindingScope = { courseId, conceptId };
   const where: Prisma.QuestionWhereInput = {
+    ...schoolQuestionAccessWhere(teacherId),
     AND: [
       ...(query.keyword
         ? [

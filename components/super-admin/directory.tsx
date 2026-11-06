@@ -10,7 +10,19 @@ import {
   type SchoolAdminDirectoryQuery,
 } from "@/services/super-admin/directory-schemas";
 
-function date(value: Date | null): string {
+function dateOnly(value: Date): string {
+  return value
+    .toLocaleDateString("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+    .replace(/(\d+)(年|月|日)/g, "$1 $2")
+    .replace(/(年|月)(?=\d)/g, "$1 ");
+}
+
+function dateTime(value: Date | null): string {
   return value
     ? value.toLocaleString("zh-CN", {
         timeZone: "Asia/Shanghai",
@@ -148,7 +160,7 @@ export function SchoolAdminDirectory({
                     "学校名称",
                     "所在地区",
                     "绑定管理员",
-                    "接入时间（北京时间）",
+                    "接入日期（北京时间）",
                     "操作",
                   ].map((label) => (
                     <th key={label} className="px-5 py-4 font-medium">
@@ -168,7 +180,7 @@ export function SchoolAdminDirectory({
                     </td>
                     <td className="px-5 py-4">{school.adminCount} 人</td>
                     <td className="px-5 py-4 text-slate-500">
-                      {date(school.createdAt)}
+                      {dateOnly(school.createdAt)}
                     </td>
                     <td className="px-5 py-4">
                       <DeleteSchoolButton
@@ -222,7 +234,7 @@ export function SchoolAdminDirectory({
                       </span>
                     </td>
                     <td className="px-5 py-4 text-slate-500">
-                      {date(admin.lastLoginAt)}
+                      {dateTime(admin.lastLoginAt)}
                     </td>
                   </tr>
                 ))}

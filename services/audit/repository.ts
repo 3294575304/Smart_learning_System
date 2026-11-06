@@ -1,4 +1,9 @@
-import { AuditTargetType, Prisma, type AuditAction } from "@prisma/client";
+import {
+  AuditTargetType,
+  Prisma,
+  Role,
+  type AuditAction,
+} from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import type { AuditLogListQuery } from "@/services/audit/schemas";
@@ -218,11 +223,15 @@ export async function writeTeachingAuditLog(
   });
 }
 
-export async function loadAuditLogPage(query: AuditLogListQuery): Promise<{
+export async function loadAuditLogPage(
+  query: AuditLogListQuery,
+  schoolId: string,
+): Promise<{
   total: number;
   records: AuditLogRecord[];
 }> {
   const where: Prisma.AuditLogWhereInput = {
+    actor: { is: { schoolId, role: { not: Role.SUPER_ADMIN } } },
     ...(query.action ? { action: query.action } : {}),
     ...(query.actorId ? { actorId: query.actorId } : {}),
     ...(query.targetId ? { targetId: query.targetId } : {}),
@@ -278,10 +287,13 @@ export async function loadAuditLogPage(query: AuditLogListQuery): Promise<{
   return { total, records };
 }
 
-export async function loadAuditTargetUsers(targetIds: string[]) {
+export async function loadAuditTargetUsers(
+  targetIds: string[],
+  schoolId: string,
+) {
   if (targetIds.length === 0) return [];
   return prisma.user.findMany({
-    where: { id: { in: targetIds } },
+    where: { id: { in: targetIds }, schoolId },
     select: {
       id: true,
       email: true,
