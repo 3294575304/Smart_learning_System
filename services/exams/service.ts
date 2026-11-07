@@ -86,7 +86,7 @@ export async function listEligibleExamQuestions(
             }
           : {}),
       },
-      include: { options: true },
+      include: { options: true, examImages: true },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     }),
     recentUses(prisma, course.categoryId, input.startsAt),
@@ -108,7 +108,8 @@ export async function listEligibleExamQuestions(
   });
 }
 
-export async function createExamSession(
+export async function createExamSessionInTransaction(
+  tx: Prisma.TransactionClient,
   teacherId: string,
   input: ExamCreateInput,
   context: AuditRequestContext = { ipAddress: null, userAgent: null },
@@ -127,130 +128,154 @@ export async function createExamSession(
     throw new AssignmentOperationError("考试截止时间必须晚于当前时间", 400);
   if (input.classroomIds.length * input.questions.length > 400)
     throw new AssignmentOperationError("单次最多复制400题次", 400);
-  return runAssignmentSerializable(
-    async (tx) => {
-      const existing = await tx.examSession.findUnique({
-        where: { requestId: input.requestId },
-        include: { assignments: true },
-      });
-      if (existing) {
-        if (existing.teacherId !== teacherId)
-          throw new ResourceNotFoundError("考试不存在");
-        if (existing.requestFingerprint !== requestFingerprint)
-          throw new AssignmentOperationError("请求键已用于其他考试内容", 409);
-        return existing;
-      }
-      await tx.$queryRaw`SELECT id FROM "QuestionCourseCategory" WHERE id = ${course.categoryId} FOR UPDATE`;
-      const classrooms = await tx.classroom.findMany({
-        where: {
-          id: { in: input.classroomIds },
-          teacherId,
-          courseId: course.id,
-          status: "ACTIVE",
-        },
-        select: { id: true },
-      });
-      if (classrooms.length !== input.classroomIds.length)
-        throw new ResourceNotFoundError("班级不存在");
-      const questions = await tx.question.findMany({
-        where: {
-          id: { in: input.questions.map((item) => item.questionId) },
-          questionCategoryId: course.categoryId,
-          status: QuestionStatus.ACTIVE,
-          deletedAt: null,
-          isAssignmentOnly: false,
-        },
-        include: { options: true },
-      });
-      if (questions.length !== input.questions.length)
-        throw new AssignmentOperationError("部分题目不可用于本课程考试", 400);
-      const uses = await recentUses(tx, course.categoryId, input.startsAt);
-      const selectedHashes = new Set<string>();
-      for (const question of questions) {
-        const hash = examQuestionHash(question);
-        if (selectedHashes.has(hash))
-          throw new AssignmentOperationError(
-            "同一试卷不能包含内容相同的题目",
-            400,
-          );
-        selectedHashes.add(hash);
-        if (
-          uses.some(
-            (use) =>
-              overlapsThreeYears(input.startsAt, use.startsAt) &&
-              (use.questionId === question.id || use.contentHash === hash),
-          )
-        )
-          throw new AssignmentOperationError(
-            `题目「${question.title}」近三年已用于考试`,
-            409,
-          );
-      }
-      const session = await tx.examSession.create({
-        data: {
-          requestId: input.requestId,
-          requestFingerprint,
-          teacherId,
-          courseId: course.id,
-          questionCategoryId: course.categoryId,
-          type: input.type,
-          title: input.title,
-          startsAt: input.startsAt,
-          endsAt: input.endsAt,
-          allowedSwitches: input.allowedSwitches,
-          questionUses: {
-            create: questions.map((question) => ({
-              questionId: question.id,
-              questionCategoryId: course.categoryId,
-              contentHash: examQuestionHash(question),
-              startsAt: input.startsAt,
-            })),
-          },
-        },
-      });
-      for (const classroomId of [...input.classroomIds].sort()) {
-        const assignmentId = await createDraftInTransaction(tx, teacherId, {
-          title: input.title,
-          description:
-            input.type === ExamType.MIDTERM ? "期中考试" : "期末考试",
-          classroomId,
-          publishedAt: input.startsAt,
-          dueAt: input.endsAt,
-          allowResubmission: false,
-          allowAttachments: false,
-          questions: input.questions.map((item, index) => ({
-            ...item,
-            sortOrder: index + 1,
-          })),
-        });
-        await tx.assignment.update({
-          where: { id: assignmentId },
-          data: { examSessionId: session.id },
-        });
-        await publishInTransaction(tx, teacherId, assignmentId);
-      }
-      await writeTeachingAuditLog(tx, {
-        actorId: teacherId,
-        action: AuditAction.EXAM_PUBLISHED,
-        targetType: AuditTargetType.EXAM_SESSION,
-        targetId: session.id,
-        summary: "发布考试",
-        beforeData: null,
-        afterData: {
-          courseId: course.id,
-          classroomIds: [...input.classroomIds].sort(),
-          type: input.type,
-          startsAt: input.startsAt.toISOString(),
-          endsAt: input.endsAt.toISOString(),
-          questionCount: input.questions.length,
-        },
-        context,
-      });
-      return tx.examSession.findUniqueOrThrow({
-        where: { id: session.id },
-        include: { assignments: true },
-      });
+  const existing = await tx.examSession.findUnique({
+    where: { requestId: input.requestId },
+    include: { assignments: true },
+  });
+  if (existing) {
+    if (existing.teacherId !== teacherId)
+      throw new ResourceNotFoundError("考试不存在");
+    if (existing.requestFingerprint !== requestFingerprint)
+      throw new AssignmentOperationError("请求键已用于其他考试内容", 409);
+    return existing;
+  }
+  await tx.$queryRaw`SELECT id FROM "QuestionCourseCategory" WHERE id = ${course.categoryId} FOR UPDATE`;
+  const classrooms = await tx.classroom.findMany({
+    where: {
+      id: { in: input.classroomIds },
+      teacherId,
+      courseId: course.id,
+      status: "ACTIVE",
     },
+    select: { id: true },
+  });
+  if (classrooms.length !== input.classroomIds.length)
+    throw new ResourceNotFoundError("班级不存在");
+  const questions = await tx.question.findMany({
+    where: {
+      id: { in: input.questions.map((item) => item.questionId) },
+      questionCategoryId: course.categoryId,
+      status: QuestionStatus.ACTIVE,
+      deletedAt: null,
+      isAssignmentOnly: false,
+    },
+    include: { options: true, examImages: true },
+  });
+  if (questions.length !== input.questions.length)
+    throw new AssignmentOperationError("部分题目不可用于本课程考试", 400);
+  const uses = await recentUses(tx, course.categoryId, input.startsAt);
+  const selectedHashes = new Set<string>();
+  for (const question of questions) {
+    const hash = examQuestionHash(question);
+    if (selectedHashes.has(hash))
+      throw new AssignmentOperationError("同一试卷不能包含内容相同的题目", 400);
+    selectedHashes.add(hash);
+    if (
+      uses.some(
+        (use) =>
+          overlapsThreeYears(input.startsAt, use.startsAt) &&
+          (use.questionId === question.id || use.contentHash === hash),
+      )
+    )
+      throw new AssignmentOperationError(
+        `题目「${question.title}」近三年已用于考试`,
+        409,
+      );
+  }
+  const session = await tx.examSession.create({
+    data: {
+      requestId: input.requestId,
+      requestFingerprint,
+      teacherId,
+      courseId: course.id,
+      questionCategoryId: course.categoryId,
+      type: input.type,
+      title: input.title,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      allowedSwitches: input.allowedSwitches,
+      questionUses: {
+        create: questions.map((question) => ({
+          questionId: question.id,
+          questionCategoryId: course.categoryId,
+          contentHash: examQuestionHash(question),
+          startsAt: input.startsAt,
+        })),
+      },
+    },
+  });
+  for (const classroomId of [...input.classroomIds].sort()) {
+    const assignmentId = await createDraftInTransaction(tx, teacherId, {
+      title: input.title,
+      description: input.type === ExamType.MIDTERM ? "期中考试" : "期末考试",
+      classroomId,
+      publishedAt: input.startsAt,
+      dueAt: input.endsAt,
+      allowResubmission: false,
+      allowAttachments: false,
+      questions: input.questions.map((item, index) => ({
+        ...item,
+        sortOrder: index + 1,
+      })),
+    });
+    await tx.assignment.update({
+      where: { id: assignmentId },
+      data: { examSessionId: session.id },
+    });
+    await publishInTransaction(tx, teacherId, assignmentId);
+    const snapshots = await tx.assignmentQuestion.findMany({
+      where: { assignmentId },
+      select: { id: true, questionId: true },
+    });
+    const snapshotByQuestion = new Map(
+      snapshots.map((item) => [item.questionId, item.id]),
+    );
+    const imageRows = questions.flatMap((question) =>
+      question.examImages.map((image) => ({
+        assignmentQuestionId: snapshotByQuestion.get(question.id) ?? "",
+        sortOrder: image.sortOrder,
+        storageKey: image.storageKey,
+        checksum: image.checksum,
+        mimeType: image.mimeType,
+        width: image.width,
+        height: image.height,
+      })),
+    );
+    if (imageRows.some((row) => !row.assignmentQuestionId))
+      throw new AssignmentOperationError("试卷图片快照创建失败", 409);
+    if (imageRows.length)
+      await tx.assignmentQuestionImage.createMany({ data: imageRows });
+  }
+  await writeTeachingAuditLog(tx, {
+    actorId: teacherId,
+    action: AuditAction.EXAM_PUBLISHED,
+    targetType: AuditTargetType.EXAM_SESSION,
+    targetId: session.id,
+    summary: "发布考试",
+    beforeData: null,
+    afterData: {
+      courseId: course.id,
+      classroomIds: [...input.classroomIds].sort(),
+      type: input.type,
+      startsAt: input.startsAt.toISOString(),
+      endsAt: input.endsAt.toISOString(),
+      questionCount: input.questions.length,
+    },
+    context,
+  });
+  return tx.examSession.findUniqueOrThrow({
+    where: { id: session.id },
+    include: { assignments: true },
+  });
+}
+
+export async function createExamSession(
+  teacherId: string,
+  input: ExamCreateInput,
+  context: AuditRequestContext = { ipAddress: null, userAgent: null },
+) {
+  return runAssignmentSerializable(
+    (tx) => createExamSessionInTransaction(tx, teacherId, input, context),
     "考试发布发生并发冲突，请刷新后重试",
     30000,
   );

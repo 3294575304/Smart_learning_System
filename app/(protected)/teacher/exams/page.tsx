@@ -16,12 +16,20 @@ export default async function TeacherExamsPage() {
           </Link>
           <h1 className="text-2xl font-semibold">考试管理</h1>
         </div>
-        <Link
-          className="rounded bg-sky-700 px-4 py-2 text-white"
-          href="/teacher/exams/new"
-        >
-          创建考试
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            className="rounded border px-4 py-2 text-sky-700"
+            href="/teacher/exams/import"
+          >
+            上传试卷
+          </Link>
+          <Link
+            className="rounded bg-sky-700 px-4 py-2 text-white"
+            href="/teacher/exams/new"
+          >
+            手动组卷
+          </Link>
+        </div>
       </div>
       {exams.length ? (
         <ul className="space-y-3">

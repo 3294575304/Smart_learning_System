@@ -27,6 +27,7 @@ async function main() {
     ...process.env,
     DATABASE_URL: isolatedDatabaseUrl(base, schema),
     AI_PROVIDER: "mock",
+    HTTP_INTEGRATION_SCHEMA: schema,
   };
   try {
     run(
@@ -39,7 +40,11 @@ async function main() {
         "--conditions=react-server",
         "--import",
         "tsx",
-        resolve("tests/exams/integration.ts"),
+        resolve(
+          process.argv.includes("--http")
+            ? "tests/exams/http.integration.ts"
+            : "tests/exams/integration.ts",
+        ),
       ],
       env,
     );

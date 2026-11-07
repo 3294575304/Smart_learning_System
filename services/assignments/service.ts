@@ -90,6 +90,10 @@ const studentQuestionSelect = {
   typeSnapshot: true,
   sortOrder: true,
   points: true,
+  examImages: {
+    orderBy: { sortOrder: "asc" as const },
+    select: { id: true },
+  },
   optionSnapshots: {
     orderBy: { sortOrder: "asc" as const },
     select: {
@@ -910,6 +914,10 @@ export async function getStudentAssignment(
       type: question.typeSnapshot,
       sortOrder: question.sortOrder,
       points: question.points.toNumber(),
+      images: question.examImages.map((image) => ({
+        id: image.id,
+        url: `/api/assignment-question-images/${image.id}`,
+      })),
       options: question.optionSnapshots.map((option) => ({
         id: option.id,
         label: option.labelSnapshot,
@@ -1102,6 +1110,10 @@ export async function getStudentSubmissionDraft(
       type: question.typeSnapshot,
       sortOrder: question.sortOrder,
       points: question.points.toNumber(),
+      images: question.examImages.map((image) => ({
+        id: image.id,
+        url: `/api/assignment-question-images/${image.id}`,
+      })),
       options: question.optionSnapshots.map((option) => ({
         id: option.id,
         label: option.labelSnapshot,
@@ -1581,6 +1593,7 @@ export async function getStudentSubmissionResult(
           },
           assignmentQuestion: {
             include: {
+              examImages: { orderBy: { sortOrder: "asc" } },
               optionSnapshots: { orderBy: { sortOrder: "asc" } },
               knowledgePointSnapshots: {
                 orderBy: [{ nameSnapshot: "asc" }, { knowledgePointId: "asc" }],
@@ -1627,6 +1640,10 @@ export async function getStudentSubmissionResult(
           assignmentQuestionId: answer.assignmentQuestionId,
           title: answer.assignmentQuestion.titleSnapshot,
           content: answer.assignmentQuestion.contentSnapshot,
+          images: answer.assignmentQuestion.examImages.map((image) => ({
+            id: image.id,
+            url: `/api/assignment-question-images/${image.id}`,
+          })),
           type: answer.assignmentQuestion.typeSnapshot,
           sortOrder: answer.assignmentQuestion.sortOrder,
           score: decimalNumber(answer.score),

@@ -1,25 +1,26 @@
 import Link from "next/link";
 import { Role } from "@prisma/client";
-import { TeacherQuestionFileImport } from "@/components/admin/admin-question-file-import";
+import { PaperUpload } from "@/components/exams/paper-upload";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { listQuestionImportCourses } from "@/services/question-import/courses";
+import { getTeacherAssignmentEditorOptions } from "@/services/assignments/service";
+import { listPaperDrafts } from "@/services/exams/paper-drafts";
 
 export default async function ExamPaperImportPage() {
-  await requirePageRole(Role.TEACHER);
-  const courses = await listQuestionImportCourses();
+  const teacher = await requirePageRole(Role.TEACHER);
+  const [options, drafts] = await Promise.all([
+    getTeacherAssignmentEditorOptions(teacher.id),
+    listPaperDrafts(teacher.id),
+  ]);
   return (
     <section className="mx-auto max-w-5xl space-y-4">
       <Link className="text-sky-700" href="/teacher/exams/new">
         ← 返回考试组卷
       </Link>
-      <h1 className="text-2xl font-semibold">上传试卷文件</h1>
+      <h1 className="text-2xl font-semibold">AI 解析试卷</h1>
       <p className="text-sm text-slate-600">
-        识别后逐题核对答案与解析，确认加入共享题库；返回组卷页重新查询可用题。三年禁重将在组卷和发布时再次检查。
+        上传后生成在线考试草稿，核对题目并设置考试规则即可发布。
       </p>
-      <TeacherQuestionFileImport
-        courses={courses}
-        returnHref="/teacher/exams/new"
-      />
+      <PaperUpload courses={options.publicationCourses} drafts={drafts} />
     </section>
   );
 }

@@ -6,6 +6,7 @@ type Question = {
   correctBoolean: boolean | null;
   referenceAnswer: string | null;
   acceptableAnswers: string[];
+  examImages?: Array<{ checksum: string; sortOrder: number }>;
 };
 const normalize = (value: string | null) =>
   (value ?? "").normalize("NFKC").replace(/\s+/gu, " ").trim().toLowerCase();
@@ -22,6 +23,9 @@ export function examQuestionHash(question: Question): string {
         question.correctBoolean,
         normalize(question.referenceAnswer),
         question.acceptableAnswers.map(normalize).sort(),
+        [...(question.examImages ?? [])]
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((image) => image.checksum),
       ]),
     )
     .digest("hex");

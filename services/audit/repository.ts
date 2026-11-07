@@ -136,6 +136,7 @@ interface WriteTeachingAuditInput {
   targetType:
     | typeof AuditTargetType.SUBMISSION
     | typeof AuditTargetType.ASSIGNMENT
+    | typeof AuditTargetType.EXAM_DRAFT
     | typeof AuditTargetType.EXAM_SESSION;
   targetId: string;
   summary: string;

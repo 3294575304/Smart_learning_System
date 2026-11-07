@@ -4,6 +4,7 @@ import { assertAssignmentTaskScope } from "@/services/student-experience/task-sc
 import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { Role } from "@prisma/client";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 
 import { LearningAnalysisCard } from "@/components/learning-analysis/learning-analysis-card";
@@ -96,6 +97,17 @@ export default async function ResultPage({ params, searchParams }: Props) {
                     <p className="text-muted-foreground mt-2 whitespace-pre-wrap">
                       {answer.content}
                     </p>
+                    {answer.images.map((image) => (
+                      <Image
+                        alt={`第 ${answer.sortOrder} 题附图`}
+                        className="mt-3 max-h-[32rem] max-w-full rounded border object-contain"
+                        key={image.id}
+                        src={image.url}
+                        width={800}
+                        height={600}
+                        unoptimized
+                      />
+                    ))}
                   </div>
                   <span className="font-medium">
                     {answer.score === null

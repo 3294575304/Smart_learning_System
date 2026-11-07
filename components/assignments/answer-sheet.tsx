@@ -7,6 +7,7 @@ import {
 
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { QuestionType, SubmissionStatus } from "@prisma/client";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -31,6 +32,7 @@ interface DraftQuestion {
   type: QuestionType;
   sortOrder: number;
   points: number;
+  images: Array<{ id: string; url: string }>;
   options: Array<{
     id: string;
     label: string;
@@ -417,6 +419,18 @@ export function AnswerSheet({
                 <p className="mt-4 text-sm whitespace-pre-wrap">
                   {question.content}
                 </p>
+                {question.images.map((image) => (
+                  // Authenticated, immutable exam snapshot image.
+                  <Image
+                    alt={`第 ${question.sortOrder} 题附图`}
+                    className="mt-3 max-h-[32rem] max-w-full rounded border object-contain"
+                    key={image.id}
+                    src={image.url}
+                    width={800}
+                    height={600}
+                    unoptimized
+                  />
+                ))}
                 {answer?.kind === "CODE" &&
                 question.type === QuestionType.PYTHON_PROGRAMMING ? (
                   <ProgrammingQuestionInput

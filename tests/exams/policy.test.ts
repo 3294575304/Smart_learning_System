@@ -38,6 +38,18 @@ test("question hash ignores whitespace but includes answer content", () => {
   };
   assert.equal(examQuestionHash(question), examQuestionHash(changedWhitespace));
   assert.notEqual(examQuestionHash(question), examQuestionHash(changedAnswer));
+  const image = { checksum: "a".repeat(64), sortOrder: 1 };
+  assert.notEqual(
+    examQuestionHash(question),
+    examQuestionHash({ ...question, examImages: [image] }),
+  );
+  assert.notEqual(
+    examQuestionHash({ ...question, examImages: [image] }),
+    examQuestionHash({
+      ...question,
+      examImages: [{ ...image, checksum: "b".repeat(64) }],
+    }),
+  );
 });
 
 test("exam requires an ordered nonempty paper and a valid window", () => {

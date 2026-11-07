@@ -239,11 +239,11 @@ export function ExamForm({
       <section className="space-y-3 rounded-xl border bg-white p-5">
         <h2 className="font-semibold">试卷选题</h2>
         <p className="text-sm">
-          上传试卷请先
+          已有整份试卷？
           <Link className="text-sky-700 underline" href="/teacher/exams/import">
-            识别并审核文件
+            上传并由 AI 生成考试草稿
           </Link>
-          ，入共享题库后返回选题。支持 DOC、DOCX、文本型 PDF、TXT、JSON。
+          ，审核后直接发布。
         </p>
         <div className="flex flex-wrap gap-2">
           <select

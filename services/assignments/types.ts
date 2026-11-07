@@ -95,6 +95,7 @@ export interface SubmissionResultView {
     assignmentQuestionId: string;
     title: string;
     content: string;
+    images: Array<{ id: string; url: string }>;
     type: QuestionType;
     sortOrder: number;
     score: number | null;

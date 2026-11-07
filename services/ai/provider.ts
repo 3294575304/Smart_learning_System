@@ -9,6 +9,7 @@ import type {
   QuestionGenerationAIInput,
   QuestionGenerationReviewInput,
 } from "@/services/ai-question-generation/schemas";
+import type { ExamPaperAIInput } from "@/services/exams/paper-ai";
 
 export interface AIProviderOptions {
   signal: AbortSignal;
@@ -114,6 +115,11 @@ export interface AIProvider {
 
   reviewGeneratedQuestions?(
     input: QuestionGenerationReviewInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  parseExamPaper?(
+    input: ExamPaperAIInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 }

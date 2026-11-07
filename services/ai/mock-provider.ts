@@ -14,6 +14,8 @@ import type {
   QuestionGenerationReviewInput,
 } from "@/services/ai-question-generation/schemas";
 import { QuestionType } from "@prisma/client";
+import type { ExamPaperAIInput } from "@/services/exams/paper-ai";
+import { parseQuestionImportText } from "@/services/question-import/parser";
 
 export type MockAIResponder = (
   input: StudentAnalysisInput,
@@ -233,6 +235,66 @@ export class MockAIProvider implements AIProvider {
           primaryConceptId: input.concepts[0]?.id ?? null,
         };
       }),
+    };
+  }
+
+  async parseExamPaper(
+    input: ExamPaperAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    if (options.signal.aborted)
+      throw new DOMException("AI request aborted", "AbortError");
+    const format = ["DOC", "DOCX", "PDF", "TXT", "JSON"].includes(input.format)
+      ? (input.format as "DOC" | "DOCX" | "PDF" | "TXT" | "JSON")
+      : "TXT";
+    const drafts = input.text.trim()
+      ? parseQuestionImportText(input.text, format, input.sourceName)
+      : [];
+    if (!drafts.length && !input.text.trim() && input.images.length) {
+      return {
+        questions: [
+          {
+            title: "扫描页待核对",
+            content: "",
+            type: "SHORT_ANSWER",
+            difficulty: 2,
+            options: [],
+            answer: null,
+            explanation: "",
+            tags: ["试卷导入"],
+            points: null,
+            sourceLocator: input.chunkLabel,
+            imageIds: input.images.map((image) => image.id),
+            imageRegions: [],
+            answerSource: "MISSING",
+            confidence: null,
+          },
+        ],
+      };
+    }
+    return {
+      questions: drafts.slice(0, 50).map((draft) => ({
+        title: draft.title,
+        content: draft.content,
+        type: draft.type,
+        difficulty: draft.difficulty,
+        options: draft.options,
+        answer: draft.answer,
+        explanation: draft.explanation,
+        tags: draft.tags,
+        points:
+          Number(
+            /(?:（|\()\s*(\d+(?:\.\d+)?)\s*分/u.exec(draft.content)?.[1] ?? 0,
+          ) || null,
+        sourceLocator: `${input.chunkLabel} 第 ${draft.originalNumber ?? "?"} 题`,
+        imageIds: input.images.length === 1 ? [input.images[0].id] : [],
+        imageRegions:
+          input.images.length === 1 && format === "DOCX"
+            ? [{ imageId: input.images[0].id, x: 0, y: 0, width: 1, height: 1 }]
+            : [],
+        answerSource: draft.answer ? "SOURCE" : "MISSING",
+        confidence: 0.5,
+      })),
     };
   }
 
