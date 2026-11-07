@@ -58,7 +58,7 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
   const [questions, creators, courses] = await Promise.all([
     listAdminQuestions(admin.id, query),
     listAdminQuestionCreators(admin.id),
-    listQuestionImportCourses(),
+    listQuestionImportCourses(admin.id),
   ]);
   return (
     <section className="space-y-6">

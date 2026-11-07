@@ -1,11 +1,18 @@
 .screen {
+  --showcase-ink: #284b3e;
+  --showcase-muted: #61776b;
+  --showcase-soft: #6f8074;
+  --showcase-accent: #356d58;
+  --showcase-border: #d7e1d6;
+  --showcase-surface: #fafbf5d9;
+  --showcase-wash: #edf3e9;
   position: relative;
   overflow: hidden;
   min-height: 70vh;
   padding: clamp(18px, 2vw, 28px);
-  border: 1px solid #d9e4df;
+  border: 1px solid var(--showcase-border);
   border-radius: 20px;
-  color: #203545;
+  color: var(--showcase-ink);
   background: #f5f8f4;
   isolation: isolate;
   box-shadow: 0 18px 65px #27493f0c;
@@ -35,7 +42,7 @@
   margin-bottom: 24px;
 }
 .header h1 {
-  color: #193f3c;
+  color: var(--showcase-ink);
   font-family: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", serif;
   font-size: clamp(26px, 2.3vw, 36px);
   line-height: 1.4;
@@ -52,7 +59,7 @@
   margin-top: 8px;
   font-size: 13px;
   line-height: 1.6;
-  color: #6b8394;
+  color: var(--showcase-muted);
 }
 .actions {
   display: flex;
@@ -66,23 +73,23 @@
   justify-content: center;
   gap: 7px;
   padding: 9px 13px;
-  border: 1px solid #b5d9ed;
+  border: 1px solid var(--showcase-border);
   border-radius: 8px;
-  color: #167eaf;
-  background: #fff;
+  color: var(--showcase-accent);
+  background: var(--showcase-surface);
   font-size: 13px;
   transition:
     background 0.15s,
     border-color 0.15s;
 }
 .actions button:hover {
-  background: #e9f7ff;
-  border-color: #8bc5e4;
+  background: var(--showcase-wash);
+  border-color: #9bb7a2;
 }
 .actions button:last-child {
-  background: #e8f6ff;
-  border-color: #b5dff5;
-  color: #147eb0;
+  background: var(--showcase-wash);
+  border-color: var(--showcase-border);
+  color: var(--showcase-accent);
 }
 .actions button:disabled {
   opacity: 0.55;
@@ -90,7 +97,7 @@
 .actions button:focus-visible,
 .provinceSelect:focus-visible,
 .search:focus-within {
-  outline: 2px solid #0284c7;
+  outline: 2px solid var(--showcase-accent);
   outline-offset: 3px;
 }
 .metrics {
@@ -105,43 +112,19 @@
   justify-content: space-between;
   gap: 12px;
   padding: 20px 22px;
-  border: 1px solid #dfebf2;
+  border: 1px solid var(--showcase-border);
   border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 2px 4px #254a6a03;
+  background: var(--showcase-surface);
+  box-shadow: 0 2px 4px #27493f05;
 }
 .metric p {
-  color: #687f90;
+  color: var(--showcase-muted);
   font-size: 13px;
-}
-.metric:nth-child(1) {
-  background: #f1f9ff;
-  border-color: #cfe8f8;
-}
-.metric:nth-child(1) strong,
-.metric:nth-child(1) > svg {
-  color: #087ebc;
-}
-.metric:nth-child(2) {
-  background: #f1fbf7;
-  border-color: #d4eee3;
-}
-.metric:nth-child(2) strong,
-.metric:nth-child(2) > svg {
-  color: #148d78;
-}
-.metric:nth-child(3) {
-  background: #f3f9fd;
-  border-color: #d3e8f3;
-}
-.metric:nth-child(3) strong,
-.metric:nth-child(3) > svg {
-  color: #167ca1;
 }
 .metric strong {
   display: block;
   margin: 8px 0 5px;
-  color: #183d56;
+  color: var(--showcase-accent);
   font-size: 36px;
   font-weight: 600;
   line-height: 1.15;
@@ -150,20 +133,20 @@
 }
 .metric strong > span {
   margin-left: 9px;
-  color: #8499a9;
+  color: var(--showcase-soft);
   font-size: 13px;
   font-weight: 400;
   letter-spacing: 0;
 }
 .metric small {
-  color: #92a3b0;
+  color: var(--showcase-soft);
   font-size: 11px;
 }
 .metric > svg {
   width: 22px;
   height: 22px;
   margin-top: 3px;
-  color: #7ca8c0;
+  color: var(--showcase-accent);
   stroke-width: 1.5;
 }
 .content {
@@ -176,9 +159,9 @@
 .detailPanel,
 .rankingPanel {
   overflow: hidden;
-  border: 1px solid #dbe8f0;
+  border: 1px solid var(--showcase-border);
   border-radius: 12px;
-  background: #ffffffd9;
+  background: var(--showcase-surface);
   box-shadow: 0 8px 28px #254d4310;
   backdrop-filter: blur(12px);
 }
@@ -188,21 +171,21 @@
   justify-content: space-between;
   gap: 12px;
   padding: 18px 20px;
-  border-bottom: 1px solid #e9f0f5;
+  border-bottom: 1px solid #e2e9df;
 }
 .panelHeading h2 {
-  color: #28495f;
+  color: var(--showcase-ink);
   font-size: 15px;
   font-weight: 600;
 }
 .panelHeading > p {
   font-size: 11px;
-  color: #879caa;
+  color: var(--showcase-soft);
 }
 .mapArea {
   position: relative;
   isolation: isolate;
-  background: #f1f6f2;
+  background: #edf3ef;
 }
 .mapArea::before {
   position: absolute;
@@ -251,23 +234,23 @@
   align-items: center;
   gap: 9px;
   padding: 8px 12px;
-  border: 1px solid #dce9f1;
+  border: 1px solid var(--showcase-border);
   border-radius: 7px;
-  background: #ffffffed;
-  color: #627f92;
+  background: #f8faf2ed;
+  color: var(--showcase-muted);
   font-size: 11px;
   pointer-events: none;
-  box-shadow: 0 2px 6px #2b567608;
+  box-shadow: 0 2px 6px #27493f08;
 }
 .mapHint svg {
-  color: #3395c7;
+  color: var(--showcase-accent);
 }
 .mapHint strong {
-  color: #2374a0;
+  color: var(--showcase-accent);
   font-weight: 600;
 }
 .mapHint small {
-  color: #8a9fac;
+  color: var(--showcase-soft);
   font-weight: 400;
 }
 .province {
@@ -288,43 +271,54 @@
   flex-wrap: wrap;
   gap: 10px;
   padding: 15px 18px 8px;
-  color: #728998;
+  color: var(--showcase-muted);
   font-size: 11px;
 }
 .legend > div {
   width: 125px;
   height: 7px;
   border-radius: 3px;
-  background: linear-gradient(90deg, #e4f2fc, #7fcaf1, #1471c1);
+  background: linear-gradient(90deg, #e6eee8, #a2c9bd, #175d5a);
 }
 .legend > small {
-  color: #8da1af;
+  color: var(--showcase-soft);
   font-size: 10px;
 }
 .mapSource {
   margin: 5px 20px 16px;
   text-align: center;
-  color: #a0afba;
+  color: var(--showcase-soft);
   font-size: 10px;
 }
 .mapSource a:hover {
-  color: #4c8bab;
+  color: var(--showcase-accent);
   text-decoration: underline;
 }
 .sidebar {
+  max-height: var(--showcase-sidebar-max-height, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #c9d7c8 transparent;
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+@media (min-width: 1101px) {
+  .schoolList {
+    max-height: none;
+    overflow: visible;
+  }
 }
 .provinceSelect {
   display: block;
   width: calc(100% - 40px);
   margin: 18px 20px 0;
   padding: 10px 12px;
-  border: 1px solid #c9e4f3;
+  border: 1px solid var(--showcase-border);
   border-radius: 7px;
-  background: #f0f9ff;
-  color: #286b94;
+  background: var(--showcase-wash);
+  color: var(--showcase-accent);
   font-size: 13px;
   color-scheme: light;
 }
@@ -336,30 +330,30 @@
   padding: 20px;
 }
 .provinceSummary p {
-  color: #97a8b4;
+  color: var(--showcase-soft);
   font-size: 11px;
 }
 .provinceSummary h3 {
   margin-top: 5px;
-  color: #285a79;
+  color: var(--showcase-ink);
   font-size: 21px;
   font-weight: 600;
 }
 .provinceSummary strong {
-  color: #148bc0;
+  color: var(--showcase-accent);
   font-size: 26px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 .provinceSummary strong span {
-  color: #8b9fac;
+  color: var(--showcase-soft);
   font-size: 11px;
 }
 .schoolList {
   max-height: 360px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #d3e2ec transparent;
+  scrollbar-color: #c9d7c8 transparent;
   padding: 0 18px 20px;
 }
 .schoolCard {
@@ -368,9 +362,9 @@
   gap: 12px;
   margin-top: 10px;
   padding: 16px 14px;
-  border: 1px solid #d4ebf8;
+  border: 1px solid var(--showcase-border);
   border-radius: 9px;
-  background: #f0f9ff;
+  background: var(--showcase-wash);
 }
 .schoolCard:first-child {
   margin-top: 0;
@@ -380,7 +374,7 @@
   width: 19px;
   height: 19px;
   margin-top: 3px;
-  color: #4c9fc8;
+  color: var(--showcase-accent);
   stroke-width: 1.5;
 }
 .schoolLogo {
@@ -393,7 +387,7 @@
   object-fit: contain;
 }
 .schoolCard h4 {
-  color: #29648b;
+  color: var(--showcase-ink);
   font-size: 14px;
   font-weight: 500;
   line-height: 1.7;
@@ -404,7 +398,7 @@
   flex-wrap: wrap;
   gap: 7px;
   margin: 6px 0 5px;
-  color: #6d94aa;
+  color: var(--showcase-muted);
   font-size: 11px;
 }
 .connectedDot {
@@ -412,10 +406,10 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #27a983;
+  background: var(--showcase-accent);
 }
 .schoolCard small {
-  color: #a0b1bd;
+  color: var(--showcase-soft);
   font-size: 10px;
 }
 .search {
@@ -424,21 +418,25 @@
   gap: 8px;
   margin: 0 20px 14px;
   padding: 9px 10px;
-  border: 1px solid #d9e6ef;
+  border: 1px solid var(--showcase-border);
   border-radius: 7px;
-  color: #92a8b6;
+  color: var(--showcase-soft);
+}
+.search input::placeholder {
+  color: var(--showcase-soft);
+  opacity: 1;
 }
 .search input {
   width: 100%;
   min-width: 0;
   outline: none;
-  color: #41677e;
+  color: var(--showcase-ink);
   font-size: 12px;
   background: transparent;
 }
 .empty {
   padding: 30px 12px 34px;
-  color: #a1b5c2;
+  color: var(--showcase-soft);
   text-align: center;
 }
 .empty svg {
@@ -448,20 +446,20 @@
   stroke-width: 1.2;
 }
 .empty p {
-  color: #758e9e;
+  color: var(--showcase-muted);
   font-size: 13px;
 }
 .empty small {
   display: block;
   margin-top: 7px;
-  color: #a2b3be;
+  color: var(--showcase-soft);
   font-size: 11px;
 }
 .rankingPanel {
   padding-bottom: 14px;
 }
 .rankingTag {
-  color: #9babb6;
+  color: var(--showcase-soft);
   font-size: 11px;
 }
 .rankRow {
@@ -476,15 +474,15 @@
 }
 .rankRow:hover,
 .rankRow[aria-pressed="true"] {
-  background: #edf8ff;
+  background: var(--showcase-wash);
 }
 .rankRow:focus-visible {
-  outline: 2px solid #7db2ce;
+  outline: 2px solid #9bb7a2;
   outline-offset: 1px;
 }
 .rankRow > span {
   min-width: 12px;
-  color: #548daa;
+  color: var(--showcase-accent);
   font-size: 12px;
 }
 .rankRow > div {
@@ -494,15 +492,15 @@
 .rankRow p {
   display: flex;
   justify-content: space-between;
-  color: #58798e;
+  color: var(--showcase-muted);
   font-size: 12px;
 }
 .rankRow strong {
-  color: #2688b5;
+  color: var(--showcase-accent);
   font-weight: 500;
 }
 .rankRow small {
-  color: #96a9b7;
+  color: var(--showcase-soft);
   font-weight: 400;
 }
 .rankTrack {
@@ -510,16 +508,16 @@
   height: 4px;
   margin-top: 9px;
   border-radius: 3px;
-  background: #e7f3fb;
+  background: var(--showcase-wash);
 }
 .rankTrack > div {
   height: 100%;
   border-radius: 3px;
-  background: #5aa9d1;
+  background: #7b9e86;
 }
 .noRanking {
   padding: 22px 20px;
-  color: #92a7b6;
+  color: var(--showcase-soft);
   font-size: 12px;
 }
 .footer {
@@ -528,7 +526,7 @@
   flex-wrap: wrap;
   gap: 10px;
   padding-top: 20px;
-  color: #99aab6;
+  color: var(--showcase-soft);
   font-size: 10px;
   line-height: 1.7;
 }
@@ -566,6 +564,12 @@
   .sidebar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    max-height: none;
+    overflow: visible;
+  }
+  .schoolList {
+    max-height: 360px;
+    overflow-y: auto;
   }
   .metric {
     padding: 17px;

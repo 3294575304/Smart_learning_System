@@ -28,6 +28,7 @@ import { hash } from "bcryptjs";
 import { assertSafeSeedDatabase } from "./seed-safety";
 import { ensureSuperAdminAccount } from "./bootstrap-super-admin-account";
 import { DEFAULT_ADMIN_SCHOOL } from "../services/schools/constants";
+import { ensureSchoolCatalogDefaults } from "../services/schools/catalog";
 
 const prisma = new PrismaClient();
 
@@ -130,6 +131,7 @@ async function upsertUser(seedUser: SeedUser, fallbackSchoolId: string) {
       schoolId,
     },
   });
+
 
   await prisma.userProfile.upsert({
     where: { userId: user.id },
@@ -2585,35 +2587,25 @@ async function main(): Promise<void> {
     });
   }
 
-  const pythonCourseTemplate = await prisma.courseTemplate.upsert({
-    where: { code: "python-programming-v1" },
-    update: {
-      name: "Python 程序设计",
-      description: "V1.0 Python 程序设计课程模板，用于课程与导入基础建设。",
-      version: "1.0",
-      isBuiltin: true,
-      isActive: true,
-    },
-    create: {
-      code: "python-programming-v1",
-      name: "Python 程序设计",
-      description: "V1.0 Python 程序设计课程模板，用于课程与导入基础建设。",
-      version: "1.0",
-      isBuiltin: true,
-      isActive: true,
+  await ensureSchoolCatalogDefaults(prisma, seedSchoolId);
+  const pythonCourseTemplate = await prisma.courseTemplate.findUniqueOrThrow({
+    where: {
+      schoolId_code: {
+        schoolId: seedSchoolId,
+        code: "python-programming-v1",
+      },
     },
   });
-
-  const pythonQuestionCategory = await prisma.questionCourseCategory.upsert({
-    where: { normalizedName: "python 程序设计" },
-    update: { name: "Python 程序设计", isActive: true },
-    create: {
-      name: "Python 程序设计",
-      normalizedName: "python 程序设计",
-      isActive: true,
-    },
-    select: { id: true },
-  });
+  const pythonQuestionCategory =
+    await prisma.questionCourseCategory.findUniqueOrThrow({
+      where: {
+        schoolId_normalizedName: {
+          schoolId: seedSchoolId,
+          normalizedName: "python 程序设计",
+        },
+      },
+      select: { id: true },
+    });
 
   const existingPythonCourse = await prisma.course.findFirst({
     where: {

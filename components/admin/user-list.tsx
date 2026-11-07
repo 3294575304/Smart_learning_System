@@ -9,6 +9,13 @@ import {
 import { EmptyState } from "@/components/dashboard/empty-state";
 import type { AdminUserView } from "@/services/admin/users/types";
 
+const ROLE_BADGE_COLORS: Record<AdminUserView["role"], string> = {
+  SUPER_ADMIN: "bg-violet-50 text-violet-700",
+  ADMIN: "bg-violet-50 text-violet-700",
+  TEACHER: "bg-yellow-50 text-yellow-800",
+  STUDENT: "bg-sky-50 text-sky-700",
+};
+
 function roleSummary(user: AdminUserView): string {
   if (user.role === "TEACHER") {
     return `${user.summary.teacherNo ?? "未设置工号"} · ${user.summary.taughtClassroomCount} 个班级`;
@@ -60,7 +67,13 @@ export function UserList({
                   </p>
                   <p className="text-muted-foreground">{user.email}</p>
                 </td>
-                <td className="px-4 py-3">{ROLE_LABELS[user.role]}</td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`inline-flex rounded-full px-2 py-1 whitespace-nowrap ${ROLE_BADGE_COLORS[user.role]}`}
+                  >
+                    {ROLE_LABELS[user.role]}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <span
                     className={

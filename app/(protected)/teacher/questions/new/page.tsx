@@ -9,10 +9,10 @@ import {
 } from "@/services/questions/service";
 
 export default async function NewQuestionPage() {
-  await requirePageRole(Role.TEACHER);
+  const teacher = await requirePageRole(Role.TEACHER);
   const [knowledgePoints, categories] = await Promise.all([
     listKnowledgePointOptions(),
-    listTeacherQuestionCategoryOptions(),
+    listTeacherQuestionCategoryOptions(teacher.id),
   ]);
   return (
     <section className="space-y-6">

@@ -44,6 +44,46 @@ export const createSchoolAdminSchema = createAdminUserSchema
     path: ["confirmPassword"],
   });
 
+const schoolAdminPasswordSchema = z
+  .string()
+  .min(8, "密码至少需要 8 个字符")
+  .max(72, "密码长度不能超过 72 个字符")
+  .regex(/[a-z]/, "密码必须包含小写字母")
+  .regex(/[A-Z]/, "密码必须包含大写字母")
+  .regex(/\d/, "密码必须包含数字")
+  .refine(
+    (password) => new TextEncoder().encode(password).length <= 72,
+    "密码的 UTF-8 长度不能超过 72 字节",
+  );
+
+const optionalSchoolAdminPasswordSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.length === 0 ? undefined : value,
+  schoolAdminPasswordSchema.optional(),
+);
+
+export const updateSchoolAdminSchema = z
+  .object({
+    displayName: z.string().trim().min(2, "姓名至少需要 2 个字符").max(50),
+    email: z
+      .string()
+      .trim()
+      .min(1, "请输入邮箱")
+      .max(254, "邮箱长度不能超过 254 个字符")
+      .email("请输入有效的邮箱地址")
+      .transform((email) => email.toLowerCase()),
+    password: optionalSchoolAdminPasswordSchema,
+    confirmPassword: z.string().optional(),
+  })
+  .strict()
+  .refine(
+    (input) =>
+      input.password === undefined
+        ? !input.confirmPassword
+        : input.password === input.confirmPassword,
+    { message: "两次输入的密码不一致", path: ["confirmPassword"] },
+  );
+
 export type CreatePartnerSchoolInput = z.input<
   typeof createPartnerSchoolSchema
 >;
@@ -52,6 +92,8 @@ export type CreatePartnerSchoolData = z.output<
 >;
 export type CreateSchoolAdminInput = z.input<typeof createSchoolAdminSchema>;
 export type CreateSchoolAdminData = z.output<typeof createSchoolAdminSchema>;
+export type UpdateSchoolAdminInput = z.input<typeof updateSchoolAdminSchema>;
+export type UpdateSchoolAdminData = z.output<typeof updateSchoolAdminSchema>;
 
 export const partnerSchoolIdSchema = z
   .string()

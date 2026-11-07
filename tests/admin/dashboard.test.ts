@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { DistributionPanel } from "@/components/admin/dashboard/distribution-panel";
 import { OverviewPanel } from "@/components/admin/dashboard/overview-panel";
+import { TrendPanel } from "@/components/admin/dashboard/trend-panel";
 import {
   createDashboardDateRange,
   previousDashboardPeriod,
@@ -20,6 +21,8 @@ import {
 import type {
   DashboardDistributions,
   DashboardOverview,
+  DashboardRange,
+  DashboardTrends,
 } from "@/services/admin/dashboard/types";
 import {
   deriveAIHealthStatus,
@@ -223,4 +226,127 @@ test("分布页面只渲染接口返回的实际类别", () => {
   assert.match(html, /草稿/);
   assert.doesNotMatch(html, /教师/);
   assert.doesNotMatch(html, /已发布/);
+});
+
+function trendFixture(range: DashboardRange): DashboardTrends {
+  const points = Array.from(
+    { length: Number.parseInt(range, 10) },
+    (_, index) => ({
+      date: new Date(Date.UTC(2026, 6, index + 1)).toISOString().slice(0, 10),
+      users: index === 0 ? 1 : 0,
+      assignments: index === 1 ? 6 : 0,
+      submissions: index === 2 ? 2 : 0,
+      answers: index === 2 ? 36 : 0,
+      analyses: 0,
+      recommendations: 0,
+    }),
+  );
+  return {
+    range,
+    startDate: points[0].date,
+    endDate: points[points.length - 1].date,
+    timeZone: "Asia/Shanghai",
+    points,
+  };
+}
+
+test("7、30、90 天趋势保持真实柱高，零值不生成占位柱且无需固定宽度滚动", () => {
+  for (const range of ["7d", "30d", "90d"] as const) {
+    const data = trendFixture(range);
+    const html = renderToStaticMarkup(
+      React.createElement(TrendPanel, {
+        data,
+        range,
+        error: null,
+        loading: false,
+        onRangeChange: () => {},
+      }),
+    );
+    assert.equal((html.match(/<svg /gu) ?? []).length, 2);
+    assert.equal((html.match(/<rect [^>]*fill="#/gu) ?? []).length, 4);
+    assert.match(html, /2026-07-02 · 发布作业：6/);
+    assert.match(html, /2026-07-03 · 答题记录：36/);
+    assert.match(html, new RegExp(data.endDate));
+    assert.match(html, /使用左右方向键查看每日数据/);
+    assert.doesNotMatch(
+      html,
+      /NaN|Infinity|overflow-x-auto|min-width|width:640px/,
+    );
+  }
+});
+
+test("趋势完整区分加载、失败、无活动和刷新失败的历史数据", () => {
+  const render = (
+    data: DashboardTrends | null,
+    loading: boolean,
+    error: string | null,
+  ) =>
+    renderToStaticMarkup(
+      React.createElement(TrendPanel, {
+        data,
+        loading,
+        error,
+        range: "7d",
+        onRangeChange: () => {},
+      }),
+    );
+  assert.match(render(null, true, null), /正在读取趋势数据/);
+  assert.match(render(null, false, "读取失败"), /读取失败/);
+  const empty = trendFixture("7d");
+  empty.points = empty.points.map((point) => ({
+    ...point,
+    users: 0,
+    assignments: 0,
+    submissions: 0,
+    answers: 0,
+  }));
+  assert.match(render(empty, false, null), /当前时间范围内暂无/);
+  const html = render(trendFixture("7d"), false, "读取失败");
+  assert.match(html, /上一次成功数据/);
+  assert.match(html, /2026-07-03 · 答题记录：36/);
+});
+
+test("角色与作业环形图按总数计算占比，缺失分组明确为空", () => {
+  const data: DashboardDistributions = {
+    generatedAt: "2026-07-22T08:00:00.000Z",
+    roles: [
+      { key: "STUDENT", count: 105 },
+      { key: "TEACHER", count: 3 },
+      { key: "ADMIN", count: 2 },
+    ],
+    assignmentStatuses: [
+      { key: "ARCHIVED", count: 4 },
+      { key: "PUBLISHED", count: 18 },
+    ],
+    userStatuses: [],
+    questionTypes: [],
+    questionDifficulties: [],
+    submissionStatuses: [],
+    recommendationStatuses: [],
+    recommendationSources: [],
+    knowledgePointCoverage: [],
+  };
+  const render = () =>
+    renderToStaticMarkup(
+      React.createElement(DistributionPanel, {
+        data,
+        loading: false,
+        error: null,
+      }),
+    );
+  const html = render();
+  assert.match(html, /合计 110人/);
+  assert.match(html, /学生 105人，占 95\.45%/);
+  assert.match(html, /已发布 18份，占 81\.82%/);
+  const lengths = [...html.matchAll(/stroke-dasharray="([\d.]+) ([\d.]+)"/gu)];
+  assert.equal(lengths.length, 5);
+  assert.ok(
+    Math.abs(Number(lengths[0][1]) / Number(lengths[0][2]) - 105 / 110) < 1e-10,
+  );
+  assert.doesNotMatch(html, /稳定枚举|数据库|NaN|Infinity/);
+  data.roles = [];
+  assert.match(render(), /暂无用户角色数据/);
+  data.roles = [{ key: "STUDENT", count: 0 }];
+  assert.doesNotMatch(render(), /NaN|Infinity/);
+  assert.match(render(), /暂无用户角色数据/);
 });

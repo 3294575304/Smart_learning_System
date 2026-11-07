@@ -302,7 +302,12 @@ async function main(): Promise<void> {
       data: {
         questionCategory: {
           connectOrCreate: {
-            where: { normalizedName: "automated-test-category" },
+            where: {
+              schoolId_normalizedName: {
+                schoolId: null,
+                normalizedName: "automated-test-category",
+              },
+            },
             create: {
               name: "自动化测试课程分类",
               normalizedName: "automated-test-category",

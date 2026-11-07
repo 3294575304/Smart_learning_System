@@ -5,6 +5,7 @@ import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { GovernanceOperationError } from "@/services/admin/governance-errors";
+import { requireUserSchoolId } from "@/services/schools/tenant";
 import type {
   QuestionCourseCategoryInput,
   QuestionCourseCategoryUpdate,
@@ -28,9 +29,13 @@ function normalizedName(name: string) {
     .toLocaleLowerCase("zh-CN");
 }
 
-export function listQuestionCourseCategories(activeOnly = true) {
+export async function listQuestionCourseCategories(
+  userId: string,
+  activeOnly = true,
+) {
+  const schoolId = await requireUserSchoolId(userId);
   return prisma.questionCourseCategory.findMany({
-    where: activeOnly ? { isActive: true } : undefined,
+    where: { schoolId, ...(activeOnly ? { isActive: true } : {}) },
     orderBy: [{ name: "asc" }, { id: "asc" }],
     select: categorySelect,
   });
@@ -38,16 +43,55 @@ export function listQuestionCourseCategories(activeOnly = true) {
 
 export async function requireActiveQuestionCourseCategory(
   categoryId: string,
+  userId: string,
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ) {
+  const schoolId = await requireUserSchoolId(userId, client);
   const category = await client.questionCourseCategory.findFirst({
-    where: { id: categoryId, isActive: true },
-    select: { id: true, name: true },
+    where: { id: categoryId },
+    select: {
+      id: true,
+      schoolId: true,
+      name: true,
+      normalizedName: true,
+      isActive: true,
+    },
   });
-  if (!category) {
+  if (!category || !category.isActive) {
     throw new GovernanceOperationError("课程分类不存在或已停用", 400);
   }
-  return category;
+  if (category.schoolId === schoolId) return category;
+  if (category.schoolId !== null) {
+    throw new GovernanceOperationError("课程分类不存在或已停用", 400);
+  }
+
+  // Convert a legacy unscoped reference into a private copy for this school.
+  const scoped = await client.questionCourseCategory.upsert({
+    where: {
+      schoolId_normalizedName: {
+        schoolId,
+        normalizedName: category.normalizedName,
+      },
+    },
+    update: {},
+    create: {
+      schoolId,
+      name: category.name,
+      normalizedName: category.normalizedName,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      schoolId: true,
+      name: true,
+      normalizedName: true,
+      isActive: true,
+    },
+  });
+  if (!scoped.isActive) {
+    throw new GovernanceOperationError("课程分类不存在或已停用", 400);
+  }
+  return scoped;
 }
 
 export async function createQuestionCourseCategory(
@@ -57,8 +101,10 @@ export async function createQuestionCourseCategory(
 ) {
   try {
     const category = await prisma.$transaction(async (transaction) => {
+      const schoolId = await requireUserSchoolId(actorId, transaction);
       const created = await transaction.questionCourseCategory.create({
         data: {
+          schoolId,
           name: input.name,
           normalizedName: normalizedName(input.name),
         },
@@ -96,8 +142,9 @@ export async function updateQuestionCourseCategory(
 ) {
   try {
     return await prisma.$transaction(async (transaction) => {
-      const before = await transaction.questionCourseCategory.findUnique({
-        where: { id: categoryId },
+      const schoolId = await requireUserSchoolId(actorId, transaction);
+      const before = await transaction.questionCourseCategory.findFirst({
+        where: { id: categoryId, schoolId },
         select: categorySelect,
       });
       if (!before) throw new ResourceNotFoundError("课程分类不存在");

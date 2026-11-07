@@ -55,7 +55,7 @@ test("审核修订保持 AI 原稿、阻止并发覆盖并幂等发布不可变�
       where: { email: "teacher@example.com" },
       select: { id: true },
     });
-    const template = (await listTeacherCourseTemplates()).find(
+    const template = (await listTeacherCourseTemplates(teacher.id)).find(
       (item) => item.code === "python-programming-v1",
     );
     assert.ok(template);

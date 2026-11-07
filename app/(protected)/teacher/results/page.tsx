@@ -118,7 +118,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
         />
         <p className="text-xs leading-5 text-slate-500">
           作业统计范围：{REPORTING_SECTION_LABELS[query.section]}
-          。按现有有效成员关系实时统计，未冻结历史名单；入班前已截止的作业也计入应交。已退出、移除成员的作答单独保留，不计入应交和缺交。课程运行概览与章节掌握度仍展示当前有效授课班级的学情。
+          。按现有有效成员关系实时统计，未冻结历史名单；入班前已截止的作业也计入应交。已退出、移除成员的作答单独保留，不计入应交和缺交。章节掌握度仍展示当前有效授课班级的学情。
         </p>
         {selectedCourse ? (
           <Link

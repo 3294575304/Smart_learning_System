@@ -29,7 +29,7 @@ export default async function EditQuestionPage({
     const [question, knowledgePoints, categories, courses] = await Promise.all([
       getTeacherQuestion(teacher.id, parsedId.data),
       listKnowledgePointOptions(),
-      listTeacherQuestionCategoryOptions(),
+      listTeacherQuestionCategoryOptions(teacher.id),
       listTeacherBindingCourses(teacher.id),
     ]);
     if (!question.canEdit) notFound();

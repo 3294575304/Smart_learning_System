@@ -71,7 +71,7 @@ test("创建页面保持学校模块选中，面包屑指向真实学校目录",
       NAVIGATION.SUPER_ADMIN.flatMap((group) => group.items)
         .filter((item) => isNavigationItemActive(pathname, item))
         .map((item) => item.label),
-      ["学校与管理员"],
+      ["合作学校和管理员"],
     );
     const crumbs = buildBreadcrumbs(pathname);
     assert.equal(crumbs.at(-1)?.label, label);

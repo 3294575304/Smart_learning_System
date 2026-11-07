@@ -11,10 +11,10 @@ import {
 } from "react";
 
 import { requestAdminApi } from "@/components/admin/request-api";
+import { ProvinceSelect } from "@/components/admin/system-config/province-select";
 import { SchoolIdentity } from "@/components/dashboard/school-identity";
 import { MAX_SCHOOL_LOGO_BYTES } from "@/services/schools/constants";
 import type { AdminSchoolBindingView } from "@/services/schools/service";
-import { PROVINCES } from "@/services/schools/provinces";
 
 export function SchoolBindingSettings({
   initialSchool,
@@ -25,7 +25,6 @@ export function SchoolBindingSettings({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nameImageInputRef = useRef<HTMLInputElement>(null);
   const [school, setSchool] = useState(initialSchool);
-  const [name, setName] = useState(initialSchool.name);
   const [provinceCode, setProvinceCode] = useState(
     initialSchool.provinceCode ?? "",
   );
@@ -42,16 +41,15 @@ export function SchoolBindingSettings({
   } | null>(null);
 
   const dirty =
-    name.trim() !== school.name ||
     provinceCode !== (school.provinceCode ?? "") ||
     logoFile !== null ||
     nameImageFile !== null;
+  const name = school.name;
   const previewUrl = localPreviewUrl ?? school.logoUrl;
   const nameImagePreviewUrl = localNameImagePreviewUrl ?? school.nameImageUrl;
 
   useEffect(() => {
     setSchool(initialSchool);
-    setName(initialSchool.name);
     setProvinceCode(initialSchool.provinceCode ?? "");
   }, [initialSchool]);
 
@@ -127,7 +125,6 @@ export function SchoolBindingSettings({
     }
 
     setSchool(result.data);
-    setName(result.data.name);
     setProvinceCode(result.data.provinceCode ?? "");
     setLogoFile(null);
     setNameImageFile(null);
@@ -145,88 +142,25 @@ export function SchoolBindingSettings({
       <div>
         <h2 className="text-lg font-semibold">学校绑定</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          根据本校校名长短和图片比例分别调整尺寸，保持左校徽、右校名，并在顶部格子中整体居中显示。
+          根据本校校名长短和图片比例分别调整尺寸，左对齐显示，并为校徽与校名留出间距。
         </p>
       </div>
 
       <form className="mt-5 space-y-5" onSubmit={save}>
-        <div className="rounded-lg border bg-white p-4">
-          <p className="text-muted-foreground mb-3 text-xs">顶部显示预览</p>
-          <div className="mx-auto flex h-16 w-full max-w-60 items-center justify-center">
-            <SchoolIdentity
-              compact
-              name={name || "学校名称"}
-              logoUrl={previewUrl}
-              nameImageUrl={nameImagePreviewUrl}
-            />
-          </div>
-        </div>
         <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.3fr)] md:gap-6">
           <div>
-            <p className="text-sm font-medium">校名题字图片</p>
-            <p className="text-muted-foreground mt-1 text-sm leading-6">
-              上传学校题字图片，顶部将优先显示该图片。支持
-              PNG、JPG、WebP，文件大小不超过 2 MB。
+            <p className="text-sm font-medium">学校名称</p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              学校名称由超级管理员维护，无法在此修改。
             </p>
           </div>
-          <div className="flex min-h-16 flex-wrap items-center gap-4">
-            {nameImagePreviewUrl ? (
-              <Image
-                alt={`${name || "学校"}校名图片预览`}
-                className="h-auto max-h-16 w-auto max-w-[min(14rem,60vw)] object-contain object-left mix-blend-multiply"
-                height={48}
-                src={nameImagePreviewUrl}
-                unoptimized
-                width={220}
-              />
-            ) : (
-              <span className="text-sm text-slate-500">未上传校名题字图片</span>
-            )}
-            <div>
-              <input
-                accept="image/png,image/jpeg,image/webp"
-                aria-label="上传学校校名题字图片"
-                className="sr-only"
-                id="admin-school-name-image"
-                onChange={handleNameImageChange}
-                ref={nameImageInputRef}
-                type="file"
-              />
-              <button
-                className="rounded-md border px-3 py-2 text-sm font-medium transition hover:bg-slate-50"
-                onClick={() => nameImageInputRef.current?.click()}
-                type="button"
-              >
-                {nameImageFile ? "更换校名图片" : "上传校名图片"}
-              </button>
-              {nameImageFile ? (
-                <p className="text-muted-foreground mt-1 max-w-64 truncate text-xs">
-                  {nameImageFile.name}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.3fr)] md:gap-6">
-          <label
-            className="pt-2 text-sm font-medium"
-            htmlFor="admin-school-name"
-          >
-            学校名称
-          </label>
-          <input
-            autoComplete="organization"
-            className="w-full rounded-md border px-3 py-2 text-sm"
+          <p
+            className="w-full cursor-default self-start rounded-md border bg-slate-50 px-3 py-2 text-sm text-slate-600"
             id="admin-school-name"
-            maxLength={120}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="请输入学校名称"
-            required
-            readOnly={Boolean(school.id)}
             title="学校归属由超级管理员维护"
-            value={name}
-          />
+          >
+            {name || "尚未分配学校"}
+          </p>
         </div>
 
         <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.3fr)] md:gap-6">
@@ -241,65 +175,122 @@ export function SchoolBindingSettings({
               用于系统应用情况地图的省份归属。
             </p>
           </div>
-          <select
+          <ProvinceSelect
             id="admin-school-province"
-            className="w-full self-start rounded-md border bg-white px-3 py-2 text-sm"
             value={provinceCode}
-            onChange={(event) => setProvinceCode(event.target.value)}
-          >
-            <option value="">暂未设置</option>
-            {PROVINCES.map((province) => (
-              <option key={province.code} value={province.code}>
-                {province.name}
-              </option>
-            ))}
-          </select>
+            onChange={setProvinceCode}
+            disabled={isSubmitting}
+          />
         </div>
 
-        <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.3fr)] md:gap-6">
-          <div>
-            <p className="text-sm font-medium">学校校徽</p>
-            <p className="text-muted-foreground mt-1 text-sm leading-6">
-              支持 PNG、JPG、WebP，文件大小不超过 2 MB。
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-4">
-            {previewUrl ? (
-              <Image
-                alt={`${name || "学校"}校徽预览`}
-                className="h-16 w-16 rounded-md border bg-white object-contain p-1"
-                height={64}
-                src={previewUrl}
-                unoptimized
-                width={64}
-              />
-            ) : (
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-sm text-slate-500">
-                暂无
-              </span>
-            )}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-3 rounded-lg border p-4">
             <div>
-              <input
-                accept="image/png,image/jpeg,image/webp"
-                className="sr-only"
-                id="admin-school-logo"
-                onChange={handleLogoChange}
-                ref={fileInputRef}
-                type="file"
-              />
-              <button
-                className="rounded-md border px-3 py-2 text-sm font-medium transition hover:bg-slate-50"
-                onClick={() => fileInputRef.current?.click()}
-                type="button"
-              >
-                {logoFile ? "更换校徽" : "上传校徽"}
-              </button>
-              {logoFile ? (
-                <p className="text-muted-foreground mt-1 max-w-64 truncate text-xs">
-                  {logoFile.name}
-                </p>
-              ) : null}
+              <p className="text-sm font-medium">校名题字图片</p>
+              <p className="text-muted-foreground mt-1 text-sm leading-6">
+                顶部优先显示此图片。支持 PNG、JPG、WebP，文件大小不超过 2 MB。
+              </p>
             </div>
+            <div className="flex min-h-16 flex-wrap items-center gap-4">
+              {nameImagePreviewUrl ? (
+                <Image
+                  alt={`${name || "学校"}校名图片预览`}
+                  className="h-auto max-h-16 w-auto max-w-[min(14rem,60vw)] object-contain object-left mix-blend-multiply"
+                  height={48}
+                  src={nameImagePreviewUrl}
+                  unoptimized
+                  width={220}
+                />
+              ) : (
+                <span className="text-sm text-slate-500">
+                  未上传校名题字图片
+                </span>
+              )}
+              <div>
+                <input
+                  accept="image/png,image/jpeg,image/webp"
+                  aria-label="上传学校校名题字图片"
+                  className="sr-only"
+                  id="admin-school-name-image"
+                  onChange={handleNameImageChange}
+                  ref={nameImageInputRef}
+                  type="file"
+                />
+                <button
+                  className="rounded-md border px-3 py-2 text-sm font-medium transition hover:bg-slate-50"
+                  onClick={() => nameImageInputRef.current?.click()}
+                  type="button"
+                >
+                  {nameImageFile ? "更换校名图片" : "上传校名图片"}
+                </button>
+                {nameImageFile ? (
+                  <p className="text-muted-foreground mt-1 max-w-64 truncate text-xs">
+                    {nameImageFile.name}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-4">
+            <div>
+              <p className="text-sm font-medium">学校校徽</p>
+              <p className="text-muted-foreground mt-1 text-sm leading-6">
+                支持 PNG、JPG、WebP，文件大小不超过 2 MB。
+              </p>
+            </div>
+            <div className="flex min-h-16 flex-wrap items-center gap-4">
+              {previewUrl ? (
+                <Image
+                  alt={`${name || "学校"}校徽预览`}
+                  className="h-16 w-16 rounded-md border bg-white object-contain p-1"
+                  height={64}
+                  src={previewUrl}
+                  unoptimized
+                  width={64}
+                />
+              ) : (
+                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-sm text-slate-500">
+                  暂无
+                </span>
+              )}
+              <div>
+                <input
+                  accept="image/png,image/jpeg,image/webp"
+                  className="sr-only"
+                  id="admin-school-logo"
+                  onChange={handleLogoChange}
+                  ref={fileInputRef}
+                  type="file"
+                />
+                <button
+                  className="rounded-md border px-3 py-2 text-sm font-medium transition hover:bg-slate-50"
+                  onClick={() => fileInputRef.current?.click()}
+                  type="button"
+                >
+                  {logoFile ? "更换校徽" : "上传校徽"}
+                </button>
+                {logoFile ? (
+                  <p className="text-muted-foreground mt-1 max-w-64 truncate text-xs">
+                    {logoFile.name}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border bg-white p-4">
+          <p className="text-muted-foreground mb-3 text-xs">
+            效果图（顶部显示预览）
+          </p>
+          <div className="mx-auto flex h-16 w-full max-w-60 items-center justify-center">
+            <SchoolIdentity
+              compact
+              name={name || "学校名称"}
+              logoUrl={previewUrl}
+              nameImageUrl={nameImagePreviewUrl}
+            />
           </div>
         </div>
 
@@ -309,7 +300,7 @@ export function SchoolBindingSettings({
             disabled={
               isSubmitting ||
               (!dirty && !school.logoUrl && !school.nameImageUrl) ||
-              name.trim().length < 2
+              school.name.trim().length < 2
             }
             type="submit"
           >

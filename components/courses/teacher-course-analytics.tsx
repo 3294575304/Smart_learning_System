@@ -1,13 +1,8 @@
 import {
-  Activity,
   ArrowRight,
-  BookOpenCheck,
-  CalendarCheck,
   CheckCircle2,
   FileChartColumn,
   Sparkles,
-  Target,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -45,41 +40,6 @@ function displayDate(value: Date | string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function MetricCard({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  tone,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: typeof Users;
-  tone: string;
-}) {
-  return (
-    <article className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-500">{label}</p>
-          <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-            {value}
-          </p>
-        </div>
-        <span
-          className={
-            "flex size-10 items-center justify-center rounded-xl " + tone
-          }
-        >
-          <Icon aria-hidden="true" className="size-5" />
-        </span>
-      </div>
-      <p className="mt-3 text-xs leading-5 text-slate-500">{detail}</p>
-    </article>
-  );
 }
 
 function DataCell({
@@ -452,71 +412,6 @@ export function TeacherCourseAnalyticsView({
 
   return (
     <div className="space-y-6">
-      <section aria-labelledby="course-overview-heading">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2
-              id="course-overview-heading"
-              className="text-xl font-semibold text-slate-900"
-            >
-              课程运行概览
-            </h2>
-          </div>
-          <p className="text-sm text-slate-500">
-            {data.overview.classroomCount} 个班级 · {data.overview.studentCount}{" "}
-            名学生
-          </p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            label="教学进度"
-            value={displayPercent(data.overview.teachingProgressRate)}
-            detail={
-              "已授 " +
-              data.overview.taughtConceptCount +
-              "/" +
-              data.overview.totalConceptCount +
-              " 个知识点"
-            }
-            icon={BookOpenCheck}
-            tone="bg-emerald-50 text-emerald-700"
-          />
-          <MetricCard
-            label="课程出勤率"
-            value={displayPercent(data.overview.attendanceRate)}
-            detail={
-              data.overview.closedAttendanceSessionCount > 0
-                ? "依据已结束的签到记录统计"
-                : "尚无已结束的签到场次"
-            }
-            icon={CalendarCheck}
-            tone="bg-teal-50 text-teal-700"
-          />
-          <MetricCard
-            label="课程目标达成度"
-            value={displayRate(data.overview.courseOutcomeAttainmentRate)}
-            detail={
-              data.overview.courseOutcomeAttainmentRate === null
-                ? "暂无当前有效结果；生成正式达成度后显示"
-                : `所有课程目标均达标 ${data.overview.courseOutcomeAttainedStudentCount}/${data.overview.studentCount} 人 · ${data.overview.courseOutcomeAttainmentClassroomCount}/${data.overview.classroomCount} 个班级有数据`
-            }
-            icon={Target}
-            tone="bg-violet-50 text-violet-700"
-          />
-          <MetricCard
-            label="近期活跃学生比例"
-            value={displayRate(data.overview.recentActiveStudentRate)}
-            detail={
-              data.overview.studentCount > 0
-                ? `近 7 日活跃 ${data.overview.recentActiveStudentCount}/${data.overview.studentCount} 人 · 作业、签到、练习或课程问答`
-                : "当前筛选范围暂无有效学生"
-            }
-            icon={Activity}
-            tone="bg-amber-50 text-amber-700"
-          />
-        </div>
-      </section>
-
       <div className="grid items-stretch gap-6 xl:grid-cols-[1.35fr_0.65fr]">
         <section className="flex flex-col rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -539,16 +434,16 @@ export function TeacherCourseAnalyticsView({
               value={displayPercent(data.profiles.averageMastery)}
             />
             <DataCell
-              label="稳定结论"
-              value={String(data.profiles.conclusiveCount)}
+              label="已评估学生"
+              value={`${data.profiles.conclusiveCount} 人`}
             />
             <DataCell
-              label="需重点关注"
-              value={String(data.profiles.attentionStudentCount)}
+              label="掌握度待提升学生"
+              value={`${data.profiles.attentionStudentCount} 人`}
             />
             <DataCell
-              label="证据待积累"
-              value={String(data.profiles.evidencePendingCount)}
+              label="学习数据不足学生"
+              value={`${data.profiles.evidencePendingCount} 人`}
             />
           </div>
           <CourseChapterMastery
@@ -559,13 +454,10 @@ export function TeacherCourseAnalyticsView({
         </section>
 
         <div className="flex min-w-0 flex-col justify-between gap-6">
-          <CourseAttentionConcepts concepts={data.attentionConcepts} />
           <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-violet-700">
-                  课程评价闭环
-                </p>
+                <p className="text-sm font-medium text-violet-700">课程评价</p>
                 <h2 className="mt-1 text-lg font-semibold text-slate-900">
                   成绩、问卷与质量报告
                 </h2>
@@ -637,6 +529,7 @@ export function TeacherCourseAnalyticsView({
               </Link>
             </div>
           </section>
+          <CourseAttentionConcepts concepts={data.attentionConcepts} />
         </div>
       </div>
       <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm shadow-slate-100 sm:p-6">

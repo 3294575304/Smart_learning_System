@@ -14,8 +14,8 @@ const STATUS_LABELS = {
 } as const;
 
 export default async function AdminCourseTemplatesPage() {
-  await requirePageRole(Role.ADMIN);
-  const templates = await listAdminCourseTemplates();
+  const admin = await requirePageRole(Role.ADMIN);
+  const templates = await listAdminCourseTemplates(admin.id);
 
   return (
     <section className="space-y-6">
@@ -29,7 +29,7 @@ export default async function AdminCourseTemplatesPage() {
             创建模板
           </Link>
         }
-        description="管理课程模板的基础信息和可用状态。教师只能使用已启用模板创建课程。"
+        description="管理本校课程模板的基础信息和可用状态。教师只能使用本校已启用的模板创建课程。"
         title="课程模板管理"
       />
 

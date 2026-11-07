@@ -71,6 +71,7 @@ export class AIProviderRequestError extends Error {
 export interface AIProvider {
   readonly name: string;
   readonly model: string;
+  healthCheck?(): Promise<void>;
 
   analyzeStudentPerformance(
     input: StudentAnalysisInput,

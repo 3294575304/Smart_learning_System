@@ -13,8 +13,8 @@ import {
 
 export async function GET() {
   try {
-    await requireAuthenticatedUser([Role.ADMIN]);
-    return apiSuccess(await listQuestionCourseCategories(false));
+    const actor = await requireAuthenticatedUser([Role.ADMIN]);
+    return apiSuccess(await listQuestionCourseCategories(actor.id, false));
   } catch (error: unknown) {
     return adminGovernanceApiError(error);
   }

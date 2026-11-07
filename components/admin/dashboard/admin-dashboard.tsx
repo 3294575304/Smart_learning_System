@@ -4,12 +4,14 @@ import { RefreshCw } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
 } from "react";
 
 import { ActivityPanel } from "@/components/admin/dashboard/activity-panel";
+import { useAdminDashboardCache } from "@/components/admin/dashboard/admin-dashboard-cache";
 import { DistributionPanel } from "@/components/admin/dashboard/distribution-panel";
 import { OverviewPanel } from "@/components/admin/dashboard/overview-panel";
 import { TrendPanel } from "@/components/admin/dashboard/trend-panel";
@@ -28,72 +30,107 @@ interface SectionState<T> {
   error: string | null;
   loading: boolean;
 }
-const initialState = <T,>(): SectionState<T> => ({
-  data: null,
-  error: null,
-  loading: true,
-});
+function cachedState<T>(data: T | null): SectionState<T> {
+  return { data, error: null, loading: data === null };
+}
 
 async function loadSection<T>(
   url: string,
   setter: Dispatch<SetStateAction<SectionState<T>>>,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<T | null> {
   setter((current) => ({ ...current, loading: true, error: null }));
   const result = await requestAdminApi<T>(url, { cache: "no-store", signal });
-  if (signal?.aborted) return;
-  if (result.success)
+  if (signal?.aborted) return null;
+  if (result.success) {
     setter({ data: result.data, error: null, loading: false });
-  else
+    return result.data;
+  } else {
     setter((current) => ({ ...current, error: result.error, loading: false }));
+    return null;
+  }
 }
 
 export function AdminDashboard() {
+  const { snapshot, updateSnapshot } = useAdminDashboardCache();
+  const hasStartedInitialLoad = useRef(false);
   const [range, setRange] = useState<DashboardRange>("30d");
-  const [overview, setOverview] =
-    useState<SectionState<DashboardOverview>>(initialState);
-  const [trends, setTrends] =
-    useState<SectionState<DashboardTrends>>(initialState);
-  const [distributions, setDistributions] =
-    useState<SectionState<DashboardDistributions>>(initialState);
-  const [activities, setActivities] =
-    useState<SectionState<DashboardActivities>>(initialState);
+  const [overview, setOverview] = useState<SectionState<DashboardOverview>>(
+    () => cachedState(snapshot?.overview ?? null),
+  );
+  const [trends, setTrends] = useState<SectionState<DashboardTrends>>(() => {
+    return cachedState(snapshot?.trends["30d"] ?? null);
+  });
+  const [distributions, setDistributions] = useState<
+    SectionState<DashboardDistributions>
+  >(() => cachedState(snapshot?.distributions ?? null));
+  const [activities, setActivities] = useState<
+    SectionState<DashboardActivities>
+  >(() => cachedState(snapshot?.activities ?? null));
 
-  const loadCore = useCallback(async (signal?: AbortSignal) => {
-    await Promise.allSettled([
-      loadSection("/api/admin/dashboard/overview", setOverview, signal),
-      loadSection(
-        "/api/admin/dashboard/distributions",
-        setDistributions,
-        signal,
-      ),
-      loadSection(
-        "/api/admin/dashboard/activities?limit=5&type=ALL",
-        setActivities,
-        signal,
-      ),
-    ]);
-  }, []);
+  const loadCore = useCallback(
+    async (signal?: AbortSignal) => {
+      const [overviewData, distributionsData, activitiesData] =
+        await Promise.all([
+          loadSection("/api/admin/dashboard/overview", setOverview, signal),
+          loadSection(
+            "/api/admin/dashboard/distributions",
+            setDistributions,
+            signal,
+          ),
+          loadSection(
+            "/api/admin/dashboard/activities?limit=5&type=ALL",
+            setActivities,
+            signal,
+          ),
+        ]);
+      updateSnapshot((previous) => ({
+        overview: overviewData ?? previous?.overview ?? null,
+        distributions: distributionsData ?? previous?.distributions ?? null,
+        activities: activitiesData ?? previous?.activities ?? null,
+        trends: previous?.trends ?? {},
+      }));
+    },
+    [updateSnapshot],
+  );
   const loadTrends = useCallback(
-    (signal?: AbortSignal) =>
-      loadSection(
+    async (signal?: AbortSignal) => {
+      const data = await loadSection(
         `/api/admin/dashboard/trends?range=${range}`,
         setTrends,
         signal,
-      ),
-    [range],
+      );
+      if (!data) return;
+      updateSnapshot((previous) => ({
+        overview: previous?.overview ?? null,
+        distributions: previous?.distributions ?? null,
+        activities: previous?.activities ?? null,
+        trends: { ...previous?.trends, [range]: data },
+      }));
+    },
+    [range, updateSnapshot],
   );
 
+  const hasCoreCache = Boolean(
+    snapshot?.overview && snapshot.distributions && snapshot.activities,
+  );
   useEffect(() => {
+    if (hasCoreCache || hasStartedInitialLoad.current) return;
+    hasStartedInitialLoad.current = true;
     const controller = new AbortController();
     void loadCore(controller.signal);
     return () => controller.abort();
-  }, [loadCore]);
+  }, [hasCoreCache, loadCore]);
   useEffect(() => {
+    const cached = snapshot?.trends[range];
+    if (cached) {
+      setTrends(cachedState(cached));
+      return;
+    }
     const controller = new AbortController();
     void loadTrends(controller.signal);
     return () => controller.abort();
-  }, [loadTrends]);
+  }, [loadTrends, range, snapshot?.trends]);
 
   const refreshing =
     overview.loading ||
@@ -121,7 +158,7 @@ export function AdminDashboard() {
             刷新数据
           </button>
         }
-        description="查看本校用户、教学、题库与 AI 使用情况。"
+        description="查看本校用户、教学、题库与 AI 使用情况。数据仅在首次进入和点击“刷新数据”时更新。"
         eyebrow="Admin dashboard"
         title="学校仪表盘"
       />

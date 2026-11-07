@@ -9,6 +9,7 @@ export interface DatabaseHealth {
 export interface AIHealth {
   status: SystemHealthStatus;
   configurationComplete: boolean;
+  probeMessage: string;
   successfulExecutionsLast7Days: number;
   issueExecutionsLast7Days: number;
   successRateLast7Days: number | null;

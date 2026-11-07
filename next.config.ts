@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR?.trim() || ".next",
+  outputFileTracingIncludes: {
+    "/super-admin/development-logs": ["./CHANGELOG.md"],
+  },
   images: {
     remotePatterns: [
       {

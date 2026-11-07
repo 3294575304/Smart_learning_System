@@ -77,7 +77,7 @@ export default async function QuestionsPage({
   const [questions, courseOptions, categories] = await Promise.all([
     listTeacherQuestions(teacher.id, query),
     listTeacherQuestionCourseOptions(teacher.id),
-    listTeacherQuestionCategoryOptions(),
+    listTeacherQuestionCategoryOptions(teacher.id),
   ]);
 
   return (

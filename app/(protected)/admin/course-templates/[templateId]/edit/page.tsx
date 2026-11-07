@@ -17,7 +17,7 @@ interface PageProps {
 export default async function AdminCourseTemplateEditPage({
   params,
 }: PageProps) {
-  await requirePageRole(Role.ADMIN);
+  const admin = await requirePageRole(Role.ADMIN);
   const { templateId } = await params;
   const parsedId = courseTemplateIdSchema.safeParse(templateId);
   if (!parsedId.success) {
@@ -26,7 +26,7 @@ export default async function AdminCourseTemplateEditPage({
 
   let template;
   try {
-    template = await getAdminCourseTemplate(parsedId.data);
+    template = await getAdminCourseTemplate(admin.id, parsedId.data);
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) {
       notFound();

@@ -3,6 +3,8 @@ import Link from "next/link";
 import { PageIndex } from "@/components/dashboard/page-index";
 import { RefreshOverview } from "@/components/super-admin/refresh-overview";
 import { DeleteSchoolButton } from "@/components/super-admin/delete-school-button";
+import { EditSchoolAdminButton } from "@/components/super-admin/edit-school-admin-button";
+import { SchoolAdminPassword } from "@/components/super-admin/school-admin-password";
 import { provinceName } from "@/services/schools/provinces";
 import type { SchoolAdminDirectoryData } from "@/services/super-admin/directory";
 import {
@@ -43,7 +45,7 @@ export function SchoolAdminDirectory({
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-950">
-            学校与管理员
+            合作学校和管理员
           </h1>
           <p className="text-muted-foreground mt-2 text-sm">
             添加合作学校，创建并绑定高校管理员账号。
@@ -194,7 +196,7 @@ export function SchoolAdminDirectory({
               </tbody>
             </table>
           ) : (
-            <table className="w-full min-w-[780px] text-left text-sm">
+            <table className="w-full min-w-[940px] text-left text-sm">
               <caption className="sr-only">
                 高校管理员账号，不含超级管理员
               </caption>
@@ -204,7 +206,9 @@ export function SchoolAdminDirectory({
                     "管理员",
                     "绑定学校",
                     "账号状态",
+                    "密码",
                     "最近登录（北京时间）",
+                    "操作",
                   ].map((label) => (
                     <th key={label} className="px-5 py-4 font-medium">
                       {label}
@@ -233,8 +237,23 @@ export function SchoolAdminDirectory({
                         {admin.status === "ACTIVE" ? "已启用" : "已禁用"}
                       </span>
                     </td>
+                    <td className="px-5 py-4">
+                      <SchoolAdminPassword
+                        displayName={admin.profile?.displayName ?? "未设置姓名"}
+                      />
+                    </td>
                     <td className="px-5 py-4 text-slate-500">
                       {dateTime(admin.lastLoginAt)}
+                    </td>
+                    <td className="px-5 py-4">
+                      <EditSchoolAdminButton
+                        admin={{
+                          id: admin.id,
+                          displayName:
+                            admin.profile?.displayName ?? "未设置姓名",
+                          email: admin.email,
+                        }}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -244,7 +263,7 @@ export function SchoolAdminDirectory({
         </div>
       )}
       <PageIndex
-        ariaLabel="学校与管理员分页"
+        ariaLabel="合作学校和管理员分页"
         page={data.page}
         totalPages={data.totalPages}
         hrefForPage={(page) => directoryHref(query, page)}

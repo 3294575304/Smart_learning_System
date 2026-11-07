@@ -841,9 +841,15 @@ test("parse drafts are version-isolated, idempotent and preserve existing data",
         where: { email: "teacher2@example.com" },
         select: { id: true },
       }),
-      listTeacherCourseTemplates().then((items) =>
-        items.find((item) => item.code === "python-programming-v1"),
-      ),
+      prisma.user
+        .findUniqueOrThrow({
+          where: { email: "teacher@example.com" },
+          select: { id: true },
+        })
+        .then(({ id }) => listTeacherCourseTemplates(id))
+        .then((items) =>
+          items.find((item) => item.code === "python-programming-v1"),
+        ),
     ]);
     assert.ok(template);
     const suffix = randomBytes(4).toString("hex");

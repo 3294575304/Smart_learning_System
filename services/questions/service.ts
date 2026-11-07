@@ -244,11 +244,10 @@ export async function listKnowledgePointOptions(): Promise<
   });
 }
 
-export async function listTeacherQuestionCategoryOptions() {
-  return (await listQuestionCourseCategories(true)).map(({ id, name }) => ({
-    id,
-    name,
-  }));
+export async function listTeacherQuestionCategoryOptions(teacherId: string) {
+  return (await listQuestionCourseCategories(teacherId, true)).map(
+    ({ id, name }) => ({ id, name }),
+  );
 }
 
 export async function listTeacherQuestionCourseOptions(teacherId: string) {
@@ -561,8 +560,9 @@ export async function createQuestionInTransaction(
   input: QuestionUpsertData,
   status?: QuestionStatus,
 ): Promise<string> {
-  await requireActiveQuestionCourseCategory(
+  const questionCategory = await requireActiveQuestionCourseCategory(
     input.questionCategoryId,
+    teacherId,
     transaction,
   );
   await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
@@ -570,6 +570,7 @@ export async function createQuestionInTransaction(
     data: {
       creatorId: teacherId,
       ...persistenceFields(input),
+      questionCategoryId: questionCategory.id,
       ...(status ? { status } : {}),
       options: { create: optionCreateData(input) },
       knowledgePointLinks: {
@@ -591,8 +592,9 @@ export async function createQuestionsInBulk(
   return prisma.$transaction(async (transaction) => {
     const ids: string[] = [];
     for (const input of questions) {
-      await requireActiveQuestionCourseCategory(
+      const questionCategory = await requireActiveQuestionCourseCategory(
         input.questionCategoryId,
+        teacherId,
         transaction,
       );
       await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
@@ -600,6 +602,7 @@ export async function createQuestionsInBulk(
         data: {
           creatorId: teacherId,
           ...persistenceFields(input),
+          questionCategoryId: questionCategory.id,
           options: { create: optionCreateData(input) },
           knowledgePointLinks: {
             create: input.knowledgePointIds.map((knowledgePointId) => ({
@@ -649,8 +652,9 @@ export async function updateQuestion(
         409,
       );
     }
-    await requireActiveQuestionCourseCategory(
+    const questionCategory = await requireActiveQuestionCourseCategory(
       input.questionCategoryId,
+      teacherId,
       transaction,
     );
     await assertKnowledgePointsExist(transaction, input.knowledgePointIds);
@@ -663,6 +667,7 @@ export async function updateQuestion(
       },
       data: {
         ...persistenceFields(input),
+        questionCategoryId: questionCategory.id,
         status: before.status,
         revision: { increment: 1 },
       },

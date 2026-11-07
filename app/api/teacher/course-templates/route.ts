@@ -7,8 +7,8 @@ import { listTeacherCourseTemplates } from "@/services/courses/service";
 
 export async function GET() {
   try {
-    await requireAuthenticatedUser([Role.TEACHER]);
-    return apiSuccess(await listTeacherCourseTemplates());
+    const actor = await requireAuthenticatedUser([Role.TEACHER]);
+    return apiSuccess(await listTeacherCourseTemplates(actor.id));
   } catch (error: unknown) {
     return courseApiError(error);
   }

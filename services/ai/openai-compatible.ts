@@ -123,6 +123,35 @@ export class OpenAICompatibleProvider implements AIProvider {
     this.logger = config.logger ?? console;
   }
 
+  async healthCheck(): Promise<void> {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      Math.min(this.config.timeoutMs ?? 8_000, 8_000),
+    );
+    try {
+      const response = await this.completeJson(
+        [
+          {
+            role: "system",
+            content: '只返回 JSON 对象 {"ok":true}，不要添加其他内容。',
+          },
+          { role: "user", content: "health check" },
+        ],
+        controller.signal,
+        32,
+      );
+      if (!response.content) {
+        throw new AIProviderRequestError(
+          "AI provider health check returned empty content",
+          "PROVIDER_EMPTY_RESPONSE",
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async analyzeStudentPerformance(
     input: StudentAnalysisInput,
     options: AIProviderOptions,

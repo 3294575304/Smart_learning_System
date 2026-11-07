@@ -49,7 +49,7 @@ export function SchoolIdentity({
     <div
       ref={containerRef}
       title={name}
-      className="flex w-full min-w-0 items-center justify-center"
+      className="flex w-full min-w-0 items-center justify-start"
       style={{ gap: layout.gap }}
     >
       {displayLogoUrl && failedLogoUrl !== displayLogoUrl ? (
@@ -95,7 +95,7 @@ export function SchoolIdentity({
         />
       ) : (
         <span
-          className="shrink-0 text-center leading-tight font-semibold whitespace-nowrap text-blue-950"
+          className="shrink-0 text-left leading-tight font-semibold whitespace-nowrap text-blue-950"
           style={{
             width: layout.nameWidth,
             fontSize: Math.min(

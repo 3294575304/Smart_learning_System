@@ -79,7 +79,9 @@ test("课程模板可以创建、编辑、停用和重新启用", async () => {
   );
   assert.equal(disabled.isActive, false);
 
-  const activeTemplatesAfterDisable = await listTeacherCourseTemplates();
+  const activeTemplatesAfterDisable = await listTeacherCourseTemplates(
+    template.id,
+  );
   assert.equal(
     activeTemplatesAfterDisable.some((item) => item.id === created.id),
     false,
@@ -93,7 +95,9 @@ test("课程模板可以创建、编辑、停用和重新启用", async () => {
   );
   assert.equal(reenabled.isActive, true);
   assert.equal(
-    (await listTeacherCourseTemplates()).some((item) => item.id === created.id),
+    (await listTeacherCourseTemplates(template.id)).some(
+      (item) => item.id === created.id,
+    ),
     true,
   );
 
@@ -117,7 +121,7 @@ test("教师课程可以按模板创建、避免重复并关联班级", async ()
       select: { id: true },
     }),
   ]);
-  const pythonTemplate = (await listTeacherCourseTemplates()).find(
+  const pythonTemplate = (await listTeacherCourseTemplates(teacher.id)).find(
     (template) => template.code === "python-programming-v1",
   );
   assert.ok(pythonTemplate);
@@ -248,7 +252,12 @@ test("教师可以软删除课程并保留班级、名单、文件、成员和�
     data: {
       questionCategory: {
         connectOrCreate: {
-          where: { normalizedName: "automated-test-category" },
+          where: {
+            schoolId_normalizedName: {
+              schoolId: null,
+              normalizedName: "automated-test-category",
+            },
+          },
           create: {
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",
@@ -364,7 +373,12 @@ test("教师可以软删除课程并保留班级、名单、文件、成员和�
     data: {
       questionCategory: {
         connectOrCreate: {
-          where: { normalizedName: "automated-test-category" },
+          where: {
+            schoolId_normalizedName: {
+              schoolId: null,
+              normalizedName: "automated-test-category",
+            },
+          },
           create: {
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",
@@ -447,7 +461,12 @@ test("课程可在已有正式教学数据时删除，跨教师访问受限且�
       data: {
         questionCategory: {
           connectOrCreate: {
-            where: { normalizedName: "automated-test-category" },
+            where: {
+              schoolId_normalizedName: {
+                schoolId: null,
+                normalizedName: "automated-test-category",
+              },
+            },
             create: {
               name: "自动化测试课程分类",
               normalizedName: "automated-test-category",
@@ -581,7 +600,12 @@ test("课程删除不清理已上传文件", async () => {
     data: {
       questionCategory: {
         connectOrCreate: {
-          where: { normalizedName: "automated-test-category" },
+          where: {
+            schoolId_normalizedName: {
+              schoolId: null,
+              normalizedName: "automated-test-category",
+            },
+          },
           create: {
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",
@@ -644,7 +668,12 @@ test("课程软删除保留已执行的空导入批次", async () => {
     data: {
       questionCategory: {
         connectOrCreate: {
-          where: { normalizedName: "automated-test-category" },
+          where: {
+            schoolId_normalizedName: {
+              schoolId: null,
+              normalizedName: "automated-test-category",
+            },
+          },
           create: {
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",

@@ -747,7 +747,9 @@ model School {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  admins User[]
+  admins                   User[]
+  courseTemplates          CourseTemplate[]
+  questionCourseCategories QuestionCourseCategory[]
 
   @@index([name])
   @@index([provinceCode])
@@ -996,7 +998,8 @@ model StudentIdentityClassroomAssignment {
 
 model CourseTemplate {
   id          String   @id @default(cuid())
-  code        String   @unique
+  schoolId    String?
+  code        String
   name        String
   description String?  @db.Text
   version     String   @default("1.0")
@@ -1005,23 +1008,28 @@ model CourseTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  school  School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   courses Course[]
 
-  @@index([name, isActive])
+  @@unique([schoolId, code])
+  @@index([schoolId, name, isActive])
 }
 
 model QuestionCourseCategory {
   id             String   @id @default(cuid())
+  schoolId       String?
   name           String   @db.VarChar(100)
-  normalizedName String   @unique @db.VarChar(100)
+  normalizedName String   @db.VarChar(100)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  school    School?    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   courses   Course[]
   questions Question[]
 
-  @@index([isActive, name])
+  @@unique([schoolId, normalizedName])
+  @@index([schoolId, isActive, name])
 }
 
 model Course {

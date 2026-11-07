@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 
 const courseTemplateSelect = Prisma.validator<Prisma.CourseTemplateSelect>()({
   id: true,
+  schoolId: true,
   code: true,
   name: true,
   description: true,
@@ -153,11 +154,12 @@ interface CreateCourseSyllabusData {
 }
 
 export async function loadCourseTemplates(
+  schoolId: string,
   client: DatabaseClient = prisma,
   onlyActive = false,
 ): Promise<CourseTemplateRecord[]> {
   return client.courseTemplate.findMany({
-    where: onlyActive ? { isActive: true } : undefined,
+    where: { schoolId, ...(onlyActive ? { isActive: true } : {}) },
     select: courseTemplateSelect,
     orderBy: [
       { isBuiltin: "desc" },
@@ -170,30 +172,68 @@ export async function loadCourseTemplates(
 
 export function findCourseTemplateById(
   templateId: string,
+  schoolId: string,
   client: DatabaseClient = prisma,
 ): Promise<CourseTemplateRecord | null> {
-  return client.courseTemplate.findUnique({
-    where: { id: templateId },
+  return client.courseTemplate.findFirst({
+    where: { id: templateId, schoolId },
     select: courseTemplateSelect,
   });
 }
 
 export function findActiveCourseTemplateById(
   templateId: string,
+  schoolId: string,
   client: DatabaseClient = prisma,
 ): Promise<CourseTemplateRecord | null> {
   return client.courseTemplate.findFirst({
-    where: { id: templateId, isActive: true },
+    where: { id: templateId, schoolId, isActive: true },
     select: courseTemplateSelect,
   });
 }
 
+export async function resolveActiveCourseTemplateForSchool(
+  templateId: string,
+  schoolId: string,
+  client: DatabaseClient = prisma,
+): Promise<CourseTemplateRecord | null> {
+  const scoped = await findActiveCourseTemplateById(
+    templateId,
+    schoolId,
+    client,
+  );
+  if (scoped) return scoped;
+
+  const legacy = await client.courseTemplate.findFirst({
+    where: { id: templateId, schoolId: null, isActive: true },
+    select: courseTemplateSelect,
+  });
+  if (!legacy) return null;
+
+  const scopedTemplate = await client.courseTemplate.upsert({
+    where: { schoolId_code: { schoolId, code: legacy.code } },
+    update: {},
+    create: {
+      schoolId,
+      code: legacy.code,
+      name: legacy.name,
+      description: legacy.description,
+      version: legacy.version,
+      isBuiltin: legacy.isBuiltin,
+      isActive: true,
+    },
+    select: courseTemplateSelect,
+  });
+  return scopedTemplate.isActive ? scopedTemplate : null;
+}
+
 export function findActiveCourseTemplateByCode(
   code: string,
+  schoolId: string,
   client: DatabaseClient = prisma,
 ): Promise<CourseTemplateRecord | null> {
   return client.courseTemplate.findFirst({
-    where: { code, isActive: true },
+    where: { code, schoolId, isActive: true },
     select: courseTemplateSelect,
   });
 }

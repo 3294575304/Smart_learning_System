@@ -72,7 +72,7 @@ async function withUploadRoot<T>(
 
 async function createOwnedCourse(teacherId: string) {
   const suffix = randomBytes(4).toString("hex");
-  const template = (await listTeacherCourseTemplates()).find(
+  const template = (await listTeacherCourseTemplates(teacherId)).find(
     (item) => item.code === "python-programming-v1",
   );
   assert.ok(template);

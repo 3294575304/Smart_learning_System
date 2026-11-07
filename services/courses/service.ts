@@ -19,13 +19,13 @@ import type {
 } from "@/services/audit/types";
 import { CourseOperationError } from "@/services/courses/errors";
 import {
-  findActiveCourseTemplateById,
   findCourseTemplateById,
   findCourseSyllabusByCourseId,
   findTeacherClassroomById,
   findTeacherCourseById,
   findTeacherCourseSyllabus,
   loadCourseTemplates,
+  resolveActiveCourseTemplateForSchool,
   loadTeacherClassroomsForCourseLink,
   loadTeacherCourses,
   createCourseSyllabusRecord,
@@ -55,6 +55,7 @@ import {
   listQuestionCourseCategories,
   requireActiveQuestionCourseCategory,
 } from "@/services/question-course-categories/service";
+import { requireUserSchoolId } from "@/services/schools/tenant";
 
 function isKnownPrismaError(error: unknown, code: string): boolean {
   return (
@@ -371,16 +372,19 @@ function isTransactionConflict(error: unknown): boolean {
   return isKnownPrismaError(error, "P2034");
 }
 
-export async function listAdminCourseTemplates(): Promise<
-  CourseTemplateView[]
-> {
-  return (await loadCourseTemplates()).map(templateViewFromRecord);
+export async function listAdminCourseTemplates(
+  actorId: string,
+): Promise<CourseTemplateView[]> {
+  const schoolId = await requireUserSchoolId(actorId);
+  return (await loadCourseTemplates(schoolId)).map(templateViewFromRecord);
 }
 
 export async function getAdminCourseTemplate(
+  actorId: string,
   templateId: string,
 ): Promise<CourseTemplateView> {
-  const template = await findCourseTemplateById(templateId);
+  const schoolId = await requireUserSchoolId(actorId);
+  const template = await findCourseTemplateById(templateId, schoolId);
   if (!template) {
     throw new ResourceNotFoundError("课程模板不存在");
   }
@@ -394,8 +398,10 @@ export async function createAdminCourseTemplate(
 ): Promise<CourseTemplateView> {
   try {
     return await prisma.$transaction(async (transaction) => {
+      const schoolId = await requireUserSchoolId(actorId, transaction);
       const template = await transaction.courseTemplate.create({
         data: {
+          schoolId,
           code: input.code,
           name: input.name,
           description: input.description,
@@ -405,6 +411,7 @@ export async function createAdminCourseTemplate(
         },
         select: {
           id: true,
+          schoolId: true,
           code: true,
           name: true,
           description: true,
@@ -442,7 +449,12 @@ export async function updateAdminCourseTemplate(
   context: AuditRequestContext,
 ): Promise<CourseTemplateView> {
   return prisma.$transaction(async (transaction) => {
-    const before = await findCourseTemplateById(templateId, transaction);
+    const schoolId = await requireUserSchoolId(actorId, transaction);
+    const before = await findCourseTemplateById(
+      templateId,
+      schoolId,
+      transaction,
+    );
     if (!before) {
       throw new ResourceNotFoundError("课程模板不存在");
     }
@@ -468,6 +480,7 @@ export async function updateAdminCourseTemplate(
       },
       select: {
         id: true,
+        schoolId: true,
         code: true,
         name: true,
         description: true,
@@ -502,7 +515,12 @@ export async function setAdminCourseTemplateActive(
   context: AuditRequestContext,
 ): Promise<CourseTemplateView> {
   return prisma.$transaction(async (transaction) => {
-    const before = await findCourseTemplateById(templateId, transaction);
+    const schoolId = await requireUserSchoolId(actorId, transaction);
+    const before = await findCourseTemplateById(
+      templateId,
+      schoolId,
+      transaction,
+    );
     if (!before) {
       throw new ResourceNotFoundError("课程模板不存在");
     }
@@ -516,6 +534,7 @@ export async function setAdminCourseTemplateActive(
       data: { isActive },
       select: {
         id: true,
+        schoolId: true,
         code: true,
         name: true,
         description: true,
@@ -545,14 +564,17 @@ export async function setAdminCourseTemplateActive(
   });
 }
 
-export async function listTeacherCourseTemplates(): Promise<
-  CourseTemplateView[]
-> {
-  return (await loadCourseTemplates(prisma, true)).map(templateViewFromRecord);
+export async function listTeacherCourseTemplates(
+  teacherId: string,
+): Promise<CourseTemplateView[]> {
+  const schoolId = await requireUserSchoolId(teacherId);
+  return (await loadCourseTemplates(schoolId, prisma, true)).map(
+    templateViewFromRecord,
+  );
 }
 
-export async function listTeacherQuestionCourseCategories() {
-  return listQuestionCourseCategories(true);
+export async function listTeacherQuestionCourseCategories(teacherId: string) {
+  return listQuestionCourseCategories(teacherId, true);
 }
 
 export async function listTeacherCourses(
@@ -723,18 +745,26 @@ export async function createTeacherCourse(
   input: CreateCourseData,
   context: AuditRequestContext,
 ): Promise<TeacherCourseDetail> {
-  const template = await findActiveCourseTemplateById(input.templateId);
-  if (!template) {
-    throw new ResourceNotFoundError("课程模板不存在或已停用");
-  }
-  await requireActiveQuestionCourseCategory(input.questionCategoryId);
-
   try {
     const course = await prisma.$transaction(async (transaction) => {
+      const schoolId = await requireUserSchoolId(teacherId, transaction);
+      const template = await resolveActiveCourseTemplateForSchool(
+        input.templateId,
+        schoolId,
+        transaction,
+      );
+      if (!template) {
+        throw new ResourceNotFoundError("课程模板不存在或已停用");
+      }
+      const questionCategory = await requireActiveQuestionCourseCategory(
+        input.questionCategoryId,
+        teacherId,
+        transaction,
+      );
       const created = await transaction.course.create({
         data: {
           templateId: template.id,
-          questionCategoryId: input.questionCategoryId,
+          questionCategoryId: questionCategory.id,
           teacherId,
           courseNo: input.courseNo,
           term: input.term,
@@ -840,8 +870,9 @@ export async function updateTeacherCourse(
       return courseDetailFromRecords(before, classrooms);
     }
 
-    await requireActiveQuestionCourseCategory(
+    const questionCategory = await requireActiveQuestionCourseCategory(
       input.questionCategoryId,
+      teacherId,
       transaction,
     );
 
@@ -850,7 +881,7 @@ export async function updateTeacherCourse(
         where: { id: courseId },
         data: {
           courseNo: input.courseNo,
-          questionCategoryId: input.questionCategoryId,
+          questionCategoryId: questionCategory.id,
           term: input.term,
           name: input.name,
           description: input.description,

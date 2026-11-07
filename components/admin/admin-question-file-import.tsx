@@ -721,7 +721,7 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
             <h2 className="font-semibold">2. 选择题目课程分类</h2>
             <p className="mt-2 text-sm text-slate-600">
               文件：{sourceLabel}
-              。本批题目将归入管理员维护的全局课程分类，自动知识标签会保留在每道题上。
+              。本批题目将归入本校课程分类，自动知识标签会保留在每道题上。
             </p>
             {courses.length ? (
               <label className="mt-3 block space-y-2 text-sm">
@@ -989,7 +989,7 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
           <p className="mt-1">
             {isAdmin
               ? "自动标签来自文件原有“知识点”字段和题干关键词，可由管理员逐题修改。教师仍需使用课程知识图谱的“一键关联绑定题目”审核主知识点和次要知识点，自动标签不会越过教师确认直接进入正式学情证据。"
-              : "自动标签来自文件原有“知识点”字段和题干关键词，可由教师逐题修改。导入题目会保存到教师共同维护的共享题库，之后可在课程知识图谱中审核主知识点和次要知识点。"}
+              : "自动标签来自文件原有“知识点”字段和题干关键词，可由教师逐题修改。导入题目会保存到本校教师共同维护的共享题库，之后可在课程知识图谱中审核主知识点和次要知识点。"}
           </p>
         </div>
       </aside>

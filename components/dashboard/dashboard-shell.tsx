@@ -20,6 +20,7 @@ import {
   NavigationMemory,
   NavigationMemoryProvider,
 } from "@/components/dashboard/navigation-memory";
+import { AdminDashboardCacheProvider } from "@/components/admin/dashboard/admin-dashboard-cache";
 import { SchoolIdentity } from "@/components/dashboard/school-identity";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
@@ -261,7 +262,7 @@ export function DashboardShell({
           className={
             user.role === Role.SUPER_ADMIN
               ? "flex h-16 items-center border-b px-6"
-              : "flex h-16 items-center justify-center border-b px-2"
+              : "flex h-16 items-center justify-start border-b px-6"
           }
         >
           {user.role === Role.SUPER_ADMIN ? (
@@ -275,14 +276,14 @@ export function DashboardShell({
               <span>{platformName}</span>
             </Link>
           ) : (
-            <Link className="w-full min-w-0" href="/dashboard">
+            <div className="w-full min-w-0">
               <SchoolIdentity
                 compact
                 logoUrl={user.schoolLogoUrl}
                 name={schoolName}
                 nameImageUrl={user.schoolNameImageUrl}
               />
-            </Link>
+            </div>
           )}
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -312,7 +313,7 @@ export function DashboardShell({
               className={
                 user.role === Role.SUPER_ADMIN
                   ? "relative flex h-16 items-center justify-between border-b px-5"
-                  : "relative flex h-16 items-center justify-center border-b px-10"
+                  : "relative flex h-16 items-center justify-start border-b px-4 pr-12"
               }
             >
               {user.role === Role.SUPER_ADMIN ? (
@@ -327,18 +328,14 @@ export function DashboardShell({
                   <span>{platformName}</span>
                 </Link>
               ) : (
-                <Link
-                  className="min-w-0 flex-1"
-                  href="/dashboard"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
+                <div className="min-w-0 flex-1">
                   <SchoolIdentity
                     compact
                     logoUrl={user.schoolLogoUrl}
                     name={schoolName}
                     nameImageUrl={user.schoolNameImageUrl}
                   />
-                </Link>
+                </div>
               )}
               <button
                 aria-label="关闭菜单"
@@ -513,7 +510,15 @@ export function DashboardShell({
             <Suspense fallback={null}>
               <NavigationMemory userId={user.id} />
             </Suspense>
-            {children}
+            {user.role === Role.ADMIN ? (
+              <AdminDashboardCacheProvider
+                scopeKey={`${user.id}:${user.schoolName ?? "unbound"}`}
+              >
+                {children}
+              </AdminDashboardCacheProvider>
+            ) : (
+              children
+            )}
           </NavigationMemoryProvider>
         </main>
       </div>

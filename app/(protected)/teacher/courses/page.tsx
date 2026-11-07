@@ -14,8 +14,8 @@ export default async function TeacherCoursesPage() {
   const teacher = await requirePageRole(Role.TEACHER);
   const [courses, templates, categories] = await Promise.all([
     listTeacherCourses(teacher.id),
-    listTeacherCourseTemplates(),
-    listTeacherQuestionCourseCategories(),
+    listTeacherCourseTemplates(teacher.id),
+    listTeacherQuestionCourseCategories(teacher.id),
   ]);
   const defaultTemplateId =
     templates.find((template) => template.code === "python-programming-v1")

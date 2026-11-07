@@ -115,7 +115,7 @@ test("考核方案草稿乐观并发、正式发布不可变且重复发布幂�
     where: { email: "teacher@example.com" },
     select: { id: true },
   });
-  const template = (await listTeacherCourseTemplates()).find(
+  const template = (await listTeacherCourseTemplates(teacher.id)).find(
     (item) => item.code === "python-programming-v1",
   );
   assert.ok(template);

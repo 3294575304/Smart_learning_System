@@ -36,7 +36,11 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
     {
       items: [
         { href: "/super-admin", label: "超级管理员工作台", icon: ShieldCheck },
-        { href: "/super-admin/schools", label: "学校与管理员", icon: School },
+        {
+          href: "/super-admin/schools",
+          label: "合作学校和管理员",
+          icon: School,
+        },
         {
           href: "/super-admin/showcase",
           label: "系统应用情况",
@@ -141,7 +145,7 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
 
 export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   "super-admin": "超级管理员工作台",
-  schools: "学校与管理员",
+  schools: "合作学校和管理员",
   "new-school": "添加合作学校",
   "new-admin": "新建高校管理员",
   showcase: "系统应用情况",

@@ -26,8 +26,8 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   try {
-    await requireAuthenticatedUser([Role.ADMIN]);
-    return apiSuccess(await getAdminCourseTemplate(parsedId.data));
+    const actor = await requireAuthenticatedUser([Role.ADMIN]);
+    return apiSuccess(await getAdminCourseTemplate(actor.id, parsedId.data));
   } catch (error: unknown) {
     return courseApiError(error);
   }

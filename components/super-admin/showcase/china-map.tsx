@@ -53,7 +53,7 @@ export function ChinaMap({
               d={province.path}
               fill={provinceFill(counts[province.code] ?? 0, maxCount)}
               fillRule="evenodd"
-              stroke="#b3d1e4"
+              stroke="#a9c5bc"
               strokeWidth={0.6}
               strokeLinejoin="round"
               strokeLinecap="round"
@@ -86,8 +86,8 @@ export function ChinaMap({
           ))}
           <path
             d={map.maritimePath}
-            fill="#98afbe"
-            stroke="#98afbe"
+            fill="#91aaa0"
+            stroke="#91aaa0"
             strokeWidth="0.5"
             pointerEvents="none"
           />
@@ -105,7 +105,7 @@ export function ChinaMap({
               province.label[1] !== province.center[1] ? (
                 <path
                   d={`M${province.center.join(",")}L${province.label.join(",")}`}
-                  stroke="#a2bbcd"
+                  stroke="#91b1a5"
                   strokeWidth="0.8"
                   fill="none"
                 />
@@ -118,9 +118,9 @@ export function ChinaMap({
                 fontSize="12"
                 fontWeight={selected === province.code ? 700 : 500}
                 fill={
-                  (counts[province.code] ?? 0) / maxCount > 0.55
+                  (counts[province.code] ?? 0) / maxCount > 0.4
                     ? "#fff"
-                    : "#47687e"
+                    : "#3f625b"
                 }
                 stroke={provinceFill(counts[province.code] ?? 0, maxCount)}
                 strokeWidth="2"
@@ -139,11 +139,11 @@ export function ChinaMap({
             const color =
               code === hovered
                 ? code === selected
-                  ? "#4d95bf"
-                  : "#7facc8"
+                  ? "#428a79"
+                  : "#77a99a"
                 : code === focused
-                  ? "#377fa7"
-                  : "#4d95bf";
+                  ? "#337664"
+                  : "#428a79";
             return (
               <path
                 key={code}
@@ -165,14 +165,14 @@ export function ChinaMap({
               cy={active.capital[1]}
               r="7"
               fill="white"
-              stroke="#75afd0"
+              stroke="#78ad99"
               strokeWidth="1.5"
             />
             <circle
               cx={active.capital[0]}
               cy={active.capital[1]}
               r="3"
-              fill="#0284c7"
+              fill="#27866c"
               stroke="white"
               strokeWidth="1.5"
             />
@@ -185,8 +185,8 @@ export function ChinaMap({
         width="168"
         height="190"
         rx="7"
-        fill="#f6fafc"
-        stroke="#c9dce8"
+        fill="#f4f8f3"
+        stroke="#cbdcd2"
       />
       <g clipPath={`url(#${uid}-inset)`} aria-hidden="true">
         {map.provinces.map((province) => (
@@ -201,12 +201,12 @@ export function ChinaMap({
         ))}
         <path
           d={map.maritimeInsetPath}
-          fill="#98afbe"
-          stroke="#98afbe"
+          fill="#91aaa0"
+          stroke="#91aaa0"
           strokeWidth="0.5"
         />
       </g>
-      <text x="888" y="719" textAnchor="middle" fill="#7d99ab" fontSize="12">
+      <text x="888" y="719" textAnchor="middle" fill="#718d80" fontSize="12">
         南海诸岛
       </text>
     </svg>

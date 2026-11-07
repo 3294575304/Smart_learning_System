@@ -95,7 +95,13 @@ export async function getSchoolAdminDirectory(
           school: { select: { name: true } },
         },
       });
-      return { view: "ADMINS" as const, items, total, totalPages, page };
+      return {
+        view: "ADMINS" as const,
+        items,
+        total,
+        totalPages,
+        page,
+      };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
   );

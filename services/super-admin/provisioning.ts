@@ -20,12 +20,14 @@ import {
   partnerSchoolIdSchema,
   type CreatePartnerSchoolData,
   type CreateSchoolAdminData,
+  type UpdateSchoolAdminData,
 } from "@/services/super-admin/provisioning-schemas";
 import type {
   CreatedPartnerSchool,
   CreatedSchoolAdmin,
 } from "@/services/super-admin/provisioning-types";
 import { deleteSchoolAssetIfUnused } from "@/services/schools/service";
+import { ensureSchoolCatalogDefaults } from "@/services/schools/catalog";
 
 async function requireSuperAdmin(
   tx: Prisma.TransactionClient,
@@ -61,26 +63,44 @@ export async function deletePartnerSchool(
           provinceCode: true,
           logoStorageKey: true,
           nameImageStorageKey: true,
-          _count: { select: { admins: true } },
         },
       });
       if (!school) throw new ResourceNotFoundError("学校不存在或已删除");
-      if (school._count.admins > 0)
-        throw new ProvisioningError(
-          "该学校仍有绑定账号，请先处理管理员及师生账号的绑定关系后再删除",
-        );
+      const unboundByRole = await tx.user.groupBy({
+        by: ["role"],
+        where: { schoolId: school.id },
+        _count: { _all: true },
+      });
+      const detachedCounts = Object.fromEntries(
+        unboundByRole.map(({ role, _count }) => [role, _count._all]),
+      );
+      // Preserve catalog rows and historical course references while removing
+      // the school tenant. Deactivate the rows so private catalogs do not become
+      // available as shared legacy options to other schools.
+      await tx.courseTemplate.updateMany({
+        where: { schoolId: school.id },
+        data: { schoolId: null, isActive: false },
+      });
+      await tx.questionCourseCategory.updateMany({
+        where: { schoolId: school.id },
+        data: { schoolId: null, isActive: false },
+      });
+      await tx.user.updateMany({
+        where: { schoolId: school.id },
+        data: { schoolId: null },
+      });
       await tx.school.delete({ where: { id: school.id } });
       await writeSystemConfigAuditLog(tx, {
         actorId,
         action: AuditAction.SYSTEM_CONFIG_UPDATED,
         targetId: school.id,
-        summary: `删除合作学校：${school.name}`,
+        summary: `解除合作关系：${school.name}`,
         beforeData: {
           schoolId: school.id,
           schoolName: school.name,
           provinceCode: school.provinceCode,
         },
-        afterData: { deleted: true },
+        afterData: { deleted: true, detachedCounts },
         context,
       });
       return school;
@@ -91,7 +111,7 @@ export async function deletePartnerSchool(
       error.code === "P2003"
     )
       throw new ProvisioningError(
-        "学校出现新的账号绑定，无法删除，请刷新后重试",
+        "学校关联数据已发生变化，无法解除关系，请刷新后重试",
       );
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -138,6 +158,7 @@ export async function createPartnerSchool(
         data: { key, name: data.name, provinceCode: data.provinceCode },
         select: { id: true, name: true, provinceCode: true },
       });
+      await ensureSchoolCatalogDefaults(tx, school.id);
       await writeSystemConfigAuditLog(tx, {
         actorId,
         action: AuditAction.SYSTEM_CONFIG_UPDATED,
@@ -244,6 +265,90 @@ export async function createSchoolAdmin(
       error.code === "P2003"
     )
       throw new ProvisioningError("学校信息已发生变化，请刷新后重新选择");
+    throw error;
+  }
+}
+
+export async function updateSchoolAdmin(
+  actorId: string,
+  adminId: string,
+  input: UpdateSchoolAdminData,
+  context: AuditRequestContext,
+): Promise<{ id: string; email: string; displayName: string }> {
+  await requireSuperAdmin(prisma, actorId);
+  const passwordHash = input.password
+    ? await hashPassword(input.password)
+    : undefined;
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await requireSuperAdmin(tx, actorId);
+      const before = await tx.user.findFirst({
+        where: { id: adminId, role: Role.ADMIN },
+        select: {
+          id: true,
+          email: true,
+          status: true,
+          profile: { select: { displayName: true } },
+        },
+      });
+      if (!before) throw new ResourceNotFoundError("高校管理员不存在");
+      const displayName = input.displayName;
+      const email = input.email;
+      const updated = await tx.user.update({
+        where: { id: before.id },
+        data: {
+          email,
+          ...(passwordHash
+            ? { passwordHash, mustChangePassword: true }
+            : {}),
+          profile: {
+            upsert: {
+              create: { displayName },
+              update: { displayName },
+            },
+          },
+        },
+        select: {
+          id: true,
+          email: true,
+          profile: { select: { displayName: true } },
+        },
+      });
+      if (passwordHash)
+        await tx.authSession.deleteMany({ where: { userId: before.id } });
+      await writeUserAuditLog(tx, {
+        actorId,
+        action: AuditAction.USER_UPDATED,
+        targetId: before.id,
+        summary: passwordHash
+          ? `更新高校管理员账号并重置密码：${displayName}（${email}）`
+          : `更新高校管理员账号：${displayName}（${email}）`,
+        beforeData: {
+          displayName: before.profile?.displayName ?? before.email,
+          email: before.email,
+          role: Role.ADMIN,
+          status: before.status,
+        },
+        afterData: {
+          displayName,
+          email,
+          role: Role.ADMIN,
+          status: before.status,
+        },
+        context,
+      });
+      return {
+        id: updated.id,
+        email: updated.email ?? email,
+        displayName: updated.profile?.displayName ?? displayName,
+      };
+    });
+  } catch (error: unknown) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    )
+      throw new ProvisioningError("该邮箱已被其他用户使用");
     throw error;
   }
 }

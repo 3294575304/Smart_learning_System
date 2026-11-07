@@ -51,7 +51,7 @@ export function OverviewPanel({
           {new Date(data.generatedAt).toLocaleString("zh-CN", {
             timeZone: data.timeZone,
           })}{" "}
-          的数据库实时汇总。
+          的数据库汇总。
         </p>
       </div>
       {error ? (

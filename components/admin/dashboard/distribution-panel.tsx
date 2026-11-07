@@ -23,57 +23,132 @@ const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
   ARCHIVED: "已归档",
 };
 
-function DistributionBars<T extends string | number>({
+const ROLE_COLORS: Record<string, string> = {
+  STUDENT: "#0284c7",
+  TEACHER: "#0d9488",
+  ADMIN: "#d97706",
+  SUPER_ADMIN: "#7c3aed",
+};
+const ASSIGNMENT_STATUS_COLORS: Record<string, string> = {
+  DRAFT: "#0284c7",
+  PUBLISHED: "#059669",
+  CLOSED: "#d97706",
+  COMPLETED: "#7c3aed",
+  ARCHIVED: "#64748b",
+};
+
+function DistributionChart<T extends string | number>({
   items,
   labels,
+  colors,
   title,
+  unit,
 }: {
   items: DistributionItem<T>[];
   labels: Record<string, string>;
+  colors: Record<string, string>;
   title: string;
+  unit: string;
 }) {
-  const maximum = Math.max(1, ...items.map((item) => item.count));
   const total = items.reduce((sum, item) => sum + item.count, 0);
+  const circumference = 2 * Math.PI * 54;
+  let precedingCount = 0;
+  const segments = items.map((item) => {
+    const offset = total > 0 ? (precedingCount / total) * circumference : 0;
+    precedingCount += item.count;
+    return { ...item, offset };
+  });
+
   return (
-    <figure>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium">{title}</h3>
-        <span className="text-muted-foreground text-xs">
-          合计 {total.toLocaleString("zh-CN")}
-        </span>
-      </div>
-      <div className="space-y-3">
-        {items.map((item) => {
-          const label = labels[String(item.key)] ?? String(item.key);
-          const ratio =
-            total === 0 ? 0 : Math.round((item.count / total) * 10_000) / 100;
-          return (
-            <div key={String(item.key)}>
-              <div className="mb-1 flex justify-between gap-4 text-xs">
-                <span>{label}</span>
-                <span>
-                  {item.count.toLocaleString("zh-CN")} · {ratio}%
-                </span>
-              </div>
-              <div
-                aria-label={`${label} ${item.count}`}
-                className="bg-muted h-3 overflow-hidden rounded-full"
-                role="img"
-              >
-                <div
-                  className="h-full rounded-full bg-sky-600"
-                  style={{
-                    width: `${item.count === 0 ? 0 : Math.max(3, (item.count / maximum) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <figcaption className="text-muted-foreground mt-4 text-xs">
-        分类键来自数据库稳定枚举，中文仅在页面映射。
+    <figure className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+      <figcaption className="text-sm font-semibold text-slate-800">
+        {title}
       </figcaption>
+      {total === 0 ? (
+        <div className="flex min-h-48 items-center justify-center text-xs text-slate-500">
+          暂无{title}数据
+        </div>
+      ) : (
+        <>
+          <svg
+            className="mx-auto my-4 size-36"
+            viewBox="0 0 144 144"
+            role="img"
+            aria-label={`${title}，合计 ${total}${unit}。${items.map((item) => `${labels[String(item.key)] ?? String(item.key)} ${item.count}${unit}，占 ${Math.round((item.count / total) * 10_000) / 100}%`).join("；")}`}
+          >
+            <circle
+              cx="72"
+              cy="72"
+              r="54"
+              fill="none"
+              stroke="#e2e8f0"
+              strokeWidth="12"
+            />
+            <g transform="rotate(-90 72 72)">
+              {segments
+                .filter((item) => item.count > 0)
+                .map((item) => (
+                  <circle
+                    key={String(item.key)}
+                    cx="72"
+                    cy="72"
+                    r="54"
+                    fill="none"
+                    stroke={colors[String(item.key)] ?? "#64748b"}
+                    strokeWidth="12"
+                    strokeDasharray={`${(item.count / total) * circumference} ${circumference}`}
+                    strokeDashoffset={-item.offset}
+                  >
+                    <title>{`${labels[String(item.key)] ?? String(item.key)}：${item.count}${unit}，占 ${Math.round((item.count / total) * 10_000) / 100}%`}</title>
+                  </circle>
+                ))}
+            </g>
+            <text
+              x="72"
+              y="70"
+              textAnchor="middle"
+              className="fill-slate-900 text-2xl font-semibold tabular-nums"
+            >
+              {total.toLocaleString("zh-CN")}
+            </text>
+            <text
+              x="72"
+              y="90"
+              textAnchor="middle"
+              className="fill-slate-500 text-[10px]"
+            >
+              合计 · {unit}
+            </text>
+          </svg>
+          <ul className="space-y-1">
+            {items.map((item) => {
+              const label = labels[String(item.key)] ?? String(item.key);
+              const ratio = Math.round((item.count / total) * 10_000) / 100;
+              return (
+                <li
+                  className="flex items-center gap-2 rounded-lg px-1 py-2 text-xs"
+                  key={String(item.key)}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-2 shrink-0 rounded-full"
+                    style={{
+                      backgroundColor: colors[String(item.key)] ?? "#64748b",
+                    }}
+                  />
+                  <span className="min-w-0 flex-1 text-slate-600">{label}</span>
+                  <strong className="font-semibold text-slate-900 tabular-nums">
+                    {item.count.toLocaleString("zh-CN")}
+                  </strong>
+                  <span className="w-16 text-right text-slate-500 tabular-nums">
+                    {ratio}%
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </figure>
   );
 }
@@ -89,7 +164,7 @@ export function DistributionPanel({
 }) {
   return (
     <DashboardPanel
-      description="仅展示当前数据模型存在且数据库中有真实记录的分类。"
+      description="查看本校用户角色构成与作业状态占比。"
       title="角色与作业分布"
     >
       {loading && !data ? (
@@ -100,15 +175,19 @@ export function DistributionPanel({
         (data.roles.length === 0 && data.assignmentStatuses.length === 0) ? (
         <SectionEmpty message="暂无可展示的分布数据。" />
       ) : (
-        <div className="grid gap-8 md:grid-cols-2">
-          <DistributionBars
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+          <DistributionChart
             items={data.roles}
             labels={ROLE_LABELS}
+            colors={ROLE_COLORS}
+            unit="人"
             title="用户角色"
           />
-          <DistributionBars
+          <DistributionChart
             items={data.assignmentStatuses}
             labels={ASSIGNMENT_STATUS_LABELS}
+            colors={ASSIGNMENT_STATUS_COLORS}
+            unit="份"
             title="作业状态"
           />
         </div>

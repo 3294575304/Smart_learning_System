@@ -28,7 +28,12 @@ test("教师可解散已有学生和已发布作业的班级并通知学生、�
     data: {
       questionCategory: {
         connectOrCreate: {
-          where: { normalizedName: "automated-test-category" },
+          where: {
+            schoolId_normalizedName: {
+              schoolId: null,
+              normalizedName: "automated-test-category",
+            },
+          },
           create: {
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",

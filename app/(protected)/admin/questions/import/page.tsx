@@ -7,8 +7,8 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { listQuestionImportCourses } from "@/services/question-import/courses";
 
 export default async function AdminQuestionImportPage() {
-  await requirePageRole(Role.ADMIN);
-  const courses = await listQuestionImportCourses();
+  const admin = await requirePageRole(Role.ADMIN);
+  const courses = await listQuestionImportCourses(admin.id);
   return (
     <section className="mx-auto max-w-5xl space-y-4 pb-8">
       <header className="relative overflow-hidden rounded-2xl border border-sky-100 bg-gradient-to-br from-white via-sky-50 to-cyan-50 px-5 py-5 shadow-sm sm:px-6 sm:py-6">

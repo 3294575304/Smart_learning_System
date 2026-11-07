@@ -25,6 +25,8 @@ export function ApplicationShowcase({
   data: ApplicationShowcaseData;
 }) {
   const root = useRef<HTMLElement>(null);
+  const mapPanelRef = useRef<HTMLElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState(data.ranking[0]?.code ?? "320000");
@@ -65,6 +67,31 @@ export function ApplicationShowcase({
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
 
+  useEffect(() => {
+    const mapPanel = mapPanelRef.current;
+    const sidebar = sidebarRef.current;
+    if (!mapPanel || !sidebar) return;
+
+    const syncSidebarHeight = () => {
+      if (window.matchMedia("(max-width: 1100px)").matches) {
+        sidebar.style.removeProperty("--showcase-sidebar-max-height");
+        return;
+      }
+      sidebar.style.setProperty(
+        "--showcase-sidebar-max-height",
+        `${Math.round(mapPanel.getBoundingClientRect().height)}px`,
+      );
+    };
+    const observer = new ResizeObserver(syncSidebarHeight);
+    observer.observe(mapPanel);
+    window.addEventListener("resize", syncSidebarHeight);
+    syncSidebarHeight();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncSidebarHeight);
+    };
+  }, [fullscreen]);
+
   function selectProvince(code: string) {
     setSelected(code);
     setKeyword("");
@@ -90,7 +117,7 @@ export function ApplicationShowcase({
     >
       <header className={styles.header}>
         <div>
-          <p className={styles.overline}>智慧教育 · 山海相连</p>
+          <p className={styles.overline}>智慧教育</p>
           <h1 id="showcase-title">系统应用情况</h1>
           <p className={styles.subtitle}>
             全国高校接入情况，点击省份查看学校。
@@ -168,7 +195,11 @@ export function ApplicationShowcase({
       </div>
 
       <div className={styles.content}>
-        <section className={styles.mapPanel} aria-label="全国省份高校分布">
+        <section
+          ref={mapPanelRef}
+          className={styles.mapPanel}
+          aria-label="全国省份高校分布"
+        >
           <div className={styles.panelHeading}>
             <div>
               <h2>高校分布</h2>
@@ -212,7 +243,7 @@ export function ApplicationShowcase({
           </p>
         </section>
 
-        <aside className={styles.sidebar}>
+        <aside ref={sidebarRef} className={styles.sidebar}>
           <section
             className={styles.detailPanel}
             aria-labelledby="selected-province-title"

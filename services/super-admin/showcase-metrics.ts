@@ -45,15 +45,16 @@ export function buildSchoolDistribution(schools: ShowcaseSchool[]) {
 
 // A continuous light-to-dark scale; zero remains distinct from every nonzero count.
 export function provinceFill(count: number, maxCount: number): string {
-  if (count <= 0) return "#e4f2fc";
+  if (count <= 0) return "#e6eee8";
   const ratio = Math.min(1, count / Math.max(1, maxCount));
-  const from = [127, 202, 241],
-    to = [20, 113, 193];
+  const intensity = ratio ** 0.65;
+  const from = [162, 201, 189],
+    to = [23, 93, 90];
   return (
     "#" +
     from
       .map((channel, i) =>
-        Math.round(channel + ((to[i] ?? channel) - channel) * ratio)
+        Math.round(channel + ((to[i] ?? channel) - channel) * intensity)
           .toString(16)
           .padStart(2, "0"),
       )

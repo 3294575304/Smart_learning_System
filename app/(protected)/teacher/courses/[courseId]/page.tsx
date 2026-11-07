@@ -48,7 +48,7 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
     [course, setupProgress, categories] = await Promise.all([
       getTeacherCourse(teacher.id, parsedId.data),
       getTeacherCourseSetupProgress(teacher.id, parsedId.data),
-      listTeacherQuestionCourseCategories(),
+      listTeacherQuestionCourseCategories(teacher.id),
     ]);
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) {

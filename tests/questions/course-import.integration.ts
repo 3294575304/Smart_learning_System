@@ -32,17 +32,19 @@ async function main() {
   const suffix = randomBytes(4).toString("hex");
   const firstCategory = await prisma.questionCourseCategory.create({
     data: {
+      schoolId: teacher.schoolId,
       name: `共享题库测试课程 ${suffix}`,
       normalizedName: `shared-test-course-${suffix}`,
     },
   });
   const secondCategory = await prisma.questionCourseCategory.create({
     data: {
+      schoolId: teacher.schoolId,
       name: `共享题库测试课程二 ${suffix}`,
       normalizedName: `shared-test-course-two-${suffix}`,
     },
   });
-  const available = await listQuestionImportCourses();
+  const available = await listQuestionImportCourses(teacher.id);
   assert.ok(available.some((item) => item.id === firstCategory.id));
   assert.ok(available.some((item) => item.id === secondCategory.id));
 

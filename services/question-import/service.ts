@@ -216,7 +216,11 @@ async function commitQuestionImport(
 
   return prisma.$transaction(
     async (transaction) => {
-      await requireActiveQuestionCourseCategory(input.categoryId, transaction);
+      const questionCategory = await requireActiveQuestionCourseCategory(
+        input.categoryId,
+        actorId,
+        transaction,
+      );
       const ids: string[] = [];
       const skippedCount = 0;
       for (const [index, question] of questions.entries()) {
@@ -224,6 +228,7 @@ async function commitQuestionImport(
           data: {
             creatorId: actorId,
             ...persistenceFields(question),
+            questionCategoryId: questionCategory.id,
             ...(question.type === QuestionType.PYTHON_PROGRAMMING
               ? {
                   status: QuestionStatus.DRAFT,

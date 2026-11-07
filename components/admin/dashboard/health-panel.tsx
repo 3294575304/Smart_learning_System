@@ -81,7 +81,7 @@ export function HealthPanel({
           </button>
         ) : undefined
       }
-      description="轻量检查数据库、AI 配置与关键数据状态，不会主动调用付费 AI 服务。"
+      description="会向真实 AI 接口发送不含业务数据的短探测请求，可能产生少量调用费用。"
       title="系统运行状态"
     >
       {loading && !data ? (
@@ -122,8 +122,11 @@ export function HealthPanel({
             </span>
             <div className="text-right">
               <StatusBadge status={data.ai.status} />
+              <p className="text-muted-foreground mt-1 max-w-80 text-right text-xs">
+                {data.ai.probeMessage}
+              </p>
               <p className="text-muted-foreground mt-1 text-xs">
-                近 7 天成功 {data.ai.successfulExecutionsLast7Days} · 问题/降级{" "}
+                近 7 天成功 {data.ai.successfulExecutionsLast7Days} · 问题/降级
                 {data.ai.issueExecutionsLast7Days}
               </p>
             </div>
