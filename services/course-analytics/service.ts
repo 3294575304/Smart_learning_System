@@ -147,7 +147,12 @@ export async function getTeacherCourseAnalytics(
     reportingAssignments,
   ] = await Promise.all([
     prisma.assignment.findMany({
-      where: { teacherId, classroom: { courseId }, ...classroomScope },
+      where: {
+        teacherId,
+        examSessionId: null,
+        classroom: { courseId },
+        ...classroomScope,
+      },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
@@ -257,6 +262,7 @@ export async function getTeacherCourseAnalytics(
     prisma.assignment.findMany({
       where: {
         teacherId,
+        examSessionId: null,
         classroom: { courseId },
         ...classroomScope,
         ...assignmentReportingWhere(section, now),

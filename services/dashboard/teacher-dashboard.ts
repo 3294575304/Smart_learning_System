@@ -147,6 +147,7 @@ export async function getTeacherDashboard(
       prisma.assignment.findMany({
         where: {
           teacherId,
+          examSessionId: null,
           classroomId: { in: classroomIds },
           classroom: { teacherId, courseId },
           status: { not: "ARCHIVED" },

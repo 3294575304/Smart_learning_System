@@ -7,6 +7,8 @@ import { Role, SubmissionStatus } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 
 import { AnswerSheet } from "@/components/assignments/answer-sheet";
+import { ExamMonitor } from "@/components/exams/exam-monitor";
+import { prisma } from "@/lib/prisma";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentSubmissionDraft } from "@/services/assignments/service";
@@ -34,12 +36,28 @@ export default async function AnswerPage({ params, searchParams }: Props) {
           scope.data,
         ),
       );
+    const exam = await prisma.examSession.findFirst({
+      where: {
+        assignments: { some: { id: submission.assignmentId } },
+        cancelledAt: null,
+      },
+      select: { endsAt: true, allowedSwitches: true },
+    });
     return (
-      <AnswerSheet
-        scope={scope.data}
-        autosaveDelayMs={autosaveDelayMs}
-        submission={submission}
-      />
+      <div className="space-y-3">
+        {exam && (
+          <ExamMonitor
+            submissionId={submissionId}
+            endsAt={exam.endsAt.toISOString()}
+            allowedSwitches={exam.allowedSwitches}
+          />
+        )}
+        <AnswerSheet
+          scope={scope.data}
+          autosaveDelayMs={autosaveDelayMs}
+          submission={submission}
+        />
+      </div>
     );
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) notFound();

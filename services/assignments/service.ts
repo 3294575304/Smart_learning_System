@@ -91,6 +91,10 @@ const studentQuestionSelect = {
   typeSnapshot: true,
   sortOrder: true,
   points: true,
+  examImages: {
+    orderBy: { sortOrder: "asc" as const },
+    select: { id: true },
+  },
   optionSnapshots: {
     orderBy: { sortOrder: "asc" as const },
     select: {
@@ -435,6 +439,7 @@ export async function listTeacherAssignments(
   }
   const where: Prisma.AssignmentWhereInput = {
     teacherId,
+    examSessionId: null,
     ...(query.courseId
       ? { classroom: { courseId: query.courseId, teacherId } }
       : {}),
@@ -470,6 +475,7 @@ export async function listTeacherAssignments(
         orderBy: { status: "asc" },
         where: {
           teacherId,
+          examSessionId: null,
           AND: [assignmentSectionWhere(query.section)],
           status: { in: ["CLOSED", "ARCHIVED"] },
           ...(query.courseId
@@ -483,6 +489,7 @@ export async function listTeacherAssignments(
         orderBy: { classroomId: "asc" },
         where: {
           teacherId,
+          examSessionId: null,
           AND: [assignmentSectionWhere(query.section)],
           ...(query.courseId
             ? { classroom: { courseId: query.courseId, teacherId } }
@@ -521,7 +528,7 @@ export async function getTeacherAssignment(
   };
 }
 
-async function createDraftInTransaction(
+export async function createDraftInTransaction(
   transaction: Prisma.TransactionClient,
   teacherId: string,
   input: AssignmentUpsertData,
@@ -601,7 +608,7 @@ export async function updateDraftAssignment(
   return getTeacherAssignment(teacherId, assignmentId);
 }
 
-async function publishInTransaction(
+export async function publishInTransaction(
   transaction: Prisma.TransactionClient,
   teacherId: string,
   assignmentId: string,
@@ -731,6 +738,7 @@ export async function listStudentAssignments(
   const now = new Date();
   const assignments = await prisma.assignment.findMany({
     where: {
+      examSessionId: null,
       status: { in: [AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED] },
       publishedAt: { lte: now },
       ...(courseId ? { classroom: { courseId } } : {}),
@@ -909,6 +917,10 @@ export async function getStudentAssignment(
       type: question.typeSnapshot,
       sortOrder: question.sortOrder,
       points: question.points.toNumber(),
+      images: question.examImages.map((image) => ({
+        id: image.id,
+        url: `/api/assignment-question-images/${image.id}`,
+      })),
       options: question.optionSnapshots.map((option) => ({
         id: option.id,
         label: option.labelSnapshot,
@@ -1101,6 +1113,10 @@ export async function getStudentSubmissionDraft(
       type: question.typeSnapshot,
       sortOrder: question.sortOrder,
       points: question.points.toNumber(),
+      images: question.examImages.map((image) => ({
+        id: image.id,
+        url: `/api/assignment-question-images/${image.id}`,
+      })),
       options: question.optionSnapshots.map((option) => ({
         id: option.id,
         label: option.labelSnapshot,
@@ -1367,6 +1383,7 @@ const gradingSubmissionInclude = {
 export async function submitStudentAssignment(
   studentId: string,
   submissionId: string,
+  mode: "STUDENT" | "EXAM_AUTO" = "STUDENT",
 ): Promise<SubmissionResultView> {
   await runAssignmentSerializable(async (transaction) => {
     const submission = await transaction.submission.findFirst({
@@ -1378,18 +1395,36 @@ export async function submitStudentAssignment(
     const membership = submission.assignment.classroom.memberships.find(
       (item) => item.studentId === studentId,
     );
-    assertActiveMembership(membership ?? null);
-    const work = await assertStudentWorkAccess(
-      transaction,
-      submission.assignmentId,
-      studentId,
-      submissionId,
-    );
+    if (mode === "STUDENT") assertActiveMembership(membership ?? null);
+    const work =
+      mode === "STUDENT"
+        ? await assertStudentWorkAccess(
+            transaction,
+            submission.assignmentId,
+            studentId,
+            submissionId,
+          )
+        : { grant: null };
     const now = new Date();
-    await assertClassroomWorkAllowed(
-      transaction,
-      submission.assignment.classroomId,
-    );
+    if (mode === "EXAM_AUTO") {
+      const exam = await transaction.examSession.findFirst({
+        where: {
+          assignments: { some: { id: submission.assignmentId } },
+          cancelledAt: null,
+        },
+      });
+      if (!exam) throw new ResourceNotFoundError("考试作答不存在");
+      const switches = await transaction.examSwitchEvent.count({
+        where: { submissionId },
+      });
+      if (now < exam.endsAt && switches <= exam.allowedSwitches)
+        throw new AssignmentOperationError("尚未达到考试自动交卷条件", 409);
+    } else {
+      await assertClassroomWorkAllowed(
+        transaction,
+        submission.assignment.classroomId,
+      );
+    }
     const claimed = await transaction.submission.updateMany({
       where: {
         id: submissionId,
@@ -1561,6 +1596,7 @@ export async function getStudentSubmissionResult(
           },
           assignmentQuestion: {
             include: {
+              examImages: { orderBy: { sortOrder: "asc" } },
               optionSnapshots: { orderBy: { sortOrder: "asc" } },
               knowledgePointSnapshots: {
                 orderBy: [{ nameSnapshot: "asc" }, { knowledgePointId: "asc" }],
@@ -1607,6 +1643,10 @@ export async function getStudentSubmissionResult(
           assignmentQuestionId: answer.assignmentQuestionId,
           title: answer.assignmentQuestion.titleSnapshot,
           content: answer.assignmentQuestion.contentSnapshot,
+          images: answer.assignmentQuestion.examImages.map((image) => ({
+            id: image.id,
+            url: `/api/assignment-question-images/${image.id}`,
+          })),
           type: answer.assignmentQuestion.typeSnapshot,
           sortOrder: answer.assignmentQuestion.sortOrder,
           score: decimalNumber(answer.score),

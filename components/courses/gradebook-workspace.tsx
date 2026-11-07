@@ -43,13 +43,19 @@ type Workspace = {
         id: string;
         name: string;
         sourceType: string;
+        type: string;
         weight: string;
       }>;
     };
   };
   items: Item[];
   students: Student[];
-  assignments: Array<{ id: string; title: string; status: string }>;
+  assignments: Array<{
+    id: string;
+    title: string;
+    status: string;
+    examSession: { type: string } | null;
+  }>;
   currentPublication: { versionNumber: number; publishedAt: string } | null;
 };
 
@@ -142,7 +148,10 @@ export function GradebookWorkspace({
   const platformComponents = useMemo(
     () =>
       data?.gradebook.scheme.components.filter(
-        (item) => item.sourceType === "PLATFORM_ASSIGNMENT",
+        (item) =>
+          item.sourceType === "PLATFORM_ASSIGNMENT" ||
+          item.type === "MIDTERM_EXAM" ||
+          item.type === "FINAL_EXAM",
       ) ?? [],
     [data],
   );
@@ -494,9 +503,9 @@ export function GradebookWorkspace({
         hidden={section !== "sources"}
         className="rounded-2xl border bg-white p-5 sm:p-6"
       >
-        <h2 className="font-semibold">同步平台作业成绩</h2>
+        <h2 className="font-semibold">同步平台作业或考试成绩</h2>
         <p className="mt-2 text-sm text-slate-500">
-          选择考核项目与作业，将已发布的作答成绩同步到台账。
+          选择匹配的考核项目与作业或考试，将已发布的作答成绩同步到台账。
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <select
@@ -520,7 +529,7 @@ export function GradebookWorkspace({
             value={assignmentId}
             onChange={(event) => setAssignmentId(event.target.value)}
           >
-            <option value="">选择已发布作业</option>
+            <option value="">选择已发布作业或考试</option>
             {data.assignments
               .filter((item) => item.status !== "DRAFT")
               .map((item) => (

@@ -13,6 +13,11 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
 };
 
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  EXAM_PUBLISHED: "发布考试",
+  EXAM_CANCELLED: "取消考试",
+  EXAM_DRAFT_CREATED: "上传考试试卷",
+  EXAM_DRAFT_UPDATED: "修改考试草稿",
+  EXAM_DRAFT_REVIEWED: "审核考试题目",
   ASSIGNMENT_DEADLINE_EXTENDED: "作业延期",
   ASSIGNMENT_MAKEUP_GRANTED: "开放补交或重做",
   ASSIGNMENT_MAKEUP_REVOKED: "撤销补交授权",

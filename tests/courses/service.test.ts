@@ -253,12 +253,10 @@ test("教师可以软删除课程并保留班级、名单、文件、成员和�
       questionCategory: {
         connectOrCreate: {
           where: {
-            schoolId_normalizedName: {
-              schoolId: null,
-              normalizedName: "automated-test-category",
-            },
+            id: "test-category-automated-test-category",
           },
           create: {
+            id: "test-category-automated-test-category",
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",
           },
@@ -374,12 +372,10 @@ test("教师可以软删除课程并保留班级、名单、文件、成员和�
       questionCategory: {
         connectOrCreate: {
           where: {
-            schoolId_normalizedName: {
-              schoolId: null,
-              normalizedName: "automated-test-category",
-            },
+            id: "test-category-automated-test-category",
           },
           create: {
+            id: "test-category-automated-test-category",
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",
           },
@@ -462,12 +458,10 @@ test("课程可在已有正式教学数据时删除，跨教师访问受限且�
         questionCategory: {
           connectOrCreate: {
             where: {
-              schoolId_normalizedName: {
-                schoolId: null,
-                normalizedName: "automated-test-category",
-              },
+              id: "test-category-automated-test-category",
             },
             create: {
+              id: "test-category-automated-test-category",
               name: "自动化测试课程分类",
               normalizedName: "automated-test-category",
             },
@@ -601,12 +595,10 @@ test("课程删除不清理已上传文件", async () => {
       questionCategory: {
         connectOrCreate: {
           where: {
-            schoolId_normalizedName: {
-              schoolId: null,
-              normalizedName: "automated-test-category",
-            },
+            id: "test-category-automated-test-category",
           },
           create: {
+            id: "test-category-automated-test-category",
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",
           },
@@ -669,12 +661,10 @@ test("课程软删除保留已执行的空导入批次", async () => {
       questionCategory: {
         connectOrCreate: {
           where: {
-            schoolId_normalizedName: {
-              schoolId: null,
-              normalizedName: "automated-test-category",
-            },
+            id: "test-category-automated-test-category",
           },
           create: {
+            id: "test-category-automated-test-category",
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",
           },

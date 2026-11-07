@@ -412,7 +412,7 @@ test("可删除未绑定账号的合作学校，重复删除返回不存在并�
   );
   assert.equal(
     await prisma.auditLog.count({
-      where: { targetId: partner.id, summary: { startsWith: "删除合作学校" } },
+      where: { targetId: partner.id, summary: { startsWith: "解除合作关系" } },
     }),
     1,
   );
@@ -422,22 +422,47 @@ test("可删除未绑定账号的合作学校，重复删除返回不存在并�
   );
 });
 
-test("任意角色的绑定账号都会阻止删除学校，保留账号及学校", async () => {
+test("解除合作会停用并解绑账号、撤销会话，同时保留课程分类", async () => {
   for (const role of [Role.ADMIN, Role.TEACHER, Role.STUDENT]) {
     const partner = await school();
     const bound = await prisma.user.create({
       data: { role, passwordHash: fixtureHash, schoolId: partner.id },
     });
-    await assert.rejects(
-      deletePartnerSchool(actorId, partner.id, context),
-      ProvisioningError,
-    );
-    assert.ok(await prisma.school.findUnique({ where: { id: partner.id } }));
+    await prisma.authSession.create({
+      data: {
+        userId: bound.id,
+        tokenHash: randomBytes(32).toString("hex"),
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+    const category = await prisma.questionCourseCategory.create({
+      data: {
+        schoolId: partner.id,
+        name: "解除后保留的课程分类",
+        normalizedName: `detached-${randomUUID()}`,
+      },
+    });
+
+    await deletePartnerSchool(actorId, partner.id, context);
+
     assert.equal(
-      (await prisma.user.findUniqueOrThrow({ where: { id: bound.id } }))
-        .schoolId,
-      partner.id,
+      await prisma.school.findUnique({ where: { id: partner.id } }),
+      null,
     );
+    const detached = await prisma.user.findUniqueOrThrow({
+      where: { id: bound.id },
+    });
+    assert.equal(detached.schoolId, null);
+    assert.equal(detached.status, UserStatus.INACTIVE);
+    assert.equal(
+      await prisma.authSession.count({ where: { userId: bound.id } }),
+      0,
+    );
+    const preservedCategory = await prisma.questionCourseCategory.findUniqueOrThrow({
+      where: { id: category.id },
+    });
+    assert.equal(preservedCategory.schoolId, null);
+    assert.equal(preservedCategory.isActive, false);
   }
 });
 

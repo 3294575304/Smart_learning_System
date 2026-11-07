@@ -40,6 +40,7 @@ export async function getStudentClassAnalytics(
     ? await Promise.all([
         prisma.assignment.findMany({
           where: {
+            examSessionId: null,
             classroomId: { in: ids },
             ...assignmentReportingWhere("ALL", now),
           },

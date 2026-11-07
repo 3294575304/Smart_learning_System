@@ -10,7 +10,6 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import type { AdminUserView } from "@/services/admin/users/types";
 
 const ROLE_BADGE_COLORS: Record<AdminUserView["role"], string> = {
-  SUPER_ADMIN: "bg-violet-50 text-violet-700",
   ADMIN: "bg-violet-50 text-violet-700",
   TEACHER: "bg-yellow-50 text-yellow-800",
   STUDENT: "bg-sky-50 text-sky-700",

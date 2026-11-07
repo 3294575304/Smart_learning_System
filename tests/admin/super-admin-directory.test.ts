@@ -18,7 +18,7 @@ test("学校与管理员入口仅属于超级管理员，子页面不会同时�
   );
   assert.deepEqual(
     active.map((item) => item.label),
-    ["学校与管理员"],
+    ["合作学校和管理员"],
   );
   for (const role of ["ADMIN", "TEACHER", "STUDENT"] as const) {
     assert.ok(
@@ -29,11 +29,11 @@ test("学校与管理员入口仅属于超级管理员，子页面不会同时�
   }
   assert.equal(
     getDashboardPageTitle("/super-admin/schools", NAVIGATION.SUPER_ADMIN),
-    "学校与管理员",
+    "合作学校和管理员",
   );
   assert.deepEqual(
     buildBreadcrumbs("/super-admin/schools").map((item) => item.label),
-    ["超级管理员工作台", "学校与管理员"],
+    ["超级管理员工作台", "合作学校和管理员"],
   );
 });
 

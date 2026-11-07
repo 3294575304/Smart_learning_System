@@ -34,12 +34,10 @@ async function main() {
       questionCategory: {
         connectOrCreate: {
           where: {
-            schoolId_normalizedName: {
-              schoolId: null,
-              normalizedName: "question-order-isolated-category",
-            },
+            id: "test-category-question-order-isolated-category",
           },
           create: {
+            id: "test-category-question-order-isolated-category",
             name: "题序专项隔离分类",
             normalizedName: "question-order-isolated-category",
           },

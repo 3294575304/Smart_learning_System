@@ -39,6 +39,7 @@ export async function getStudentDashboard(studentId: string) {
     await Promise.all([
       prisma.assignment.findMany({
         where: {
+          examSessionId: null,
           status: "PUBLISHED",
           publishedAt: { lte: now },
           classroom: {

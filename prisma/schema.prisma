@@ -20,6 +20,11 @@ enum UserStatus {
 }
 
 enum AuditAction {
+  EXAM_PUBLISHED
+  EXAM_CANCELLED
+  EXAM_DRAFT_CREATED
+  EXAM_DRAFT_UPDATED
+  EXAM_DRAFT_REVIEWED
   ASSIGNMENT_DEADLINE_EXTENDED
   ASSIGNMENT_MAKEUP_GRANTED
   ASSIGNMENT_MAKEUP_REVOKED
@@ -181,6 +186,8 @@ enum AIQuestionMappingBatchStatus {
 }
 
 enum AuditTargetType {
+  EXAM_SESSION
+  EXAM_DRAFT
   USER
   SYSTEM_CONFIG
   ANNOUNCEMENT
@@ -562,6 +569,11 @@ enum AssignmentStatus {
   ARCHIVED
 }
 
+enum ExamType {
+  MIDTERM
+  FINAL
+}
+
 enum SubmissionStatus {
   IN_PROGRESS
   SUBMITTED
@@ -635,6 +647,8 @@ enum RecommendationStatus {
 }
 
 model User {
+  examSessions         ExamSession[]           @relation("ExamTeacher")
+  examPaperDrafts      ExamPaperDraft[]        @relation("ExamDraftTeacher")
   makeupGrantsReceived AssignmentMakeupGrant[] @relation("MakeupStudent")
   makeupGrantsIssued   AssignmentMakeupGrant[] @relation("MakeupTeacher")
   id                   String                  @id @default(cuid())
@@ -855,6 +869,7 @@ model BackgroundJob {
   knowledgeGraphDraft  KnowledgeGraphDraft?
   questionMappingBatch AIQuestionMappingBatch?
   aiQuestionBatch      AIQuestionGenerationBatch?
+  examPaperDraft       ExamPaperDraft?
 
   @@unique([type, idempotencyKey])
   @@index([status, nextAttemptAt, createdAt])
@@ -1016,13 +1031,15 @@ model CourseTemplate {
 }
 
 model QuestionCourseCategory {
-  id             String   @id @default(cuid())
-  schoolId       String?
-  name           String   @db.VarChar(100)
-  normalizedName String   @db.VarChar(100)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  examSessions    ExamSession[]
+  examPaperDrafts ExamPaperDraft[]
+  id              String   @id @default(cuid())
+  schoolId        String?
+  name            String   @db.VarChar(100)
+  normalizedName  String   @db.VarChar(100)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   school    School?    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   courses   Course[]
@@ -1033,25 +1050,27 @@ model QuestionCourseCategory {
 }
 
 model Course {
-  categorizedQuestions                    Question[]   @relation("QuestionCategoryCourse")
+  examSessions                            ExamSession[]
+  examPaperDrafts                         ExamPaperDraft[]
+  categorizedQuestions                    Question[]       @relation("QuestionCategoryCourse")
   questionCategoryId                      String
-  id                                      String       @id @default(cuid())
+  id                                      String           @id @default(cuid())
   templateId                              String
   teacherId                               String
-  courseNo                                String       @db.VarChar(50)
-  term                                    String       @db.VarChar(50)
-  name                                    String       @db.VarChar(100)
-  description                             String?      @db.Text
-  status                                  CourseStatus @default(DRAFT)
+  courseNo                                String           @db.VarChar(50)
+  term                                    String           @db.VarChar(50)
+  name                                    String           @db.VarChar(100)
+  description                             String?          @db.Text
+  status                                  CourseStatus     @default(DRAFT)
   publishedAt                             DateTime?
   archivedAt                              DateTime?
-  currentPublishedSyllabusStructureId     String?      @unique
-  currentPublishedKnowledgeGraphVersionId String?      @unique
-  currentPublishedAssessmentSchemeId      String?      @unique
-  currentTeachingProgressRevisionId       String?      @unique
-  currentRecommendationPolicyRevisionId   String?      @unique
-  createdAt                               DateTime     @default(now())
-  updatedAt                               DateTime     @updatedAt
+  currentPublishedSyllabusStructureId     String?          @unique
+  currentPublishedKnowledgeGraphVersionId String?          @unique
+  currentPublishedAssessmentSchemeId      String?          @unique
+  currentTeachingProgressRevisionId       String?          @unique
+  currentRecommendationPolicyRevisionId   String?          @unique
+  createdAt                               DateTime         @default(now())
+  updatedAt                               DateTime         @updatedAt
 
   template                              CourseTemplate                        @relation(fields: [templateId], references: [id], onDelete: Restrict)
   questionCategory                      QuestionCourseCategory                @relation(fields: [questionCategoryId], references: [id], onDelete: Restrict)
@@ -2498,6 +2517,8 @@ model AIQuestionGenerationCandidate {
 }
 
 model Question {
+  examQuestionUses   ExamQuestionUse[]
+  examImages         QuestionImage[]
   categoryCourseId   String?
   categoryCourse     Course?                 @relation("QuestionCategoryCourse", fields: [categoryCourseId], references: [id], onDelete: Restrict)
   questionCategoryId String?
@@ -2731,6 +2752,8 @@ model QuestionKnowledgePoint {
 }
 
 model Assignment {
+  examSessionId     String?
+  examSession       ExamSession?            @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
   makeupGrants      AssignmentMakeupGrant[]
   submissionTask    Json?
   allowAttachments  Boolean                 @default(false)
@@ -2759,28 +2782,206 @@ model Assignment {
 
   @@index([classroomId, status, dueAt])
   @@index([teacherId, status, createdAt])
+  @@index([examSessionId])
   @@index([status, publishedAt])
+}
+
+model ExamSession {
+  id                 String                 @id @default(cuid())
+  requestId          String                 @unique
+  requestFingerprint String                 @db.Char(64)
+  teacherId          String
+  courseId           String
+  questionCategoryId String
+  type               ExamType
+  title              String
+  startsAt           DateTime
+  endsAt             DateTime
+  allowedSwitches    Int                    @default(2)
+  cancelledAt        DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  assignments        Assignment[]
+  questionUses       ExamQuestionUse[]
+  switchEvents       ExamSwitchEvent[]
+  paperDraft         ExamPaperDraft?
+  teacher            User                   @relation("ExamTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  course             Course                 @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  questionCategory   QuestionCourseCategory @relation(fields: [questionCategoryId], references: [id], onDelete: Restrict)
+
+  @@index([teacherId, startsAt])
+  @@index([questionCategoryId, startsAt])
+}
+
+model ExamPaperDraft {
+  id                 String    @id @default(cuid())
+  teacherId          String
+  courseId           String
+  questionCategoryId String
+  jobId              String?   @unique
+  publishedExamId    String?   @unique
+  sourceFileName     String    @db.VarChar(255)
+  sourceFormat       String    @db.VarChar(20)
+  sourceChecksum     String    @db.Char(64)
+  sourceStorageKey   String    @unique @db.VarChar(191)
+  sourceText         String    @default("") @db.Text
+  status             String    @default("PENDING") @db.VarChar(20)
+  errorCode          String?   @db.VarChar(100)
+  revision           Int       @default(1)
+  type               ExamType  @default(MIDTERM)
+  title              String    @default("") @db.VarChar(120)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  allowedSwitches    Int       @default(2)
+  classroomIds       String[]  @default([])
+  provider           String?   @db.VarChar(100)
+  model              String?   @db.VarChar(191)
+  promptVersion      String?   @db.VarChar(50)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  teacher          User                     @relation("ExamDraftTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  course           Course                   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  questionCategory QuestionCourseCategory   @relation(fields: [questionCategoryId], references: [id], onDelete: Restrict)
+  job              BackgroundJob?           @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  publishedExam    ExamSession?             @relation(fields: [publishedExamId], references: [id], onDelete: Restrict)
+  questions        ExamPaperDraftQuestion[]
+  assets           ExamPaperAsset[]
+
+  @@index([teacherId, status, updatedAt])
+  @@index([courseId, createdAt])
+}
+
+model ExamPaperDraftQuestion {
+  id               String   @id @default(cuid())
+  draftId          String
+  ordinal          Int
+  sourceLocator    String   @default("") @db.VarChar(200)
+  questionJson     Json
+  points           Decimal  @default(10) @db.Decimal(8, 2)
+  pointsInferred   Boolean  @default(false)
+  answerSource     String   @default("SOURCE") @db.VarChar(20)
+  confidence       Float?
+  revision         Int      @default(1)
+  reviewedRevision Int?
+  issues           Json     @default("[]")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  draft  ExamPaperDraft   @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  assets ExamPaperAsset[]
+
+  @@unique([draftId, ordinal])
+  @@index([draftId, reviewedRevision])
+}
+
+model ExamPaperAsset {
+  id              String   @id @default(cuid())
+  draftId         String
+  draftQuestionId String?
+  kind            String   @db.VarChar(20)
+  isActive        Boolean  @default(true)
+  pageNumber      Int?
+  storageKey      String   @unique @db.VarChar(191)
+  checksum        String   @db.Char(64)
+  mimeType        String   @db.VarChar(40)
+  width           Int
+  height          Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  draft         ExamPaperDraft          @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  draftQuestion ExamPaperDraftQuestion? @relation(fields: [draftQuestionId], references: [id], onDelete: SetNull)
+
+  @@index([draftId, kind, pageNumber])
+  @@index([draftQuestionId, kind])
+}
+
+model QuestionImage {
+  id         String   @id @default(cuid())
+  questionId String
+  sortOrder  Int
+  storageKey String   @unique @db.VarChar(191)
+  checksum   String   @db.Char(64)
+  mimeType   String   @db.VarChar(40)
+  width      Int
+  height     Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([questionId, sortOrder])
+}
+
+model AssignmentQuestionImage {
+  id                   String   @id @default(cuid())
+  assignmentQuestionId String
+  sortOrder            Int
+  storageKey           String   @db.VarChar(191)
+  checksum             String   @db.Char(64)
+  mimeType             String   @db.VarChar(40)
+  width                Int
+  height               Int
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  assignmentQuestion AssignmentQuestion @relation(fields: [assignmentQuestionId], references: [id], onDelete: Restrict)
+
+  @@unique([assignmentQuestionId, sortOrder])
+}
+
+model ExamQuestionUse {
+  id                 String      @id @default(cuid())
+  examSessionId      String
+  questionId         String
+  questionCategoryId String
+  contentHash        String      @db.Char(64)
+  startsAt           DateTime
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  examSession        ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
+  question           Question    @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([examSessionId, questionId])
+  @@index([questionCategoryId, questionId, startsAt])
+  @@index([questionCategoryId, contentHash, startsAt])
+}
+
+model ExamSwitchEvent {
+  id            String      @id @default(cuid())
+  examSessionId String
+  submissionId  String
+  eventKey      String      @unique
+  observedAt    DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  examSession   ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
+  submission    Submission  @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+
+  @@index([submissionId, observedAt])
 }
 
 model AssignmentQuestion {
   submissionAttachments     SubmissionAttachment[]
-  id                        String                 @id @default(cuid())
+  examImages                AssignmentQuestionImage[]
+  id                        String                    @id @default(cuid())
   assignmentId              String
   questionId                String
   sortOrder                 Int
-  points                    Decimal                @db.Decimal(8, 2)
+  points                    Decimal                   @db.Decimal(8, 2)
   titleSnapshot             String
-  contentSnapshot           String                 @db.Text
+  contentSnapshot           String                    @db.Text
   typeSnapshot              QuestionType
   difficultySnapshot        Int
-  explanationSnapshot       String                 @db.Text
+  explanationSnapshot       String                    @db.Text
   correctBooleanSnapshot    Boolean?
-  referenceAnswerSnapshot   String?                @db.Text
-  acceptableAnswersSnapshot String[]               @default([])
-  isCaseSensitiveSnapshot   Boolean                @default(false)
+  referenceAnswerSnapshot   String?                   @db.Text
+  acceptableAnswersSnapshot String[]                  @default([])
+  isCaseSensitiveSnapshot   Boolean                   @default(false)
   gradingConfigSnapshot     Json?
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
 
   assignment                Assignment                           @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   sourceQuestion            Question                             @relation(fields: [questionId], references: [id], onDelete: Restrict)
@@ -2973,27 +3174,28 @@ model AssignmentQuestionConceptSnapshot {
 }
 
 model Submission {
-  makeupGrants   AssignmentMakeupGrant[]
-  attachments    SubmissionAttachment[]
-  id             String                  @id @default(cuid())
-  assignmentId   String
-  studentId      String
-  attemptNumber  Int                     @default(1)
-  idempotencyKey String                  @unique
-  status         SubmissionStatus        @default(IN_PROGRESS)
-  startedAt      DateTime                @default(now())
-  submittedAt    DateTime?
-  gradedAt       DateTime?
-  publishedAt    DateTime?
-  withdrawnAt    DateTime?
-  score          Decimal?                @db.Decimal(10, 2)
-  maxScore       Decimal?                @db.Decimal(10, 2)
-  percentage     Decimal?                @db.Decimal(5, 2)
-  feedback       String?                 @db.Text
-  saveVersion    Int                     @default(0)
-  lastSavedAt    DateTime?
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  examSwitchEvents ExamSwitchEvent[]
+  makeupGrants     AssignmentMakeupGrant[]
+  attachments      SubmissionAttachment[]
+  id               String                  @id @default(cuid())
+  assignmentId     String
+  studentId        String
+  attemptNumber    Int                     @default(1)
+  idempotencyKey   String                  @unique
+  status           SubmissionStatus        @default(IN_PROGRESS)
+  startedAt        DateTime                @default(now())
+  submittedAt      DateTime?
+  gradedAt         DateTime?
+  publishedAt      DateTime?
+  withdrawnAt      DateTime?
+  score            Decimal?                @db.Decimal(10, 2)
+  maxScore         Decimal?                @db.Decimal(10, 2)
+  percentage       Decimal?                @db.Decimal(5, 2)
+  feedback         String?                 @db.Text
+  saveVersion      Int                     @default(0)
+  lastSavedAt      DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
 
   assignment             Assignment                     @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   student                User                           @relation("SubmissionStudent", fields: [studentId], references: [id], onDelete: Restrict)

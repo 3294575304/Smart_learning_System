@@ -30,7 +30,7 @@ import {
 
 const IMPORT_RULE_VERSION = "question-file-import-v5";
 
-function persistenceFields(input: QuestionUpsertData) {
+export function persistenceFields(input: QuestionUpsertData) {
   const base = {
     questionCategoryId: input.questionCategoryId,
     title: input.title,
@@ -72,7 +72,7 @@ function persistenceFields(input: QuestionUpsertData) {
   return base;
 }
 
-function optionCreateData(input: QuestionUpsertData) {
+export function optionCreateData(input: QuestionUpsertData) {
   if (input.answer.kind !== "CHOICE") return [];
   const correct = new Set(input.answer.correctOptionLabels);
   return input.options.map((option) => ({

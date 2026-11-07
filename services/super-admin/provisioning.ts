@@ -85,10 +85,20 @@ export async function deletePartnerSchool(
         where: { schoolId: school.id },
         data: { schoolId: null, isActive: false },
       });
+      const detachedUsers = await tx.user.findMany({
+        where: { schoolId: school.id },
+        select: { id: true },
+      });
+      const detachedUserIds = detachedUsers.map(({ id }) => id);
       await tx.user.updateMany({
         where: { schoolId: school.id },
-        data: { schoolId: null },
+        data: { schoolId: null, status: UserStatus.INACTIVE },
       });
+      if (detachedUserIds.length > 0) {
+        await tx.authSession.deleteMany({
+          where: { userId: { in: detachedUserIds } },
+        });
+      }
       await tx.school.delete({ where: { id: school.id } });
       await writeSystemConfigAuditLog(tx, {
         actorId,

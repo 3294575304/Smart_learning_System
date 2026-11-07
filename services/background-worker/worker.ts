@@ -4,6 +4,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { BackgroundJob } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { finalizeExpiredExams } from "@/services/exams/expiry";
 import {
   claimNextBackgroundJob,
   failBackgroundJob,
@@ -35,6 +36,11 @@ import {
 } from "@/services/ai-question-generation/schemas";
 import { deleteExpiredQuestionSourceFiles } from "@/services/ai-question-generation/service";
 import { executeClaimedAIQuestionGenerationJob } from "@/services/ai-question-generation/worker";
+import {
+  EXAM_PAPER_JOB_TYPE,
+  examPaperJobInputSchema,
+} from "@/services/exams/paper-ai";
+import { executeClaimedExamPaperJob } from "@/services/exams/paper-worker";
 import { SYLLABUS_PARSE_JOB_TYPE } from "@/services/syllabus-parsing/constants";
 import { executeClaimedSyllabusParseJob } from "@/services/syllabus-parsing/service";
 
@@ -46,6 +52,7 @@ const ACCEPTED_TYPES = [
   SYLLABUS_PARSE_JOB_TYPE,
   QUESTION_MAPPING_JOB_TYPE,
   AI_QUESTION_JOB_TYPE,
+  EXAM_PAPER_JOB_TYPE,
 ];
 
 function authorized(value: string | undefined, expected: string) {
@@ -88,6 +95,7 @@ export class PersistentLongTaskWorker {
         ) {
           await recoverExpiredBackgroundJobs();
           await deleteExpiredQuestionSourceFiles();
+          await finalizeExpiredExams();
           this.lastRecoveryAt = Date.now();
         }
         const job = await claimNextBackgroundJob({
@@ -230,6 +238,14 @@ export class PersistentLongTaskWorker {
         leaseId,
         input.batchId,
         input.generationRevision,
+      );
+      return;
+    }
+    if (job.type === EXAM_PAPER_JOB_TYPE) {
+      await executeClaimedExamPaperJob(
+        job.id,
+        leaseId,
+        examPaperJobInputSchema.parse(job.input),
       );
       return;
     }

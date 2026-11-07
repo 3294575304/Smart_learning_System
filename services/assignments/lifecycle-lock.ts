@@ -21,6 +21,7 @@ export async function lockAssignmentLifecycle(
     where: { id: assignmentId },
     select: {
       id: true,
+      examSessionId: true,
       status: true,
       publishedAt: true,
       dueAt: true,

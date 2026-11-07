@@ -62,7 +62,7 @@ export function EditSchoolAdminButton({
       </button>
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-700/40 p-4"
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !pending) {

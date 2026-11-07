@@ -144,12 +144,10 @@ test("AI 降级审核稿可事务发布、幂等复用并维护正式指针与�
       questionCategory: {
         connectOrCreate: {
           where: {
-            schoolId_normalizedName: {
-              schoolId: null,
-              normalizedName: "automated-test-category",
-            },
+            id: "test-category-automated-test-category",
           },
           create: {
+            id: "test-category-automated-test-category",
             name: "自动化测试课程分类",
             normalizedName: "automated-test-category",
           },

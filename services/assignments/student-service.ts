@@ -20,7 +20,7 @@ function assignmentScope(query: TeacherStudentQuery, now: Date) {
       : query.section === "CURRENT"
         ? Prisma.sql`c.status = 'ACTIVE' AND a.status NOT IN ('CLOSED','ARCHIVED')`
         : Prisma.sql`(c.status <> 'ACTIVE' OR a.status IN ('CLOSED','ARCHIVED'))`;
-  return Prisma.sql`a.status IN ('PUBLISHED','CLOSED','ARCHIVED') AND a."publishedAt" <= ${utcTimestamp(now)} AND ${section}`;
+  return Prisma.sql`a."examSessionId" IS NULL AND a.status IN ('PUBLISHED','CLOSED','ARCHIVED') AND a."publishedAt" <= ${utcTimestamp(now)} AND ${section}`;
 }
 function cte(teacherId: string, query: TeacherStudentQuery, now: Date) {
   return Prisma.sql`WITH rooms AS (

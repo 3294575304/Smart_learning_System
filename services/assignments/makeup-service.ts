@@ -25,6 +25,8 @@ async function editable(
   assignmentId: string,
 ) {
   const assignment = await lockAssignmentLifecycle(tx, assignmentId, teacherId);
+  if (assignment.examSessionId)
+    throw new AssignmentOperationError("考试不支持延期或补交", 409);
   if (
     assignment.status !== "PUBLISHED" ||
     assignment.classroom.status !== "ACTIVE"

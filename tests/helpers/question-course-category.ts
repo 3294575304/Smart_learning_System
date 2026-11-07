@@ -3,12 +3,10 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 export const testQuestionCategoryRelation = {
   connectOrCreate: {
     where: {
-      schoolId_normalizedName: {
-        schoolId: null,
-        normalizedName: "automated-test-category",
-      },
+      id: "test-category-automated-test-category",
     },
     create: {
+      id: "test-category-automated-test-category",
       name: "自动化测试课程分类",
       normalizedName: "automated-test-category",
     },

@@ -44,7 +44,7 @@ test("新管理员必须绑定已有学校，校验密码确认并拒绝指定�
   for (const patch of [
     { schoolId: "" },
     { confirmPassword: "other" },
-    { password: "weak", confirmPassword: "weak" },
+    { password: "x".repeat(73), confirmPassword: "x".repeat(73) },
     { role: "SUPER_ADMIN" },
     { status: "ACTIVE" },
     { mustChangePassword: false },
