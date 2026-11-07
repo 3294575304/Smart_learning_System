@@ -2546,8 +2546,7 @@ async function main(): Promise<void> {
   const superAdmin = await ensureSuperAdminAccount(prisma);
   if (superAdmin.created) {
     console.info(`超级管理员账号：${superAdmin.email}`);
-    console.info(`初始密码：${superAdmin.password}`);
-    console.info("首次登录后必须修改初始密码。");
+    console.info("已使用 SEED_SUPER_ADMIN_PASSWORD 创建账号；密码不会输出到终端。");
   }
 
   await prisma.systemConfig.upsert({

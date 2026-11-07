@@ -12,8 +12,7 @@ async function main(): Promise<void> {
   const account = await ensureSuperAdminAccount(prisma);
   if (account.created) {
     console.info(`超级管理员账号：${account.email}`);
-    console.info(`初始密码：${account.password}`);
-    console.info("首次登录后必须修改初始密码。");
+    console.info("已使用 SEED_SUPER_ADMIN_PASSWORD 创建账号；密码不会输出到终端。");
   } else {
     console.info(`超级管理员账号 ${account.email} 已存在，密码未重置。`);
   }

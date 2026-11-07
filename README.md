@@ -290,9 +290,9 @@ MVP 已完成演示验收，V1.0 迭代一至六保留既有专项验收结论�
 | 管理员     | `admin@example.com`      | `Admin123!`                      |
 | 教师       | `teacher@example.com`    | `Teacher123!`                    |
 | 学生       | `student@example.com`    | `Student123!`                    |
-| 超级管理员 | `superadmin@example.com` | 首次初始化时随机生成并在终端显示 |
+| 超级管理员 | `superadmin@example.com` | 使用本机 `SEED_SUPER_ADMIN_PASSWORD` 配置的固定密码 |
 
-超级管理员通过 `/admin-login` 登录，不需要选择学校。首次初始化账号时必须修改随机初始密码；运行 `npm run prisma:seed` 时会在首次创建后输出凭据。也可单独运行 `npm run prisma:bootstrap-super-admin` 创建该账号，重复运行不会重置已有密码。部署环境应通过 `SEED_SUPER_ADMIN_EMAIL` 与 `SEED_SUPER_ADMIN_PASSWORD` 配置账号，并保护初始化凭据。
+超级管理员通过 `/admin-login` 登录，不需要选择学校。必须在本机 `.env` 中设置 `SEED_SUPER_ADMIN_PASSWORD`；首次初始化使用该固定密码，后续运行会验证它与已有账号匹配，不会重置密码或打印密码。数据库已存在的超级管理员密码只保留哈希，无法从数据库恢复明文；如需灾备后沿用当前密码，请将当前密码填入本机 `.env` 的 `SEED_SUPER_ADMIN_PASSWORD`。部署环境也应通过环境变量提供该值，并保护初始化凭据。
 
 其他默认密码仅供本地开发，部署前必须通过 `SEED_*` 环境变量修改。
 
