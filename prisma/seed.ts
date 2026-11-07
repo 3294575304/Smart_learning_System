@@ -132,7 +132,6 @@ async function upsertUser(seedUser: SeedUser, fallbackSchoolId: string) {
     },
   });
 
-
   await prisma.userProfile.upsert({
     where: { userId: user.id },
     update: {
@@ -2546,7 +2545,9 @@ async function main(): Promise<void> {
   const superAdmin = await ensureSuperAdminAccount(prisma);
   if (superAdmin.created) {
     console.info(`超级管理员账号：${superAdmin.email}`);
-    console.info("已使用 SEED_SUPER_ADMIN_PASSWORD 创建账号；密码不会输出到终端。");
+    console.info(
+      "已使用 SEED_SUPER_ADMIN_PASSWORD 创建账号；密码不会输出到终端。",
+    );
   }
 
   await prisma.systemConfig.upsert({

@@ -48,7 +48,9 @@ export async function loadUserOverview(input: {
 }) {
   const [total, roles, statuses, current7, previous7, current30] =
     await Promise.all([
-      prisma.user.count({ where: { schoolId: input.schoolId, deletedAt: null } }),
+      prisma.user.count({
+        where: { schoolId: input.schoolId, deletedAt: null },
+      }),
       prisma.user.groupBy({
         by: ["role"],
         where: { schoolId: input.schoolId, deletedAt: null },

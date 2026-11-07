@@ -35,7 +35,10 @@ export async function getSchoolAdminDirectory(
             provinceCode: true,
             createdAt: true,
             _count: { select: { admins: { where: { deletedAt: null } } } },
-            admins: { where: { role: Role.ADMIN, deletedAt: null }, select: { id: true } },
+            admins: {
+              where: { role: Role.ADMIN, deletedAt: null },
+              select: { id: true },
+            },
           },
         });
         return {

@@ -473,9 +473,10 @@ test("解除合作会停用并解绑账号、撤销会话，同时保留课程�
       await prisma.authSession.count({ where: { userId: bound.id } }),
       0,
     );
-    const preservedCategory = await prisma.questionCourseCategory.findUniqueOrThrow({
-      where: { id: category.id },
-    });
+    const preservedCategory =
+      await prisma.questionCourseCategory.findUniqueOrThrow({
+        where: { id: category.id },
+      });
     assert.equal(preservedCategory.schoolId, null);
     assert.equal(preservedCategory.isActive, false);
   }

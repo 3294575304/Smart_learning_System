@@ -22,8 +22,12 @@ export async function getSuperAdminOverview(now = new Date()) {
         where: { admins: { some: { role: Role.ADMIN, deletedAt: null } } },
       }),
       userGroupsQuery,
-      prisma.user.count({ where: { deletedAt: null, createdAt: { gte: since, lte: now } } }),
-      prisma.user.count({ where: { deletedAt: null, lastLoginAt: { gte: since, lte: now } } }),
+      prisma.user.count({
+        where: { deletedAt: null, createdAt: { gte: since, lte: now } },
+      }),
+      prisma.user.count({
+        where: { deletedAt: null, lastLoginAt: { gte: since, lte: now } },
+      }),
       prisma.course.count(),
       prisma.classroom.count(),
       prisma.classroom.count({ where: { status: "ACTIVE" } }),

@@ -359,9 +359,7 @@ export async function updateSchoolAdmin(
         where: { id: before.id },
         data: {
           email,
-          ...(passwordHash
-            ? { passwordHash, mustChangePassword: true }
-            : {}),
+          ...(passwordHash ? { passwordHash, mustChangePassword: true } : {}),
           profile: {
             upsert: {
               create: { displayName },
