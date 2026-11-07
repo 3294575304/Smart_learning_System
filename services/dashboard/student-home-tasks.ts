@@ -7,14 +7,21 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { listStudentCourseSurveys } from "@/services/course-surveys/service";
 
-export async function getStudentHomeTasks(studentId: string, now = new Date()) {
+export async function getStudentHomeTasks(
+  studentId: string,
+  now = new Date(),
+  scope?: { courseId: string; classroomId: string },
+) {
   const [surveys, attendance] = await Promise.all([
-    listStudentCourseSurveys(studentId),
+    listStudentCourseSurveys(studentId, scope?.courseId, scope?.classroomId),
     prisma.attendanceRecord.findMany({
       where: {
         studentId,
         currentStatus: "PENDING",
         session: {
+          ...(scope
+            ? { courseId: scope.courseId, classroomId: scope.classroomId }
+            : {}),
           status: "OPEN",
           signInOpensAt: { lte: now },
           signInClosesAt: { gte: now },

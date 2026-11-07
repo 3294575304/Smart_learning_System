@@ -173,7 +173,7 @@ export function StudentAttendanceView({
                   "AVAILABLE" &&
                 record.currentStatus === "PENDING" ? (
                   <button
-                    className="mt-2 rounded-lg bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                    className="mt-2 rounded-lg bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
                     type="button"
                     disabled={pending !== null}
                     onClick={() => void sign(record.session.id)}

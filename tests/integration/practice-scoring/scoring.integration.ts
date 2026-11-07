@@ -1,10 +1,15 @@
 import { managePracticeSet } from "../../../services/practice-sets/management";
+import {
+  getPracticeAccountDraft,
+  savePracticeAccountDraft,
+} from "../../../services/practice-sets/draft-service";
 import { getPracticeSet } from "../../../services/practice-sets/service";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { Role, QuestionType, Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma";
+import { ResourceNotFoundError } from "../../../services/auth/policy";
 import { integrationPrisma } from "../recommendations/database";
 import { RecommendationTestFactory } from "../recommendations/factories";
 import {
@@ -13,10 +18,14 @@ import {
   getRecommendationDetail,
 } from "../../../services/recommendations/service";
 import { submitRecommendationPractice } from "../../../services/recommendations/practice";
-import { createCourseRecommendations } from "../../../services/course-recommendations/service";
+import {
+  createCourseRecommendations,
+  getStudentPracticeSession,
+} from "../../../services/course-recommendations/service";
 import {
   createRecommendationProgrammingAttempt,
   completeProgrammingJob,
+  getStudentProgrammingAttempt,
 } from "../../../services/programming-attempts/service";
 import { claimBackgroundJobById } from "../../../services/background-jobs/repository";
 
@@ -426,11 +435,23 @@ test("course shortage freezes actual three questions, Python partial credit and 
     (item) => item.questionId === python.id,
   );
   assert.ok(pythonItem);
+  const savedCode = await savePracticeAccountDraft(actor, pythonItem.id, {
+    expectedRevision: 0,
+    current: pythonItem.id,
+    drafts: { [pythonItem.id]: { kind: "CODE", value: "print(1)" } },
+  });
+  assert.equal(savedCode.snapshot?.drafts[pythonItem.id]?.kind, "CODE");
   const request = { sourceCode: "print(1)", idempotencyKey: randomUUID() };
   const attempt = await createRecommendationProgrammingAttempt(
     student.id,
     pythonItem.id,
     request,
+  );
+  assert.equal(
+    (await getPracticeAccountDraft(actor, pythonItem.id)).snapshot?.drafts[
+      pythonItem.id
+    ],
+    undefined,
   );
   assert.equal(
     (
@@ -542,6 +563,28 @@ test("course shortage freezes actual three questions, Python partial credit and 
     createCourseRecommendations(actor, course.id, testInput),
     (error: unknown) =>
       error instanceof Error && "status" in error && error.status === 422,
+  );
+  await managePracticeSet(actor, pythonItem.id, {
+    action: "PURGE",
+    expectedRevision: trashed.revision,
+  });
+  await assert.rejects(
+    getStudentPracticeSession(student.id, generated.cycle.id),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    createCourseRecommendations(actor, course.id, input),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    getStudentProgrammingAttempt(student.id, attempt.attemptId),
+    ResourceNotFoundError,
+  );
+  assert.equal(
+    await prisma.recommendationConceptEvidence.count({
+      where: { id: pyEvidence.id },
+    }),
+    1,
   );
 });
 

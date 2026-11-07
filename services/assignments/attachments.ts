@@ -13,7 +13,10 @@ import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import type { AuthenticatedUser } from "@/services/auth/types";
-import { AssignmentOperationError } from "@/services/assignments/errors";
+import {
+  AssignmentOperationError,
+  AssignmentRevokedError,
+} from "@/services/assignments/errors";
 import { assertStudentWorkAccess } from "./work-access";
 import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import { getStorageService } from "@/services/storage";
@@ -56,6 +59,8 @@ async function access(
       !submission.assignment.classroom.memberships.length)
   )
     throw new ResourceNotFoundError("作答记录不存在");
+  if (actor.role === Role.STUDENT && submission.assignment.status === "REVOKED")
+    throw new AssignmentRevokedError();
   if (edit) {
     if (
       actor.role !== Role.STUDENT ||

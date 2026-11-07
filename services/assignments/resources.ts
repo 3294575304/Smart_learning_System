@@ -20,6 +20,7 @@ export async function validateAssignmentResourceFiles(
   teacherId: string,
   courseId: string | null,
   ids: readonly string[],
+  verifyStorage = false,
 ) {
   if (!ids.length) return;
   if (!courseId || ids.length > 5 || new Set(ids).size !== ids.length)
@@ -27,7 +28,8 @@ export async function validateAssignmentResourceFiles(
       "请在所属课程内选择至多5个不同的教师附件",
       400,
     );
-  const files = await tx.courseFileVersion.count({
+  const files = await tx.courseFileVersion.findMany({
+    select: { storageKey: true, sizeBytes: true },
     where: {
       id: { in: [...ids] },
       courseId,
@@ -37,8 +39,16 @@ export async function validateAssignmentResourceFiles(
       course: { teacherId },
     },
   });
-  if (files !== ids.length)
+  if (files.length !== ids.length)
     throw new ResourceNotFoundError("教师附件不存在或不属于当前课程");
+  if (verifyStorage) {
+    const storage = getStorageService();
+    for (const file of files) {
+      const data = await storage.read(file.storageKey).catch(() => null);
+      if (!data || data.length !== file.sizeBytes)
+        throw new ResourceNotFoundError("教师附件无法读取，请重新上传");
+    }
+  }
 }
 
 async function resourceAccess(actor: Actor, assignmentId: string) {
@@ -47,6 +57,7 @@ async function resourceAccess(actor: Actor, assignmentId: string) {
   const assignment = await prisma.assignment.findFirst({
     where: {
       id: assignmentId,
+      deletedAt: null,
       ...(actor.role === Role.TEACHER
         ? { teacherId: actor.id }
         : {

@@ -25,6 +25,11 @@ enum AuditAction {
   EXAM_DRAFT_CREATED
   EXAM_DRAFT_UPDATED
   EXAM_DRAFT_REVIEWED
+  ASSIGNMENT_ASSEMBLY_PREVIEWED
+  ASSIGNMENT_CATEGORY_CORRECTED
+  ASSIGNMENT_DRAFT_DELETED
+  ASSIGNMENT_SCHEDULE_CANCELLED
+  ASSIGNMENT_REVOKED
   ASSIGNMENT_DEADLINE_EXTENDED
   ASSIGNMENT_MAKEUP_GRANTED
   ASSIGNMENT_MAKEUP_REVOKED
@@ -45,6 +50,7 @@ enum AuditAction {
   ANNOUNCEMENT_CREATED
   ANNOUNCEMENT_UPDATED
   ANNOUNCEMENT_PUBLISHED
+  ANNOUNCEMENT_REVOKED
   SUBMISSION_GRADING_COMPLETED
   ASSIGNMENT_RESULTS_PUBLISHED
   QUESTION_MADE_PUBLIC
@@ -308,6 +314,7 @@ enum GradeImportExecutionStatus {
 }
 
 enum NotificationType {
+  ASSIGNMENT_REVOKED
   ASSIGNMENT_PUBLISHED
   ASSIGNMENT_DUE_SOON
   ASSIGNMENT_GRADED
@@ -316,6 +323,8 @@ enum NotificationType {
   SYSTEM_ANNOUNCEMENT
   COURSE_SURVEY_PUBLISHED
   CLASSROOM_DISSOLVED
+  /// 任课教师向本班发布的课程通知（区别于 SYSTEM_ANNOUNCEMENT 的管理员广播）。
+  COURSE_ANNOUNCEMENT
 }
 
 enum NotificationPriority {
@@ -339,11 +348,15 @@ enum AnnouncementTargetType {
   ADMIN
   TEACHER
   STUDENT
+  /// 按班级投递，仅教师端「课程通知」使用；管理员公告不使用该受众。
+  CLASSROOM
 }
 
 enum AnnouncementStatus {
   DRAFT
   PUBLISHED
+  /// 教师撤回：学生端未读通知已删除，公告记录保留备查。
+  REVOKED
 }
 
 enum NotificationJobType {
@@ -567,6 +580,7 @@ enum AssignmentStatus {
   PUBLISHED
   CLOSED
   ARCHIVED
+  REVOKED
 }
 
 enum ExamType {
@@ -687,6 +701,7 @@ model User {
   notifications                      Notification[]                       @relation("NotificationRecipient")
   createdAnnouncements               Announcement[]                       @relation("AnnouncementCreator")
   publishedAnnouncements             Announcement[]                       @relation("AnnouncementPublisher")
+  revokedAnnouncements               Announcement[]                       @relation("AnnouncementRevoker")
   uploadedCourseFiles                CourseFileVersion[]                  @relation("CourseFileUploadedBy")
   uploadedCourseSyllabi              CourseSyllabus[]                     @relation("CourseSyllabusUploadedBy")
   requestedSyllabusParses            SyllabusParseDraft[]                 @relation("SyllabusParseRequestedBy")
@@ -783,6 +798,7 @@ model Notification {
   deduplicationKey String                 @db.VarChar(191)
   readAt           DateTime?
   expiresAt        DateTime?
+  dismissedAt      DateTime?
   metadata         Json?
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
@@ -806,11 +822,20 @@ model Announcement {
   publishedById String?
   publishedAt   DateTime?
   expiresAt     DateTime?
+  /// 课程通知的目标班级；为空表示角色级系统公告。
+  /// 语义上同时承担「作用域」判定，因此外键必须 Cascade，禁止 SetNull。
+  classroomId   String?
+  /// 一次「写通知」多选多个班级时，各班级记录共享同一批次号，便于整批撤回 / 复制。
+  batchId       String?
+  revokedById   String?
+  revokedAt     DateTime?
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
 
-  createdBy   User  @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  publishedBy User? @relation("AnnouncementPublisher", fields: [publishedById], references: [id], onDelete: Restrict)
+  createdBy   User       @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  publishedBy User?      @relation("AnnouncementPublisher", fields: [publishedById], references: [id], onDelete: Restrict)
+  revokedBy   User?      @relation("AnnouncementRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
+  classroom   Classroom? @relation(fields: [classroomId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([targetType, status])
@@ -818,6 +843,9 @@ model Announcement {
   @@index([expiresAt])
   @@index([createdById])
   @@index([publishedById])
+  @@index([classroomId, status, createdAt])
+  @@index([classroomId, publishedAt])
+  @@index([batchId])
 }
 
 model NotificationJobRun {
@@ -1034,13 +1062,13 @@ model CourseTemplate {
 model QuestionCourseCategory {
   examSessions    ExamSession[]
   examPaperDrafts ExamPaperDraft[]
-  id              String   @id @default(cuid())
+  id              String           @id @default(cuid())
   schoolId        String?
-  name            String   @db.VarChar(100)
-  normalizedName  String   @db.VarChar(100)
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  name            String           @db.VarChar(100)
+  normalizedName  String           @db.VarChar(100)
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   school    School?    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   courses   Course[]
@@ -1385,20 +1413,21 @@ model PublishedCourseOutcome {
 }
 
 model PublishedAssessmentComponent {
-  id         String                  @id @default(cuid())
-  schemeId   String
-  code       String                  @db.VarChar(100)
-  name       String                  @db.VarChar(300)
-  type       AssessmentComponentType
-  fullScore  Decimal                 @db.Decimal(8, 2)
-  weight     Decimal                 @db.Decimal(7, 4)
-  sourceType GradeSourceType
-  sortOrder  Int
-  enabled    Boolean                 @default(true)
-  sourceJson Json
-  rubricJson Json
-  createdAt  DateTime                @default(now())
-  updatedAt  DateTime                @updatedAt
+  assignmentAggregationConfirmed Boolean                 @default(false)
+  id                             String                  @id @default(cuid())
+  schemeId                       String
+  code                           String                  @db.VarChar(100)
+  name                           String                  @db.VarChar(300)
+  type                           AssessmentComponentType
+  fullScore                      Decimal                 @db.Decimal(8, 2)
+  weight                         Decimal                 @db.Decimal(7, 4)
+  sourceType                     GradeSourceType
+  sortOrder                      Int
+  enabled                        Boolean                 @default(true)
+  sourceJson                     Json
+  rubricJson                     Json
+  createdAt                      DateTime                @default(now())
+  updatedAt                      DateTime                @updatedAt
 
   scheme     PublishedAssessmentScheme           @relation(fields: [schemeId], references: [id], onDelete: Restrict)
   mappings   PublishedAssessmentOutcomeMapping[]
@@ -2226,6 +2255,7 @@ model Classroom {
   teacher                    User                                 @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
   course                     Course?                              @relation("ClassroomCourse", fields: [courseId], references: [id], onDelete: SetNull)
   memberships                ClassMembership[]
+  announcements              Announcement[]
   assignments                Assignment[]
   aiAnalyses                 AIAnalysis[]
   courseFileVersions         CourseFileVersion[]                  @relation("CourseFileClassroom")
@@ -2752,25 +2782,36 @@ model QuestionKnowledgePoint {
   @@index([knowledgePointId, questionId])
 }
 
+enum AssignmentCategory {
+  PRACTICE
+  COURSE_ASSIGNMENT
+  COURSE_EXPERIMENT
+}
+
 model Assignment {
-  examSessionId     String?
-  examSession       ExamSession?            @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
-  makeupGrants      AssignmentMakeupGrant[]
-  submissionTask    Json?
-  allowAttachments  Boolean                 @default(false)
-  id                String                  @id @default(cuid())
-  classroomId       String
-  teacherId         String
-  title             String
-  description       String?                 @db.Text
-  status            AssignmentStatus        @default(DRAFT)
-  totalPoints       Decimal                 @default(0) @db.Decimal(10, 2)
-  allowResubmission Boolean                 @default(false)
-  publishedAt       DateTime?
-  dueAt             DateTime?
-  closedAt          DateTime?
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  examSessionId       String?
+  examSession         ExamSession?            @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
+  category            AssignmentCategory      @default(PRACTICE)
+  categoryNeedsReview Boolean                 @default(false)
+  makeupGrants        AssignmentMakeupGrant[]
+  submissionTask      Json?
+  allowAttachments    Boolean                 @default(false)
+  id                  String                  @id @default(cuid())
+  classroomId         String
+  teacherId           String
+  title               String
+  description         String?                 @db.Text
+  status              AssignmentStatus        @default(DRAFT)
+  totalPoints         Decimal                 @default(0) @db.Decimal(10, 2)
+  allowResubmission   Boolean                 @default(false)
+  publishedAt         DateTime?
+  dueAt               DateTime?
+  closedAt            DateTime?
+  deletedAt           DateTime?
+  /// 同一次「多班级保存/发布」生成的作业共享此标识，用于批次内批量编辑与发布。
+  batchId             String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
 
   classroom              Classroom                           @relation(fields: [classroomId], references: [id], onDelete: Restrict)
   teacher                User                                @relation("AssignmentTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
@@ -2785,6 +2826,7 @@ model Assignment {
   @@index([teacherId, status, createdAt])
   @@index([examSessionId])
   @@index([status, publishedAt])
+  @@index([batchId, status])
 }
 
 model ExamSession {
@@ -4008,16 +4050,20 @@ model AssignmentMakeupGrant {
 }
 
 model PracticeSetManagement {
-  id        String    @id @default(cuid())
-  studentId String
-  cycleKey  String
-  title     String?   @db.VarChar(80)
-  endedAt   DateTime?
-  trashedAt DateTime?
-  revision  Int       @default(0)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  student   User      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  id            String    @id @default(cuid())
+  studentId     String
+  cycleKey      String
+  title         String?   @db.VarChar(80)
+  endedAt       DateTime?
+  trashedAt     DateTime?
+  purgedAt      DateTime?
+  revision      Int       @default(0)
+  draftData     Json?
+  draftRevision Int       @default(0)
+  draftSavedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  student       User      @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
   @@unique([studentId, cycleKey])
   @@index([studentId, trashedAt, endedAt])

@@ -1,13 +1,16 @@
 import { Role } from "@prisma/client";
+import { Suspense } from "react";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import { StudentHomeView } from "@/components/dashboard/student-home-view";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { getStudentTaskOverview } from "@/services/dashboard/student-task-service";
 import { StudentHomeInsights } from "@/components/dashboard/student-home-insights";
 import { getStudentClassAnalytics } from "@/services/dashboard/student-class-analytics";
-import { getStudentCourseLearningCenter } from "@/services/learner-profiles/learning-center";
+import {
+  StudentHomeKnowledge,
+  StudentHomeKnowledgeLoading,
+} from "@/components/dashboard/student-home-knowledge";
 import { selectStudentEnrollment } from "@/services/courses/student-enrollment";
-import { ResourceNotFoundError } from "@/services/auth/policy";
 import { notFound } from "next/navigation";
 
 export default async function StudentPage({
@@ -33,19 +36,6 @@ export default async function StudentPage({
   } catch {
     notFound();
   }
-  let knowledge;
-  if (selected) {
-    try {
-      knowledge = await getStudentCourseLearningCenter(
-        student.id,
-        selected.course.id,
-        selected.classroom.id,
-      );
-    } catch (error) {
-      if (error instanceof ResourceNotFoundError) notFound();
-      throw error;
-    }
-  }
   return (
     <>
       <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
@@ -56,8 +46,22 @@ export default async function StudentPage({
           <StudentHomeInsights
             classes={analytics.classes}
             selected={selected}
-            knowledge={knowledge}
+            knowledge={
+              selected ? (
+                <Suspense
+                  key={selected.classroom.id}
+                  fallback={<StudentHomeKnowledgeLoading />}
+                >
+                  <StudentHomeKnowledge
+                    studentId={student.id}
+                    courseId={selected.course.id}
+                    classroomId={selected.classroom.id}
+                  />
+                </Suspense>
+              ) : undefined
+            }
             overview={overview}
+            now={now}
           />
         }
       />

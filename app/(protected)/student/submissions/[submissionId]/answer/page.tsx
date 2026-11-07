@@ -1,3 +1,5 @@
+import { StudentRevokedAssignment } from "@/components/assignments/student-revoked-assignment";
+import { AssignmentRevokedError } from "@/services/assignments/errors";
 import {
   studentTaskScopeSchema,
   studentTaskHref,
@@ -60,6 +62,12 @@ export default async function AnswerPage({ params, searchParams }: Props) {
       </div>
     );
   } catch (error: unknown) {
+    if (error instanceof AssignmentRevokedError)
+      return (
+        <StudentRevokedAssignment
+          backHref={studentTaskHref("/student/assignments", scope.data)}
+        />
+      );
     if (error instanceof ResourceNotFoundError) notFound();
     throw error;
   }

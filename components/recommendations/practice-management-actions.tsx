@@ -9,14 +9,27 @@ import {
   Trash2,
   RotateCcw,
 } from "lucide-react";
-import type { PracticeManagementView } from "@/services/practice-sets/management-schemas";
-type Action = "RENAME" | "END" | "TRASH" | "RESTORE";
+import type {
+  PracticeManagementAction as Action,
+  PracticeManagementBatch,
+  PracticeManagementView,
+} from "@/services/practice-sets/management-schemas";
 const labels: Record<Action, string> = {
   RENAME: "重命名",
   END: "结束练习",
   TRASH: "移入回收站",
   RESTORE: "恢复记录",
+  PURGE: "永久删除",
 };
+const batchLabels: Record<PracticeManagementBatch["action"], string> = {
+  TRASH: "删除所选",
+  RESTORE: "恢复所选",
+  PURGE: "永久删除所选",
+};
+const button =
+  "inline-flex min-h-10 items-center rounded-lg border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50";
+const dangerButton =
+  "border-red-200 bg-red-50 text-red-800 hover:bg-red-100 focus-visible:outline-red-700";
 export function PracticeManagementActions({
   id,
   title,
@@ -25,17 +38,16 @@ export function PracticeManagementActions({
   onChange,
   batch,
   primaryRestore,
+  menuLabel = "管理练习",
 }: {
   id: string;
   title: string;
   management?: PracticeManagementView;
   active: boolean;
   primaryRestore?: boolean;
-  onChange: () => void;
-  batch?: {
-    action: "TRASH" | "RESTORE";
-    items: Array<{ id: string; expectedRevision: number }>;
-  };
+  menuLabel?: string;
+  onChange: (action?: Action) => void;
+  batch?: PracticeManagementBatch;
 }) {
   const [action, setAction] = useState<Action | null>(null),
     [name, setName] = useState(title),
@@ -135,7 +147,7 @@ export function PracticeManagementActions({
       }
       dialog.current?.close();
       setAction(null);
-      onChange();
+      onChange(action);
     } catch {
       setError("操作失败，请重试。");
     } finally {
@@ -150,19 +162,28 @@ export function PracticeManagementActions({
           type="button"
           disabled={!batch.items.length}
           onClick={() => open(batch.action)}
-          className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+          className={`${button} ${batch.action === "PURGE" ? dangerButton : "border-sky-200 bg-white focus-visible:outline-sky-700"}`}
         >
-          {batch.action === "TRASH" ? "删除所选" : "恢复所选"}（
-          {batch.items.length}）
+          {batchLabels[batch.action]}（{batch.items.length}）
         </button>
       ) : primaryRestore ? (
-        <button
-          type="button"
-          className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white"
-          onClick={() => open("RESTORE")}
-        >
-          恢复记录
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={`${button} border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100 focus-visible:outline-sky-700`}
+            onClick={() => open("RESTORE")}
+          >
+            恢复记录
+          </button>
+          <button
+            type="button"
+            className={`${button} ${dangerButton}`}
+            aria-label={`永久删除${title}`}
+            onClick={() => open("PURGE")}
+          >
+            永久删除
+          </button>
+        </div>
       ) : (
         <details
           ref={menu}
@@ -174,7 +195,7 @@ export function PracticeManagementActions({
             aria-label={`管理${title}`}
           >
             <MoreHorizontal aria-hidden="true" className="size-4" />
-            管理练习
+            {menuLabel}
             <ChevronDown
               aria-hidden="true"
               className="size-3.5 transition-transform group-open:rotate-180"
@@ -185,7 +206,7 @@ export function PracticeManagementActions({
             className="absolute z-40 mt-2 w-44 max-w-[calc(100vw_-_2rem)] space-y-1 rounded-xl border border-sky-100 bg-white p-1.5 shadow-lg"
           >
             {(management?.trashedAt
-              ? ["RESTORE"]
+              ? ["RESTORE", "PURGE"]
               : active
                 ? ["RENAME", "END", "TRASH"]
                 : ["RENAME", "TRASH"]
@@ -193,7 +214,7 @@ export function PracticeManagementActions({
               <button
                 key={value}
                 type="button"
-                className={`flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-sky-50 focus-visible:outline-sky-600 ${value === "TRASH" ? "text-red-700" : "text-slate-700"}`}
+                className={`flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-sky-50 focus-visible:outline-sky-600 ${value === "TRASH" || value === "PURGE" ? "text-red-700" : "text-slate-700"}`}
                 onClick={() => open(value as Action)}
               >
                 {(() => {
@@ -202,6 +223,7 @@ export function PracticeManagementActions({
                     END: Square,
                     TRASH: Trash2,
                     RESTORE: RotateCcw,
+                    PURGE: Trash2,
                   }[value as Action];
                   return (
                     <Icon aria-hidden="true" className="size-4 shrink-0" />
@@ -255,7 +277,9 @@ export function PracticeManagementActions({
                 ? "移入回收站后，进行中的练习会同时结束。恢复后只能回看，不能继续作答；原始答案、成绩和学习记录保留。已排队判题会继续完成并保留反馈。"
                 : action === "END"
                   ? "结束后只能回看，不能继续作答。已提交答案保留，已排队判题会继续完成并保留反馈。"
-                  : "恢复到历史记录后可以只读查看题目、本人答案和已有反馈，不能重新作答。"}
+                  : action === "PURGE"
+                    ? "删除后将无法查看或恢复这些练习。已产生的学习分析数据、错题和收藏仍会保留。"
+                    : "恢复到历史记录后可以只读查看题目、本人答案和已有反馈，不能重新作答。"}
             </p>
           )}
           {conflict ? (
@@ -287,10 +311,10 @@ export function PracticeManagementActions({
             </button>
             <button
               disabled={busy || (action === "RENAME" && !name.trim())}
-              className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
+              className={`rounded-lg px-4 py-2 text-sm text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 ${action === "PURGE" ? "bg-red-700 hover:bg-red-800 focus-visible:outline-red-700" : "bg-sky-700 hover:bg-sky-800 focus-visible:outline-sky-700"}`}
               type="submit"
             >
-              {busy ? "处理中…" : "确认"}
+              {busy ? "处理中…" : action === "PURGE" ? "确认永久删除" : "确认"}
             </button>
           </div>
         </form>

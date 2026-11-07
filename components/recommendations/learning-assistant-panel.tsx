@@ -358,7 +358,7 @@ export function LearningAssistantPanel({
                         <button
                           disabled={pending}
                           type="button"
-                          className="mt-2 rounded-lg bg-sky-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+                          className="mt-2 rounded-lg bg-sky-700 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
                           onClick={() =>
                             void ask(
                               "ADVICE",
@@ -396,7 +396,7 @@ export function LearningAssistantPanel({
                         )}
                         <div className="flex flex-wrap gap-2">
                           <Link
-                            className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-medium text-white"
+                            className="rounded-lg bg-sky-700 px-3 py-2 text-xs font-medium text-white"
                             href={turn.reply.practiceUrl}
                             onClick={(event) => {
                               if (
@@ -439,7 +439,7 @@ export function LearningAssistantPanel({
                           </Link>
                         </div>
                         <p className="text-xs leading-5 text-slate-500">
-                          这里只带入练习条件，不会立即生成或提交。请在练习中心核对课程、范围、题型和题量；范围不符合你的意思时可返回继续说明。不计入正式课程成绩。
+                          这里只带入练习条件，不会立即生成或提交。请在自主练习核对课程、范围、题型和题量；范围不符合你的意思时可返回继续说明。不计入正式课程成绩。
                         </p>
                       </div>
                     ) : null}
@@ -517,7 +517,7 @@ export function LearningAssistantPanel({
               </p>
               <div className="flex gap-2">
                 <button
-                  className="rounded-lg bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                  className="rounded-lg bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
                   type="button"
                   disabled={pending || draft.trim().length < 2}
                   onClick={() => void saveReflection()}
@@ -565,7 +565,7 @@ export function LearningAssistantPanel({
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs text-slate-400">{text.length}/2000</span>
               <button
-                className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg bg-sky-700 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
                 type="submit"
                 disabled={pending || !topicAvailable || text.trim().length < 2}
               >

@@ -9,5 +9,10 @@ export default async function NotificationsPage() {
     user.id,
     notificationListQuerySchema.parse({}),
   );
-  return <NotificationCenter initialResult={result} />;
+  return (
+    <NotificationCenter
+      initialResult={result}
+      allowRemoval={user.role === "TEACHER" || user.role === "STUDENT"}
+    />
+  );
 }

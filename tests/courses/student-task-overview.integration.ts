@@ -142,6 +142,25 @@ async function main() {
     1,
   );
   assert.equal((await getStudentTaskOverview("missing-student")).total, 0);
+  const scope = { courseId: course.id, classroomId: classroom.id };
+  assert.deepEqual(
+    (await getStudentTaskOverview(student.id, new Date(), scope)).counts,
+    overview.counts,
+  );
+  await assert.rejects(
+    getStudentTaskOverview(student.id, new Date(), {
+      ...scope,
+      classroomId: otherClass.id,
+    }),
+    /教学班不存在/,
+  );
+  await assert.rejects(
+    getStudentTaskOverview(student.id, new Date(), {
+      ...scope,
+      courseId: template.id,
+    }),
+    /教学班不存在/,
+  );
   await prisma.submission.update({
     where: { id: draft.id },
     data: { status: "SUBMITTED", submittedAt: new Date() },
@@ -172,6 +191,26 @@ async function main() {
   });
   overview = await getStudentTaskOverview(student.id);
   assert.equal(overview.counts.assignment, 0);
+  assert.equal(
+    (await getStudentTaskOverview(student.id, new Date(), scope)).total,
+    0,
+  );
+  await prisma.classMembership.create({
+    data: { studentId: student.id, classroomId: otherClass.id },
+  });
+  const other = await getStudentTaskOverview(student.id, new Date(), {
+    ...scope,
+    classroomId: otherClass.id,
+  });
+  assert.equal(other.total, 1);
+  assert.ok(
+    other.items.every(
+      (item) =>
+        new URL(item.href, "http://localhost").searchParams.get(
+          "classroomId",
+        ) === otherClass.id,
+    ),
+  );
   console.log(
     "Student tasks: membership isolation, counts, ordering, draft links, completion refresh, scheduled surveys and completed-class checks passed.",
   );

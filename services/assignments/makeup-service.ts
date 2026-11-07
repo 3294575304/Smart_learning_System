@@ -294,7 +294,7 @@ export async function revokeAssignmentMakeup(
       teacherId,
     );
     if (
-      assignment.status === "ARCHIVED" ||
+      ["ARCHIVED", "REVOKED"].includes(assignment.status) ||
       assignment.classroom.status === "ARCHIVED"
     )
       throw new AssignmentOperationError("归档记录只读", 409);
@@ -347,7 +347,7 @@ export async function getAssignmentMakeupManagement(
   assignmentId: string,
 ) {
   const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, teacherId },
+    where: { id: assignmentId, teacherId, deletedAt: null },
     select: {
       id: true,
       status: true,

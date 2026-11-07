@@ -36,6 +36,20 @@ export const notificationListQuerySchema = z
   })
   .strict();
 
+export const notificationDismissSchema = z.discriminatedUnion("scope", [
+  z.object({ scope: z.literal("ALL") }).strict(),
+  z
+    .object({
+      scope: z.literal("SELECTED"),
+      ids: z.array(notificationIdSchema).min(1).max(50),
+    })
+    .strict(),
+]);
+
+export type NotificationDismissRequest = z.output<
+  typeof notificationDismissSchema
+>;
+
 export const notificationCreateInputSchema = z
   .object({
     recipientId: z.string().cuid(),

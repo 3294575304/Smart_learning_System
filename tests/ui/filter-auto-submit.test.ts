@@ -43,7 +43,12 @@ test("筛选选择项立即生效且服务端页面不直接绑定事件", async
     ]);
 
   assert.match(control, /form\?\.requestSubmit\(\)/u);
-  assert.equal(assignments.match(/<AutoSubmitSelect/gu)?.length, 3);
+  assert.deepEqual(
+    [...assignments.matchAll(/<AutoSubmitSelect\b[^>]*\bname="([^"]+)"/gu)].map(
+      (match) => match[1],
+    ),
+    ["category", "status", "classroomId", "sort"],
+  );
   assert.match(results, /<TeacherResultsFilters/u);
   assert.match(resultsFilters, /form\.requestSubmit\(\)/u);
   assert.doesNotMatch(assignments, /onChange=|应用筛选/u);

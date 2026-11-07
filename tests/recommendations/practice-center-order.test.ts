@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("练习中心先展示筛选结果，再提供生成入口", async () => {
+test("自主练习先展示筛选结果，再提供生成入口", async () => {
   const page = await readFile(
     "app/(protected)/student/recommendations/page.tsx",
     "utf8",
@@ -19,12 +19,12 @@ test("练习中心先展示筛选结果，再提供生成入口", async () => {
   assert.match(page, /<details[\s\S]*根据近期答题生成推荐/);
 });
 
-test("练习中心标题区不重复显示返回学习主页链接", async () => {
+test("自主练习标题区不重复显示返回学习主页链接", async () => {
   const page = await readFile(
     "app/(protected)/student/recommendations/page.tsx",
     "utf8",
   );
 
-  assert.match(page, /<StudentPageHeader[\s\S]*?title="练习中心"/);
+  assert.match(page, /<StudentPageHeader[\s\S]*?title="自主练习"/);
   assert.doesNotMatch(page, /返回学习主页/);
 });

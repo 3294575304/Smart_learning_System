@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ClipboardList,
   FileChartColumn,
+  Megaphone,
   MessageSquareText,
   NotebookPen,
   Shuffle,
@@ -65,6 +66,12 @@ const WORKSPACE_GROUPS = [
         description: "从当前班级的在读学生中随机抽取",
         path: "random-picker",
         icon: Shuffle,
+      },
+      {
+        title: "课程通知",
+        description: "发布通知给本班学生，查看历史与已读",
+        path: "announcements",
+        icon: Megaphone,
       },
     ],
   },
@@ -156,7 +163,7 @@ export function CourseWorkspaceNavigation({
                   ?.focus();
               }}
               onClick={() => setActiveGroup(group.title)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${activeGroup === group.title ? "bg-sky-600 text-white" : "bg-sky-50 text-slate-600 hover:bg-sky-100"}`}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${activeGroup === group.title ? "bg-sky-700 text-white" : "bg-sky-50 text-slate-600 hover:bg-sky-100"}`}
             >
               {group.title}
             </button>

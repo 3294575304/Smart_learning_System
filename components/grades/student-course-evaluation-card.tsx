@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import React, { useState } from "react";
 import { EditorDialog } from "@/components/assignments/editor-dialog";
 import { CourseGradeBreakdown } from "@/components/grades/course-grade-breakdown";
+import { studentEnrollmentStatus } from "@/services/courses/student-enrollment";
 
 interface Props {
   course: { id: string; name: string; term: string; status: string };
@@ -37,19 +38,18 @@ export function StudentCourseEvaluationCard({
   const classroom = classrooms[0];
   if (!classroom) return null;
   const grade = grades.find((item) => item.classroomId === classroom.id);
-  const ended = course.status === "ARCHIVED" || classroom.status === "ARCHIVED";
+  const { label, readOnly } = studentEnrollmentStatus(
+    course.status,
+    classroom.status,
+  );
   const numeric = grade?.status === "SCORED" && grade.score !== null;
   const score = grade
     ? grade.status === "SCORED"
       ? (grade.score ?? "尚未录入")
       : (STATUS_LABELS[grade.status] ?? "特殊状态")
     : "待发布";
-  const analytics = new URLSearchParams({
-    courseId: course.id,
-    classroomId: classroom.id,
-  });
   const button =
-    "inline-flex min-h-11 items-center justify-center rounded-lg border border-sky-200 px-3 text-sm font-medium text-sky-700 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600";
+    "inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
   return (
     <article className="flex min-w-0 flex-col rounded-xl border border-sky-100 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -68,7 +68,7 @@ export function StudentCourseEvaluationCard({
         </span>
       </div>
       <p className="mt-2 text-xs [overflow-wrap:anywhere] text-slate-500">
-        {course.term} · {ended ? "已结课" : "学习中"}
+        {course.term} · {label}
       </p>
       <div className="my-4 flex items-end justify-between gap-3 border-y border-slate-100 py-4">
         <div>
@@ -92,61 +92,50 @@ export function StudentCourseEvaluationCard({
               版本 {grade.version}
             </>
           ) : (
-            <>
-              教师发布后显示
-              <br />
-              待发布不代表零分
-            </>
+            "教师发布后可查看"
           )}
         </p>
       </div>
-      <p className="mb-4 min-h-8 text-xs leading-4 text-slate-500">
-        {grade
-          ? ended
-            ? "已发布成绩快照，展开可查看各项构成。"
-            : "当前总评供阶段参考，以教师最终发布为准。"
-          : "尚无已发布成绩，可先查看本班学习情况。"}
-      </p>
-      <div
-        className={`mt-auto grid gap-2 ${grade ? "grid-cols-2" : "grid-cols-1"}`}
-      >
-        {grade && (
+      {grade && (
+        <>
+          <p className="mb-4 text-xs leading-5 text-slate-600">
+            {readOnly
+              ? "可查看教师已发布的各项成绩。"
+              : "当前总评供参考，以教师最终发布为准。"}
+          </p>
           <button
-            className={`${button} border-sky-600 bg-sky-600 text-white hover:bg-sky-700`}
+            type="button"
+            className={`${button} mt-auto w-full bg-sky-700 text-white hover:bg-sky-800`}
             onClick={() => setOpen(true)}
           >
             成绩构成
           </button>
-        )}
-        <a className={button} href={`/student/analytics?${analytics}`}>
-          本班学情
-        </a>
-      </div>
-      {grade && (
-        <EditorDialog
-          open={open}
-          title={`${course.name} · 成绩构成`}
-          onClose={() => setOpen(false)}
-        >
-          <p className="mt-2 text-sm [overflow-wrap:anywhere] text-slate-500">
-            {classroom.name} · {score}
-            {numeric ? " 分" : ""}
-          </p>
-          <CourseGradeBreakdown
-            components={grade.components}
-            snapshot={grade.snapshot}
-          />
-          <p className="mt-4 text-xs text-slate-400">
-            发布版本 {grade.version} ·{" "}
-            {new Date(grade.publishedAt).toLocaleDateString("zh-CN")}
-          </p>
-          <button
-            className={`${button} mt-5 w-full`}
-            onClick={() => setOpen(false)}
+          <EditorDialog
+            open={open}
+            title={`${course.name} · 成绩构成`}
+            onClose={() => setOpen(false)}
           >
-            关闭
-          </button>
-        </EditorDialog>
+            <p className="mt-2 text-sm [overflow-wrap:anywhere] text-slate-500">
+              {classroom.name} · {score}
+              {numeric ? " 分" : ""}
+            </p>
+            <CourseGradeBreakdown
+              components={grade.components}
+              snapshot={grade.snapshot}
+            />
+            <p className="mt-4 text-xs text-slate-400">
+              发布版本 {grade.version} ·{" "}
+              {new Date(grade.publishedAt).toLocaleDateString("zh-CN")}
+            </p>
+            <button
+              type="button"
+              className={`${button} mt-5 w-full bg-sky-50 text-sky-900 hover:bg-sky-100`}
+              onClick={() => setOpen(false)}
+            >
+              关闭
+            </button>
+          </EditorDialog>
+        </>
       )}
     </article>
   );

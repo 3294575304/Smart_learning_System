@@ -1,5 +1,4 @@
 "use client";
-import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { summarizePracticeScores } from "@/services/recommendations/scoring";
 import { PracticeManagementActions } from "./practice-management-actions";
 import { PracticeHistoryQuestion } from "./practice-history-question";
@@ -7,9 +6,15 @@ import { canAnswerPractice } from "@/services/practice-sets/types";
 import { useSearchParams } from "next/navigation";
 import { practiceListReturnUrl } from "@/services/practice-sets/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, CheckCircle2 } from "lucide-react";
-import { parsePracticeDraft } from "@/services/practice-sets/draft-storage";
-import { useNavigationUserId } from "@/components/dashboard/navigation-memory";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Save,
+  Send,
+} from "lucide-react";
+import { usePracticeAccountDraft } from "./use-practice-account-draft";
 import {
   missingPracticeAnswers,
   practiceAnswerRequired,
@@ -26,6 +31,43 @@ import {
 } from "@/lib/api/recommendations";
 import type { PracticeSet } from "@/services/practice-sets/types";
 import type { RecommendationDetailView } from "@/services/recommendations/types";
+
+const controlClass =
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50";
+const secondaryClass = `${controlClass} border-sky-200 bg-white text-sky-800 hover:bg-sky-50`;
+
+function questionState(
+  question: PracticeSet["questions"][number],
+  draft: PracticeDraft | undefined,
+  missing: boolean,
+) {
+  if (question.status === "COMPLETED")
+    return {
+      label: "已提交",
+      mark: "✓",
+      color: "bg-emerald-50 text-emerald-800",
+    };
+  if (
+    question.judgingStatus === "PENDING" ||
+    question.judgingStatus === "RUNNING"
+  )
+    return { label: "待判", mark: "…", color: "bg-violet-50 text-violet-800" };
+  if (question.judgingStatus)
+    return {
+      label: "判题异常",
+      mark: "!",
+      color: "bg-amber-50 text-amber-900",
+    };
+  if (missing)
+    return {
+      label: "必答未填",
+      mark: "!",
+      color: "border-red-400 bg-red-50 text-red-800",
+    };
+  if (practiceDraftFilled(draft))
+    return { label: "草稿", mark: "✎", color: "bg-sky-50 text-sky-800" };
+  return { label: "未答", mark: "–", color: "bg-white text-slate-700" };
+}
 export function RecommendationPracticeSet({
   set,
   initialRecommendation,
@@ -43,11 +85,25 @@ export function RecommendationPracticeSet({
       ? (initialQuestion ?? initialRecommendation.id)
       : initialRecommendation.id,
   );
+  const draft = usePracticeAccountDraft(
+    set,
+    initialQuestion,
+    setCurrent,
+    returnTo,
+  );
+  const {
+    drafts,
+    setDrafts,
+    ready: draftsReady,
+    keys,
+    cache: cacheDraft,
+  } = draft;
   useEffect(() => {
+    if (!draftsReady) return;
     const url = new URL(window.location.href);
     url.searchParams.set("question", current);
     window.history.replaceState(window.history.state, "", url);
-  }, [current]);
+  }, [current, draftsReady]);
   const [cache, setCache] = useState<Record<string, RecommendationDetailView>>({
     [initialRecommendation.id]: initialRecommendation,
   });
@@ -57,7 +113,6 @@ export function RecommendationPracticeSet({
   );
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
-  const [drafts, setDrafts] = useState<Record<string, PracticeDraft>>({});
   const [batchBusy, setBatchBusy] = useState(false);
   const [submittingItems, setSubmittingItems] = useState<
     Record<string, boolean>
@@ -73,76 +128,55 @@ export function RecommendationPracticeSet({
   const [batchTotal, setBatchTotal] = useState(0);
   const [batchMessage, setBatchMessage] = useState("");
   const [missing, setMissing] = useState<string[]>([]);
-  const keys = useRef<Record<string, string>>({});
-  const [draftsReady, setDraftsReady] = useState(false);
-  const [storageMessage, setStorageMessage] = useState("");
-  const userId = useNavigationUserId();
-  const storageKey = `practice-draft:v1:${userId}:${set.id}`;
-  useEffect(() => {
-    if (readOnly) {
-      setDraftsReady(true);
-      return;
-    }
-    try {
-      if (!userId) return;
-      const saved = parsePracticeDraft(
-        JSON.parse(sessionStorage.getItem(storageKey) ?? "null"),
-        set.questions.filter((q) => q.status !== "COMPLETED").map((q) => q.id),
-      );
-      if (saved) {
-        setDrafts(saved.drafts);
-        keys.current = saved.keys;
-        if (saved.current && !initialQuestion) setCurrent(saved.current);
-        setStorageMessage(
-          "已恢复本标签页的未提交答案；已提交题目以服务器结果为准。",
-        );
-      }
-    } catch {
-      setStorageMessage("浏览器无法恢复草稿，请及时提交答案。");
-    } finally {
-      setDraftsReady(true);
-    }
-  }, [storageKey, set.questions, userId, readOnly, initialQuestion]);
-  useEffect(() => {
-    if (!draftsReady || !userId) return;
-    const save = () => {
-      try {
-        const pending = questions.filter(canAnswerPractice);
-        if (!pending.length) sessionStorage.removeItem(storageKey);
-        else
-          sessionStorage.setItem(
-            storageKey,
-            JSON.stringify({
-              at: Date.now(),
-              current,
-              keys: keys.current,
-              drafts: Object.fromEntries(
-                pending
-                  .filter((q) => drafts[q.id])
-                  .map((q) => [q.id, drafts[q.id]]),
-              ),
-            }),
-          );
-      } catch {
-        setStorageMessage(
-          "浏览器草稿保存不可用，请及时提交；当前页面答案仍保留。",
-        );
-      }
+  const [navigatorOpen, setNavigatorOpen] = useState(false);
+  const viewQuestions = questions.map((q) => {
+    const detail = cache[q.id];
+    const result = detail?.practiceResult;
+    return {
+      ...q,
+      status:
+        q.status === "COMPLETED" ? q.status : (detail?.status ?? q.status),
+      readOnly: q.readOnly || detail?.readOnly,
+      score: result?.score ?? q.score,
+      maxScore: result?.maxScore ?? q.maxScore,
+      assignedPoints: detail?.assignedPoints ?? q.assignedPoints,
+      judgingStatus: detail?.programmingAttempt?.status ?? q.judgingStatus,
     };
+  });
+  const pending = viewQuestions.filter(
+    (q) => canAnswerPractice(q) && !q.judgingStatus,
+  );
+  const working = batchBusy || singleBusy || draft.saving;
+  const saveSnapshot = {
+    current,
+    drafts: Object.fromEntries(
+      pending.filter((q) => drafts[q.id]).map((q) => [q.id, drafts[q.id]]),
+    ),
+  };
+  useEffect(() => {
+    if (!draftsReady || readOnly) return;
+    const save = () => cacheDraft(saveSnapshot);
     save();
     window.addEventListener("pagehide", save);
     return () => window.removeEventListener("pagehide", save);
-  }, [draftsReady, drafts, current, questions, storageKey, userId]);
-  const onDraftChange = useCallback((id: string, answer: PracticeDraft) => {
-    setDrafts((previous) => ({ ...previous, [id]: answer }));
-    setMissing((previous) => previous.filter((item) => item !== id));
-  }, []);
+  });
+  const onDraftChange = useCallback(
+    (id: string, answer: PracticeDraft) => {
+      setDrafts((previous) => ({ ...previous, [id]: answer }));
+      setMissing((previous) => previous.filter((item) => item !== id));
+    },
+    [setDrafts],
+  );
   async function submitAll() {
-    if (readOnly || batchBusy || singleBusy) return;
-    const unanswered = missingPracticeAnswers(
-      questions.filter(canAnswerPractice),
-      drafts,
-    );
+    if (
+      readOnly ||
+      working ||
+      !draftsReady ||
+      draft.conflict ||
+      !pending.length
+    )
+      return;
+    const unanswered = missingPracticeAnswers(pending, drafts);
     if (unanswered.length) {
       setMissing(unanswered);
       setCurrent(unanswered[0]);
@@ -151,7 +185,6 @@ export function RecommendationPracticeSet({
       );
       return;
     }
-    const pending = questions.filter(canAnswerPractice);
     if (
       pending.some(
         (q) => q.type === "SHORT_ANSWER" && practiceDraftFilled(drafts[q.id]),
@@ -199,23 +232,7 @@ export function RecommendationPracticeSet({
           const key =
             keys.current[q.id] ?? (keys.current[q.id] = crypto.randomUUID());
           // Persist before sending so a reload during a request can reuse its key.
-          if (userId) {
-            try {
-              sessionStorage.setItem(
-                storageKey,
-                JSON.stringify({
-                  at: Date.now(),
-                  current,
-                  drafts,
-                  keys: keys.current,
-                }),
-              );
-            } catch {
-              setStorageMessage(
-                "提交恢复记录无法保存，请保持页面打开直至提交完成。",
-              );
-            }
-          }
+          cacheDraft(saveSnapshot);
           if (q.type === "PYTHON_PROGRAMMING" && item.programmingAttempt) {
             // 已排队或失败的判题保留原结果，交由现有判题面板恢复。
           } else if (answer.kind === "CODE" && answer.value.trim()) {
@@ -284,25 +301,12 @@ export function RecommendationPracticeSet({
       setBatchBusy(false);
     }
   }
-  const scoring = summarizePracticeScores(
-    questions.map((q) => {
-      const detail = cache[q.id];
-      const result = detail?.practiceResult;
-      return {
-        ...q,
-        status: detail?.status ?? q.status,
-        score: result?.score ?? q.score,
-        maxScore: result?.maxScore ?? q.maxScore,
-        assignedPoints: detail?.assignedPoints ?? q.assignedPoints,
-        judgingStatus: detail?.programmingAttempt?.status ?? q.judgingStatus,
-      };
-    }),
-  );
-  const judgingIds = Object.values(cache)
+  const scoring = summarizePracticeScores(viewQuestions);
+  const judgingIds = viewQuestions
     .filter(
       (item) =>
         item.status !== "COMPLETED" &&
-        ["PENDING", "RUNNING"].includes(item.programmingAttempt?.status ?? ""),
+        ["PENDING", "RUNNING"].includes(item.judgingStatus ?? ""),
     )
     .map((item) => item.id)
     .sort()
@@ -351,11 +355,15 @@ export function RecommendationPracticeSet({
     };
   }, [judgingIds]);
   const index = questions.findIndex((q) => q.id === current);
-  const completed = questions.filter((q) => q.status === "COMPLETED").length;
+  const submitted = viewQuestions.filter(
+    (q) => q.status === "COMPLETED" || q.judgingStatus,
+  ).length;
+  const cachedCurrent = cache[current];
   useEffect(() => {
+    if (!draftsReady) return;
     let alive = true;
     async function load() {
-      const entry = cache[current];
+      const entry = cachedCurrent;
       if (entry && (entry.status !== "PENDING" || entry.readOnly)) {
         setBusy(false);
         setError("");
@@ -396,286 +404,368 @@ export function RecommendationPracticeSet({
     return () => {
       alive = false;
     };
-  }, [current, retry, cache, questions]);
+  }, [current, retry, cachedCurrent, draftsReady]);
   return (
-    <section className="mx-auto max-w-[1440px] min-w-0 space-y-5">
-      <header className="rounded-2xl border border-sky-100 bg-white/90 p-4 shadow-sm sm:p-6">
-        <StudentBackLink href={returnTo}>返回练习中心</StudentBackLink>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-slate-500">{set.courseName}</p>
-            <h1 className="mt-1 text-xl font-semibold [overflow-wrap:anywhere] sm:text-2xl">
+    <section className="mx-auto max-w-7xl min-w-0 space-y-4">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+          <a href={returnTo} className={secondaryClass}>
+            <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
+            返回自主练习
+          </a>
+          <div className="min-w-0 flex-1 basis-48">
+            <p className="text-xs [overflow-wrap:anywhere] text-slate-600">
+              {set.courseName}
+            </p>
+            <h1 className="text-lg leading-7 font-semibold [overflow-wrap:anywhere] text-slate-950">
               {set.title}
             </h1>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {set.management?.trashedAt ? (
-                <span className="text-sm text-amber-700">
-                  已移入回收站 · 恢复后只能回看
-                </span>
-              ) : null}
-              <PracticeManagementActions
-                id={initialRecommendation.id}
-                title={set.title}
-                management={set.management}
-                primaryRestore={Boolean(set.management?.trashedAt)}
-                active={!readOnly}
-                onChange={() => window.location.reload()}
-              />
-            </div>
-          </div>
-          <p className="rounded-xl bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800">
-            已完成 {completed}/{questions.length} 题
-          </p>
-        </div>
-        {readOnly ? (
-          <p className="mt-2 text-sm text-slate-600">
-            练习已结束 · 只读回看，可切换题号查看题目与本人已有答案。
-          </p>
-        ) : (
-          <>
-            <p className="mt-2 text-xs text-slate-500">
-              可逐题提交，也可全部作答后统一提交。选择题、判断题必答；空白文字题记
-              0 分，编程题异步判题。未提交答案在本标签页保存 24
-              小时，关闭标签页后不保留。
-            </p>
-            <p role="status" className="mt-2 text-xs text-slate-600">
-              {storageMessage || "草稿仅保存在当前浏览器标签页，不代表已提交。"}
-            </p>
-          </>
-        )}
-        {!readOnly &&
-          questions.some(
-            (q) => q.type === "SHORT_ANSWER" && q.status !== "COMPLETED",
-          ) && (
-            <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              本组含简答题：非空答案暂不支持自主评分，请勿将其当作可自动完成的练习；空白提交为
-              0 分。教师作业中的简答题仍由教师批改。
-            </p>
-          )}
-        {readOnly && scoring.gradedCount === 0 ? (
-          <p className="mt-3 rounded-lg border bg-white p-4 text-sm text-slate-600">
-            暂无已评成绩 · 共 {questions.length} 题 · 生成于{" "}
-            {new Date(set.generatedAt).toLocaleString("zh-CN")}
-          </p>
-        ) : null}
-        {(!readOnly || scoring.gradedCount > 0) && (
-          <div
-            className="mt-3 rounded-xl border border-sky-100 bg-sky-50 p-4 text-sm"
-            aria-live="polite"
-          >
-            <p className="font-medium">
-              {scoring.complete
-                ? `整组成绩：${scoring.percentage ?? "缺少完整成绩"}${scoring.percentage === null ? "" : " 分"}`
-                : scoring.gradedCount === 0
-                  ? readOnly
-                    ? "暂无已评成绩"
-                    : "尚未产生已评成绩"
-                  : `已评得分：${scoring.gradedScore} 分${readOnly ? "（部分成绩）" : "（尚非最终成绩）"}`}
-            </p>
-            <p className="mt-1 text-slate-600">
-              实际 {questions.length} 题 ·{" "}
-              {scoring.frozen
-                ? `总分 ${scoring.totalPoints} 分`
-                : "旧练习：保留原始分值"}{" "}
-              · 自主练习不计课程成绩
-            </p>
-            <p className="mt-1 text-slate-600">
-              完成 {scoring.completedCount}/{questions.length} · 已评{" "}
-              {scoring.gradedCount} · 待判 {scoring.pendingCount} · 未作答{" "}
-              {scoring.unansweredCount}
-              {scoring.errorCount
-                ? ` · 判题异常 ${scoring.errorCount}${readOnly ? "" : "（可查看并重试）"}`
-                : ""}
-            </p>
-            {!scoring.frozen && !scoring.complete ? (
-              <p className="mt-1 text-slate-500">
-                历史题组尚缺完整成绩，暂不换算整组百分制。
+            {readOnly && (
+              <p className="text-xs text-slate-600">
+                {set.management?.trashedAt
+                  ? "回收站 · 只读回看"
+                  : "练习记录 · 只读回看"}
               </p>
-            ) : null}
+            )}
           </div>
-        )}
+        </div>
+        <div inert={working}>
+          <PracticeManagementActions
+            id={initialRecommendation.id}
+            title={set.title}
+            management={set.management}
+            active={!readOnly}
+            menuLabel="更多"
+            onChange={(action) => {
+              if (action === "PURGE")
+                window.location.replace(
+                  returnTo === "/student/recommendations"
+                    ? "/student/recommendations?view=recommended&section=TRASH"
+                    : returnTo,
+                );
+              else window.location.reload();
+            }}
+          />
+        </div>
       </header>
-      {!readOnly && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4">
-          <div className="min-w-48 flex-1">
-            <p className="text-sm font-medium">
-              已提交 {completed}/{questions.length} · 待提交已填{" "}
-              {
-                questions.filter(
-                  (q) =>
-                    q.status !== "COMPLETED" &&
-                    practiceDraftFilled(drafts[q.id]),
-                ).length
-              }{" "}
-              题
+
+      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
+        <aside
+          aria-labelledby="practice-progress"
+          className="min-w-0 rounded-2xl border bg-white p-4 xl:sticky xl:top-24 xl:col-start-2 xl:row-start-1"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <h2
+              id="practice-progress"
+              className="text-sm font-semibold text-slate-950"
+            >
+              练习进度
+            </h2>
+            <p className="text-xs text-slate-600 tabular-nums">
+              已提交 {submitted}/{questions.length}
             </p>
+          </div>
+          {!readOnly && (
             <progress
               aria-label="练习提交进度"
               max={questions.length}
-              value={completed}
-              className="mt-2 h-2 w-full accent-sky-600"
+              value={submitted}
+              className="mt-2 block h-2 w-full overflow-hidden rounded-full accent-sky-700"
             />
+          )}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-slate-600">
+            {scoring.pendingCount > 0 && (
+              <span>待判 {scoring.pendingCount}</span>
+            )}
+            {scoring.errorCount > 0 && (
+              <span className="text-amber-900">
+                判题异常 {scoring.errorCount}
+              </span>
+            )}
+            {scoring.gradedCount > 0 && (
+              <span aria-live="polite" className="font-medium text-slate-900">
+                {scoring.complete && scoring.percentage !== null
+                  ? "整组成绩 " + scoring.percentage + " 分"
+                  : "已评 " + scoring.gradedScore + " 分"}
+              </span>
+            )}
+            {readOnly && scoring.gradedCount === 0 && <span>暂无已评成绩</span>}
+            <span>
+              {scoring.frozen
+                ? "总分 " + scoring.totalPoints + " 分"
+                : "保留原始分值"}
+            </span>
+            <span>不计课程成绩</span>
           </div>
           <button
             type="button"
-            disabled={
-              !draftsReady ||
-              batchBusy ||
-              singleBusy ||
-              busy ||
-              completed === questions.length
+            aria-expanded={navigatorOpen}
+            aria-controls="practice-question-navigator"
+            className={
+              secondaryClass + " mt-3 w-full justify-between xl:hidden"
             }
-            onClick={() => void submitAll()}
-            className="flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-sky-700 disabled:opacity-50"
+            onClick={() => setNavigatorOpen((open) => !open)}
           >
-            {completed === questions.length ? (
-              <CheckCircle2 className="size-4" />
-            ) : (
-              <Send className="size-4" />
-            )}
-            {batchBusy
-              ? `正在提交 ${batchProgress}/${batchTotal}…`
-              : completed === questions.length
-                ? "已全部提交"
-                : "提交全部练习"}
+            {navigatorOpen ? "收起题号" : "展开题号"}
+            <ChevronDown
+              aria-hidden="true"
+              className={"size-4 " + (navigatorOpen ? "rotate-180" : "")}
+            />
           </button>
-        </div>
-      )}
-      {!readOnly && batchMessage && (
-        <p
-          role="status"
-          className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900"
-        >
-          {batchMessage}
-        </p>
-      )}
-      {completed === questions.length && (
-        <p
-          role="status"
-          className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"
-        >
-          本组练习已全部完成，可切换题号查看答案与解析。
-        </p>
-      )}
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_240px]">
-        <div className="min-w-0">
-          <p className="mb-3 text-sm font-medium text-slate-600">
-            第 {index + 1} / {questions.length} 题
-          </p>
-          {busy && (
-            <p role="status" className="p-5 text-sm">
-              正在加载题目…
-            </p>
-          )}
-          {error && (
-            <p role="alert" className="p-5 text-sm text-red-700">
-              {error}{" "}
-              <button
-                className="underline"
-                onClick={() => setRetry((value) => value + 1)}
-              >
-                重试
-              </button>
-            </p>
-          )}
-          {(draftsReady || readOnly) &&
-            Object.values(cache).map((item) => (
-              <div
-                key={`${item.id}:${item.status}:${item.programmingAttempt?.id ?? ""}`}
-                hidden={item.id !== current || busy || Boolean(error)}
-              >
-                <fieldset disabled={batchBusy}>
-                  {item.status === "STARTED" && !item.readOnly ? (
-                    <RecommendationPractice
-                      embedded
-                      recommendation={item}
-                      initialAnswer={drafts[item.id]}
-                      onDraftChange={onDraftChange}
-                      onSubmissionStateChange={onSubmissionStateChange}
-                      onProgrammingQueued={(id, attempt) =>
-                        setCache((previous) =>
-                          previous[id]
-                            ? {
-                                ...previous,
-                                [id]: {
-                                  ...previous[id],
-                                  programmingAttempt: attempt,
-                                },
-                              }
-                            : previous,
-                        )
-                      }
-                      batchBusy={batchBusy}
-                      onCompleted={(id) => {
-                        setQuestions((previous) =>
-                          previous.map((q) =>
-                            q.id === id ? { ...q, status: "COMPLETED" } : q,
-                          ),
-                        );
-                        void requestApi<RecommendationDetailView>(
-                          recommendationDetailApiPath(id),
-                          { method: "GET" },
-                        ).then((response) => {
-                          if (response.success)
-                            setCache((previous) => ({
-                              ...previous,
-                              [id]: response.data,
-                            }));
-                        });
-                      }}
-                    />
-                  ) : (
-                    <PracticeHistoryQuestion item={item} />
-                  )}
-                </fieldset>
-              </div>
-            ))}
-          <div className="mt-5 flex justify-between gap-3">
-            <button
-              disabled={busy || batchBusy || index <= 0}
-              onClick={() => setCurrent(questions[index - 1].id)}
-              className="rounded-lg border bg-white px-4 py-2 text-sm disabled:opacity-40"
+          <nav
+            id="practice-question-navigator"
+            aria-label="题号导航"
+            className={
+              (navigatorOpen ? "block" : "hidden") +
+              " mt-3 border-t pt-3 xl:block"
+            }
+          >
+            <div className="grid max-h-64 grid-cols-5 gap-1.5 overflow-y-auto px-1 py-1 sm:grid-cols-8 xl:grid-cols-5">
+              {viewQuestions.map((question, i) => {
+                const state = questionState(
+                  question,
+                  drafts[question.id],
+                  missing.includes(question.id),
+                );
+                const selected = question.id === current;
+                return (
+                  <button
+                    key={question.id}
+                    type="button"
+                    disabled={working || !draftsReady}
+                    aria-label={"第 " + (i + 1) + " 题，" + state.label}
+                    aria-current={selected ? "step" : undefined}
+                    title={state.label}
+                    onClick={() => setCurrent(question.id)}
+                    className={
+                      "min-h-11 rounded-lg border text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-700 disabled:opacity-60 " +
+                      state.color +
+                      (selected ? " ring-2 ring-sky-600 ring-inset" : "")
+                    }
+                  >
+                    {i + 1} <span aria-hidden="true">{state.mark}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p
+              aria-hidden="true"
+              className="mt-2 text-xs leading-5 text-slate-600"
             >
-              上一题
-            </button>
-            <button
-              disabled={busy || batchBusy || index >= questions.length - 1}
-              onClick={() => setCurrent(questions[index + 1].id)}
-              className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-40"
-            >
-              下一题 →
-            </button>
-          </div>
-        </div>
-        <aside className="h-fit rounded-xl border bg-white p-4 xl:sticky xl:top-24">
-          <h2 className="text-sm font-semibold">题号导航</h2>
-          <div className="mt-3 grid grid-cols-5 gap-2">
-            {questions.map((q, i) => (
-              <button
-                key={q.id}
-                disabled={busy || batchBusy}
-                aria-label={`第${i + 1}题，${q.status === "COMPLETED" ? "已提交" : practiceDraftFilled(drafts[q.id]) ? "已填待提交" : "未作答"}`}
-                aria-current={q.id === current ? "step" : undefined}
-                onClick={() => setCurrent(q.id)}
-                className={`rounded-md border py-2 text-sm ${missing.includes(q.id) ? "border-red-400 ring-1 ring-red-200" : q.id === current ? "border-sky-600 ring-2 ring-sky-200" : ""} ${q.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700" : !readOnly && practiceDraftFilled(drafts[q.id]) ? "bg-sky-50 text-sky-700" : "bg-slate-50 text-slate-600"}`}
-              >
-                {i + 1}
-                {q.status === "COMPLETED" ? " ✓" : ""}
-              </button>
-            ))}
-          </div>
-          <p className="mt-3 text-xs leading-6 text-slate-500">
-            {readOnly ? (
-              "✓ 已提交 · 灰色未答。切换题号查看历史内容。"
-            ) : (
-              <>
-                ✓ 已提交 · 蓝色已填 · 灰色未答 · 红框必答
-                <br />
-                可先跳题，再回来继续作答。
-              </>
-            )}
-          </p>
+              – 未答　✎ 草稿　… 待判　✓ 已提交　! 需查看
+            </p>
+          </nav>
         </aside>
+
+        <div className="min-w-0 space-y-3 xl:col-start-1 xl:row-start-1">
+          <div className="min-w-0 rounded-2xl border bg-white p-4 sm:p-5">
+            <h2 className="mb-2 text-xs font-semibold text-sky-800">
+              第 {index + 1} / {questions.length} 题
+            </h2>
+            {((!readOnly && !draftsReady) || busy) && (
+              <p role="status" className="py-4 text-sm text-slate-600">
+                正在加载题目…
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="py-4 text-sm text-red-700">
+                {error}{" "}
+                <button
+                  type="button"
+                  className={secondaryClass}
+                  onClick={() => setRetry((value) => value + 1)}
+                >
+                  重试
+                </button>
+              </p>
+            )}
+            {(draftsReady || readOnly) &&
+              Object.values(cache).map((item) => (
+                <div
+                  key={
+                    item.id +
+                    ":" +
+                    item.status +
+                    ":" +
+                    (item.programmingAttempt?.id ?? "") +
+                    ":" +
+                    draft.inputVersion
+                  }
+                  hidden={item.id !== current || busy || Boolean(error)}
+                >
+                  <fieldset
+                    className="min-w-0"
+                    disabled={
+                      batchBusy || draft.saving || Boolean(draft.conflict)
+                    }
+                  >
+                    {!readOnly &&
+                    item.status === "STARTED" &&
+                    !item.readOnly ? (
+                      <RecommendationPractice
+                        embedded
+                        recommendation={item}
+                        initialAnswer={drafts[item.id]}
+                        onDraftChange={onDraftChange}
+                        onSubmissionStateChange={onSubmissionStateChange}
+                        onProgrammingQueued={(id, attempt) =>
+                          setCache((previous) =>
+                            previous[id]
+                              ? {
+                                  ...previous,
+                                  [id]: {
+                                    ...previous[id],
+                                    programmingAttempt: attempt,
+                                  },
+                                }
+                              : previous,
+                          )
+                        }
+                        batchBusy={batchBusy}
+                        onCompleted={(id) => {
+                          setQuestions((previous) =>
+                            previous.map((q) =>
+                              q.id === id ? { ...q, status: "COMPLETED" } : q,
+                            ),
+                          );
+                          void requestApi<RecommendationDetailView>(
+                            recommendationDetailApiPath(id),
+                            { method: "GET" },
+                          ).then((response) => {
+                            if (response.success)
+                              setCache((previous) => ({
+                                ...previous,
+                                [id]: response.data,
+                              }));
+                          });
+                        }}
+                      />
+                    ) : (
+                      <PracticeHistoryQuestion
+                        item={item}
+                        draft={drafts[item.id]}
+                        embedded
+                      />
+                    )}
+                  </fieldset>
+                </div>
+              ))}
+          </div>
+
+          {(draft.error || draft.message || batchMessage) && (
+            <div className="space-y-2 rounded-xl border bg-white px-4 py-3 text-sm">
+              {batchMessage && (
+                <p role="status" className="text-slate-700">
+                  {batchMessage}
+                </p>
+              )}
+              {draft.error ? (
+                <>
+                  <p role="alert" className="text-red-700">
+                    {draft.error}
+                  </p>
+                  {!readOnly && (
+                    <p className="text-slate-600">
+                      答案仍保留在本页，可直接重试保存。
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p role="status" className="text-slate-600">
+                  {draft.message}
+                </p>
+              )}
+              {draft.conflict && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={working}
+                    className={secondaryClass}
+                    onClick={() => {
+                      draft.useServerDraft();
+                      setMissing([]);
+                    }}
+                  >
+                    载入账号草稿
+                  </button>
+                  <button
+                    type="button"
+                    disabled={working || !pending.length}
+                    className={secondaryClass}
+                    onClick={() => {
+                      if (window.confirm("用当前答案覆盖账号草稿并退出？"))
+                        void draft.saveAndExit(saveSnapshot, true);
+                    }}
+                  >
+                    覆盖并保存退出
+                  </button>
+                </div>
+              )}
+              {readOnly && draft.error && (
+                <button
+                  type="button"
+                  className={secondaryClass}
+                  onClick={() => window.location.reload()}
+                >
+                  重试读取
+                </button>
+              )}
+            </div>
+          )}
+          <footer className="sticky bottom-0 z-10 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border bg-white p-2 shadow-sm sm:p-3">
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+              <button
+                type="button"
+                className={secondaryClass}
+                disabled={!draftsReady || working || index <= 0}
+                onClick={() => setCurrent(questions[index - 1].id)}
+              >
+                <ChevronLeft aria-hidden="true" className="size-4 shrink-0" />
+                上一题
+              </button>
+              <button
+                type="button"
+                className={secondaryClass}
+                disabled={
+                  !draftsReady || working || index >= questions.length - 1
+                }
+                onClick={() => setCurrent(questions[index + 1].id)}
+              >
+                下一题
+                <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
+              </button>
+            </div>
+            {!readOnly && pending.length > 0 && (
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+                <button
+                  type="button"
+                  className={secondaryClass}
+                  disabled={!draftsReady || working || Boolean(draft.conflict)}
+                  onClick={() => void draft.saveAndExit(saveSnapshot)}
+                >
+                  <Save aria-hidden="true" className="size-4 shrink-0" />
+                  {draft.saving ? "保存中…" : "保存并退出"}
+                </button>
+                <button
+                  type="button"
+                  className={
+                    controlClass +
+                    " border-sky-700 bg-sky-700 text-white hover:bg-sky-800"
+                  }
+                  disabled={
+                    !draftsReady || working || busy || Boolean(draft.conflict)
+                  }
+                  onClick={() => void submitAll()}
+                >
+                  <Send aria-hidden="true" className="size-4 shrink-0" />
+                  {batchBusy
+                    ? "提交 " + batchProgress + "/" + batchTotal
+                    : "提交练习"}
+                </button>
+              </div>
+            )}
+          </footer>
+        </div>
       </div>
     </section>
   );

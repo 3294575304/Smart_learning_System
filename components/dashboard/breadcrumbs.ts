@@ -78,6 +78,12 @@ export function buildBreadcrumbs(
       return {
         href: targetHref,
         label:
+          (index === 4 &&
+          segments[0] === "teacher" &&
+          segments[1] === "assignments" &&
+          segments[3] === "submissions"
+            ? "个人作答详情"
+            : undefined) ??
           getStudentPageLabel(
             isStudentVirtualRoot ? targetHref.split("?")[0] : href,
           ) ??

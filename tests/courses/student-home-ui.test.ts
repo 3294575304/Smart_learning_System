@@ -27,30 +27,23 @@ function overview(count = 0): StudentTaskOverview {
   };
 }
 
-test("首页按优先任务、待办、常用入口排列，移除跨课程图表", () => {
+test("首页合并待办，优先任务只出现一次，保留两个学习入口", () => {
   const html = renderToStaticMarkup(
     React.createElement(StudentHomeView, {
       name: "测试同学",
       overview: overview(1),
     }),
   );
-  assert.ok(html.indexOf("当前优先任务") < html.indexOf("我的待办"));
-  assert.ok(html.indexOf("我的待办") < html.indexOf("常用入口"));
-  for (const label of [
-    "我的课程",
-    "练习中心",
-    "复习中心",
-    "我的成绩",
-    "查看学习分析",
-    "查看全部任务",
-  ])
+  for (const label of ["自主练习", "我的题库", "查看全部任务", "优先处理"])
     assert.ok(html.includes(label));
+  assert.equal((html.match(/>任务 0</gu) ?? []).length, 1);
+  assert.match(html, /aria-label="待办分布：共 1 项，作业 1、签到 0、问卷 0"/u);
   assert.doesNotMatch(
     html,
-    /平均正确率|最近成绩|薄弱知识点|AI 推荐练习|<svg[^>]+role="img"/u,
+    /待办事项分布|当前优先任务|常用入口|练习中心|复习中心/u,
   );
   assert.match(html, /Python · 二班/u);
-  assert.match(html, /16:00/u); // Shanghai timezone, independent of host timezone.
+  assert.match(html, /16:00/u);
 });
 
 test("首页仅展示五项列表但保留完整待办数和全部任务入口", () => {
@@ -80,7 +73,9 @@ test("无待办时显示课程入口和正常空状态，待开放问卷独立�
   const html = renderToStaticMarkup(
     React.createElement(StudentHomeView, { name: "同学", overview: data }),
   );
-  assert.match(html, /当前没有待处理任务/u);
+  assert.match(html, /暂无待办/u);
+  // 零待办时收敛成一行状态，不再渲染 0 项的分布环图。
+  assert.doesNotMatch(html, /aria-label="待办分布/u);
   assert.match(html, /进入我的课程/u);
   assert.match(html, /暂不计入待办/u);
   assert.match(html, /不计入成绩/u);

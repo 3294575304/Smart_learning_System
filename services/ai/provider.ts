@@ -11,6 +11,8 @@ import type {
 } from "@/services/ai-question-generation/schemas";
 import type { ExamPaperAIInput } from "@/services/exams/paper-ai";
 
+import type { AssemblyProviderInput } from "@/services/assignments/editor-assistance-schemas";
+
 export interface AIProviderOptions {
   signal: AbortSignal;
   validationError?: string;
@@ -106,6 +108,11 @@ export interface AIProvider {
 
   writeQualityReportNarrative?(
     input: QualityReportAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  assembleAssignment?(
+    input: AssemblyProviderInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 

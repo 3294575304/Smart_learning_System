@@ -1,3 +1,5 @@
+import { studentCourseTabHref } from "@/services/courses/student-workspace";
+import { ProfileEvidenceFocus } from "@/components/learner-profiles/profile-evidence-focus";
 import { getStudentClassroomContext } from "@/services/courses/student-access";
 import { Role } from "@prisma/client";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
@@ -6,7 +8,10 @@ import { notFound } from "next/navigation";
 import { LearnerProfileDetail } from "@/components/learner-profiles/profile-detail";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { studentProfilePathSchema } from "@/services/learner-profiles/schemas";
+import {
+  studentProfilePathSchema,
+  studentProfileFocusSchema,
+} from "@/services/learner-profiles/schemas";
 import { getStudentLearnerProfile } from "@/services/learner-profiles/service";
 
 type Props = {
@@ -25,6 +30,10 @@ export default async function StudentLearnerProfilePage({
   if (query.classroomId !== undefined && typeof query.classroomId !== "string")
     notFound();
   const classroomId = query.classroomId;
+  const focus = studentProfileFocusSchema.safeParse({
+    conceptId: query.conceptId,
+  });
+  if (!focus.success) notFound();
   try {
     if (classroomId)
       await getStudentClassroomContext(
@@ -36,11 +45,25 @@ export default async function StudentLearnerProfilePage({
       student.id,
       path.data.courseId,
     );
+    if (
+      focus.data.conceptId &&
+      !profile.concepts.some((c) => c.conceptId === focus.data.conceptId)
+    )
+      notFound();
     return (
       <section className="space-y-6">
         <header>
           <StudentBackLink
-            href={`/student/courses/${profile.course.id}/learning-center?tab=profile${classroomId ? `&classroomId=${encodeURIComponent(classroomId)}` : ""}`}
+            href={
+              classroomId
+                ? studentCourseTabHref(
+                    profile.course.id,
+                    classroomId,
+                    "growth",
+                    focus.data.conceptId ? "knowledge" : "profile",
+                  )
+                : `/student/courses/${profile.course.id}/learning-center?tab=profile`
+            }
           >
             返回课程学习中心
           </StudentBackLink>
@@ -51,7 +74,12 @@ export default async function StudentLearnerProfilePage({
             基于已完成作答查看学习状态。尚未评估或待进一步评估的知识点，需要更多练习后才能形成可靠判断。
           </p>
         </header>
-        <LearnerProfileDetail profile={profile} />
+        <LearnerProfileDetail
+          profile={profile}
+          focusConceptId={focus.data.conceptId}
+          studentView
+        />
+        <ProfileEvidenceFocus conceptId={focus.data.conceptId} />
       </section>
     );
   } catch (error) {

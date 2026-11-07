@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { studentCourseReturnHref } from "../../services/courses/student-return";
+import { studentCourseTabHref } from "../../services/courses/student-workspace";
 import { StudentCourseReturnLink } from "../../components/dashboard/student-course-return-link";
 import { StudentBackLink } from "../../components/dashboard/student-back-link";
 
@@ -37,9 +38,10 @@ test("返回入口有明确按钮文案及键盘焦点样式", () => {
   const html = renderToStaticMarkup(
     React.createElement(StudentCourseReturnLink, { courseId, classroomId }),
   );
-  assert.match(html, /返回我的课程/);
+  assert.match(html, /返回课程学习中心/);
   assert.match(html, /focus-visible:outline/);
-  assert.match(html, /bg-sky-600/);
+  // 主操作按钮底色用 sky-700，白字对比度 5.76:1；sky-600 只有 4.10:1，不达标。
+  assert.match(html, /bg-sky-700/);
   assert.match(html, /text-white/);
   assert.doesNotMatch(html, /bg-white/);
   assert.ok(
@@ -49,8 +51,39 @@ test("返回入口有明确按钮文案及键盘焦点样式", () => {
   );
 });
 
-test("图谱与其他返回入口复用原生链接，保留栏目与班级", () => {
-  const href = `/student/courses/${courseId}/learning-center?tab=knowledge&classroomId=${classroomId}`;
+test("作业与图谱返回链接保留同班及对应页签", () => {
+  const tasks = studentCourseReturnHref(courseId, classroomId, "tasks");
+  assert.equal(
+    tasks,
+    `/student/courses/${courseId}/learning-center?classroomId=${classroomId}&tab=tasks`,
+  );
+  const taskReturn = renderToStaticMarkup(
+    React.createElement(StudentCourseReturnLink, {
+      courseId,
+      classroomId,
+      tab: "tasks",
+    }),
+  );
+  assert.match(taskReturn, /返回课程任务/);
+  assert.ok(taskReturn.includes(tasks.replaceAll("&", "&amp;")));
+  const fallback = renderToStaticMarkup(
+    React.createElement(StudentCourseReturnLink, {
+      courseId,
+      classroomId: "invalid",
+      tab: "tasks",
+    }),
+  );
+  assert.match(fallback, /href="\/student\/courses".*>返回我的课程</);
+  const href = studentCourseTabHref(
+    courseId,
+    classroomId,
+    "growth",
+    "knowledge",
+  );
+  assert.equal(
+    href,
+    `/student/courses/${courseId}/learning-center?classroomId=${classroomId}&tab=growth&section=knowledge`,
+  );
   const html = renderToStaticMarkup(
     StudentBackLink({
       href,

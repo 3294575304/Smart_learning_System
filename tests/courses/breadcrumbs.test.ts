@@ -83,6 +83,7 @@ test("课程各功能页的所有上级面包屑指向真实管理入口", () =>
     "quality-report",
     "surveys",
     "assessment-scheme",
+    "announcements",
   ]) {
     const crumbs = buildBreadcrumbs(`/teacher/courses/course-123/${section}`);
     assert.deepEqual(
@@ -157,7 +158,7 @@ test("三角色模块及补充功能使用明确的导航内容", () => {
     ["/student/course-grades", "课程总评"],
     ["/teacher/questions/ai", "AI出题"],
     ["/teacher/courses/course-a/random-picker", "随机选人"],
-    ["/teacher/assignments/task-a/submissions/submission-a", "提交记录详情"],
+    ["/teacher/assignments/task-a/submissions/submission-a", "个人作答详情"],
     ["/notifications/notification-a", "通知中心详情"],
   ])
     assert.equal(buildBreadcrumbs(path).at(-1)?.label, label);

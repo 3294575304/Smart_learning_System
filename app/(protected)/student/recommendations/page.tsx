@@ -119,7 +119,7 @@ export default async function StudentRecommendationsPage({
             classroomId={initialClassroomId}
           />
         }
-        title="练习中心"
+        title="自主练习"
         description="按课程生成与完成练习，或与 AI 梳理学习疑问。"
       />
 

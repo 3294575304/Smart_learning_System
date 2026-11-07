@@ -1,3 +1,5 @@
+import { AssignmentStateRefresh } from "@/components/assignments/state-refresh";
+import { personalWorkHref } from "@/services/assignments/personal-work-navigation";
 import { safeStudentWorkReturn } from "@/services/assignments/student-query";
 import { getAssignmentPublicationState } from "@/services/assignments/manual-grading";
 import { hundredPointScore } from "@/services/assignments/presentation";
@@ -5,12 +7,11 @@ import { TeacherAssignmentNav } from "@/components/assignments/teacher-assignmen
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role, SubmissionStatus } from "@prisma/client";
 import { Eye } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { ResultsPagination } from "@/components/assignment-results/pagination";
 import { PublishResultsButton } from "@/components/assignment-results/publish-results-button";
 import { ScoreDistribution } from "@/components/assignment-results/score-distribution";
-import { StudentAnswerDetail } from "@/components/assignment-results/student-answer-detail";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { assignmentResultsQuerySchema } from "@/services/assignment-results/schemas";
@@ -46,13 +47,10 @@ function studentDetailHref(
   page: number,
   pageSize: number,
 ): string {
-  const params = new URLSearchParams({
-    page: String(page),
-    pageSize: String(pageSize),
-    studentId,
-  });
-  if (submissionId) params.set("submissionId", submissionId);
-  return `/teacher/assignments/${assignmentId}/results?${params.toString()}`;
+  const back = `/teacher/assignments/${assignmentId}/results?page=${page}&pageSize=${pageSize}#student-${studentId}`;
+  return submissionId
+    ? personalWorkHref(assignmentId, submissionId, back)
+    : `/teacher/assignments/${assignmentId}`;
 }
 
 export default async function AssignmentResultsPage({
@@ -87,27 +85,31 @@ export default async function AssignmentResultsPage({
       const backHref =
         returnTo ??
         `/teacher/assignments/${parsedId.data}/results?page=${parsedQuery.data.page}&pageSize=${parsedQuery.data.pageSize}`;
+      if (personal.detail.selectedSubmission) {
+        redirect(
+          personalWorkHref(
+            parsedId.data,
+            personal.detail.selectedSubmission.id,
+            backHref,
+          ),
+        );
+      }
       return (
         <section className="min-w-0 space-y-4">
+          <AssignmentStateRefresh renderedAt={Date.now()} />
           <TeacherBackLink href={backHref}>
             {returnTo ? "返回该学生的作业" : "返回班级成绩"}
           </TeacherBackLink>
-          <header>
-            <h1 className="text-2xl font-semibold">
-              {personal.assignment.title} · 个人作答
-            </h1>
-            <p className="mt-2 text-sm text-slate-500">
-              {personal.assignment.classroom.name}
+          <h1 className="text-2xl font-semibold">个人作答详情</h1>
+          <div className="rounded-xl border border-dashed bg-white p-8 text-center">
+            <p>
+              {personal.detail.student.displayName}
+              尚未提交该作业，暂无个人作答。
             </p>
-          </header>
-          <StudentAnswerDetail
-            assignmentId={parsedId.data}
-            detail={personal.detail}
-            page={parsedQuery.data.page}
-            pageSize={parsedQuery.data.pageSize}
-            returnTo={returnTo}
-            attachmentsEnabled={personal.assignment.allowAttachments}
-          />
+            <p className="mt-2 text-sm text-slate-500">
+              {personal.assignment.title} · {personal.assignment.classroom.name}
+            </p>
+          </div>
         </section>
       );
     }
@@ -129,6 +131,7 @@ export default async function AssignmentResultsPage({
     );
     return (
       <section className="space-y-6">
+        <AssignmentStateRefresh renderedAt={Date.now()} />
         <header>
           <TeacherBackLink href="/teacher/assignments">
             返回作业管理
@@ -301,48 +304,6 @@ export default async function AssignmentResultsPage({
         </section>
 
         <section className="bg-card rounded-xl border p-5">
-          <h2 className="font-semibold">每个知识点正确率</h2>
-          <p className="text-muted-foreground mt-1 text-xs">
-            按作业发布时保存的题目—知识点权重计算。
-          </p>
-          {results.knowledgePointAccuracy.length === 0 ? (
-            <div className="text-muted-foreground mt-4 rounded-lg border border-dashed p-8 text-center text-sm">
-              作业题目尚未关联知识点。
-            </div>
-          ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[600px] text-left text-sm">
-                <thead className="text-muted-foreground border-b">
-                  <tr>
-                    <th className="py-3 pr-4 font-medium">知识点</th>
-                    <th className="py-3 pr-4 font-medium">编码</th>
-                    <th className="py-3 pr-4 font-medium">已判定权重</th>
-                    <th className="py-3 font-medium">正确率</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.knowledgePointAccuracy.map((knowledge) => (
-                    <tr
-                      className="border-b last:border-0"
-                      key={knowledge.knowledgePointId}
-                    >
-                      <td className="py-3 pr-4 font-medium">
-                        {knowledge.name}
-                      </td>
-                      <td className="py-3 pr-4">{knowledge.code}</td>
-                      <td className="py-3 pr-4">{knowledge.judgedWeight}</td>
-                      <td className="py-3">
-                        {accuracyText(knowledge.accuracy)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className="bg-card rounded-xl border p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="font-semibold">学生成绩列表</h2>
             <p className="text-muted-foreground text-xs">
@@ -375,6 +336,7 @@ export default async function AssignmentResultsPage({
                       <tr
                         className="border-b last:border-0"
                         key={student.studentId}
+                        id={`student-${student.studentId}`}
                       >
                         <td className="py-3 pr-4">
                           <p className="font-medium">{student.displayName}</p>

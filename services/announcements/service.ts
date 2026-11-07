@@ -82,8 +82,19 @@ function auditSnapshot(record: {
 }
 
 function rolesForTarget(target: AnnouncementTargetType): Role[] | undefined {
-  if (target === AnnouncementTargetType.ALL) return undefined;
-  return [Role[target]];
+  switch (target) {
+    case AnnouncementTargetType.ALL:
+      return undefined;
+    case AnnouncementTargetType.ADMIN:
+      return [Role.ADMIN];
+    case AnnouncementTargetType.TEACHER:
+      return [Role.TEACHER];
+    case AnnouncementTargetType.STUDENT:
+      return [Role.STUDENT];
+    default:
+      // 班级受众只走教师端「课程通知」，系统公告不支持，避免误发给全站或漏发。
+      throw new AnnouncementOperationError("系统公告不能使用班级受众", 422);
+  }
 }
 
 function assertValidExpiry(
@@ -95,7 +106,7 @@ function assertValidExpiry(
   }
 }
 
-async function serializableTransaction<T>(
+export async function serializableTransaction<T>(
   operation: (transaction: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
   for (let attempt = 0; attempt <= SERIALIZABLE_RETRY_LIMIT; attempt += 1) {

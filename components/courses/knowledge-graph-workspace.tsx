@@ -514,7 +514,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
             </p>
           </div>
           <button
-            className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="rounded-md bg-sky-700 px-4 py-2 text-sm text-white disabled:opacity-50"
             disabled={
               busy ||
               !state?.sourceSyllabusStructureId ||
@@ -1011,7 +1011,7 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
               保存审核稿
             </button>
             <button
-              className="rounded-md bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-sky-700 px-4 py-2 text-sm text-white disabled:opacity-50"
               disabled={busy || dirty || !state?.review}
               onClick={() => void publish()}
             >

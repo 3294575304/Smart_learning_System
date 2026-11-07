@@ -17,8 +17,8 @@ test("学生共享路径使用学生名称，顶部与面包屑保持一致", ()
     ["/student/results", "课程总评"],
     ["/student/attendance", "签到与出勤"],
     ["/student/surveys", "课程问卷"],
-    ["/student/recommendations", "练习中心"],
-    ["/student/wrong-questions", "复习中心"],
+    ["/student/recommendations", "自主练习"],
+    ["/student/wrong-questions", "我的题库"],
     ["/student/analytics", "学习分析"],
     ["/student/course-grades", "课程总评"],
   ];
@@ -112,7 +112,7 @@ test("学生命名不会影响教师同名路径或管理员导航", () => {
   assert.equal(NAVIGATION.ADMIN.length, 1);
 });
 
-test("课程练习和收藏详情保留练习中心选中，面包屑不指向不存在的根页", () => {
+test("课程练习和收藏详情保留自主练习选中，面包屑不指向不存在的根页", () => {
   const items = NAVIGATION.STUDENT.flatMap((group) => group.items);
   for (const path of [
     "/student/practice/cycle1",
@@ -185,10 +185,10 @@ test("学生所有资源详情使用同一标题与面包屑命名，不暴露�
 });
 
 test("虚拟详情父级只保留可访问的模块，作答不陈列不存在的提交页", () => {
-  assert.equal(buildBreadcrumbs("/student/practice/c1")[1].label, "练习中心");
+  assert.equal(buildBreadcrumbs("/student/practice/c1")[1].label, "自主练习");
   assert.equal(
     buildBreadcrumbs("/student/question-favorites/q1")[1].label,
-    "复习中心",
+    "我的题库",
   );
   const crumbs = buildBreadcrumbs("/student/submissions/s1/answer");
   assert.deepEqual(

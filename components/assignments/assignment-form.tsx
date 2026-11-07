@@ -1,8 +1,20 @@
 "use client";
+import {
+  assignmentCategorySchema,
+  ASSIGNMENT_CATEGORY_LABELS,
+} from "@/services/assignments/category";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { QuestionType } from "@prisma/client";
-import { ArrowDown, ArrowUp, ListOrdered, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ListOrdered,
+  Loader2,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -10,6 +22,7 @@ import { z } from "zod";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-workspace-refresh";
+import { toast } from "@/components/ui/toast";
 import {
   distributeAssignmentPoints,
   selectAssignmentQuestions,
@@ -20,6 +33,12 @@ import {
   courseSwitchImpact,
 } from "@/services/assignments/editor-review";
 import { EditorDialog } from "./editor-dialog";
+import { TypedScoreDialog } from "./typed-score-dialog";
+import {
+  AssignmentAssemblyDialog,
+  type AssemblyChapter,
+} from "./assignment-assembly-dialog";
+import type { AssignmentPublicationPreview } from "@/services/assignments/editor-assistance-schemas";
 import type { TeacherAssignmentView } from "@/services/assignments/types";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import {
@@ -29,6 +48,7 @@ import {
 } from "@/services/assignments/question-order";
 
 const formSchema = z.object({
+  category: assignmentCategorySchema,
   title: z.string().trim().min(2, "作业名称至少需要 2 个字符").max(120),
   description: z.string().trim().max(5000),
   classroomId: z.string().min(1, "请选择发布班级"),
@@ -56,6 +76,7 @@ interface SelectedQuestion extends EditorQuestion {
 
 interface AssignmentFormProps {
   mode: "create" | "edit";
+  assemblyChapters?: Record<string, AssemblyChapter[]>;
   publicationCourses?: Array<{ id: string; name: string; term: string }>;
   classrooms: Array<{
     id: string;
@@ -77,8 +98,26 @@ interface AssignmentFormProps {
   }>;
   questions: EditorQuestion[];
   assignment?: TeacherAssignmentView;
+  /** 编辑同批多班级草稿时的批次信息；单班草稿不传。 */
+  batch?: {
+    batchId: string;
+    members: Array<{
+      id: string;
+      classroomId: string;
+      classroomName: string;
+      status: string;
+    }>;
+  };
   defaultDueDays?: number;
   initialClassroomId?: string;
+  lastPublishedByClassroom?: Record<
+    string,
+    {
+      title: string;
+      category: keyof typeof ASSIGNMENT_CATEGORY_LABELS;
+      publishedAt: string;
+    }
+  >;
 }
 
 interface PreparedAction {
@@ -88,6 +127,7 @@ interface PreparedAction {
   classroomNames: string[];
   resourceNames: string[];
   scoreMode: string;
+  preview?: AssignmentPublicationPreview;
   publish: boolean;
 }
 
@@ -104,9 +144,12 @@ export function AssignmentForm({
   questions,
   courses = [],
   publicationCourses = [],
+  assemblyChapters = {},
   assignment,
+  batch,
   defaultDueDays = 7,
   initialClassroomId,
+  lastPublishedByClassroom,
 }: AssignmentFormProps) {
   const [confirmation, setConfirmation] = useState<PreparedAction | null>(null);
   const [retryAction, setRetryAction] = useState<PreparedAction | null>(null);
@@ -135,6 +178,14 @@ export function AssignmentForm({
   const [uploading, setUploading] = useState<string | null>(null);
   const [pickCount, setPickCount] = useState(10);
   const [targetPoints, setTargetPoints] = useState(100);
+  const [scoreDialogOpen, setScoreDialogOpen] = useState(false);
+  const [typedScore, setTypedScore] = useState<{
+    target: number;
+    signature: string;
+    lockedIds: string[];
+  } | null>(null);
+  const [assemblyOpen, setAssemblyOpen] = useState(false);
+  const [preflighting, setPreflighting] = useState(false);
   const [defaultHundredPoints, setDefaultHundredPoints] = useState(
     mode === "create",
   );
@@ -247,6 +298,7 @@ export function AssignmentForm({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      category: assignment?.category ?? undefined,
       title: assignment?.title ?? "",
       description: assignment?.description ?? "",
       classroomId: defaultClassroomId,
@@ -255,6 +307,8 @@ export function AssignmentForm({
       allowResubmission: assignment?.allowResubmission ?? false,
     },
   });
+
+  const titleIsEmpty = mode === "create" && !form.watch("title").trim();
 
   useEffect(() => {
     if (!defaultHundredPoints || selected.length === 0) return;
@@ -362,9 +416,24 @@ export function AssignmentForm({
       );
     }
   }
+  function applyAssembly(ids: string[]) {
+    const current = new Set(selected.map((item) => item.id));
+    const byId = new Map(questions.map((item) => [item.id, item]));
+    const added = ids.flatMap((id) => {
+      const item = byId.get(id);
+      return item && !current.has(id) ? [{ ...item, points: 10 }] : [];
+    });
+    const next = [...selected, ...added].slice(0, 200);
+    setSelected(autoOrganize ? organizeAssignmentQuestions(next) : next);
+    setAssemblyOpen(false);
+    setOrderFeedback(
+      `已加入 ${next.length - selected.length} 道审核通过的建议题，请核对分值。`,
+    );
+  }
   function organizePoints() {
     try {
       const points = distributeAssignmentPoints(selected.length, targetPoints);
+      setTypedScore(null);
       setDefaultHundredPoints(false);
       setSelected((items) =>
         items.map((item, index) => ({ ...item, points: points[index] })),
@@ -436,15 +505,21 @@ export function AssignmentForm({
       setSwitchTarget({ courseId, classroomId });
     else applyCourseChange({ courseId, classroomId });
   }
-  function persist(values: FormValues, publish: boolean) {
+  async function persist(values: FormValues, publish: boolean) {
     if (inFlight.current) return;
     setServerError(null);
     try {
+      if (publish && scoreNeedsReview)
+        throw new Error("题目或分值已变动，请重新核对题型配分");
       const input = validateEditorAction(
         {
           ...values,
           publishedAt: new Date(values.publishedAt),
           dueAt: new Date(values.dueAt),
+          scoreTarget:
+            publish && assignmentType === "bank"
+              ? typedScore?.target
+              : undefined,
           allowAttachments: assignmentType === "task" && allowAttachments,
           submissionTask:
             assignmentType === "task"
@@ -466,8 +541,19 @@ export function AssignmentForm({
         },
         publish,
       );
+      // 编辑同批多班草稿：一次提交写入批次内全部仍为草稿的班级。
+      const batchClassroomIds =
+        mode === "edit" && batch
+          ? batch.members
+              .filter((member) => member.status === "DRAFT")
+              .map((member) => member.classroomId)
+          : [];
       const classroomIds =
-        mode === "create" ? [...selectedClassroomIds] : [input.classroomId];
+        mode === "create"
+          ? [...selectedClassroomIds]
+          : batchClassroomIds.length > 1
+            ? batchClassroomIds
+            : [input.classroomId];
       if (!classroomIds.length) throw new Error("请至少选择一个班级");
       if (classroomIds.length * Math.max(1, input.questions.length) > 400)
         throw new Error("单次最多复制400题次，请减少班级或题目后分批发布");
@@ -489,13 +575,38 @@ export function AssignmentForm({
             ? task.points === 100
               ? "百分制"
               : "自定义总分"
-            : defaultHundredPoints
-              ? "默认百分制"
-              : "自定义总分",
+            : typedScore
+              ? "按题型配分"
+              : defaultHundredPoints
+                ? "默认百分制"
+                : "自定义总分",
       };
       setRetryAction(null);
-      if (publish) setConfirmation(action);
-      else void execute(action);
+      if (publish) {
+        inFlight.current = true;
+        setPreflighting(true);
+        try {
+          const preview =
+            await requestAssignmentApi<AssignmentPublicationPreview>(
+              "/api/teacher/assignments/editor-assistance",
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  action: "PREFLIGHT",
+                  assignment: input,
+                  classroomIds,
+                  assignmentId: assignment?.id,
+                }),
+              },
+            );
+          if (!preview.success) throw new Error(preview.error);
+          setConfirmation({ ...action, preview: preview.data });
+        } finally {
+          inFlight.current = false;
+          setPreflighting(false);
+        }
+      } else void execute(action);
     } catch (error) {
       setServerError(
         error instanceof z.ZodError
@@ -545,9 +656,13 @@ export function AssignmentForm({
         setResult({ ...response.data, publish: action.publish });
       } else {
         let saved: TeacherAssignmentView | undefined;
+        const batchQuery =
+          mode === "edit" && batch && action.classroomIds.length > 1
+            ? "?batch=1"
+            : "";
         if (!(action.publish && savedPublication.current === signature)) {
           const response = await requestAssignmentApi<TeacherAssignmentView>(
-            `/api/teacher/assignments/${assignment?.id}`,
+            `/api/teacher/assignments/${assignment?.id}${batchQuery}`,
             {
               method: "PATCH",
               headers: { "content-type": "application/json" },
@@ -563,7 +678,7 @@ export function AssignmentForm({
         }
         if (action.publish) {
           const response = await requestAssignmentApi<TeacherAssignmentView>(
-            `/api/teacher/assignments/${assignment?.id}/publish`,
+            `/api/teacher/assignments/${assignment?.id}/publish${batchQuery}`,
             { method: "POST" },
           );
           if (!response.success) {
@@ -581,6 +696,7 @@ export function AssignmentForm({
       }
       setConfirmation(null);
       setRetryAction(null);
+      toast("success", action.publish ? "作业已发布。" : "草稿已保存。");
       markTeacherWorkspaceDirty();
     } finally {
       inFlight.current = false;
@@ -588,13 +704,26 @@ export function AssignmentForm({
     }
   }
 
-  const busy = submittingAction !== null || uploading !== null;
+  const busy = preflighting || submittingAction !== null || uploading !== null;
   const effectiveClassroomIds =
     mode === "create" ? selectedClassroomIds : [form.watch("classroomId")];
   const totalPoints =
     assignmentType === "task"
       ? task.points
       : Math.round(selected.reduce((sum, q) => sum + q.points, 0) * 100) / 100;
+  const selectedSignature = selected
+    .map((q) => q.id)
+    .sort()
+    .join(",");
+  const scoreNeedsReview =
+    assignmentType === "bank" &&
+    typedScore !== null &&
+    (typedScore.signature !== selectedSignature ||
+      typedScore.target !== totalPoints);
+  const assemblyCourseId =
+    classrooms.find((item) => item.id === effectiveClassroomIds[0])?.courseId ??
+    "";
+  const currentAssemblyChapters = assemblyChapters[assemblyCourseId] ?? [];
   const switchImpact = switchTarget
     ? courseSwitchImpact(
         selected,
@@ -661,6 +790,32 @@ export function AssignmentForm({
               基本信息
             </h2>
             <label className="block space-y-1 text-sm">
+              <span className="font-medium">作业类别（必选）</span>
+              <select
+                className="w-full rounded-lg border px-3"
+                defaultValue=""
+                aria-label="作业类别"
+                {...form.register("category")}
+              >
+                <option value="" disabled>
+                  请选择作业类别
+                </option>
+                {Object.entries(ASSIGNMENT_CATEGORY_LABELS).map(
+                  ([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ),
+                )}
+              </select>
+              <span className="text-xs text-red-600">
+                {form.formState.errors.category?.message}
+              </span>
+              <p className="text-xs leading-5 text-slate-500">
+                练习对应平时表现，课程作业与实验对应各自项目；须由正式考核方案确认计分规则后，在台账中同步。发布后类别冻结。
+              </p>
+            </label>
+            <label className="block space-y-1 text-sm">
               <span className="font-medium">作业名称</span>
               <input
                 className="w-full rounded-lg border px-3"
@@ -670,6 +825,79 @@ export function AssignmentForm({
                 {form.formState.errors.title?.message}
               </span>
             </label>
+            {mode === "create" && lastPublishedByClassroom && (
+              <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
+                <p className="font-medium text-slate-700">上次布置的作业</p>
+                {selectedClassroomIds.length ? (
+                  <ul className="max-h-40 space-y-2 overflow-y-auto">
+                    {selectedClassroomIds.map((id) => {
+                      const classroom = classrooms.find(
+                        (item) => item.id === id,
+                      );
+                      const previous = lastPublishedByClassroom[id];
+                      return (
+                        <li
+                          key={id}
+                          className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1"
+                        >
+                          <div className="min-w-0 [overflow-wrap:anywhere]">
+                            <p className="text-xs text-slate-600">
+                              {classroom?.name}
+                            </p>
+                            {previous ? (
+                              <p className="mt-0.5">
+                                <span className="font-medium">
+                                  {previous.title}
+                                </span>{" "}
+                                <span className="text-xs text-slate-600">
+                                  ·{" "}
+                                  {
+                                    ASSIGNMENT_CATEGORY_LABELS[
+                                      previous.category
+                                    ]
+                                  }{" "}
+                                  ·{" "}
+                                  <time dateTime={previous.publishedAt}>
+                                    {new Date(
+                                      previous.publishedAt,
+                                    ).toLocaleDateString("zh-CN", {
+                                      timeZone: "Asia/Shanghai",
+                                    })}
+                                  </time>
+                                </span>
+                              </p>
+                            ) : (
+                              <p className="text-xs text-slate-600">
+                                暂无已开放作业
+                              </p>
+                            )}
+                          </div>
+                          {previous && titleIsEmpty && (
+                            <button
+                              type="button"
+                              aria-label={`用作命名参考：${previous.title} · ${classroom?.name}`}
+                              onClick={() => {
+                                if (form.getValues("title").trim()) return;
+                                form.setValue("title", previous.title, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                                form.setFocus("title", { shouldSelect: true });
+                              }}
+                              className="min-h-8 rounded-md border bg-white px-2 text-xs text-sky-800 hover:bg-sky-50"
+                            >
+                              用作命名参考
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-slate-600">选择教学班后查看。</p>
+                )}
+              </div>
+            )}
             <label className="block space-y-1 text-sm">
               <span className="font-medium">作业说明</span>
               <textarea
@@ -776,6 +1004,22 @@ export function AssignmentForm({
                   </p>
                 </fieldset>
               </>
+            ) : batch ? (
+              <div className="space-y-1 text-sm">
+                <span className="font-medium">
+                  教学班（{batch.members.length} 个班级一起保存与发布）
+                </span>
+                <ul className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
+                  {batch.members.map((member) => (
+                    <li key={member.id} className="truncate">
+                      {member.classroomName}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-slate-500">
+                  同一份内容会写入以上每个班级，无需逐个班级编辑。
+                </p>
+              </div>
             ) : (
               <label className="block space-y-1 text-sm">
                 <span className="font-medium">教学班（单班草稿）</span>
@@ -998,14 +1242,29 @@ export function AssignmentForm({
                   </label>
                   <button
                     type="button"
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:bg-sky-700"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-700 px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:bg-sky-800"
                     onClick={autoPickQuestions}
                   >
                     <Plus aria-hidden="true" className="size-4" />
                     一键添加题目
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssemblyOpen(true)}
+                    disabled={
+                      !effectiveClassroomIds.length ||
+                      !currentAssemblyChapters.length ||
+                      selected.length >= 200
+                    }
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-3 text-sm font-medium text-sky-800 hover:bg-sky-50 disabled:opacity-50"
+                  >
+                    <Sparkles aria-hidden="true" className="size-4" />
+                    智能组卷
+                  </button>
                   <p className="w-full text-xs leading-5 text-slate-500">
-                    按下方筛选条件从可用题库中随机加入未选题；请核对后发布。
+                    {currentAssemblyChapters.length
+                      ? "智能组卷支持多选章节和知识点，并在确认前显示历史用题。"
+                      : "选择已发布正式知识图谱的课程后可使用智能组卷。"}
                   </p>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 [&>input]:min-w-0 [&>select]:min-w-0">
@@ -1237,6 +1496,7 @@ export function AssignmentForm({
                         checked={defaultHundredPoints}
                         onChange={(event) => {
                           setDefaultHundredPoints(event.target.checked);
+                          if (event.target.checked) setTypedScore(null);
                           setOrderFeedback(
                             event.target.checked
                               ? "已恢复默认百分制，当前题目自动均分至100分。"
@@ -1268,12 +1528,36 @@ export function AssignmentForm({
                         onClick={organizePoints}
                         className="shrink-0 rounded-lg border bg-white px-3 py-2 text-xs whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:opacity-50"
                       >
-                        一键整理分值
+                        全卷均分
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!selected.length}
+                        onClick={() => setScoreDialogOpen(true)}
+                        className="shrink-0 rounded-lg border bg-white px-3 py-2 text-xs text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+                      >
+                        按题型配分
                       </button>
                     </div>
-                    <p className="text-xs leading-5 text-slate-500">
-                      修改单题分值或整理目标总分后，切换为自定义分值。
-                    </p>
+                    {typedScore ? (
+                      <p
+                        role="status"
+                        className={
+                          scoreNeedsReview
+                            ? "text-xs text-amber-800"
+                            : "text-xs text-emerald-800"
+                        }
+                      >
+                        题型配分目标 {typedScore.target} 分 ·{" "}
+                        {scoreNeedsReview
+                          ? "题目或分值已变化，请重新配分后发布。"
+                          : "各题型小计已应用。"}
+                      </p>
+                    ) : (
+                      <p className="text-xs leading-5 text-slate-500">
+                        可选择全卷均分，也可分别设置各题型小计。
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
                     <span className="text-xs text-slate-500">
@@ -1461,27 +1745,70 @@ export function AssignmentForm({
           </p>
           <div className="flex flex-wrap gap-3">
             <button
-              className="h-10 rounded-lg border px-4 text-sm disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-4 text-sm transition hover:bg-slate-50 active:scale-[0.98] active:bg-slate-100 disabled:opacity-50"
               disabled={busy}
               type="submit"
             >
-              {submittingAction === "save" ? "保存中…" : "保存草稿"}
+              {submittingAction === "save" ? (
+                <>
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  保存中…
+                </>
+              ) : (
+                "保存草稿"
+              )}
             </button>
             <button
-              className="h-10 rounded-lg bg-sky-700 px-4 text-sm text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-sky-700 px-4 text-sm text-white transition hover:bg-sky-800 active:scale-[0.98] active:bg-sky-800 disabled:opacity-50"
               disabled={busy}
               onClick={form.handleSubmit((v) => persist(v, true))}
               type="button"
             >
-              {submittingAction === "publish"
-                ? "发布中…"
-                : mode === "create" && selectedClassroomIds.length > 1
-                  ? `发布到${selectedClassroomIds.length}个班级`
-                  : "发布作业"}
+              {preflighting ? (
+                <>
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  检查中…
+                </>
+              ) : submittingAction === "publish" ? (
+                <>
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  发布中…
+                </>
+              ) : mode === "create" && selectedClassroomIds.length > 1 ? (
+                `发布到${selectedClassroomIds.length}个班级`
+              ) : (
+                "发布作业"
+              )}
             </button>
           </div>
         </div>
       </fieldset>
+      {scoreDialogOpen && (
+        <TypedScoreDialog
+          questions={selected}
+          target={typedScore?.target ?? targetPoints}
+          initiallyLocked={typedScore?.lockedIds ?? []}
+          onClose={() => setScoreDialogOpen(false)}
+          onApply={(points, target, lockedIds) => {
+            setDefaultHundredPoints(false);
+            setTypedScore({ target, signature: selectedSignature, lockedIds });
+            setSelected((items) =>
+              items.map((item, index) => ({ ...item, points: points[index] })),
+            );
+            setScoreDialogOpen(false);
+          }}
+        />
+      )}
+      {assemblyOpen && (
+        <AssignmentAssemblyDialog
+          chapters={currentAssemblyChapters}
+          classroomIds={effectiveClassroomIds}
+          excludedIds={selected.map((q) => q.id)}
+          questionContents={new Map(questions.map((q) => [q.id, q.content]))}
+          onAdd={applyAssembly}
+          onClose={() => setAssemblyOpen(false)}
+        />
+      )}
       <EditorDialog
         open={Boolean(confirmation)}
         title="确认发布作业"
@@ -1493,6 +1820,14 @@ export function AssignmentForm({
             <dl className="mt-4 grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm">
               <dt className="text-slate-500">作业名称</dt>
               <dd className="break-words">{confirmation.input.title}</dd>
+              <dt className="text-slate-500">作业类别</dt>
+              <dd>
+                {
+                  ASSIGNMENT_CATEGORY_LABELS[
+                    confirmation.input.category ?? "PRACTICE"
+                  ]
+                }
+              </dd>
               <dt className="text-slate-500">课程</dt>
               <dd className="break-words">{confirmation.courseLabel}</dd>
               <dt className="text-slate-500">发布班级</dt>
@@ -1504,6 +1839,17 @@ export function AssignmentForm({
                       key={confirmation.classroomIds[i]}
                     >
                       {name}
+                      {confirmation.preview?.classrooms[i] && (
+                        <span className="ms-2 text-xs text-slate-600">
+                          {confirmation.preview.classrooms[i].sameTitleCount
+                            ? ` · 同名作业 ${confirmation.preview.classrooms[i].sameTitleCount} 份`
+                            : ""}
+                          {confirmation.preview.classrooms[i]
+                            .recentQuestionCount
+                            ? ` · 近 90 天已用 ${confirmation.preview.classrooms[i].recentQuestionCount} 题`
+                            : ""}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -1543,6 +1889,11 @@ export function AssignmentForm({
                   : "仅允许提交一次"}
               </dd>
             </dl>
+            {confirmation.preview && (
+              <p className="mt-3 text-xs text-slate-600">
+                已核对班级权限、题目、总分和附件归属。历史用题及同名作业提示供发布前确认。
+              </p>
+            )}
             {confirmation.resourceNames.length ? (
               <ul className="mt-3 space-y-1 rounded-lg bg-slate-50 p-3 text-xs">
                 {confirmation.resourceNames.map((name, index) => (
@@ -1558,7 +1909,7 @@ export function AssignmentForm({
             <div className="mt-5 flex flex-wrap justify-end gap-3">
               <button
                 type="button"
-                className="h-10 rounded-lg border px-4 text-sm"
+                className="h-10 rounded-lg border px-4 text-sm transition hover:bg-slate-50 active:scale-[0.98] active:bg-slate-100 disabled:opacity-50"
                 disabled={busy}
                 onClick={() => setConfirmation(null)}
               >
@@ -1566,13 +1917,21 @@ export function AssignmentForm({
               </button>
               <button
                 type="button"
-                className="h-10 rounded-lg bg-sky-700 px-4 text-sm text-white disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-sky-700 px-4 text-sm text-white transition hover:bg-sky-800 active:scale-[0.98] active:bg-sky-800 disabled:opacity-50"
                 disabled={busy}
                 onClick={() => void execute(confirmation)}
               >
-                {busy
-                  ? "发布中…"
-                  : `确认发布到${confirmation.classroomIds.length}个班级`}
+                {busy ? (
+                  <>
+                    <Loader2
+                      aria-hidden="true"
+                      className="size-4 animate-spin"
+                    />
+                    发布中…
+                  </>
+                ) : (
+                  `确认发布到${confirmation.classroomIds.length}个班级`
+                )}
               </button>
             </div>
           </>

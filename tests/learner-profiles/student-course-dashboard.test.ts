@@ -107,11 +107,15 @@ test("真实零分保留，未公布独立计数，待确认出勤不当作正�
   const html = renderToStaticMarkup(
     React.createElement(StudentCourseDashboard, { data, analysis }),
   );
-  assert.match(html, /已公布零分：0分/);
+  // 只有 1 项成绩时改为单卡直出（作业名、得分、反馈入口），不再画一个孤立的点。
+  assert.match(html, /最近一次已公布成绩/);
+  assert.match(html, /已公布零分/);
+  assert.match(html, /tabular-nums">0<span/u);
+  assert.match(html, /查看成绩与教师反馈/);
   assert.match(html, /已公布1项，已交待公布1项，未提交1项/);
   assert.match(html, /待确认1次，共1次/);
   assert.match(html, /正常0次，共1次/);
-  assert.match(html, /仅有1项成绩，暂不判断趋势/);
+  assert.match(html, /只有 1 项已公布成绩/);
   assert.match(html, /尚未评估不代表零分/);
   assert.doesNotMatch(html, /NaN|Infinity/);
 });

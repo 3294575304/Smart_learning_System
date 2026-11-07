@@ -24,10 +24,12 @@ function Content({
   label,
   icon,
   arrow,
+  preserveLabel,
 }: {
   label: string;
   icon?: keyof typeof icons;
   arrow: boolean;
+  preserveLabel: boolean;
 }) {
   const { pending } = useLinkStatus();
   const Icon = icon ? icons[icon] : null;
@@ -41,7 +43,14 @@ function Content({
       ) : Icon ? (
         <Icon aria-hidden="true" className="size-4 shrink-0" />
       ) : null}
-      <span aria-live="polite">{pending ? "正在打开…" : label}</span>
+      <span aria-live="polite">
+        {pending && !preserveLabel ? "正在打开…" : label}
+      </span>
+      {pending && preserveLabel ? (
+        <span className="sr-only" role="status">
+          正在打开{label}
+        </span>
+      ) : null}
       {arrow && !pending ? (
         <ArrowRight
           aria-hidden="true"
@@ -61,6 +70,7 @@ export function FeedbackLink({
   className,
   current,
   ariaLabel,
+  preserveLabel = false,
 }: {
   href: string;
   label: string;
@@ -69,6 +79,7 @@ export function FeedbackLink({
   className?: string;
   current?: boolean;
   ariaLabel?: string;
+  preserveLabel?: boolean;
 }) {
   const router = useRouter();
   return (
@@ -83,7 +94,12 @@ export function FeedbackLink({
         "group inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-800 transition hover:border-sky-300 hover:bg-sky-100 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:outline-none sm:text-sm"
       }
     >
-      <Content label={label} icon={icon} arrow={arrow} />
+      <Content
+        label={label}
+        icon={icon}
+        arrow={arrow}
+        preserveLabel={preserveLabel}
+      />
     </Link>
   );
 }

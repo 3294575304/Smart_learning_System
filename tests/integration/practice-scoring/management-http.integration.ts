@@ -104,8 +104,8 @@ test("real HTTP verifies management authentication, atomic batches, private resp
           page.includes("analytics")
             ? "学习分析"
             : page.includes("wrong-questions")
-              ? "复习中心"
-              : "练习中心",
+              ? "我的题库"
+              : "自主练习",
         ),
       );
       assert.ok(!html.includes("Internal Server Error"));
@@ -429,8 +429,46 @@ test("real HTTP verifies management authentication, atomic batches, private resp
     assert.equal(historyPage.status, 200);
     const html = await historyPage.text();
     assert.match(html, /只读回看/);
-    assert.match(html, /返回练习中心/);
+    assert.match(html, /返回自主练习/);
     assert.doesNotMatch(html, />提交全部练习</);
+    assert.equal(
+      (
+        await request(managementPath, cookie, "PATCH", {
+          action: "PURGE",
+          expectedRevision: restored.revision,
+        })
+      ).status,
+      409,
+    );
+    const movedBack = await request(managementPath, cookie, "PATCH", {
+      action: "TRASH",
+      expectedRevision: restored.revision,
+    });
+    assert.equal(movedBack.status, 200);
+    const revision = (await movedBack.json()).data.revision;
+    const remove = await request(managementPath, cookie, "PATCH", {
+      action: "PURGE",
+      expectedRevision: revision,
+    });
+    assert.equal(remove.status, 200);
+    assert.ok((await remove.json()).data.purgedAt);
+    assert.equal(
+      (await request(`/api/recommendations/${entry.id}`, cookie)).status,
+      404,
+    );
+    const oldPractice = await request(
+      `/student/recommendations/${entry.id}/practice`,
+      cookie,
+    );
+    assert.ok([200, 404].includes(oldPractice.status));
+    const oldPracticeHtml = await oldPractice.text();
+    assert.match(oldPracticeHtml, /资源不存在/);
+    assert.doesNotMatch(oldPracticeHtml, /只读回看/);
+    const removedFromTrash = await request(
+      "/api/student/practice-sets?section=TRASH",
+      cookie,
+    );
+    assert.equal((await removedFromTrash.json()).data.total, 0);
   } finally {
     server.kill();
     if (server.exitCode === null)

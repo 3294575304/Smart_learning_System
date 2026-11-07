@@ -125,7 +125,7 @@ test("非法、越权、跨课程和重复参数不扩大查询", () => {
   ])
     assert.throws(() => filterStudentGradeCards(contexts, raw, published));
 });
-test("总评卡片区分零分、缺失、待发布及特殊状态，学情链接固定班级", () => {
+test("总评卡片区分零分、缺失、待发布及特殊状态，仅已发布成绩有构成入口", () => {
   const props = {
     course: { ...contexts[0].course, status: "ACTIVE" },
     classrooms: [{ ...contexts[0].classroom, status: "ACTIVE" }],
@@ -134,9 +134,8 @@ test("总评卡片区分零分、缺失、待发布及特殊状态，学情链�
   const pending = renderToStaticMarkup(
     React.createElement(StudentCourseEvaluationCard, props),
   );
-  assert.match(pending, /待发布不代表零分/);
-  assert.ok(pending.includes("courseId=c1&amp;classroomId=a"));
-  assert.doesNotMatch(pending, /查看本班作业|课程自评/);
+  assert.match(pending, /教师发布后可查看/);
+  assert.doesNotMatch(pending, /<button|\/student\/analytics|本班学情/);
   for (const [score, status, expected] of [
     ["0.00", "SCORED", "0.00"],
     [null, "SCORED", "尚未录入"],
@@ -161,5 +160,6 @@ test("总评卡片区分零分、缺失、待发布及特殊状态，学情链�
     );
     assert.ok(markup.includes(expected));
     assert.match(markup, /成绩构成/);
+    assert.doesNotMatch(markup, /\/student\/analytics|本班学情/);
   }
 });

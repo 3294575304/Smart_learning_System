@@ -36,7 +36,7 @@ export default async function TeacherCoursesPage() {
               {templates.length} 个可用模板
             </span>
           </span>
-          <span className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-3 py-2 text-white">
+          <span className="inline-flex items-center gap-1 rounded-lg bg-sky-700 px-3 py-2 text-white">
             <Plus
               aria-hidden="true"
               className="size-4 transition-transform group-open:rotate-45"

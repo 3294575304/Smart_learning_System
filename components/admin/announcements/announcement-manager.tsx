@@ -30,6 +30,21 @@ const TARGET_LABELS: Record<AnnouncementTargetType, string> = {
   ADMIN: "全部管理员",
   TEACHER: "全部教师",
   STUDENT: "全部学生",
+  CLASSROOM: "指定班级（教师端）",
+};
+
+/** 管理端只允许角色级广播；CLASSROOM 由教师端「课程通知」使用。 */
+const ROLE_TARGETS = [
+  AnnouncementTargetType.ALL,
+  AnnouncementTargetType.ADMIN,
+  AnnouncementTargetType.TEACHER,
+  AnnouncementTargetType.STUDENT,
+] as const;
+
+const STATUS_LABELS: Record<AnnouncementStatus, string> = {
+  DRAFT: "草稿",
+  PUBLISHED: "已发布",
+  REVOKED: "已撤回",
 };
 
 function dateTimeLocalValue(value: Date | null): string {
@@ -194,7 +209,7 @@ export function AnnouncementManager({
               className="w-full rounded-md border bg-white px-3 py-2"
               {...form.register("targetType")}
             >
-              {Object.values(AnnouncementTargetType).map((target) => (
+              {ROLE_TARGETS.map((target) => (
                 <option key={target} value={target}>
                   {TARGET_LABELS[target]}
                 </option>
@@ -211,7 +226,7 @@ export function AnnouncementManager({
           </label>
         </div>
         <button
-          className="mt-4 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
+          className="mt-4 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800 disabled:opacity-50"
           disabled={form.formState.isSubmitting}
           type="submit"
         >
@@ -259,9 +274,7 @@ export function AnnouncementManager({
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-semibold">{announcement.title}</h3>
                     <span className="rounded-full bg-gray-100 px-2 py-1 text-xs">
-                      {announcement.status === AnnouncementStatus.DRAFT
-                        ? "草稿"
-                        : "已发布"}
+                      {STATUS_LABELS[announcement.status]}
                     </span>
                     <span className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">
                       {TARGET_LABELS[announcement.targetType]}
@@ -286,7 +299,7 @@ export function AnnouncementManager({
                       <Pencil className="h-4 w-4" /> 编辑
                     </button>
                     <button
-                      className="inline-flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none disabled:cursor-wait disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-800 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none disabled:cursor-wait disabled:opacity-50"
                       disabled={pendingId === announcement.id}
                       onClick={() => void publish(announcement)}
                       type="button"

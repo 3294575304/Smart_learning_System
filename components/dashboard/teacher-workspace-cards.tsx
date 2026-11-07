@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardList,
   GitBranch,
+  Megaphone,
   School,
   Users,
 } from "lucide-react";
@@ -113,6 +114,13 @@ export function TeacherWorkspaceCards({
       icon: BarChart3,
       accent: "bg-amber-50 text-amber-700 ring-amber-100",
     },
+    {
+      label: "课程通知",
+      description: "发布通知与管理历史记录",
+      href: `${base}/announcements`,
+      icon: Megaphone,
+      accent: "bg-orange-50 text-orange-700 ring-orange-100",
+    },
   ];
   const stats = [
     {
@@ -159,7 +167,8 @@ export function TeacherWorkspaceCards({
           >
             快捷入口
           </h2>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
+          {/* 固定两列：5 项排 2/2/1，后续加入「考试管理」自然成为 3×2，不再出现 4+1 破格。 */}
+          <div className="mt-3 grid grid-cols-2 gap-2">
             {quickLinks.map(
               ({ label, description, href, icon: Icon, accent }) => (
                 <Link

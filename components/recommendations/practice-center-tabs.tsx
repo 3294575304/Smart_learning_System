@@ -2,6 +2,10 @@
 
 import { BookOpen, SlidersHorizontal, MessageCircle } from "lucide-react";
 import { AssistantPanelActiveContext } from "./practice-panel-context";
+import {
+  SECTION_TABS_LIST,
+  sectionTabClass,
+} from "@/components/ui/section-tabs";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 
@@ -84,8 +88,8 @@ export function PracticeCenterTabs({
       ) : null}
       <div
         role="tablist"
-        aria-label="练习中心功能"
-        className="flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-sky-100 bg-white p-1"
+        aria-label="自主练习功能"
+        className={SECTION_TABS_LIST}
       >
         {(
           [
@@ -101,7 +105,7 @@ export function PracticeCenterTabs({
             id={`practice-tab-${value}`}
             aria-selected={view === value}
             aria-controls={`practice-panel-${value}`}
-            className={`flex min-w-0 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${view === value ? "bg-sky-50 text-sky-800 ring-1 ring-sky-200 ring-inset" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
+            className={sectionTabClass(view === value)}
             onClick={() => selectView(value)}
             onKeyDown={(event) => {
               if (

@@ -5,7 +5,7 @@ import {
 } from "@/services/assignments/reporting";
 
 export type CourseAssignmentStatus =
-  "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
+  "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED" | "REVOKED";
 
 export type CourseSubmissionStatus =
   | "IN_PROGRESS"

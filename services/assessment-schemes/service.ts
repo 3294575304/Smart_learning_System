@@ -562,6 +562,8 @@ async function publishTransaction(
             enabled: component.enabled,
             sourceJson: jsonValue(component.sourceRefs),
             rubricJson: jsonValue(component.rubricBands),
+            assignmentAggregationConfirmed:
+              component.assignmentAggregationConfirmed === true,
           },
         });
         for (const mapping of component.mappings) {

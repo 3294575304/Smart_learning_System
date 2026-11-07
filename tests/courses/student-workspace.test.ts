@@ -4,21 +4,42 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   STUDENT_COURSE_TABS,
-  parseStudentCourseTab,
+  parseStudentCourseLocation,
   studentCourseTabHref,
 } from "../../services/courses/student-workspace";
 import { CourseWorkspaceTabs } from "../../components/learner-profiles/course-workspace-tabs";
-test("课程栏目默认概览，拒绝无效和重复参数", () => {
-  assert.equal(parseStudentCourseTab(undefined), "overview");
-  for (const value of ["", "invalid", ["profile", "tasks"], null, 3])
-    assert.equal(parseStudentCourseTab(value), null);
-  for (const tab of STUDENT_COURSE_TABS)
-    assert.equal(parseStudentCourseTab(tab.id), tab.id);
-  assert.equal(parseStudentCourseTab("tasks"), "overview");
-  assert.equal(parseStudentCourseTab("path"), "knowledge");
-  assert.equal(parseStudentCourseTab("activity"), "profile");
+
+test("旧链接映射到正确页签，拒绝非法和重复参数", () => {
+  assert.deepEqual(parseStudentCourseLocation(undefined, undefined), {
+    tab: "overview",
+  });
+  assert.deepEqual(parseStudentCourseLocation("tasks", undefined), {
+    tab: "tasks",
+  });
+  for (const [tab, section] of [
+    ["knowledge", "knowledge"],
+    ["path", "path"],
+    ["profile", "profile"],
+    ["activity", "trends"],
+    ["growth", "knowledge"],
+  ]) {
+    assert.deepEqual(parseStudentCourseLocation(tab, undefined), {
+      tab: "growth",
+      section,
+    });
+  }
+  for (const [tab, section] of [
+    ["", undefined],
+    ["invalid", undefined],
+    [["profile", "tasks"], undefined],
+    ["growth", ["path"]],
+    ["tasks", "profile"],
+    ["growth", "bad"],
+  ])
+    assert.equal(parseStudentCourseLocation(tab, section), null);
 });
-test("每个栏目只有一个当前状态，所有切换都保持对应课程与教学班", () => {
+
+test("三页签只有一个当前状态，切换保持课程与教学班", () => {
   for (const selected of STUDENT_COURSE_TABS) {
     const html = renderToStaticMarkup(
       React.createElement(CourseWorkspaceTabs, {
@@ -31,19 +52,12 @@ test("每个栏目只有一个当前状态，所有切换都保持对应课程�
     assert.equal((html.match(/<a /g) ?? []).length, 3);
     for (const tab of STUDENT_COURSE_TABS) {
       assert.ok(html.includes(tab.label));
-      const url = new URL(
-        studentCourseTabHref("course", "class1", tab.id),
-        "http://localhost",
-      );
-      assert.equal(url.searchParams.get("classroomId"), "class1");
-      assert.equal(url.searchParams.get("tab"), tab.id);
-      assert.ok(
-        html.includes(url.pathname + url.search.replaceAll("&", "&amp;")),
-      );
+      const href = studentCourseTabHref("course", "class1", tab.id);
+      assert.ok(html.includes(href.replaceAll("&", "&amp;")));
     }
   }
   assert.notEqual(
-    studentCourseTabHref("course", "class1", "profile"),
-    studentCourseTabHref("course", "class2", "profile"),
+    studentCourseTabHref("course", "class1", "growth", "profile"),
+    studentCourseTabHref("course", "class2", "growth", "profile"),
   );
 });

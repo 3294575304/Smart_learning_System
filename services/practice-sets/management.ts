@@ -17,13 +17,22 @@ type Row = {
   title: string | null;
   endedAt: Date | null;
   trashedAt: Date | null;
+  purgedAt: Date | null;
   revision: number;
 };
+export const practiceManagementSelect = {
+  title: true,
+  endedAt: true,
+  trashedAt: true,
+  purgedAt: true,
+  revision: true,
+} satisfies Prisma.PracticeSetManagementSelect;
 export function managementView(row: Row | null): PracticeManagementView {
   return {
     title: row?.title ?? null,
     endedAt: row?.endedAt?.toISOString() ?? null,
     trashedAt: row?.trashedAt?.toISOString() ?? null,
+    purgedAt: row?.purgedAt?.toISOString() ?? null,
     revision: row?.revision ?? 0,
   };
 }
@@ -41,6 +50,7 @@ async function lockGroup(
     where: { studentId_cycleKey: { studentId, cycleKey } },
     create: { studentId, cycleKey },
     update: {},
+    select: { ...practiceManagementSelect, id: true },
   });
 }
 export async function assertPracticeGroupWritable(
@@ -78,21 +88,25 @@ export async function assertPracticeGroupWritable(
       409,
     );
   const row = await lockGroup(tx, studentId, anchor.cycleKey);
+  if (row.purgedAt) throw new ResourceNotFoundError("练习组不存在");
   if (row.endedAt || row.trashedAt)
     throw new RecommendationOperationError(
       "练习已结束或已移入回收站，只能回看记录",
       409,
     );
+  return { cycleKey: anchor.cycleKey, managementId: row.id };
 }
 export async function readPracticeManagement(
   studentId: string,
   cycleKey: string,
+  db: Pick<Prisma.TransactionClient, "practiceSetManagement"> = prisma,
 ) {
-  return managementView(
-    await prisma.practiceSetManagement.findUnique({
-      where: { studentId_cycleKey: { studentId, cycleKey } },
-    }),
-  );
+  const row = await db.practiceSetManagement.findUnique({
+    where: { studentId_cycleKey: { studentId, cycleKey } },
+    select: practiceManagementSelect,
+  });
+  if (row?.purgedAt) throw new ResourceNotFoundError("练习组不存在");
+  return managementView(row);
 }
 
 async function apply(
@@ -102,6 +116,31 @@ async function apply(
   input: ReturnType<typeof practiceManagementSchema.parse>,
 ) {
   const row = await lockGroup(tx, studentId, cycleKey);
+  if (row.purgedAt) {
+    if (input.action === "PURGE") return managementView(row);
+    throw new ResourceNotFoundError("练习组不存在");
+  }
+  if (input.action === "PURGE") {
+    if (row.revision !== input.expectedRevision)
+      throw new RecommendationOperationError(
+        "练习记录已更新，请刷新后重试",
+        409,
+      );
+    if (!row.trashedAt)
+      throw new RecommendationOperationError("只能永久删除回收站中的练习", 409);
+    return managementView(
+      await tx.practiceSetManagement.update({
+        where: { id: row.id },
+        data: {
+          purgedAt: new Date(),
+          revision: { increment: 1 },
+          draftData: Prisma.DbNull,
+          draftSavedAt: null,
+        },
+        select: practiceManagementSelect,
+      }),
+    );
+  }
   const same =
     input.action === "RENAME"
       ? row.title === input.title
@@ -130,6 +169,7 @@ async function apply(
     });
   const updated = await tx.practiceSetManagement.update({
     where: { id: row.id },
+    select: practiceManagementSelect,
     data: {
       revision: { increment: 1 },
       ...(input.action === "RENAME"

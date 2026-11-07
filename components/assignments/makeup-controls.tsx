@@ -124,7 +124,7 @@ export function AssignmentMakeupControls({ data }: { data: Data }) {
   }
   async function submit() {
     if (inFlight.current) return;
-    if (reason.trim().length < 2) {
+    if (mode === "revoke" && reason.trim().length < 2) {
       setError("请填写至少2字的原因");
       return;
     }
@@ -287,7 +287,9 @@ export function AssignmentMakeupControls({ data }: { data: Data }) {
                       {g.kind === "REDO" ? "重做" : "补交"}
                       <details className="mt-1 text-xs text-slate-500">
                         <summary className="cursor-pointer">查看原因</summary>
-                        <p className="max-w-xs break-words">{g.reason}</p>
+                        <p className="max-w-xs break-words">
+                          {g.reason || "未填写原因"}
+                        </p>
                       </details>
                     </td>
                     <td className="p-3 text-xs">
@@ -425,11 +427,10 @@ export function AssignmentMakeupControls({ data }: { data: Data }) {
             </label>
           )}
           <label className="block space-y-1 text-sm">
-            <span>原因（必填）</span>
+            <span>原因（{mode === "revoke" ? "必填" : "选填"}）</span>
             <textarea
-              aria-label="调整原因"
-              required
-              minLength={2}
+              required={mode === "revoke"}
+              minLength={mode === "revoke" ? 2 : undefined}
               maxLength={500}
               className="min-h-20 w-full rounded-lg border p-3"
               value={reason}

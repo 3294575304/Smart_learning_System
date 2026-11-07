@@ -27,6 +27,8 @@ type Contexts = Awaited<
 >["contexts"];
 const panel =
   "min-w-0 rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/30";
+const panelAction =
+  "inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-sky-50 px-3 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
 function PanelTitle({
   icon,
   title,
@@ -71,12 +73,49 @@ export function ScoreChart({
           等待第一份已公布成绩
         </p>
         <p className="mt-1 text-xs leading-5 text-slate-500">
-          成绩公布后，这里会呈现本班作业的得分变化。
+          成绩公布后，我可以在这里查看每次作业的得分。
         </p>
       </div>
     );
-  const xs = points.map((_, i) =>
-    points.length === 1 ? 300 : 44 + (i * 512) / (points.length - 1),
+  // 只有 1 项成绩时，孤立的一个点画不出趋势，直接给出这次成绩和反馈入口更有用。
+  if (points.length === 1) {
+    const only = points[0];
+    return (
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-5">
+        <p className="text-xs font-medium text-slate-600">最近一次已公布成绩</p>
+        <p className="mt-2 text-sm font-medium [overflow-wrap:anywhere] break-words text-slate-900">
+          {only.title}
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-1.5">
+          <p className="text-3xl font-semibold tracking-tight text-slate-900 tabular-nums">
+            {only.percentage}
+            <span className="ml-1 text-sm font-medium text-slate-600">分</span>
+          </p>
+          {only.submittedAt ? (
+            <p className="text-xs text-slate-600 tabular-nums">
+              {only.submittedAt.toLocaleDateString("zh-CN")} 提交
+            </p>
+          ) : null}
+        </div>
+        <p className="mt-3 text-xs leading-5 text-slate-600">
+          只有 1 项已公布成绩，暂时不展示趋势；累积到 2 项后会自动显示变化曲线。
+        </p>
+        <Link
+          className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-sky-50 px-3 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+          href={`/student/submissions/${encodeURIComponent(only.id)}/result`}
+        >
+          查看成绩与教师反馈
+          <ArrowUpRight aria-hidden="true" className="size-3.5" />
+        </Link>
+      </div>
+    );
+  }
+  const left = 44;
+  const right = 16;
+  const width = Math.max(560, left + points.length * 100 + right);
+  const plotWidth = width - left - right;
+  const xs = points.map(
+    (_, i) => left + ((i + 0.5) * plotWidth) / points.length,
   );
   const y = (value: number) => 160 - value * 1.28;
   const path = points
@@ -84,99 +123,134 @@ export function ScoreChart({
     .join(" ");
   return (
     <figure className="mt-4 min-w-0">
-      <svg
-        viewBox="0 0 600 198"
-        className="block w-full"
-        role="img"
-        aria-label={`最近${points.length}项已公布作业的百分制成绩变化`}
+      <div
+        role="region"
+        aria-label="作业成绩图和作业名称，可横向滚动"
+        tabIndex={0}
+        className="overflow-x-auto rounded-lg focus-visible:outline-2 focus-visible:outline-sky-700"
       >
-        <title>本班已公布作业成绩趋势</title>
-        <desc>
-          {points.map((p) => `${p.title}：${p.percentage}分`).join("；")}
-        </desc>
-        {[0, 50, 100].map((value) => (
-          <g key={value}>
-            <line
-              x1="44"
-              y1={y(value)}
-              x2="556"
-              y2={y(value)}
-              stroke="#e2e8f0"
-              strokeDasharray="4 5"
-            />
-            <text
-              x="40"
-              y={y(value) + 4}
-              textAnchor="end"
-              fill="#64748b"
-              className="text-[20px] sm:text-[11px]"
+        <div
+          style={{ minWidth: Math.max(340, left + points.length * 82 + right) }}
+        >
+          <svg
+            viewBox={`0 0 ${width} 176`}
+            className="block w-full"
+            role="img"
+            aria-label={`我的作业成绩，最近 ${points.length} 项已公布成绩，按百分制展示`}
+          >
+            <title>我的作业成绩变化</title>
+            <desc>
+              {points.map((p) => `${p.title}：${p.percentage}分`).join("；")}
+            </desc>
+            {[0, 50, 100].map((value) => (
+              <g key={value}>
+                <line
+                  x1={left}
+                  y1={y(value)}
+                  x2={width - right}
+                  y2={y(value)}
+                  stroke="#e2e8f0"
+                  strokeDasharray="4 5"
+                />
+                <text
+                  x={left - 8}
+                  y={y(value) + 4}
+                  textAnchor="end"
+                  fill="#64748b"
+                  fontSize="11"
+                >
+                  {value}
+                </text>
+              </g>
+            ))}
+            {points.length > 1 ? (
+              <>
+                <path
+                  d={`${path} L${xs[xs.length - 1]},160 L${xs[0]},160 Z`}
+                  fill="#e0f2fe"
+                  fillOpacity="0.65"
+                />
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#0284c7"
+                  strokeWidth="2.5"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              </>
+            ) : null}
+            {points.map((point, i) => (
+              <g key={point.id}>
+                <circle
+                  cx={xs[i]}
+                  cy={y(point.percentage)}
+                  r="4"
+                  fill="white"
+                  stroke="#0284c7"
+                  strokeWidth="2.5"
+                >
+                  <title>{`${point.title}：${point.percentage}分`}</title>
+                </circle>
+                <text
+                  x={xs[i]}
+                  y={y(point.percentage) - 12}
+                  textAnchor="middle"
+                  fill="#0369a1"
+                  fontSize="12"
+                  fontWeight="600"
+                >
+                  {point.percentage}
+                </text>
+              </g>
+            ))}
+          </svg>
+          <ol
+            aria-label="横轴作业名称"
+            className="grid pb-3 text-center text-xs leading-5 text-slate-700"
+            style={{
+              gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))`,
+              paddingInline: `${(left / width) * 100}% ${(right / width) * 100}%`,
+            }}
+          >
+            {points.map((point) => (
+              <li key={point.id} className="min-w-0 px-1" title={point.title}>
+                <span className="line-clamp-2 [overflow-wrap:anywhere]">
+                  {point.title}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+      <details className="mt-2 text-sm text-slate-700">
+        <summary className="w-fit cursor-pointer rounded py-2 font-medium text-sky-800 focus-visible:outline-2 focus-visible:outline-sky-700">
+          查看完整作业名和得分
+        </summary>
+        <ol className="divide-y divide-slate-100">
+          {points.map((point) => (
+            <li
+              key={point.id}
+              className="flex items-baseline justify-between gap-3 py-2.5"
             >
-              {value}
-            </text>
-          </g>
-        ))}
-        {points.length > 1 ? (
-          <>
-            <path
-              d={`${path} L${xs[xs.length - 1]},160 L${xs[0]},160 Z`}
-              fill="#e0f2fe"
-              fillOpacity="0.65"
-            />
-            <path
-              d={path}
-              fill="none"
-              stroke="#0284c7"
-              strokeWidth="2.5"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          </>
-        ) : null}
-        {points.map((point, i) => (
-          <g key={point.id}>
-            <circle
-              cx={xs[i]}
-              cy={y(point.percentage)}
-              r="4"
-              fill="white"
-              stroke="#0284c7"
-              strokeWidth="2.5"
-            >
-              <title>{`${point.title}：${point.percentage}分`}</title>
-            </circle>
-            <text
-              x={xs[i]}
-              y={y(point.percentage) - 12}
-              textAnchor="middle"
-              fill="#0369a1"
-              className="text-[20px] sm:text-[11px]"
-              fontWeight="600"
-            >
-              {point.percentage}
-            </text>
-            <text
-              x={xs[i]}
-              y="185"
-              textAnchor="middle"
-              fill="#64748b"
-              className="text-[20px] sm:text-[10px]"
-            >
-              {point.submittedAt?.toLocaleDateString("zh-CN", {
-                month: "numeric",
-                day: "numeric",
-              }) ?? `第${i + 1}项`}
-            </text>
-          </g>
-        ))}
-      </svg>
-      <figcaption className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+              <span className="min-w-0 [overflow-wrap:anywhere]">
+                {point.title}
+              </span>
+              <span className="shrink-0 font-medium tabular-nums">
+                {point.percentage} 分
+              </span>
+            </li>
+          ))}
+        </ol>
+      </details>
+      <figcaption className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
         <span className="inline-flex items-center gap-1.5">
           <span className="size-2 rounded-full bg-sky-600" />
           百分制得分
         </span>
         <span>
           {points.length === 1
-            ? "仅有1项成绩，暂不判断趋势"
+            ? "仅有 1 项已公布成绩"
             : "按提交时间排列，每项作业取最新有效提交"}
         </span>
       </figcaption>
@@ -211,7 +285,7 @@ export function StudentAnalysisWorkspace({
   const tips = s.unsubmitted
     ? [
         {
-          title: `还有 ${s.unsubmitted} 项作业未提交`,
+          title: `我还有 ${s.unsubmitted} 项作业未提交`,
           text: s.overdue
             ? `其中 ${s.overdue} 项已截止，请到作业页查看任务状态和可提交范围。`
             : "先安排近期作业，再留出时间复习。",
@@ -222,8 +296,8 @@ export function StudentAnalysisWorkspace({
     : s.total
       ? [
           {
-            title: "本班作业均已提交",
-            text: "可以回顾已有反馈，整理容易遗漏的解题步骤。",
+            title: "我已提交全部作业",
+            text: "打开作业记录可回看答题和批改反馈。",
             href: assignments,
             label: "回顾作业",
           },
@@ -231,7 +305,7 @@ export function StudentAnalysisWorkspace({
       : [
           {
             title: "从课程学习开始",
-            text: "本班还没有已开放作业，可以先浏览课程内容与知识图谱。",
+            text: "当前教学班暂无已开放作业，可以先查看课程知识图谱。",
             href: center,
             label: "进入课程",
           },
@@ -246,14 +320,14 @@ export function StudentAnalysisWorkspace({
           : "结合已公布作业反馈，先复习反复出错的内容。";
   const metrics = [
     {
-      label: "作业提交率",
+      label: "我的作业提交率",
       value: s.completion === null ? "—" : `${s.completion}%`,
       detail: `已提交 ${s.submitted} / ${s.total} 项`,
       icon: CheckCheck,
       tint: "bg-sky-50 text-sky-600",
     },
     {
-      label: "已公布作业均分",
+      label: "我的作业均分",
       value: s.average ?? "—",
       detail: s.gradedCount
         ? `来自 ${s.gradedCount} 项百分制成绩`
@@ -267,17 +341,17 @@ export function StudentAnalysisWorkspace({
       detail: s.overdue
         ? `${s.overdue} 项已截止`
         : s.total
-          ? "按本班正式作业统计"
-          : "本班暂无已开放作业",
+          ? "当前教学班的正式作业"
+          : "当前教学班暂无已开放作业",
       icon: ClipboardList,
       tint: "bg-amber-50 text-amber-600",
     },
     {
-      label: "出勤记录",
+      label: "我的出勤次数",
       value: s.attendance.total,
       detail: s.attendance.total
         ? `正常 ${s.attendance.present} 次 · 待确认 ${s.attendance.pending} 次`
-        : "本班暂无出勤记录",
+        : "我还没有出勤记录",
       icon: CalendarCheck2,
       tint: "bg-teal-50 text-teal-600",
     },
@@ -286,7 +360,7 @@ export function StudentAnalysisWorkspace({
     <section className="space-y-5 pb-2" aria-label="个人学情分析看板">
       <StudentPageHeader
         title="学习分析"
-        description="查看当前课程的作业、成绩与学习表现。"
+        description="查看我的作业、成绩和出勤记录。"
         actions={
           <StudentCourseReturnLink
             courseId={s.course.id}
@@ -310,7 +384,7 @@ export function StudentAnalysisWorkspace({
               </span>
               <span>{s.course.term}</span>
               <span>·</span>
-              <span>仅统计当前课程的学习记录</span>
+              <span>当前教学班</span>
             </div>
           </div>
           <div className="w-full min-w-0 sm:max-w-sm">
@@ -353,13 +427,10 @@ export function StudentAnalysisWorkspace({
         <section className={`${panel} p-5 sm:p-6 lg:col-span-8`}>
           <PanelTitle
             icon={<ChartNoAxesCombined className="size-4" />}
-            title="成绩变化"
+            title="我的作业成绩"
             description="最近 8 项已公布作业，按百分制展示"
             action={
-              <Link
-                href={assignments}
-                className="inline-flex shrink-0 items-center gap-1 text-xs text-sky-700"
-              >
+              <Link href={assignments} className={panelAction}>
                 作业记录
                 <ArrowUpRight className="size-3.5" aria-hidden="true" />
               </Link>
@@ -370,8 +441,8 @@ export function StudentAnalysisWorkspace({
         <section className={`${panel} p-5 sm:p-6 lg:col-span-4`}>
           <PanelTitle
             icon={<Layers3 className="size-4" />}
-            title="学习任务"
-            description="本班已开放的正式作业"
+            title="我的作业进度"
+            description="当前教学班已开放的正式作业"
           />
           <div className="mt-6 flex flex-wrap items-center justify-center gap-5">
             <div
@@ -380,7 +451,7 @@ export function StudentAnalysisWorkspace({
               aria-label={
                 s.total
                   ? `${s.total}项作业，已公布${s.publishedCount}项，待公布${s.awaitingRelease}项，未提交${s.unsubmitted}项`
-                  : "本班暂无作业"
+                  : "当前教学班暂无作业"
               }
               style={{
                 background: s.total
@@ -439,13 +510,10 @@ export function StudentAnalysisWorkspace({
           <div className="p-5 sm:px-6">
             <PanelTitle
               icon={<ClipboardList className="size-4" />}
-              title="最近学习记录"
-              description="本班最近 8 项有效作业提交"
+              title="我的提交记录"
+              description="当前教学班最近 8 项有效提交"
               action={
-                <Link
-                  href={assignments}
-                  className="inline-flex shrink-0 items-center gap-1 text-xs text-sky-700"
-                >
+                <Link href={assignments} className={panelAction}>
                   全部作业
                   <ArrowUpRight className="size-3.5" aria-hidden="true" />
                 </Link>
@@ -506,7 +574,7 @@ export function StudentAnalysisWorkspace({
             </>
           ) : (
             <div className="px-6 pt-3 pb-8 text-center text-sm text-slate-500">
-              暂无提交记录，完成作业后会在这里留下学习足迹。
+              我还没有提交作业
             </div>
           )}
         </section>
@@ -514,11 +582,11 @@ export function StudentAnalysisWorkspace({
           <section className={`${panel} p-5 sm:p-6`}>
             <PanelTitle
               icon={<CalendarCheck2 className="size-4" />}
-              title="课堂出勤"
+              title="我的出勤记录"
               action={
                 <Link
                   href={`/student/attendance?${scope}`}
-                  className="inline-flex items-center gap-1 text-xs text-sky-700"
+                  className={panelAction}
                 >
                   明细
                   <ArrowUpRight className="size-3.5" aria-hidden="true" />
@@ -565,7 +633,7 @@ export function StudentAnalysisWorkspace({
               </>
             ) : (
               <p className="py-6 text-center text-sm text-slate-500">
-                暂无本班出勤记录
+                我还没有出勤记录
               </p>
             )}
           </section>
@@ -608,17 +676,14 @@ export function StudentAnalysisWorkspace({
           </span>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-slate-800">
-              进一步了解课程知识状态
+              我的知识掌握
             </h2>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              进入课程学习中心查看画像、知识图谱与学习路径。课程画像汇总本课程证据，本页作业和出勤仅统计当前课程。
+              进入课程学习中心查看画像、知识图谱与学习路径。画像汇总我在这门课的评分记录。
             </p>
           </div>
         </div>
-        <Link
-          href={center}
-          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-medium text-sky-700 hover:bg-sky-50"
-        >
+        <Link href={center} className={panelAction}>
           <BookOpen className="size-4" aria-hidden="true" />
           课程学习中心
           <ArrowRight className="size-3.5" aria-hidden="true" />
@@ -627,7 +692,7 @@ export function StudentAnalysisWorkspace({
       <footer className="flex flex-wrap items-start justify-between gap-2 px-1 text-[11px] leading-5 text-slate-500">
         <p className="inline-flex max-w-3xl items-start gap-1.5">
           <Info className="mt-1 size-3 shrink-0" aria-hidden="true" />
-          均分按本班各项作业最新有效且已公布的百分制成绩计算；不包含自主练习，未评分不按零分计算。
+          均分取我在当前教学班各项作业最新有效、已公布的百分制成绩。自主练习和未评分作业不计入。
         </p>
         <span className="inline-flex items-center gap-1">
           <Clock3 className="size-3" aria-hidden="true" />

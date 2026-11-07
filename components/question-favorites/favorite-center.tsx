@@ -146,7 +146,7 @@ function FavoriteRow({
               type="button"
               disabled={busy}
               onClick={() => void save()}
-              className="rounded-lg bg-sky-600 px-3 py-2 text-xs text-white"
+              className="rounded-lg bg-sky-700 px-3 py-2 text-xs text-white"
             >
               {busy ? "保存中…" : "保存备注"}
             </button>

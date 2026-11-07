@@ -38,7 +38,7 @@ export function FavoritePracticeButton({
         type="button"
         disabled={pending || disabled}
         onClick={() => void start()}
-        className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+        className="rounded-lg bg-sky-700 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
       >
         {pending ? "准备练习…" : "练习这道题"}
       </button>

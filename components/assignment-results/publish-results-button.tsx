@@ -15,6 +15,7 @@ export function PublishResultsButton({
   assignmentId: string;
   publication: {
     refreshAt?: Date | string;
+    availableAt?: Date | string;
     blockedReason?: string | null;
     canPublish: boolean;
     pendingCount: number;
@@ -44,6 +45,7 @@ export function PublishResultsButton({
     typeof publication | null
   >(null);
   const justPublished = publishedSource === publication;
+  const allPublished = publication.blockedReason === "成绩已全部公布";
   const busy = pending || refreshing;
   const canPublish = publication.canPublish && !justPublished;
   const [confirmPublish, setConfirmPublish] = useState(false);
@@ -100,14 +102,30 @@ export function PublishResultsButton({
               ? "成绩已全部公布"
               : canPublish
                 ? `公布给学生（${publication.gradedCount}份）`
-                : publication.blockedReason
-                  ? publication.blockedReason
-                  : publication.pendingCount
-                    ? "尚有提交待批改"
-                    : publication.publishedCount
-                      ? "成绩已全部公布"
-                      : "暂无可公布成绩"}
+                : allPublished
+                  ? "成绩已全部公布"
+                  : "公布成绩"}
       </button>
+      {!canPublish &&
+      !justPublished &&
+      !allPublished &&
+      publication.blockedReason ? (
+        <p className="max-w-sm text-xs leading-5 text-slate-600">
+          {publication.blockedReason}
+          {publication.availableAt && (
+            <>
+              <br />
+              最早可公布时间{" "}
+              <time dateTime={new Date(publication.availableAt).toISOString()}>
+                {new Date(publication.availableAt).toLocaleString("zh-CN", {
+                  timeZone: "Asia/Shanghai",
+                  hour12: false,
+                })}
+              </time>
+            </>
+          )}
+        </p>
+      ) : null}
       <p className="max-w-sm text-xs leading-5 text-slate-500">
         公布后学生可见分数、答案、解析和反馈；完成的待公布事项会从工作台移除。
         {publication.pendingCount

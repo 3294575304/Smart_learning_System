@@ -474,7 +474,11 @@ export async function loadRecentAssignments(
   schoolId: string,
 ): Promise<DashboardActivity[]> {
   const records = await prisma.assignment.findMany({
-    where: { teacher: { schoolId }, publishedAt: { not: null } },
+    where: {
+      teacher: { schoolId },
+      deletedAt: null,
+      publishedAt: { not: null },
+    },
     orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
     take: limit,
     select: {

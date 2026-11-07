@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import {
   studentEnrollmentLabel,
+  studentEnrollmentStatus,
   type StudentEnrollmentContext,
 } from "@/services/courses/student-enrollment";
 export function StudentEnrollmentPicker({
@@ -54,15 +55,18 @@ export function StudentEnrollmentPicker({
               `${action}?${new URLSearchParams({ classroomId: next })}`,
             );
           }}
-          className="min-h-11 w-full min-w-0 rounded-lg border border-sky-100 bg-sky-50/40 px-3 text-sm text-slate-700"
+          className="min-h-11 w-full min-w-0 rounded-lg border border-sky-100 bg-sky-50/40 px-3 text-sm text-slate-700 focus-visible:outline-2 focus-visible:outline-sky-700"
         >
           {contexts.map((item) => (
             <option key={item.classroom.id} value={item.classroom.id}>
-              {studentEnrollmentLabel(item)}
-              {item.classroom.status === "ARCHIVED" ||
-              item.course.status === "ARCHIVED"
-                ? "（已结课）"
-                : ""}
+              {studentEnrollmentLabel(item)}（
+              {
+                studentEnrollmentStatus(
+                  item.course.status,
+                  item.classroom.status,
+                ).label
+              }
+              ）
             </option>
           ))}
         </select>

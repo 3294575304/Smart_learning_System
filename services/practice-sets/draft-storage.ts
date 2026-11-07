@@ -6,13 +6,15 @@ const answerSchema = z.discriminatedUnion("kind", [
     optionIds: z.array(z.string().max(128)).max(50),
   }),
   z.object({ kind: z.literal("BOOLEAN"), value: z.boolean().nullable() }),
-  z.object({ kind: z.enum(["TEXT", "CODE"]), value: z.string().max(100000) }),
+  z.object({ kind: z.enum(["TEXT", "CODE"]), value: z.string().max(200000) }),
 ]);
 const snapshotSchema = z.object({
   at: z.number().finite(),
   current: z.string(),
   drafts: z.record(answerSchema),
   keys: z.record(z.string().uuid()),
+  revision: z.number().int().nonnegative().optional(),
+  dirty: z.boolean().optional(),
 });
 export function parsePracticeDraft(
   value: unknown,

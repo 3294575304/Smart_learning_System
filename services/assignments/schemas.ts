@@ -1,3 +1,4 @@
+import { assignmentCategorySchema } from "./category";
 import { SubmissionStatus } from "@prisma/client";
 import { z } from "zod";
 
@@ -25,6 +26,7 @@ export const assignmentTaskSchema = z
 
 export const assignmentUpsertSchema = z
   .object({
+    category: assignmentCategorySchema.optional(),
     title: z.string().trim().min(2, "作业名称至少需要 2 个字符").max(120),
     description: z.string().trim().max(5000).default(""),
     classroomId: z.string().cuid("班级 ID 格式无效"),
@@ -34,6 +36,7 @@ export const assignmentUpsertSchema = z
     allowAttachments: z.boolean().optional(),
     submissionTask: assignmentTaskSchema.optional(),
     questions: z.array(assignmentQuestionSchema).max(200),
+    scoreTarget: z.number().positive().max(10000).optional(),
   })
   .superRefine((value, context) => {
     if (value.submissionTask && value.questions.length)
@@ -42,6 +45,28 @@ export const assignmentUpsertSchema = z
         path: ["questions"],
         message: "直接布置任务与题库组卷请分别保存",
       });
+    if (value.scoreTarget !== undefined) {
+      const targetCents = Math.round(value.scoreTarget * 100);
+      const total = value.questions.reduce(
+        (sum, question) => sum + Math.round(question.points * 100),
+        0,
+      );
+      if (
+        value.submissionTask ||
+        !value.questions.length ||
+        total !== targetCents ||
+        Math.abs(targetCents / 100 - value.scoreTarget) > 1e-8 ||
+        value.questions.some(
+          ({ points }) =>
+            Math.abs(Math.round(points * 100) / 100 - points) > 1e-8,
+        )
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["scoreTarget"],
+          message: "题型配分须合计为目标总分，且单题精确到 0.01 分",
+        });
+    }
     const questionIds = value.questions.map((item) => item.questionId);
     const sortOrders = value.questions.map((item) => item.sortOrder);
     if (new Set(questionIds).size !== questionIds.length) {
@@ -106,6 +131,10 @@ export const teacherSubmissionListQuerySchema = z
 export const assignmentListQuerySchema = z
   .object({
     section: z.enum(["CURRENT", "HISTORY"]).default("CURRENT"),
+    category: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      assignmentCategorySchema.optional(),
+    ),
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(50).default(20),
     courseId: z.preprocess(
@@ -123,6 +152,7 @@ export const assignmentListQuerySchema = z
           "PUBLISHED",
           "CLOSED",
           "ARCHIVED",
+          "REVOKED",
         ])
         .optional(),
     ),
@@ -142,7 +172,9 @@ export const assignmentListQuerySchema = z
   .transform((query) => ({
     ...query,
     section:
-      query.status === "ARCHIVED" || query.status === "CLOSED"
+      query.status === "ARCHIVED" ||
+      query.status === "CLOSED" ||
+      query.status === "REVOKED"
         ? ("HISTORY" as const)
         : query.section,
   }));
@@ -155,8 +187,11 @@ export const studentResultsQuerySchema = z.object({
 export const studentAssignmentListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   status: z
-    .enum(["ALL", "PENDING", "IN_PROGRESS", "SUBMITTED", "EXPIRED"])
-    .default("ALL"),
+    .enum(["ALL", "TODO", "PENDING", "IN_PROGRESS", "SUBMITTED", "EXPIRED"])
+    .default("ALL")
+    .transform((status) =>
+      status === "PENDING" || status === "IN_PROGRESS" ? "TODO" : status,
+    ),
 });
 
 export const startAttemptSchema = z.object({

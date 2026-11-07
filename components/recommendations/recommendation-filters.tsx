@@ -21,7 +21,7 @@ export function RecommendationFilters({ activeStatus }: Props) {
             aria-current={active ? "page" : undefined}
             className={`shrink-0 rounded-full border px-4 py-2 text-sm transition-colors ${
               active
-                ? "border-sky-600 bg-sky-600 text-white"
+                ? "border-sky-600 bg-sky-700 text-white"
                 : "bg-white hover:bg-sky-50/70"
             }`}
             href={filter.href}

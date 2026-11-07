@@ -87,7 +87,7 @@ test("分页、状态与额外字段严格校验", () => {
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PracticeSetCenter } from "../../components/recommendations/practice-set-center";
-test("练习中心按组展示题量、进度、课程和继续入口", () => {
+test("自主练习按组展示题量、进度、课程和继续入口", () => {
   Object.assign(globalThis, { React });
   const set = buildPracticeSet([
     item("a", "COMPLETED"),

@@ -10,7 +10,7 @@ export async function getTeacherAssignmentOverview(
   assignmentId: string,
 ) {
   const record = await prisma.assignment.findFirst({
-    where: { id: assignmentId, teacherId },
+    where: { id: assignmentId, teacherId, deletedAt: null },
     select: {
       questions: {
         orderBy: { sortOrder: "asc" },

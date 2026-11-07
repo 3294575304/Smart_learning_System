@@ -33,6 +33,12 @@ async function main() {
       "--conditions=react-server",
       "--import",
       "tsx",
+      resolve("tests/courses/student-work-pagination.integration.ts"),
+    ]);
+    run([
+      "--conditions=react-server",
+      "--import",
+      "tsx",
       resolve("tests/courses/student-task-overview.integration.ts"),
     ]);
     run([

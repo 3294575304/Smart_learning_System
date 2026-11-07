@@ -19,7 +19,15 @@ interface Dimension {
   sourceStatus?: string;
 }
 
-export function LearnerProfileDetail({ profile }: { profile: Profile }) {
+export function LearnerProfileDetail({
+  profile,
+  focusConceptId,
+  studentView = false,
+}: {
+  profile: Profile;
+  focusConceptId?: string;
+  studentView?: boolean;
+}) {
   const attendance = profile.dimensions.attendance as Dimension;
   const activity = profile.dimensions.activity as Dimension;
   const reflection = profile.dimensions.reflection as Dimension;
@@ -29,7 +37,9 @@ export function LearnerProfileDetail({ profile }: { profile: Profile }) {
       <section className="rounded-xl border bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="font-semibold">确定性画像摘要</h2>
+            <h2 className="font-semibold">
+              {studentView ? "我的画像摘要" : "确定性画像摘要"}
+            </h2>
             <p className="mt-2 text-sm leading-6">{profile.summary}</p>
           </div>
           <div className="text-muted-foreground text-right text-xs">
@@ -46,7 +56,7 @@ export function LearnerProfileDetail({ profile }: { profile: Profile }) {
                 ? "暂无有效出勤记录"
                 : `出勤折算率 ${attendance.rate}%`
             }
-            label="出勤"
+            label={studentView ? "我的出勤" : "出勤"}
             state={attendance.evidenceState}
           />
           <DimensionCard
@@ -74,7 +84,7 @@ export function LearnerProfileDetail({ profile }: { profile: Profile }) {
                 ? "暂无稳定结论"
                 : `稳定概念均分 ${mastery.conclusiveAverageMastery}%`
             }
-            label="客观掌握度"
+            label={studentView ? "我的知识掌握度" : "客观掌握度"}
             state={mastery.evidenceState}
           />
         </div>
@@ -249,6 +259,11 @@ export function LearnerProfileDetail({ profile }: { profile: Profile }) {
               <details
                 key={chapter.id}
                 id={`profile-chapter-${chapter.id}`}
+                open={
+                  focusConceptId
+                    ? chapter.conceptIds.includes(focusConceptId)
+                    : undefined
+                }
                 className="group rounded-xl border border-sky-100"
               >
                 <summary className="cursor-pointer p-4">
@@ -278,7 +293,14 @@ export function LearnerProfileDetail({ profile }: { profile: Profile }) {
                 </summary>
                 <div className="divide-y border-t border-sky-100 px-4">
                   {concepts.map((concept) => (
-                    <div key={concept.conceptId} className="py-4">
+                    <div
+                      key={concept.conceptId}
+                      id={`profile-concept-${concept.conceptId}`}
+                      tabIndex={
+                        focusConceptId === concept.conceptId ? -1 : undefined
+                      }
+                      className="scroll-mt-24 py-4"
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <h4 className="text-sm font-medium">{concept.name}</h4>
                         <span className="text-sm font-semibold text-sky-800">
@@ -299,7 +321,12 @@ export function LearnerProfileDetail({ profile }: { profile: Profile }) {
                         {Math.round(concept.confidence * 100)}%
                       </p>
                       {concept.historicalEvidence.latestReferences.length ? (
-                        <details className="mt-2 text-sm">
+                        <details
+                          open={
+                            focusConceptId === concept.conceptId || undefined
+                          }
+                          className="mt-2 text-sm"
+                        >
                           <summary className="cursor-pointer text-sky-700">
                             查看评分依据
                           </summary>

@@ -365,7 +365,7 @@ function ReviewEditor({
           下载 AI 审核稿
         </a>
         <button
-          className="rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+          className="rounded-md bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
           disabled={busy}
           onClick={() => void approve()}
           type="button"
@@ -577,7 +577,7 @@ export function QualityReportWorkspace({
         <p className="text-sm text-red-700">{error}</p>
         <button
           type="button"
-          className="mt-3 rounded-lg bg-sky-600 px-4 py-2 text-sm text-white"
+          className="mt-3 rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
           onClick={() => {
             setError(null);
             void load().catch((reason: unknown) =>
@@ -894,7 +894,7 @@ export function QualityReportWorkspace({
           </p>
         ) : null}
         <button
-          className="rounded-xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 disabled:opacity-50"
+          className="rounded-xl bg-sky-700 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-800 disabled:opacity-50"
           disabled={
             busy ||
             templateBusy ||

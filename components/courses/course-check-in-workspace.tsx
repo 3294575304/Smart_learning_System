@@ -270,7 +270,7 @@ export function CourseCheckInWorkspace({
           </label>
           <button
             disabled={busy}
-            className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             {busy ? "发布中…" : "发布签到"}
           </button>
@@ -344,7 +344,7 @@ export function CourseCheckInWorkspace({
                   type="button"
                   disabled={busy}
                   onClick={() => void update("OPEN")}
-                  className="rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                  className="rounded-md bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
                 >
                   开放签到
                 </button>
@@ -354,7 +354,7 @@ export function CourseCheckInWorkspace({
                   type="button"
                   disabled={busy}
                   onClick={() => void update("CLOSE")}
-                  className="rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                  className="rounded-md bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
                 >
                   结束并结算缺勤
                 </button>
@@ -447,7 +447,7 @@ export function CourseCheckInWorkspace({
                                 <button
                                   type="submit"
                                   disabled={busy}
-                                  className="rounded bg-sky-600 px-2 py-1 text-white disabled:opacity-50"
+                                  className="rounded bg-sky-700 px-2 py-1 text-white disabled:opacity-50"
                                 >
                                   保存
                                 </button>

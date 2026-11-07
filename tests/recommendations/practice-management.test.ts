@@ -75,6 +75,7 @@ test("active menu and trash menu offer the appropriate lifecycle actions", () =>
           revision: 0,
           endedAt: trashed ? "date" : null,
           trashedAt: trashed ? "date" : null,
+          purgedAt: null,
         },
         onChange() {},
       }),
@@ -85,5 +86,7 @@ test("active menu and trash menu offer the appropriate lifecycle actions", () =>
   assert.match(active, />移入回收站</);
   const trash = render(true);
   assert.match(trash, />恢复记录</);
+  assert.match(trash, />永久删除</);
+  assert.doesNotMatch(active, />永久删除</);
   assert.doesNotMatch(trash, />结束练习<|>重命名</);
 });

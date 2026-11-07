@@ -148,19 +148,26 @@ function CourseDeleteAction({
                 取消
               </button>
               <button
-                className="bg-destructive text-destructive-foreground inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-4 text-sm font-semibold text-rose-800 transition-[background-color,border-color,color,scale] duration-150 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 enabled:hover:border-rose-400 enabled:hover:bg-rose-100 enabled:active:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60 motion-safe:enabled:active:scale-[0.96]"
                 disabled={isDeleting}
                 onClick={() => void confirmDelete()}
                 type="button"
               >
                 {isDeleting ? (
                   <>
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className="size-4 motion-safe:animate-spin"
+                    />
                     删除中...
                   </>
                 ) : (
                   <>
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2
+                      aria-hidden="true"
+                      className="size-4"
+                      strokeWidth={2}
+                    />
                     确认删除
                   </>
                 )}
@@ -267,7 +274,7 @@ export function TeacherCourseList({
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Link
-                  className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600"
+                  className="inline-flex items-center gap-1 rounded-lg bg-sky-700 px-3 py-2 text-xs font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-sky-600"
                   href={`/teacher/courses/${course.id}`}
                 >
                   进入课程

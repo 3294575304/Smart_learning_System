@@ -56,6 +56,7 @@ const componentSchema = z
     sourceRefs: sourceRefsSchema,
     mappings: z.array(mappingSchema).max(100),
     rubricBands: z.array(rubricBandSchema).max(20),
+    assignmentAggregationConfirmed: z.boolean().optional(),
   })
   .strict();
 
@@ -161,6 +162,22 @@ export const publishableAssessmentSchemeSchema =
           code: "custom",
           path: ["components", index, "weight"],
           message: "启用项目权重必须大于 0",
+        });
+      }
+      if (
+        component.assignmentAggregationConfirmed &&
+        (component.sourceType !== GradeSourceType.PLATFORM_ASSIGNMENT ||
+          ![
+            AssessmentComponentType.REGULAR_PERFORMANCE,
+            AssessmentComponentType.COURSE_ASSIGNMENT,
+            AssessmentComponentType.COURSE_EXPERIMENT,
+          ].some((type) => type === component.type))
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["components", index, "assignmentAggregationConfirmed"],
+          message:
+            "仅平时表现、课程作业、课程实验的平台作业来源项目可确认等权规则",
         });
       }
       if (component.sourceType === null) {

@@ -20,6 +20,7 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { readPracticeManagement } from "@/services/practice-sets/management";
 import { studentAnalysisOutputSchema } from "@/services/ai/schemas";
 import { AUTO_GRADABLE_QUESTION_TYPES } from "@/services/assignments/grading";
 import {
@@ -682,6 +683,7 @@ export async function loadRecommendationsByCycle(
   studentId: string,
   cycleKey: string,
 ): Promise<RecommendationViewRecord[]> {
+  await readPracticeManagement(studentId, cycleKey);
   return prisma.personalizedRecommendation.findMany({
     where: { studentId, cycleKey },
     orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { id: "desc" }],
@@ -720,10 +722,15 @@ export async function loadRecommendationPage(
   studentId: string,
   query: RecommendationListQuery,
 ): Promise<RecommendationViewRecord[]> {
+  const purged = await prisma.practiceSetManagement.findMany({
+    where: { studentId, purgedAt: { not: null } },
+    select: { cycleKey: true },
+  });
   return prisma.personalizedRecommendation.findMany({
     where: {
       studentId,
       question: schoolQuestionAccessWhere(studentId),
+      cycleKey: { notIn: purged.map((row) => row.cycleKey) },
       ...(query.status ? { status: query.status } : {}),
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],

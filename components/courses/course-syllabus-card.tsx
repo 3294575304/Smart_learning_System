@@ -195,7 +195,7 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
               </div>
             </div>
             <a
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800"
               href={`/api/teacher/courses/${courseId}/syllabus/download`}
             >
               <Download className="h-4 w-4" />
@@ -218,7 +218,7 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
               </div>
             </div>
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-60"
               disabled={isUploading}
               onClick={() => fileInputRef.current?.click()}
               type="button"

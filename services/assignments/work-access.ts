@@ -146,6 +146,7 @@ export async function usableGrantWindow(
   const result = await tx.assignmentMakeupGrant.aggregate({
     _count: { _all: true },
     _min: { expiresAt: true },
+    _max: { expiresAt: true },
     where: {
       assignmentId,
       status: "ACTIVE",
@@ -162,7 +163,11 @@ export async function usableGrantWindow(
       },
     },
   });
-  return { count: result._count._all, nextAt: result._min.expiresAt };
+  return {
+    count: result._count._all,
+    nextAt: result._min.expiresAt,
+    lastAt: result._max.expiresAt,
+  };
 }
 export async function countUsableGrants(
   tx: Pick<Prisma.TransactionClient, "assignmentMakeupGrant">,

@@ -1,3 +1,5 @@
+import { AssignmentStateRefresh } from "@/components/assignments/state-refresh";
+import { personalWorkHref } from "@/services/assignments/personal-work-navigation";
 import { Role } from "@prisma/client";
 import { z } from "zod";
 import { notFound } from "next/navigation";
@@ -57,6 +59,7 @@ export default async function StudentAssignmentsPage({
   };
   return (
     <section className="min-w-0 space-y-5">
+      <AssignmentStateRefresh renderedAt={Date.now()} />
       <TeacherBackLink href={returnTo}>返回学生查询</TeacherBackLink>
       <header>
         <h1 className="text-2xl font-semibold">{data.name}的作业</h1>
@@ -183,9 +186,17 @@ export default async function StudentAssignmentsPage({
                   <td className="px-4 py-4">
                     <a
                       className="text-sky-700 hover:underline"
-                      href={`/teacher/assignments/${item.id}/results?${new URLSearchParams({ studentId: id.data, returnTo: pageHref(query.page), ...(item.submissionId ? { submissionId: item.submissionId } : {}) })}`}
+                      href={
+                        item.submissionId
+                          ? personalWorkHref(
+                              item.id,
+                              item.submissionId,
+                              pageHref(query.page),
+                            )
+                          : `/teacher/assignments/${item.id}`
+                      }
                     >
-                      {item.submissionId ? "查看作答" : "查看提交情况"}
+                      {item.submissionId ? "查看作答" : "查看作业"}
                     </a>
                   </td>
                 </tr>

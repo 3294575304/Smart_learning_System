@@ -25,6 +25,7 @@ import {
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import { expireStudentRecommendations } from "@/services/recommendations/repository";
 import { prisma } from "@/lib/prisma";
+import { readPracticeManagement } from "@/services/practice-sets/management";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import type { AuthenticatedUser } from "@/services/auth/types";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
@@ -1207,6 +1208,7 @@ async function courseRecommendationCycleView(
       },
     },
   });
+  await readPracticeManagement(cycle.studentId, cycle.cycleKey, transaction);
   return {
     cycle: {
       id: cycle.id,
@@ -1252,6 +1254,7 @@ export async function getStudentPracticeSession(
     where: { id: cycleId, studentId },
     select: {
       id: true,
+      cycleKey: true,
       requestSnapshot: true,
       generatedAt: true,
       course: { select: { id: true, name: true } },
@@ -1309,6 +1312,7 @@ export async function getStudentPracticeSession(
     },
   });
   if (!cycle) throw new ResourceNotFoundError("练习或测试不存在");
+  await readPracticeManagement(studentId, cycle.cycleKey);
   const snapshot = cycle.requestSnapshot;
   const rawDistribution =
     typeof snapshot === "object" &&

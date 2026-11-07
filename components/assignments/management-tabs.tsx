@@ -3,6 +3,7 @@ type Props = {
   section: "ALL" | "CURRENT" | "HISTORY";
   courseId?: string;
   classroomId?: string;
+  category?: string;
 };
 
 export function AssignmentManagementTabs({
@@ -10,6 +11,7 @@ export function AssignmentManagementTabs({
   section,
   courseId,
   classroomId,
+  category,
 }: Props) {
   const tabs = [
     { label: "当前作业", view: "ASSIGNMENTS", section: "CURRENT" },
@@ -23,6 +25,8 @@ export function AssignmentManagementTabs({
           view === tab.view && (view === "STUDENTS" || section === tab.section);
         const params = new URLSearchParams({ section: tab.section });
         if (courseId) params.set("courseId", courseId);
+        if (category && tab.view === "ASSIGNMENTS")
+          params.set("category", category);
         if (tab.view === "STUDENTS") {
           params.set("view", "STUDENTS");
           if (classroomId) params.set("classroomId", classroomId);
