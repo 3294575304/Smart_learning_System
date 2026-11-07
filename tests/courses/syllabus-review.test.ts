@@ -63,7 +63,9 @@ test("审核修订保持 AI 原稿、阻止并发覆盖并幂等发布不可变�
       teacher.id,
       {
         templateId: template.id,
-        questionCategoryId: (await ensureTestQuestionCategory(prisma)).id,
+        questionCategoryId: (
+          await ensureTestQuestionCategory(prisma, teacher.id)
+        ).id,
         courseNo: `REVIEW-${randomBytes(4).toString("hex")}`,
         term: "2026-2027-1",
         name: "Python Review Test",

@@ -84,7 +84,8 @@ async function createOwnedCourse(teacherId: string) {
     teacherId,
     {
       templateId: template.id,
-      questionCategoryId: (await ensureTestQuestionCategory(prisma)).id,
+      questionCategoryId: (await ensureTestQuestionCategory(prisma, teacherId))
+        .id,
       courseNo: `FILE-${suffix.toUpperCase()}`,
       term: "2026-2027-1",
       name: `课程文件测试 ${suffix}`,

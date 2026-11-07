@@ -660,6 +660,7 @@ model User {
   mustChangePassword   Boolean                 @default(false)
   passwordChangedAt    DateTime?
   lastLoginAt          DateTime?
+  deletedAt            DateTime?
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
 

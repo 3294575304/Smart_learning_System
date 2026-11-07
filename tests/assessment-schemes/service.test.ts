@@ -123,7 +123,8 @@ test("考核方案草稿乐观并发、正式发布不可变且重复发布幂�
     teacher.id,
     {
       templateId: template.id,
-      questionCategoryId: (await ensureTestQuestionCategory(prisma)).id,
+      questionCategoryId: (await ensureTestQuestionCategory(prisma, teacher.id))
+        .id,
       courseNo: `SCHEME-${randomBytes(4).toString("hex")}`,
       term: "2026-2027-1",
       name: "Assessment Scheme Test",

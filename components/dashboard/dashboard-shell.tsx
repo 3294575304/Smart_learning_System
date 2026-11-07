@@ -287,11 +287,13 @@ export function DashboardShell({
           )}
         </div>
         <div className="flex-1 overflow-y-auto">
-          <div className="px-6 pt-5 pb-2">
-            <p className="text-muted-foreground text-xs font-medium tracking-wide">
-              {title}
-            </p>
-          </div>
+          {user.role !== Role.SUPER_ADMIN ? (
+            <div className="px-6 pt-5 pb-2">
+              <p className="text-muted-foreground text-xs font-medium tracking-wide">
+                {title}
+              </p>
+            </div>
+          ) : null}
           <SidebarNavigation
             groups={navigationGroups}
             pathname={pathname}

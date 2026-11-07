@@ -3,8 +3,7 @@ import Link from "next/link";
 import { PageIndex } from "@/components/dashboard/page-index";
 import { RefreshOverview } from "@/components/super-admin/refresh-overview";
 import { DeleteSchoolButton } from "@/components/super-admin/delete-school-button";
-import { EditSchoolAdminButton } from "@/components/super-admin/edit-school-admin-button";
-import { SchoolAdminPassword } from "@/components/super-admin/school-admin-password";
+import { DeleteSchoolAdminButton } from "@/components/super-admin/delete-school-admin-button";
 import { provinceName } from "@/services/schools/provinces";
 import type { SchoolAdminDirectoryData } from "@/services/super-admin/directory";
 import {
@@ -206,7 +205,6 @@ export function SchoolAdminDirectory({
                     "管理员",
                     "绑定学校",
                     "账号状态",
-                    "密码",
                     "最近登录（北京时间）",
                     "操作",
                   ].map((label) => (
@@ -237,21 +235,15 @@ export function SchoolAdminDirectory({
                         {admin.status === "ACTIVE" ? "已启用" : "已禁用"}
                       </span>
                     </td>
-                    <td className="px-5 py-4">
-                      <SchoolAdminPassword
-                        displayName={admin.profile?.displayName ?? "未设置姓名"}
-                      />
-                    </td>
                     <td className="px-5 py-4 text-slate-500">
                       {dateTime(admin.lastLoginAt)}
                     </td>
                     <td className="px-5 py-4">
-                      <EditSchoolAdminButton
+                      <DeleteSchoolAdminButton
                         admin={{
                           id: admin.id,
                           displayName:
                             admin.profile?.displayName ?? "未设置姓名",
-                          email: admin.email,
                         }}
                       />
                     </td>

@@ -53,6 +53,7 @@ export async function loadAdminUserPage(
 }> {
   const where: Prisma.UserWhereInput = {
     schoolId,
+    deletedAt: null,
     role: query.role ?? { in: [...ADMIN_MANAGED_ROLES] },
     ...(query.keyword
       ? {
@@ -101,6 +102,7 @@ export function findAdminUserById(
     where: {
       id: userId,
       schoolId,
+      deletedAt: null,
       role: { in: [...ADMIN_MANAGED_ROLES] },
     },
     select: adminUserSelect,

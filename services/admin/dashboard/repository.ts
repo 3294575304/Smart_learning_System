@@ -48,32 +48,35 @@ export async function loadUserOverview(input: {
 }) {
   const [total, roles, statuses, current7, previous7, current30] =
     await Promise.all([
-      prisma.user.count({ where: { schoolId: input.schoolId } }),
+      prisma.user.count({ where: { schoolId: input.schoolId, deletedAt: null } }),
       prisma.user.groupBy({
         by: ["role"],
-        where: { schoolId: input.schoolId },
+        where: { schoolId: input.schoolId, deletedAt: null },
         _count: { _all: true },
       }),
       prisma.user.groupBy({
         by: ["status"],
-        where: { schoolId: input.schoolId },
+        where: { schoolId: input.schoolId, deletedAt: null },
         _count: { _all: true },
       }),
       prisma.user.count({
         where: {
           schoolId: input.schoolId,
+          deletedAt: null,
           createdAt: { gte: input.current7Start, lt: input.current7End },
         },
       }),
       prisma.user.count({
         where: {
           schoolId: input.schoolId,
+          deletedAt: null,
           createdAt: { gte: input.previous7Start, lt: input.previous7End },
         },
       }),
       prisma.user.count({
         where: {
           schoolId: input.schoolId,
+          deletedAt: null,
           createdAt: { gte: input.current30Start, lt: input.current7End },
         },
       }),
@@ -339,12 +342,12 @@ export async function loadDistributions(schoolId: string) {
     knowledgePointCoverage,
   ] = await Promise.all([
     prisma.user.groupBy({
-      where: { schoolId },
+      where: { schoolId, deletedAt: null },
       by: ["role"],
       _count: { _all: true },
     }),
     prisma.user.groupBy({
-      where: { schoolId },
+      where: { schoolId, deletedAt: null },
       by: ["status"],
       _count: { _all: true },
     }),
@@ -419,7 +422,7 @@ export async function loadRecentUsers(
 
   while (activities.length < limit) {
     const records = await prisma.user.findMany({
-      where: { schoolId, role: { not: Role.SUPER_ADMIN } },
+      where: { schoolId, deletedAt: null, role: { not: Role.SUPER_ADMIN } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip,
       take: batchSize,

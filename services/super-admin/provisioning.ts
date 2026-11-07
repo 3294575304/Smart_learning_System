@@ -14,6 +14,7 @@ import {
 } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { ProvisioningError } from "@/services/super-admin/provisioning-errors";
+import { adminUserIdSchema } from "@/services/admin/users/schemas";
 import {
   createPartnerSchoolSchema,
   createSchoolAdminSchema,
@@ -27,7 +28,6 @@ import type {
   CreatedSchoolAdmin,
 } from "@/services/super-admin/provisioning-types";
 import { deleteSchoolAssetIfUnused } from "@/services/schools/service";
-import { ensureSchoolCatalogDefaults } from "@/services/schools/catalog";
 
 async function requireSuperAdmin(
   tx: Prisma.TransactionClient,
@@ -168,7 +168,6 @@ export async function createPartnerSchool(
         data: { key, name: data.name, provinceCode: data.provinceCode },
         select: { id: true, name: true, provinceCode: true },
       });
-      await ensureSchoolCatalogDefaults(tx, school.id);
       await writeSystemConfigAuditLog(tx, {
         actorId,
         action: AuditAction.SYSTEM_CONFIG_UPDATED,
@@ -279,6 +278,58 @@ export async function createSchoolAdmin(
   }
 }
 
+export async function deleteSchoolAdmin(
+  actorId: string,
+  rawAdminId: string,
+  context: AuditRequestContext,
+): Promise<{ id: string }> {
+  await requireSuperAdmin(prisma, actorId);
+  const parsedId = adminUserIdSchema.safeParse(rawAdminId);
+  if (!parsedId.success) throw new ProvisioningError("管理员 ID 格式无效");
+  return prisma.$transaction(async (tx) => {
+    await requireSuperAdmin(tx, actorId);
+    const before = await tx.user.findFirst({
+      where: { id: parsedId.data, role: Role.ADMIN, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        schoolId: true,
+        profile: { select: { displayName: true } },
+      },
+    });
+    if (!before) throw new ResourceNotFoundError("高校管理员不存在");
+    const deletedAt = new Date();
+    const removed = await tx.user.updateMany({
+      where: { id: before.id, role: Role.ADMIN, deletedAt: null },
+      data: { status: UserStatus.INACTIVE, deletedAt, email: null },
+    });
+    if (removed.count !== 1)
+      throw new ResourceNotFoundError("高校管理员不存在");
+    await tx.authSession.deleteMany({ where: { userId: before.id } });
+    await writeUserAuditLog(tx, {
+      actorId,
+      action: AuditAction.USER_DISABLED,
+      targetId: before.id,
+      summary: `删除高校管理员账号：${before.profile?.displayName ?? before.email ?? before.id}`,
+      beforeData: {
+        displayName: before.profile?.displayName ?? null,
+        email: before.email,
+        role: Role.ADMIN,
+        status: before.status,
+      },
+      afterData: {
+        displayName: before.profile?.displayName ?? null,
+        email: null,
+        role: Role.ADMIN,
+        status: UserStatus.INACTIVE,
+      },
+      context,
+    });
+    return { id: before.id };
+  });
+}
+
 export async function updateSchoolAdmin(
   actorId: string,
   adminId: string,
@@ -293,7 +344,7 @@ export async function updateSchoolAdmin(
     return await prisma.$transaction(async (tx) => {
       await requireSuperAdmin(tx, actorId);
       const before = await tx.user.findFirst({
-        where: { id: adminId, role: Role.ADMIN },
+        where: { id: adminId, role: Role.ADMIN, deletedAt: null },
         select: {
           id: true,
           email: true,

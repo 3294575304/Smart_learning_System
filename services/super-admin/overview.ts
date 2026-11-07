@@ -9,6 +9,7 @@ export async function getSuperAdminOverview(now = new Date()) {
   await requireAuthenticatedUser([Role.SUPER_ADMIN]);
   const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const userGroupsQuery = prisma.user.groupBy({
+    where: { deletedAt: null },
     by: ["role", "status"],
     orderBy: [{ role: "asc" }, { status: "asc" }],
     _count: { _all: true },
@@ -18,11 +19,11 @@ export async function getSuperAdminOverview(now = new Date()) {
     [
       prisma.school.count(),
       prisma.school.count({
-        where: { admins: { some: { role: Role.ADMIN } } },
+        where: { admins: { some: { role: Role.ADMIN, deletedAt: null } } },
       }),
       userGroupsQuery,
-      prisma.user.count({ where: { createdAt: { gte: since, lte: now } } }),
-      prisma.user.count({ where: { lastLoginAt: { gte: since, lte: now } } }),
+      prisma.user.count({ where: { deletedAt: null, createdAt: { gte: since, lte: now } } }),
+      prisma.user.count({ where: { deletedAt: null, lastLoginAt: { gte: since, lte: now } } }),
       prisma.course.count(),
       prisma.classroom.count(),
       prisma.classroom.count({ where: { status: "ACTIVE" } }),

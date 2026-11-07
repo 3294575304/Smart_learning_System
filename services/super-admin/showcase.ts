@@ -13,7 +13,7 @@ const SCHOOL_LOGO_KEY_PATTERN = /^school-logos\/[0-9a-f-]+\.(png|jpg|webp)$/;
 export async function getApplicationShowcase() {
   await requireAuthenticatedUser([Role.SUPER_ADMIN]);
   const schools = await prisma.school.findMany({
-    where: { admins: { some: { role: Role.ADMIN } } },
+    where: { admins: { some: { role: Role.ADMIN, deletedAt: null } } },
     orderBy: [{ name: "asc" }, { id: "asc" }],
     select: {
       id: true,

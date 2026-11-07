@@ -96,7 +96,7 @@ export async function loginAction(
     user?.passwordHash ?? null,
   );
 
-  if (!user || !passwordIsValid || user.status !== UserStatus.ACTIVE) {
+  if (!user || !passwordIsValid || user.status !== UserStatus.ACTIVE || user.deletedAt) {
     return {
       success: false,
       error: "账号、密码或所选学校错误，或师生账号当前不可用",
@@ -154,7 +154,8 @@ export async function adminLoginAction(
     !user ||
     (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN) ||
     !passwordIsValid ||
-    user.status !== UserStatus.ACTIVE
+    user.status !== UserStatus.ACTIVE ||
+    user.deletedAt
   ) {
     return {
       success: false,

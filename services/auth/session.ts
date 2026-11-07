@@ -70,7 +70,8 @@ export const getCurrentUser = cache(
 
     if (
       session.expiresAt <= new Date() ||
-      session.user.status !== UserStatus.ACTIVE
+      session.user.status !== UserStatus.ACTIVE ||
+      session.user.deletedAt
     ) {
       await prisma.authSession.deleteMany({ where: { id: session.id } });
       return null;

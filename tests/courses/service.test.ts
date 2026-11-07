@@ -125,7 +125,7 @@ test("教师课程可以按模板创建、避免重复并关联班级", async ()
     (template) => template.code === "python-programming-v1",
   );
   assert.ok(pythonTemplate);
-  const questionCategory = await ensureTestQuestionCategory(prisma);
+  const questionCategory = await ensureTestQuestionCategory(prisma, teacher.id);
 
   const courseNo = `IT-COURSE-${suffix.toUpperCase()}`;
   const created = await createTeacherCourse(

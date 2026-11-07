@@ -60,38 +60,10 @@ export async function requireActiveQuestionCourseCategory(
   if (!category || !category.isActive) {
     throw new GovernanceOperationError("课程分类不存在或已停用", 400);
   }
-  if (category.schoolId === schoolId) return category;
-  if (category.schoolId !== null) {
+  if (category.schoolId !== schoolId) {
     throw new GovernanceOperationError("课程分类不存在或已停用", 400);
   }
-
-  // Convert a legacy unscoped reference into a private copy for this school.
-  const scoped = await client.questionCourseCategory.upsert({
-    where: {
-      schoolId_normalizedName: {
-        schoolId,
-        normalizedName: category.normalizedName,
-      },
-    },
-    update: {},
-    create: {
-      schoolId,
-      name: category.name,
-      normalizedName: category.normalizedName,
-      isActive: true,
-    },
-    select: {
-      id: true,
-      schoolId: true,
-      name: true,
-      normalizedName: true,
-      isActive: true,
-    },
-  });
-  if (!scoped.isActive) {
-    throw new GovernanceOperationError("课程分类不存在或已停用", 400);
-  }
-  return scoped;
+  return category;
 }
 
 export async function createQuestionCourseCategory(

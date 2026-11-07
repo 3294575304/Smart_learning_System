@@ -1,32 +1,26 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
-export const testQuestionCategoryRelation = {
-  connectOrCreate: {
-    where: {
-      id: "test-category-automated-test-category",
-    },
-    create: {
-      id: "test-category-automated-test-category",
-      name: "自动化测试课程分类",
-      normalizedName: "automated-test-category",
-    },
-  },
-} satisfies Prisma.QuestionCourseCategoryCreateNestedOneWithoutCoursesInput;
-
-export async function ensureTestQuestionCategory(client: PrismaClient) {
-  const existing = await client.questionCourseCategory.findFirst({
-    where: { schoolId: null, normalizedName: "automated-test-category" },
-    select: { id: true },
+export async function ensureTestQuestionCategory(
+  client: PrismaClient,
+  userId: string,
+) {
+  const user = await client.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { schoolId: true },
   });
-  if (existing) {
-    return client.questionCourseCategory.update({
-      where: { id: existing.id },
-      data: { isActive: true },
-      select: { id: true },
-    });
+  if (!user.schoolId) {
+    throw new Error("Test user must belong to a school");
   }
-  return client.questionCourseCategory.create({
-    data: {
+  return client.questionCourseCategory.upsert({
+    where: {
+      schoolId_normalizedName: {
+        schoolId: user.schoolId,
+        normalizedName: "automated-test-category",
+      },
+    },
+    update: { isActive: true },
+    create: {
+      schoolId: user.schoolId,
       name: "自动化测试课程分类",
       normalizedName: "automated-test-category",
     },

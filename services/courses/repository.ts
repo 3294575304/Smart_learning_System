@@ -192,39 +192,12 @@ export function findActiveCourseTemplateById(
   });
 }
 
-export async function resolveActiveCourseTemplateForSchool(
+export function resolveActiveCourseTemplateForSchool(
   templateId: string,
   schoolId: string,
   client: DatabaseClient = prisma,
 ): Promise<CourseTemplateRecord | null> {
-  const scoped = await findActiveCourseTemplateById(
-    templateId,
-    schoolId,
-    client,
-  );
-  if (scoped) return scoped;
-
-  const legacy = await client.courseTemplate.findFirst({
-    where: { id: templateId, schoolId: null, isActive: true },
-    select: courseTemplateSelect,
-  });
-  if (!legacy) return null;
-
-  const scopedTemplate = await client.courseTemplate.upsert({
-    where: { schoolId_code: { schoolId, code: legacy.code } },
-    update: {},
-    create: {
-      schoolId,
-      code: legacy.code,
-      name: legacy.name,
-      description: legacy.description,
-      version: legacy.version,
-      isBuiltin: legacy.isBuiltin,
-      isActive: true,
-    },
-    select: courseTemplateSelect,
-  });
-  return scopedTemplate.isActive ? scopedTemplate : null;
+  return findActiveCourseTemplateById(templateId, schoolId, client);
 }
 
 export function findActiveCourseTemplateByCode(

@@ -13,11 +13,12 @@ export async function requireAdminSchoolId(
 ): Promise<string> {
   const actor = await client.user.findUnique({
     where: { id: actorId },
-    select: { role: true, schoolId: true, status: true },
+    select: { role: true, schoolId: true, status: true, deletedAt: true },
   });
   if (
     actor?.role !== Role.ADMIN ||
     actor.status !== UserStatus.ACTIVE ||
+    actor.deletedAt ||
     !actor.schoolId
   ) {
     throw new AuthorizationError("当前管理员尚未绑定学校，无法访问本校数据");

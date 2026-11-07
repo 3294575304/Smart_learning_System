@@ -34,8 +34,8 @@ export async function getSchoolAdminDirectory(
             name: true,
             provinceCode: true,
             createdAt: true,
-            _count: { select: { admins: true } },
-            admins: { where: { role: Role.ADMIN }, select: { id: true } },
+            _count: { select: { admins: { where: { deletedAt: null } } } },
+            admins: { where: { role: Role.ADMIN, deletedAt: null }, select: { id: true } },
           },
         });
         return {
@@ -52,6 +52,7 @@ export async function getSchoolAdminDirectory(
       }
       const where: Prisma.UserWhereInput = {
         role: Role.ADMIN,
+        deletedAt: null,
         ...(query.keyword
           ? {
               OR: [

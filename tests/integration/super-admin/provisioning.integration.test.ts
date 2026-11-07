@@ -21,6 +21,7 @@ import {
   createPartnerSchool,
   createSchoolAdmin,
   deletePartnerSchool,
+  deleteSchoolAdmin,
 } from "../../../services/super-admin/provisioning";
 import { ProvisioningError } from "../../../services/super-admin/provisioning-errors";
 import { assertIsolatedIntegrationEnvironment } from "../database";
@@ -81,6 +82,20 @@ function adminInput(schoolId: string) {
     confirmPassword: initial,
   };
 }
+
+test("新增合作学校的课程模板和题库课程分类初始为空", async () => {
+  const partner = await school();
+  assert.equal(
+    await prisma.courseTemplate.count({ where: { schoolId: partner.id } }),
+    0,
+  );
+  assert.equal(
+    await prisma.questionCourseCategory.count({
+      where: { schoolId: partner.id },
+    }),
+    0,
+  );
+});
 
 test("高校管理员只读取本校师生和统计，拒绝跨校编辑、班级操作及重新绑定学校", async () => {
   const ownSchool = await school();
@@ -469,6 +484,11 @@ test("解除合作会停用并解绑账号、撤销会话，同时保留课程�
 test("审计失败时学校创建、账号创建和学校删除均完整回滚", async () => {
   const partner = await school();
   const input = adminInput(partner.id);
+  const existingAdmin = await createSchoolAdmin(
+    actorId,
+    adminInput(partner.id),
+    context,
+  );
   const schoolName = name();
   await prisma.$executeRawUnsafe(
     `CREATE FUNCTION reject_test_school_audit() RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'isolated audit failure'; END; $$`,
@@ -489,10 +509,129 @@ test("审计失败时学校创建、账号创建和学校删除均完整回滚",
     assert.equal(await prisma.user.count({ where: { email: input.email } }), 0);
     await assert.rejects(deletePartnerSchool(actorId, partner.id, context));
     assert.ok(await prisma.school.findUnique({ where: { id: partner.id } }));
+    await assert.rejects(deleteSchoolAdmin(actorId, existingAdmin.id, context));
+    const preservedAdmin = await prisma.user.findUniqueOrThrow({
+      where: { id: existingAdmin.id },
+    });
+    assert.equal(preservedAdmin.deletedAt, null);
+    assert.equal(preservedAdmin.status, UserStatus.ACTIVE);
   } finally {
     await prisma.$executeRawUnsafe(
       `DROP TRIGGER reject_test_school_audit ON "AuditLog"`,
     );
     await prisma.$executeRawUnsafe(`DROP FUNCTION reject_test_school_audit()`);
   }
+});
+
+test("删除管理员撤销会话、隐藏账号并释放邮箱，保留学校及题目关联", async () => {
+  const partner = await school();
+  const input = adminInput(partner.id);
+  const admin = await createSchoolAdmin(actorId, input, context);
+  await prisma.authSession.create({
+    data: {
+      userId: admin.id,
+      tokenHash: randomBytes(32).toString("hex"),
+      expiresAt: new Date(Date.now() + 3600000),
+    },
+  });
+  const category = await prisma.questionCourseCategory.create({
+    data: {
+      schoolId: partner.id,
+      name: "保留分类",
+      normalizedName: randomUUID(),
+    },
+  });
+  const question = await prisma.question.create({
+    data: {
+      creatorId: admin.id,
+      questionCategoryId: category.id,
+      title: "保留题目",
+      content: "True",
+      explanation: "正确",
+      type: "TRUE_FALSE",
+      difficulty: 1,
+      correctBoolean: true,
+    },
+  });
+  await deleteSchoolAdmin(actorId, admin.id, context);
+  const deleted = await prisma.user.findUniqueOrThrow({
+    where: { id: admin.id },
+  });
+  assert.ok(deleted.deletedAt);
+  assert.equal(deleted.status, UserStatus.INACTIVE);
+  assert.equal(deleted.email, null);
+  assert.equal(deleted.schoolId, partner.id);
+  assert.equal(
+    await prisma.authSession.count({ where: { userId: admin.id } }),
+    0,
+  );
+  assert.ok(await prisma.question.findUnique({ where: { id: question.id } }));
+  assert.equal(
+    await prisma.user.count({ where: { id: admin.id, deletedAt: null } }),
+    0,
+  );
+  assert.equal(
+    await prisma.auditLog.count({
+      where: {
+        targetId: admin.id,
+        summary: { startsWith: "删除高校管理员账号" },
+      },
+    }),
+    1,
+  );
+  await assert.rejects(
+    deleteSchoolAdmin(actorId, admin.id, context),
+    ResourceNotFoundError,
+  );
+  assert.notEqual(
+    (await createSchoolAdmin(actorId, input, context)).id,
+    admin.id,
+  );
+});
+
+test("管理员删除拒绝非超级管理员、错误角色目标和非法 ID", async () => {
+  const partner = await school();
+  const admin = await createSchoolAdmin(
+    actorId,
+    adminInput(partner.id),
+    context,
+  );
+  await assert.rejects(
+    deleteSchoolAdmin(admin.id, admin.id, context),
+    AuthorizationError,
+  );
+  await assert.rejects(
+    deleteSchoolAdmin("missing", admin.id, context),
+    AuthorizationError,
+  );
+  await assert.rejects(
+    deleteSchoolAdmin(actorId, actorId, context),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    deleteSchoolAdmin(actorId, "invalid-id", context),
+    ProvisioningError,
+  );
+  const teacher = await prisma.user.create({
+    data: {
+      role: Role.TEACHER,
+      schoolId: partner.id,
+      passwordHash: fixtureHash,
+    },
+  });
+  await assert.rejects(
+    deleteSchoolAdmin(actorId, teacher.id, context),
+    ResourceNotFoundError,
+  );
+  const disabled = await prisma.user.create({
+    data: {
+      role: Role.SUPER_ADMIN,
+      status: UserStatus.INACTIVE,
+      passwordHash: fixtureHash,
+    },
+  });
+  await assert.rejects(
+    deleteSchoolAdmin(disabled.id, admin.id, context),
+    AuthorizationError,
+  );
 });
