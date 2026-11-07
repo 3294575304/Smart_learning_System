@@ -432,6 +432,7 @@ export async function listTeacherAssignments(
   }
   const where: Prisma.AssignmentWhereInput = {
     teacherId,
+    examSessionId: null,
     ...(query.courseId
       ? { classroom: { courseId: query.courseId, teacherId } }
       : {}),
@@ -467,6 +468,7 @@ export async function listTeacherAssignments(
         orderBy: { status: "asc" },
         where: {
           teacherId,
+          examSessionId: null,
           AND: [assignmentSectionWhere(query.section)],
           status: { in: ["CLOSED", "ARCHIVED"] },
           ...(query.courseId
@@ -480,6 +482,7 @@ export async function listTeacherAssignments(
         orderBy: { classroomId: "asc" },
         where: {
           teacherId,
+          examSessionId: null,
           AND: [assignmentSectionWhere(query.section)],
           ...(query.courseId
             ? { classroom: { courseId: query.courseId, teacherId } }
@@ -518,7 +521,7 @@ export async function getTeacherAssignment(
   };
 }
 
-async function createDraftInTransaction(
+export async function createDraftInTransaction(
   transaction: Prisma.TransactionClient,
   teacherId: string,
   input: AssignmentUpsertData,
@@ -598,7 +601,7 @@ export async function updateDraftAssignment(
   return getTeacherAssignment(teacherId, assignmentId);
 }
 
-async function publishInTransaction(
+export async function publishInTransaction(
   transaction: Prisma.TransactionClient,
   teacherId: string,
   assignmentId: string,
@@ -728,6 +731,7 @@ export async function listStudentAssignments(
   const now = new Date();
   const assignments = await prisma.assignment.findMany({
     where: {
+      examSessionId: null,
       status: { in: [AssignmentStatus.PUBLISHED, AssignmentStatus.CLOSED] },
       publishedAt: { lte: now },
       ...(courseId ? { classroom: { courseId } } : {}),
@@ -1364,6 +1368,7 @@ const gradingSubmissionInclude = {
 export async function submitStudentAssignment(
   studentId: string,
   submissionId: string,
+  mode: "STUDENT" | "EXAM_AUTO" = "STUDENT",
 ): Promise<SubmissionResultView> {
   await runAssignmentSerializable(async (transaction) => {
     const submission = await transaction.submission.findFirst({
@@ -1375,18 +1380,36 @@ export async function submitStudentAssignment(
     const membership = submission.assignment.classroom.memberships.find(
       (item) => item.studentId === studentId,
     );
-    assertActiveMembership(membership ?? null);
-    const work = await assertStudentWorkAccess(
-      transaction,
-      submission.assignmentId,
-      studentId,
-      submissionId,
-    );
+    if (mode === "STUDENT") assertActiveMembership(membership ?? null);
+    const work =
+      mode === "STUDENT"
+        ? await assertStudentWorkAccess(
+            transaction,
+            submission.assignmentId,
+            studentId,
+            submissionId,
+          )
+        : { grant: null };
     const now = new Date();
-    await assertClassroomWorkAllowed(
-      transaction,
-      submission.assignment.classroomId,
-    );
+    if (mode === "EXAM_AUTO") {
+      const exam = await transaction.examSession.findFirst({
+        where: {
+          assignments: { some: { id: submission.assignmentId } },
+          cancelledAt: null,
+        },
+      });
+      if (!exam) throw new ResourceNotFoundError("考试作答不存在");
+      const switches = await transaction.examSwitchEvent.count({
+        where: { submissionId },
+      });
+      if (now < exam.endsAt && switches <= exam.allowedSwitches)
+        throw new AssignmentOperationError("尚未达到考试自动交卷条件", 409);
+    } else {
+      await assertClassroomWorkAllowed(
+        transaction,
+        submission.assignment.classroomId,
+      );
+    }
     const claimed = await transaction.submission.updateMany({
       where: {
         id: submissionId,

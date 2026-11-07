@@ -95,9 +95,14 @@ function emptyAnswer(type: QuestionImportDraft["type"]): QuestionAnswer | null {
 interface QuestionFileImportProps {
   courses: QuestionImportCourseOption[];
   mode: "ADMIN" | "TEACHER";
+  returnHref?: string;
 }
 
-export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
+export function QuestionFileImport({
+  courses,
+  mode,
+  returnHref,
+}: QuestionFileImportProps) {
   const [preview, setPreview] = useState<QuestionImportPreview | null>(null);
   const [categoryId, setCategoryId] = useState(
     courses.length === 1 ? courses[0].id : "",
@@ -118,7 +123,8 @@ export function QuestionFileImport({ courses, mode }: QuestionFileImportProps) {
     ? "/api/admin/questions/import/commit"
     : "/api/teacher/questions/import/commit";
   const targetName = "共享题库";
-  const backHref = isAdmin ? "/admin/questions" : "/teacher/questions";
+  const backHref =
+    returnHref ?? (isAdmin ? "/admin/questions" : "/teacher/questions");
 
   const importable = preview?.questions ?? [];
   const invalidCount = importable.filter(
@@ -1005,6 +1011,13 @@ export function AdminQuestionFileImport({
 
 export function TeacherQuestionFileImport({
   courses,
+  returnHref,
 }: Omit<QuestionFileImportProps, "mode">) {
-  return <QuestionFileImport courses={courses} mode="TEACHER" />;
+  return (
+    <QuestionFileImport
+      courses={courses}
+      mode="TEACHER"
+      returnHref={returnHref}
+    />
+  );
 }

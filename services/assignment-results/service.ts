@@ -60,6 +60,7 @@ export async function listTeacherResultsOverview(
   await getTeacherReportingScope(teacherId, query, now);
   const where: Prisma.AssignmentWhereInput = {
     teacherId,
+    examSessionId: null,
     ...assignmentReportingWhere(query.section, now),
     ...(query.classroomId ? { classroomId: query.classroomId } : {}),
     ...(query.courseId ? { classroom: { courseId: query.courseId } } : {}),

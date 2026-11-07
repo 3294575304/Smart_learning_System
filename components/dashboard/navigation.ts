@@ -66,6 +66,7 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
           label: "作业管理",
           icon: ClipboardList,
         },
+        { href: "/teacher/exams", label: "考试管理", icon: ClipboardCheck },
         { href: "/teacher/results", label: "学情分析", icon: BarChart3 },
       ],
     },
@@ -86,6 +87,7 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
             "/student/surveys",
           ],
         },
+        { href: "/student/exams", label: "我的考试", icon: ClipboardCheck },
       ],
     },
     {
@@ -152,6 +154,7 @@ export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   classes: "班级管理",
   questions: "题库管理",
   assignments: "作业管理",
+  exams: "考试管理",
   surveys: "课程问卷",
   submissions: "提交记录",
   results: "学情分析",

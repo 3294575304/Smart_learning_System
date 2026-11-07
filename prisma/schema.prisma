@@ -19,6 +19,8 @@ enum UserStatus {
 }
 
 enum AuditAction {
+  EXAM_PUBLISHED
+  EXAM_CANCELLED
   ASSIGNMENT_DEADLINE_EXTENDED
   ASSIGNMENT_MAKEUP_GRANTED
   ASSIGNMENT_MAKEUP_REVOKED
@@ -180,6 +182,7 @@ enum AIQuestionMappingBatchStatus {
 }
 
 enum AuditTargetType {
+  EXAM_SESSION
   USER
   SYSTEM_CONFIG
   ANNOUNCEMENT
@@ -561,6 +564,11 @@ enum AssignmentStatus {
   ARCHIVED
 }
 
+enum ExamType {
+  MIDTERM
+  FINAL
+}
+
 enum SubmissionStatus {
   IN_PROGRESS
   SUBMITTED
@@ -634,6 +642,7 @@ enum RecommendationStatus {
 }
 
 model User {
+  examSessions         ExamSession[]          @relation("ExamTeacher")
   makeupGrantsReceived AssignmentMakeupGrant[] @relation("MakeupStudent")
   makeupGrantsIssued   AssignmentMakeupGrant[] @relation("MakeupTeacher")
   id                   String                  @id @default(cuid())
@@ -990,6 +999,7 @@ model CourseTemplate {
 }
 
 model QuestionCourseCategory {
+  examSessions ExamSession[]
   id             String   @id @default(cuid())
   name           String   @db.VarChar(100)
   normalizedName String   @unique @db.VarChar(100)
@@ -1004,6 +1014,7 @@ model QuestionCourseCategory {
 }
 
 model Course {
+  examSessions                            ExamSession[]
   categorizedQuestions                    Question[]   @relation("QuestionCategoryCourse")
   questionCategoryId                      String
   id                                      String       @id @default(cuid())
@@ -2469,6 +2480,7 @@ model AIQuestionGenerationCandidate {
 }
 
 model Question {
+  examQuestionUses                  ExamQuestionUse[]
   categoryCourseId   String?
   categoryCourse     Course?                 @relation("QuestionCategoryCourse", fields: [categoryCourseId], references: [id], onDelete: Restrict)
   questionCategoryId String?
@@ -2702,6 +2714,8 @@ model QuestionKnowledgePoint {
 }
 
 model Assignment {
+  examSessionId     String?
+  examSession       ExamSession?            @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
   makeupGrants      AssignmentMakeupGrant[]
   submissionTask    Json?
   allowAttachments  Boolean                 @default(false)
@@ -2730,7 +2744,65 @@ model Assignment {
 
   @@index([classroomId, status, dueAt])
   @@index([teacherId, status, createdAt])
+  @@index([examSessionId])
   @@index([status, publishedAt])
+}
+
+model ExamSession {
+  id                String            @id @default(cuid())
+  requestId         String            @unique
+  requestFingerprint String          @db.Char(64)
+  teacherId         String
+  courseId          String
+  questionCategoryId String
+  type              ExamType
+  title             String
+  startsAt          DateTime
+  endsAt            DateTime
+  allowedSwitches   Int               @default(2)
+  cancelledAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  assignments       Assignment[]
+  questionUses      ExamQuestionUse[]
+  switchEvents      ExamSwitchEvent[]
+  teacher           User              @relation("ExamTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  course            Course            @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  questionCategory  QuestionCourseCategory @relation(fields: [questionCategoryId], references: [id], onDelete: Restrict)
+
+  @@index([teacherId, startsAt])
+  @@index([questionCategoryId, startsAt])
+}
+
+model ExamQuestionUse {
+  id                String      @id @default(cuid())
+  examSessionId     String
+  questionId        String
+  questionCategoryId String
+  contentHash       String      @db.Char(64)
+  startsAt          DateTime
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  examSession       ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
+  question          Question    @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([examSessionId, questionId])
+  @@index([questionCategoryId, questionId, startsAt])
+  @@index([questionCategoryId, contentHash, startsAt])
+}
+
+model ExamSwitchEvent {
+  id              String      @id @default(cuid())
+  examSessionId   String
+  submissionId    String
+  eventKey        String      @unique
+  observedAt      DateTime    @default(now())
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  examSession     ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
+  submission      Submission  @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+
+  @@index([submissionId, observedAt])
 }
 
 model AssignmentQuestion {
@@ -2944,6 +3016,7 @@ model AssignmentQuestionConceptSnapshot {
 }
 
 model Submission {
+  examSwitchEvents ExamSwitchEvent[]
   makeupGrants   AssignmentMakeupGrant[]
   attachments    SubmissionAttachment[]
   id             String                  @id @default(cuid())

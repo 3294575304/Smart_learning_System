@@ -485,12 +485,26 @@ export async function syncTeacherPlatformAssignmentGrades(
       const component = gradebook.scheme.components.find(
         (item) => item.id === componentId,
       );
+      const exam = await transaction.examSession.findFirst({
+        where: {
+          assignments: { some: { id: assignmentId } },
+        },
+        select: { type: true, cancelledAt: true },
+      });
+      if (exam?.cancelledAt)
+        throw new GradebookOperationError("已取消考试不能同步成绩", 409);
+      const examComponentType =
+        exam?.type === "MIDTERM" ? "MIDTERM_EXAM" : "FINAL_EXAM";
       if (
         !component ||
-        component.sourceType !== GradeSourceType.PLATFORM_ASSIGNMENT
+        (exam
+          ? component.type !== examComponentType ||
+            component.sourceType === GradeSourceType.ATTENDANCE
+          : component.sourceType !== GradeSourceType.PLATFORM_ASSIGNMENT ||
+            ["MIDTERM_EXAM", "FINAL_EXAM"].includes(component.type))
       ) {
         throw new GradebookOperationError(
-          "所选考核项目不是平台作业来源。",
+          "考核项目与作业或考试类型不匹配。",
           409,
           "PLATFORM_COMPONENT_REQUIRED",
         );
@@ -508,7 +522,7 @@ export async function syncTeacherPlatformAssignmentGrades(
       if (assignment.totalPoints.lessThanOrEqualTo(0)) {
         throw new GradebookOperationError("作业满分必须大于 0。", 409);
       }
-      const existingItem = await transaction.gradeItem.findUnique({
+      let existingItem = await transaction.gradeItem.findUnique({
         where: {
           gradebookId_sourceKey: {
             gradebookId,
@@ -516,6 +530,36 @@ export async function syncTeacherPlatformAssignmentGrades(
           },
         },
       });
+      if (exam && !existingItem) {
+        const defaultItem = await transaction.gradeItem.findUnique({
+          where: {
+            gradebookId_sourceKey: {
+              gradebookId,
+              sourceKey: `component:${componentId}:default`,
+            },
+          },
+          include: { _count: { select: { entries: true } } },
+        });
+        if (
+          defaultItem &&
+          defaultItem._count.entries > 0 &&
+          defaultItem.assignmentId !== assignmentId
+        )
+          throw new GradebookOperationError(
+            "考核项目已有人工成绩，请先核对后再同步考试",
+            409,
+          );
+        if (defaultItem)
+          existingItem = await transaction.gradeItem.update({
+            where: { id: defaultItem.id },
+            data: {
+              assignmentId,
+              name: assignment.title,
+              maxScore: assignment.totalPoints,
+              sourceType: GradeSourceType.PLATFORM_ASSIGNMENT,
+            },
+          });
+      }
       const item =
         existingItem ??
         (await transaction.gradeItem.create({
@@ -959,6 +1003,7 @@ export async function getTeacherGradebookWorkspace(
           status: true,
           totalPoints: true,
           publishedAt: true,
+          examSession: { select: { type: true } },
         },
       }),
     ]);

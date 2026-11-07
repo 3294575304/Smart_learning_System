@@ -209,7 +209,7 @@ export async function loadTrendCounts(start: Date, end: Date) {
         SELECT to_char(timezone('Asia/Shanghai', "publishedAt"), 'YYYY-MM-DD') AS "date",
                COUNT(*)::bigint AS "count"
         FROM "Assignment"
-        WHERE "publishedAt" >= ${start} AND "publishedAt" < ${end}
+        WHERE "examSessionId" IS NULL AND "publishedAt" >= ${start} AND "publishedAt" < ${end}
         GROUP BY 1 ORDER BY 1
       `),
       prisma.$queryRaw<CountByDateRow[]>(Prisma.sql`

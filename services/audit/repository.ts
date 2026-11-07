@@ -134,7 +134,9 @@ interface WriteTeachingAuditInput {
   actorId: string;
   action: AuditAction;
   targetType:
-    typeof AuditTargetType.SUBMISSION | typeof AuditTargetType.ASSIGNMENT;
+    | typeof AuditTargetType.SUBMISSION
+    | typeof AuditTargetType.ASSIGNMENT
+    | typeof AuditTargetType.EXAM_SESSION;
   targetId: string;
   summary: string;
   beforeData: AuditConfigSnapshot | null;

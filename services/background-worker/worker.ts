@@ -4,6 +4,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { BackgroundJob } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { finalizeExpiredExams } from "@/services/exams/expiry";
 import {
   claimNextBackgroundJob,
   failBackgroundJob,
@@ -88,6 +89,7 @@ export class PersistentLongTaskWorker {
         ) {
           await recoverExpiredBackgroundJobs();
           await deleteExpiredQuestionSourceFiles();
+          await finalizeExpiredExams();
           this.lastRecoveryAt = Date.now();
         }
         const job = await claimNextBackgroundJob({
