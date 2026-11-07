@@ -1,5 +1,9 @@
 import "server-only";
-import { managementView, readPracticeManagement } from "./management";
+import {
+  managementView,
+  practiceManagementSelect,
+  readPracticeManagement,
+} from "./management";
 import type { PracticeManagementView } from "./management-schemas";
 import { buildPracticeSet } from "./grouping";
 import { Prisma } from "@prisma/client";
@@ -96,7 +100,10 @@ export async function listPracticeSets(
       orderBy: [{ priority: "desc" }, { id: "asc" }],
       select: { ...setQuestionSelect, cycleKey: true },
     }),
-    prisma.practiceSetManagement.findMany({ where: { studentId: actor.id } }),
+    prisma.practiceSetManagement.findMany({
+      where: { studentId: actor.id },
+      select: { ...practiceManagementSelect, cycleKey: true },
+    }),
     prisma.courseRecommendationCycle.findMany({
       where: { studentId: actor.id },
       distinct: ["courseId"],
@@ -112,6 +119,7 @@ export async function listPracticeSets(
   const byKey = new Map(metadata.map((row) => [row.cycleKey, row]));
   const keyword = query.keyword?.toLocaleLowerCase();
   const sets = [...groups]
+    .filter(([key]) => !byKey.get(key)?.purgedAt)
     .map(([key, rows]) =>
       managedSet(
         {
@@ -179,14 +187,12 @@ export async function getPracticeSet(
     select: { cycleKey: true },
   });
   if (!anchor) throw new ResourceNotFoundError("练习组不存在");
+  const management = await readPracticeManagement(actor.id, anchor.cycleKey);
   await expireStudentRecommendations(actor.id, new Date());
   const records = await prisma.personalizedRecommendation.findMany({
     where: { studentId: actor.id, cycleKey: anchor.cycleKey },
     orderBy: [{ priority: "desc" }, { id: "asc" }],
     select: setQuestionSelect,
   });
-  return managedSet(
-    buildPracticeSet(records),
-    await readPracticeManagement(actor.id, anchor.cycleKey),
-  );
+  return managedSet(buildPracticeSet(records), management);
 }

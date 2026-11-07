@@ -505,6 +505,7 @@ export async function listStudentCourseSurveys(
   const now = new Date();
   const surveys = await prisma.courseSurvey.findMany({
     where: {
+      ...(courseId ? { courseId } : {}),
       ...(classroomId ? { classroomId } : {}),
       OR: [
         { status: CourseSurveyStatus.PUBLISHED },

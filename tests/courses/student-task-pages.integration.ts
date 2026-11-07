@@ -127,6 +127,7 @@ async function main() {
     title: string,
     classroomId = room.id,
     dueAt = date(45),
+    publishedAt = date(-60),
   ) =>
     prisma.assignment.create({
       data: {
@@ -134,7 +135,7 @@ async function main() {
         teacherId: teacher.id,
         title,
         status: "PUBLISHED",
-        publishedAt: date(-60),
+        publishedAt,
         dueAt,
         totalPoints: 10,
         questions: {
@@ -157,8 +158,9 @@ async function main() {
     "长标题排版验收：" +
     "循环与函数综合应用练习".repeat(8) +
     " LongUnbrokenAssignmentTitleForResponsiveLayoutTesting";
-  const first = await makeAssignment(longTitle, room.id, date(25));
-  for (let i = 0; i < 9; i++) await makeAssignment(`甲班作业 ${i + 1}`);
+  const first = await makeAssignment(longTitle, room.id, date(25), date(-70));
+  for (let i = 0; i < 9; i++)
+    await makeAssignment(`甲班作业 ${i + 1}`, room.id, date(45), date(-59 + i));
   await makeAssignment("乙班专属作业", secondRoom.id);
   await makeAssignment("第二课程专属作业", thirdRoom.id);
   const submitted = await makeAssignment("甲班已提交记录");
@@ -337,6 +339,60 @@ async function main() {
         );
       }
     }
+    const center = `/student/courses/${course.id}/learning-center?classroomId=${room.id}`;
+    const coursePage = await page(`${center}&tab=tasks`);
+    check(
+      ["学习概况", "课程任务", "知识与成长", "我的待办"].every((title) =>
+        coursePage.includes(title),
+      ) && !coursePage.includes("我的作业成绩"),
+      "three tabs render with only the selected tasks content",
+    );
+    check(
+      !coursePage.includes("乙班专属作业") &&
+        !coursePage.includes("第二课程专属作业"),
+      "course tasks isolate class and course",
+    );
+    const classroomCenter = (id: string) =>
+      `/student/courses/${course.id}/learning-center?classroomId=${id}`;
+    const otherClass = await page(
+      `${classroomCenter(secondRoom.id)}&tab=tasks`,
+    );
+    check(
+      otherClass.includes("乙班专属作业") && !otherClass.includes("甲班问卷"),
+      "same-course enrollments show separate tasks",
+    );
+    const emptyCenter = await page(
+      `${classroomCenter(emptyRoom.id)}&tab=tasks`,
+    );
+    check(
+      emptyCenter.includes("暂无待办"),
+      "empty class shows no pending tasks",
+    );
+    for (const [legacy, suffix] of [
+      ["knowledge", "&tab=growth&section=knowledge"],
+      ["path", "&tab=growth&section=path"],
+      ["profile", "&tab=growth&section=profile"],
+      ["activity", "&tab=growth&section=trends"],
+    ]) {
+      const response = await request(`${center}&tab=${legacy}`);
+      check(
+        response.status === 307
+          ? response.headers.get("location") === center + suffix
+          : (await response.text())
+              .replaceAll("&amp;", "&")
+              .includes(center + suffix),
+        `legacy course link restores its target: ${legacy}`,
+      );
+    }
+    await missing(`${center}&tab=growth&section=invalid`);
+    await missing(`${center}&tab=growth&section=path&section=profile`);
+    await missing(classroomCenter(foreignRoom.id));
+    await missing(classroomCenter(thirdRoom.id));
+    const trends = await page(`${center}&tab=growth&section=trends`);
+    check(
+      trends.includes("我的作业成绩") && !trends.includes("我的待办"),
+      "trends stays within the growth tab",
+    );
     const list = await page(`/student/assignments?${scope}`);
     check(
       !list.includes("<select") && !list.includes("全部教学班"),
@@ -350,8 +406,41 @@ async function main() {
       list.includes(`page=2&courseId=${course.id}&classroomId=${room.id}`),
       "pagination preserves scope",
     );
-    await page(`/student/assignments?page=2&${scope}`);
-    await page(`/student/assignments?status=PENDING&${scope}`);
+    const listTitles = (html: string) =>
+      [...html.matchAll(/<h2[^>]*>([^<]*)<\/h2>/gu)].map(([, title]) => title);
+    const newestTitles = Array.from(
+      { length: 8 },
+      (_, i) => `甲班作业 ${9 - i}`,
+    );
+    assert.deepEqual(listTitles(list), newestTitles);
+    const secondPage = await page(`/student/assignments?page=2&${scope}`);
+    check(
+      listTitles(secondPage).at(-1) === longTitle,
+      "oldest release on page 2",
+    );
+    for (const status of ["TODO", "PENDING", "IN_PROGRESS"]) {
+      const pending = await page(
+        `/student/assignments?status=${status}&${scope}`,
+      );
+      assert.deepEqual(listTitles(pending), newestTitles);
+      check(
+        pending.includes(`status=TODO&page=2&${scope}`),
+        "merged filter keeps scope in pagination",
+      );
+    }
+    const pendingSecondPage = await page(
+      `/student/assignments?status=TODO&page=2&${scope}`,
+    );
+    assert.deepEqual(listTitles(pendingSecondPage), ["甲班作业 1", longTitle]);
+    check(
+      pendingSecondPage.includes("开始作业") &&
+        pendingSecondPage.includes("继续作答"),
+      "merged filter includes both untouched work and drafts",
+    );
+    check(
+      list.includes(`${center}&tab=tasks`),
+      "assignment list returns to same class tasks tab",
+    );
     const records = await page(`/student/assignments?view=records&${scope}`);
     check(
       records.includes("甲班已提交记录") &&
@@ -375,6 +464,10 @@ async function main() {
     );
     for (const area of ["assignments", "attendance", "surveys"]) {
       const scoped = await page(`/student/${area}?${scope}`);
+      check(
+        scoped.includes(`${center}&tab=tasks`),
+        `${area} returns to same class tasks`,
+      );
       check(!scoped.includes("<select"), `no switcher: ${area}`);
       const global = await page(`/student/${area}`);
       check(
@@ -612,6 +705,17 @@ async function main() {
         (item) => item.id === `assignment:${completionAssignment.id}`,
       ),
       "completed class task disappears",
+    );
+    const completedPage = await page(
+      `${classroomCenter(completionRoom.id)}&tab=tasks`,
+    );
+    check(
+      completedPage.includes("仅查看记录") &&
+        completedPage.includes("已结课") &&
+        completedPage.includes("当前教学班已停止作答") &&
+        !completedPage.includes("结课待办") &&
+        !completedPage.includes("/student/recommendations?view=generate"),
+      "completed course center shows read-only records",
     );
     overview = await getStudentTaskOverview(student.id);
     console.log(

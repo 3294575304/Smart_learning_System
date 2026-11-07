@@ -255,6 +255,17 @@ body {
   }
 }
 
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* 教师工作区统一密度：不改变学生端、编辑器和表格的数据语义。 */
 #dashboard-main[data-workspace-role="TEACHER"] {
   padding-top: 1.25rem;

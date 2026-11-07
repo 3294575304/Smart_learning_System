@@ -9,6 +9,7 @@ import type {
 } from "@/services/practice-sets/types";
 import type { z } from "zod";
 import { PracticeManagementActions } from "./practice-management-actions";
+import type { PracticeManagementAction } from "@/services/practice-sets/management-schemas";
 import { summarizePracticeScores } from "@/services/recommendations/scoring";
 type Query = z.output<typeof practiceSetQuerySchema>;
 export function PracticeSetCenter({
@@ -30,10 +31,12 @@ export function PracticeSetCenter({
   const sequence = useRef(0),
     controller = useRef<AbortController | null>(null),
     requested = useRef(query);
+  const noticeTimeout = useRef<number | undefined>(undefined);
   useEffect(
     () => () => {
       sequence.current++;
       controller.current?.abort();
+      window.clearTimeout(noticeTimeout.current);
     },
     [],
   );
@@ -92,8 +95,12 @@ export function PracticeSetCenter({
       push && url.href !== window.location.href ? "pushState" : "replaceState";
     window.history[historyMethod](window.history.state, "", url);
   }
-  function changed() {
-    setNotice("练习记录已更新。");
+  function changed(action?: PracticeManagementAction) {
+    window.clearTimeout(noticeTimeout.current);
+    setNotice(action === "PURGE" ? "练习已永久删除。" : "练习记录已更新。");
+    if (action === "PURGE") {
+      noticeTimeout.current = window.setTimeout(() => setNotice(""), 3000);
+    }
     void load(query, false);
   }
   const returnParams = new URLSearchParams({ view: "recommended" });
@@ -103,6 +110,12 @@ export function PracticeSetCenter({
   const detailHref = (id: string) =>
     `/student/recommendations/${id}/practice?returnTo=${encodeURIComponent(returnTo)}`;
   const section = query.section ?? result.section ?? "ACTIVE";
+  const selectedItems = result.items
+    .filter((item) => selected.includes(item.id))
+    .map((item) => ({
+      id: item.id,
+      expectedRevision: item.management?.revision ?? 0,
+    }));
   return (
     <section className="space-y-4" aria-label="我的练习组" aria-busy={busy}>
       <p className="text-xs text-slate-500">
@@ -134,7 +147,7 @@ export function PracticeSetCenter({
                 page: 1,
               })
             }
-            className={`rounded-lg border px-4 py-2 text-sm ${value === "TRASH" ? "ml-2" : ""} ${section === value ? "bg-sky-600 text-white" : "bg-white text-slate-600"}`}
+            className={`rounded-lg border px-4 py-2 text-sm ${value === "TRASH" ? "ml-2" : ""} ${section === value ? "bg-sky-700 text-white" : "bg-white text-slate-600"}`}
           >
             {label}
             {result.counts ? ` ${result.counts[value]}` : ""}
@@ -213,7 +226,7 @@ export function PracticeSetCenter({
       </form>
       {section === "TRASH" ? (
         <p className="text-sm text-slate-600">
-          回收站保留学习记录。恢复后进入历史记录，只能回看。
+          可以恢复记录或永久删除。恢复后的练习可在历史记录中回看。
         </p>
       ) : null}
       {notice ? (
@@ -255,21 +268,27 @@ export function PracticeSetCenter({
           />{" "}
           选择本页 · 共 {result.total} 组
         </label>
-        <PracticeManagementActions
-          id="batch"
-          title="所选练习"
-          active={false}
-          onChange={changed}
-          batch={{
-            action: section === "TRASH" ? "RESTORE" : "TRASH",
-            items: result.items
-              .filter((item) => selected.includes(item.id))
-              .map((item) => ({
-                id: item.id,
-                expectedRevision: item.management?.revision ?? 0,
-              })),
-          }}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <PracticeManagementActions
+            id="batch"
+            title="所选练习"
+            active={false}
+            onChange={changed}
+            batch={{
+              action: section === "TRASH" ? "RESTORE" : "TRASH",
+              items: selectedItems,
+            }}
+          />
+          {section === "TRASH" && (
+            <PracticeManagementActions
+              id="batch-purge"
+              title="所选练习"
+              active={false}
+              onChange={changed}
+              batch={{ action: "PURGE", items: selectedItems }}
+            />
+          )}
+        </div>
       </div>
       {!result.items.length && !busy ? (
         <p className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500">
@@ -331,7 +350,7 @@ export function PracticeSetCenter({
                 </p>
               </div>
               <Link
-                className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white"
+                className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
                 href={detailHref(item.entryId)}
               >
                 {item.status === "ACTIVE"

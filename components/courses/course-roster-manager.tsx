@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { EditorDialog } from "@/components/assignments/editor-dialog";
+import { useRouter } from "next/navigation";
 import { requestApi } from "@/components/courses/request-api";
 import type { listCourseRoster } from "@/services/course-rosters/service";
 import type { RosterMutation } from "@/services/course-rosters/schemas";
@@ -19,23 +27,48 @@ const labels: Record<string, string> = {
   REMOVED: "已移出",
 };
 
+function RosterFormContainer({
+  modal,
+  busy,
+  onClose,
+  children,
+}: {
+  modal: boolean;
+  busy: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return modal ? (
+    <EditorDialog open title="添加学生" busy={busy} onClose={onClose}>
+      {children}
+    </EditorDialog>
+  ) : (
+    children
+  );
+}
+
 export function CourseRosterManager({
   courseId,
   initialData,
   initialClassroomId,
+  lockedClassroomId,
 }: {
   courseId: string;
   initialData: Data;
   initialClassroomId?: string;
+  lockedClassroomId?: string;
 }) {
+  const router = useRouter();
   const [data, setData] = useState(initialData),
     [filter, setFilter] = useState<Filter>({
-      classroomId: initialClassroomId ?? "",
+      classroomId: lockedClassroomId ?? initialClassroomId ?? "",
       keyword: "",
       status: "ACTIVE",
       page: 1,
     });
   const [keyword, setKeyword] = useState("");
+  const addButton = useRef<HTMLButtonElement>(null);
+  const wasAdding = useRef(false);
   const activeRequest = useRef(0);
   const requestController = useRef<AbortController | null>(null);
   const firstQuery = useRef(true);
@@ -51,6 +84,15 @@ export function CourseRosterManager({
     name: string;
   } | null>(null);
   const [confirm, setConfirm] = useState<Row | null>(null);
+  useEffect(() => {
+    if (wasAdding.current && form?.mode !== "ADD") addButton.current?.focus();
+    wasAdding.current = form?.mode === "ADD";
+  }, [form?.mode]);
+  function closeForm() {
+    if (busy) return;
+    setForm(null);
+    setError("");
+  }
   const load = useCallback(
     async (next: Filter) => {
       const requestId = ++activeRequest.current;
@@ -64,7 +106,8 @@ export function CourseRosterManager({
         status: next.status,
         page: String(next.page),
       });
-      if (next.classroomId) params.set("classroomId", next.classroomId);
+      const classroomId = lockedClassroomId ?? next.classroomId;
+      if (classroomId) params.set("classroomId", classroomId);
       const response = await requestApi<Data>(
         `/api/teacher/courses/${courseId}/roster?${params}`,
         { cache: "no-store", signal: controller.signal },
@@ -75,7 +118,7 @@ export function CourseRosterManager({
       else setError(response.error);
       setLoading(false);
     },
-    [courseId],
+    [courseId, lockedClassroomId],
   );
   useEffect(() => {
     if (firstQuery.current) {
@@ -112,7 +155,11 @@ export function CourseRosterManager({
       const response = await fetch(`/api/teacher/courses/${courseId}/roster`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
+        body: JSON.stringify(
+          input.action === "ADD" && lockedClassroomId
+            ? { ...input, classroomId: lockedClassroomId }
+            : input,
+        ),
       });
       const body = await response.json();
       if (!response.ok || !body.success) throw Error(body.error ?? "保存失败");
@@ -128,6 +175,7 @@ export function CourseRosterManager({
               : "已恢复到本班名单",
       );
       await load(filter);
+      if (lockedClassroomId) router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "网络异常，请重试");
     } finally {
@@ -183,8 +231,9 @@ export function CourseRosterManager({
             </p>
           </div>
           <button
+            ref={addButton}
             type="button"
-            className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white disabled:opacity-50"
             disabled={!data.classrooms.length || busy || loading}
             onClick={() => {
               setError("");
@@ -209,27 +258,29 @@ export function CourseRosterManager({
           }}
           className="mt-4 flex flex-wrap items-center gap-3"
         >
-          <select
-            aria-label="班级范围"
-            className="rounded-lg border p-2 text-sm"
-            value={filter.classroomId}
-            disabled={busy}
-            onChange={(e) =>
-              setFilter({
-                ...filter,
-                classroomId: e.target.value,
-                keyword: keyword.trim(),
-                page: 1,
-              })
-            }
-          >
-            <option value="">全部课程班级</option>
-            {data.classrooms.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          {!lockedClassroomId && (
+            <select
+              aria-label="班级范围"
+              className="rounded-lg border p-2 text-sm"
+              value={filter.classroomId}
+              disabled={busy}
+              onChange={(e) =>
+                setFilter({
+                  ...filter,
+                  classroomId: e.target.value,
+                  keyword: keyword.trim(),
+                  page: 1,
+                })
+              }
+            >
+              <option value="">全部课程班级</option>
+              {data.classrooms.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             aria-label="名单状态"
             className="rounded-lg border p-2 text-sm"
@@ -263,7 +314,7 @@ export function CourseRosterManager({
             className="rounded-lg border px-3 py-2 text-sm text-slate-600 disabled:opacity-50"
             disabled={
               busy ||
-              (!filter.classroomId &&
+              (filter.classroomId === (lockedClassroomId ?? "") &&
                 filter.status === "ACTIVE" &&
                 !keyword &&
                 filter.page === 1)
@@ -271,7 +322,7 @@ export function CourseRosterManager({
             onClick={() => {
               setKeyword("");
               setFilter({
-                classroomId: "",
+                classroomId: lockedClassroomId ?? "",
                 keyword: "",
                 status: "ACTIVE",
                 page: 1,
@@ -300,7 +351,7 @@ export function CourseRosterManager({
             {notice}
           </p>
         )}
-        {error && (
+        {error && form?.mode !== "ADD" && (
           <div
             role="alert"
             className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700"
@@ -316,85 +367,117 @@ export function CourseRosterManager({
           </div>
         )}
         {form && (
-          <form
-            onSubmit={submitForm}
-            className="mt-4 space-y-3 rounded-lg border bg-sky-50/70 p-4"
+          <RosterFormContainer
+            modal={form.mode === "ADD"}
+            busy={busy}
+            onClose={closeForm}
           >
-            <h3 className="font-medium">
-              {form.mode === "ADD"
-                ? "添加学生到班级"
-                : form.row?.kind === "MEMBER"
-                  ? "纠正学生姓名"
-                  : "纠正待认领信息"}
-            </h3>
-            {form.mode === "ADD" && (
-              <label className="block text-sm">
-                加入班级
-                <select
-                  className="mt-1 block w-full rounded-lg border bg-white p-2"
-                  value={form.classroomId}
-                  onChange={(e) =>
-                    setForm({ ...form, classroomId: e.target.value })
+            <form
+              onSubmit={submitForm}
+              className={
+                form.mode === "ADD"
+                  ? "mt-4 space-y-4"
+                  : "mt-4 space-y-3 rounded-lg border bg-sky-50/70 p-4"
+              }
+            >
+              {form.mode !== "ADD" && (
+                <h3 className="font-medium">
+                  {form.row?.kind === "MEMBER"
+                    ? "纠正学生姓名"
+                    : "纠正待认领信息"}
+                </h3>
+              )}
+              {form.mode === "ADD" && lockedClassroomId && (
+                <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                  加入班级：
+                  {
+                    data.classrooms.find((c) => c.id === lockedClassroomId)
+                      ?.name
                   }
+                </p>
+              )}
+              {form.mode === "ADD" && !lockedClassroomId && (
+                <label className="block text-sm">
+                  加入班级
+                  <select
+                    className="mt-1 block h-10 w-full rounded-lg border bg-white px-3"
+                    disabled={busy}
+                    value={form.classroomId}
+                    onChange={(e) =>
+                      setForm({ ...form, classroomId: e.target.value })
+                    }
+                  >
+                    {data.classrooms.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm">
+                  学号
+                  <input
+                    required
+                    disabled={busy}
+                    maxLength={50}
+                    className="mt-1 block h-10 w-full rounded-lg border bg-white px-3"
+                    readOnly={
+                      form.mode === "EDIT" && form.row?.kind === "MEMBER"
+                    }
+                    value={form.studentNo}
+                    onChange={(e) =>
+                      setForm({ ...form, studentNo: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="text-sm">
+                  姓名
+                  <input
+                    required
+                    disabled={busy}
+                    minLength={2}
+                    maxLength={100}
+                    className="mt-1 block h-10 w-full rounded-lg border bg-white px-3"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </label>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {form.mode === "ADD"
+                  ? "已有学生需学号与姓名匹配；新学生创建待认领信息，不生成默认密码。"
+                  : form.row?.kind === "MEMBER"
+                    ? "姓名纠正同步到该学生的账号资料；学号保持不变，历史作答与成绩保留。"
+                    : "纠正信息同时更新本教师其他班级中的同一待认领身份。"}
+              </p>
+              {form.mode === "ADD" && error && (
+                <p
+                  role="alert"
+                  className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
                 >
-                  {data.classrooms.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-sm">
-                学号
-                <input
-                  required
-                  maxLength={50}
-                  className="mt-1 block w-full rounded-lg border bg-white p-2"
-                  readOnly={form.mode === "EDIT" && form.row?.kind === "MEMBER"}
-                  value={form.studentNo}
-                  onChange={(e) =>
-                    setForm({ ...form, studentNo: e.target.value })
-                  }
-                />
-              </label>
-              <label className="text-sm">
-                姓名
-                <input
-                  required
-                  minLength={2}
-                  maxLength={100}
-                  className="mt-1 block w-full rounded-lg border bg-white p-2"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-              </label>
-            </div>
-            <p className="text-muted-foreground text-xs">
-              {form.mode === "ADD"
-                ? "已有学生需学号与姓名匹配；新学生创建待认领信息，不生成默认密码。"
-                : form.row?.kind === "MEMBER"
-                  ? "姓名纠正同步到该学生的账号资料；学号保持不变，历史作答与成绩保留。"
-                  : "纠正信息同时更新本教师其他班级中的同一待认领身份。"}
-            </p>
-            <div className="flex gap-2">
-              <button
-                disabled={busy}
-                className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white"
-              >
-                {busy ? "保存中…" : "保存"}
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                className="rounded-lg border px-4 py-2 text-sm"
-                onClick={() => setForm(null)}
-              >
-                取消
-              </button>
-            </div>
-          </form>
+                  {error}
+                </p>
+              )}
+              <div className="flex justify-end gap-2 border-t pt-4">
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="h-10 rounded-lg border px-4 text-sm hover:bg-slate-50 disabled:opacity-50"
+                  onClick={closeForm}
+                >
+                  取消
+                </button>
+                <button
+                  disabled={busy}
+                  className="h-10 rounded-lg bg-sky-700 px-4 text-sm text-white hover:bg-sky-800 disabled:opacity-50"
+                >
+                  {busy ? "保存中…" : "保存"}
+                </button>
+              </div>
+            </form>
+          </RosterFormContainer>
         )}
         {confirm && (
           <div

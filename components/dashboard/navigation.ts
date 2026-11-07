@@ -108,9 +108,9 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
             "/student/assignments",
             "/student/attendance",
             "/student/surveys",
+            "/student/exams",
           ],
         },
-        { href: "/student/exams", label: "我的考试", icon: ClipboardCheck },
       ],
     },
     {
@@ -118,13 +118,13 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
       items: [
         {
           href: "/student/recommendations",
-          label: "练习中心",
+          label: "自主练习",
           icon: Sparkles,
           relatedPaths: ["/student/practice"],
         },
         {
           href: "/student/wrong-questions",
-          label: "复习中心",
+          label: "我的题库",
           relatedPaths: ["/student/question-favorites"],
           icon: NotebookPen,
         },
@@ -213,6 +213,7 @@ const STUDENT_SEGMENT_LABELS: Readonly<Record<string, string>> = {
   attendance: "签到与出勤",
   surveys: "课程问卷",
   tasks: "学习任务",
+  exams: "我的考试",
   "learning-center": "课程学习中心",
   profile: "我的课程画像",
 };
@@ -223,6 +224,9 @@ export function getSegmentLabels(
 ): Readonly<Record<string, string>> {
   if (/^\/teacher\/assignments\/[^/]+\/results$/.test(pathname))
     return { ...labels, results: "成绩统计" };
+  // 教师课程通知与管理员「系统公告」同名段，按路径区分标题。
+  if (/^\/teacher\/courses\/[^/]+\/announcements$/.test(pathname))
+    return { ...labels, announcements: "课程通知" };
   if (pathname === "/admin" || pathname.startsWith("/admin/"))
     return { ...labels, classrooms: "班级治理", questions: "共享题库" };
   return pathname === "/student" || pathname.startsWith("/student/")
@@ -280,6 +284,8 @@ export function getDashboardPageTitle(
   groups: NavigationGroup[],
   context?: { studentId?: string | null; view?: string | null },
 ): string {
+  if (/^\/teacher\/assignments\/[^/]+\/submissions\/[^/]+$/.test(pathname))
+    return "个人作答详情";
   const studentLabel = getStudentPageLabel(pathname);
   if (studentLabel) return studentLabel;
   if (/^\/teacher\/assignments\/students\/[^/]+$/.test(pathname))

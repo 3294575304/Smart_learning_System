@@ -263,7 +263,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
                   </label>
                 ) : null}
                 <button
-                  className="min-h-10 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-10 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
                   type="button"
                   disabled={
                     pendingCourseId !== null || !course.classrooms.length
@@ -278,7 +278,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
                   className="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm text-sky-800 hover:bg-sky-50"
                   href={`/student/recommendations?${params}`}
                 >
-                  打开练习中心 →
+                  打开自主练习 →
                 </Link>
                 {!course.classrooms.length ? (
                   <span className="text-sm text-amber-800">
@@ -395,7 +395,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
                       {course.knowledgePoints.length > 12 ? (
                         <p className="mt-2 text-xs text-slate-500">
                           这里只展示错题最多的 12
-                          个知识点；生成练习中心可继续调整范围。
+                          个知识点；生成自主练习可继续调整范围。
                         </p>
                       ) : null}
                     </fieldset>

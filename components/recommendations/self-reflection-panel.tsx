@@ -194,7 +194,7 @@ export function SelfReflectionPanel({
             {record.status !== "CONFIRMED" || historyOnly ? (
               <button
                 disabled={pending}
-                className="mt-3 rounded-md bg-sky-600 px-3 py-2 text-xs text-white"
+                className="mt-3 rounded-md bg-sky-700 px-3 py-2 text-xs text-white"
                 onClick={() => void confirm(record)}
                 type="button"
               >

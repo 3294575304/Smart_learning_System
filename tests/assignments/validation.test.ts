@@ -197,11 +197,14 @@ test("学生作业列表查询校验状态筛选", () => {
     page: 1,
     status: "ALL",
   });
-  assert.equal(
-    studentAssignmentListQuerySchema.safeParse({ status: "IN_PROGRESS" })
-      .success,
-    true,
-  );
+  for (const status of ["TODO", "PENDING", "IN_PROGRESS"])
+    assert.deepEqual(
+      studentAssignmentListQuerySchema.parse({ status, page: "2" }),
+      {
+        status: "TODO",
+        page: 2,
+      },
+    );
   assert.equal(
     studentAssignmentListQuerySchema.safeParse({ status: "UNKNOWN" }).success,
     false,

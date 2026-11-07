@@ -119,7 +119,7 @@ export function WrongQuestionFilters({
             placeholder="搜索题目标题或内容"
           />
           <button
-            className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white"
+            className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
             type="submit"
           >
             搜索

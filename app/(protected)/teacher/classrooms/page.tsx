@@ -6,12 +6,25 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { listTeacherClassrooms } from "@/services/classrooms/service";
 
-export default async function TeacherClassroomsPage() {
+export default async function TeacherClassroomsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ deleted?: string }>;
+}) {
   const teacher = await requirePageRole(Role.TEACHER);
   const classrooms = await listTeacherClassrooms(teacher.id);
+  const deleted = (await searchParams).deleted === "1";
 
   return (
     <section className="space-y-7">
+      {deleted && (
+        <p
+          role="status"
+          className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800"
+        >
+          班级已删除，列表已更新。学生账号及历史教学记录已保留。
+        </p>
+      )}
       <PageHeader
         description="查看班级状态、学生人数和邀请码，并进入班级详情管理成员。"
         title="班级管理"

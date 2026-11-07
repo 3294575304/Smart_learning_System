@@ -1,5 +1,5 @@
-import { RouteLoading } from "@/components/feedback/route-loading";
+import { StudentPageLoading } from "@/components/feedback/student-page-loading";
 
 export default function Loading() {
-  return <RouteLoading />;
+  return <StudentPageLoading title="提交结果" variant="answer" />;
 }

@@ -1,5 +1,7 @@
 import { courseQuestionSchoolWhere } from "@/services/questions/access";
 import "server-only";
+import { studentKnowledgeStatus as conceptStatus } from "./knowledge-status";
+import { learningCenterChapters } from "./knowledge-chapters";
 
 import {
   LearnerProfileEvidenceState,
@@ -28,28 +30,6 @@ function dimensionNumber(value: unknown, key: string) {
   return typeof candidate === "number" && Number.isFinite(candidate)
     ? candidate
     : null;
-}
-
-function conceptStatus(
-  concept: {
-    evidenceState: LearnerProfileEvidenceState;
-    masteryScore: number | null;
-  } | null,
-): ConceptStatus {
-  if (
-    !concept ||
-    concept.evidenceState === LearnerProfileEvidenceState.NO_EVIDENCE
-  )
-    return "NO_EVIDENCE";
-  if (
-    concept.evidenceState ===
-      LearnerProfileEvidenceState.INSUFFICIENT_EVIDENCE ||
-    concept.masteryScore === null
-  )
-    return "INSUFFICIENT";
-  if (concept.masteryScore >= 80) return "MASTERED";
-  if (concept.masteryScore >= 60) return "DEVELOPING";
-  return "NEEDS_SUPPORT";
 }
 
 function shortDate(date: Date) {
@@ -94,6 +74,7 @@ export async function getStudentCourseLearningCenter(
         studentId,
         courseId,
         supersededBy: null,
+        projectedEvidence: { none: { assignment: { status: "REVOKED" } } },
         eventType: {
           in: [
             LearningEventType.ASSESSMENT_GRADED,
@@ -357,33 +338,7 @@ export async function getStudentCourseLearningCenter(
   const pointByKey = new Map(
     pointViewsWithQuestions.map((point) => [point.key, point]),
   );
-  const pointOrderByKey = new Map(
-    pointViews.map((point, index) => [point.key, index]),
-  );
-  const chapters =
-    structure?.nodes
-      .filter((node) => node.type === "CHAPTER")
-      .sort(
-        (left, right) =>
-          left.sortOrder - right.sortOrder ||
-          left.code.localeCompare(right.code, "zh-CN", { numeric: true }),
-      )
-      .map((chapter) => ({
-        key: chapter.key,
-        code: chapter.code,
-        name: chapter.name,
-        concepts: (structure?.edges ?? [])
-          .filter(
-            (edge) => edge.type === "CONTAINS" && edge.from === chapter.key,
-          )
-          .map((edge) => pointByKey.get(edge.to))
-          .filter((point): point is NonNullable<typeof point> => Boolean(point))
-          .sort(
-            (left, right) =>
-              (pointOrderByKey.get(left.key) ?? Number.POSITIVE_INFINITY) -
-              (pointOrderByKey.get(right.key) ?? Number.POSITIVE_INFINITY),
-          ),
-      })) ?? [];
+  const chapters = learningCenterChapters(structure, pointViewsWithQuestions);
   const chapterPointViews = chapters.flatMap((chapter) => chapter.concepts);
   const chapterPointKeys = new Set(chapterPointViews.map((point) => point.key));
   const orderedPointViews = [

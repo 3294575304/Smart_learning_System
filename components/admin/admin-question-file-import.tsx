@@ -525,7 +525,7 @@ export function QuestionFileImport({
               key={step.number}
             >
               <span
-                className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${complete ? "bg-emerald-500 text-white" : active ? "bg-sky-600 text-white shadow-sm shadow-sky-200" : "bg-slate-100 text-slate-400"}`}
+                className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${complete ? "bg-emerald-500 text-white" : active ? "bg-sky-700 text-white shadow-sm shadow-sky-200" : "bg-slate-100 text-slate-400"}`}
               >
                 {complete ? (
                   <Check aria-hidden="true" className="size-4" />
@@ -639,7 +639,7 @@ export function QuestionFileImport({
               ))}
             </div>
             <button
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700 disabled:opacity-60"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-800 disabled:opacity-60"
               disabled={busy}
               onClick={(event) => {
                 event.stopPropagation();
@@ -697,7 +697,7 @@ export function QuestionFileImport({
         </div>
         {importFinished ? (
           <Link
-            className="mx-5 mb-4 inline-flex rounded-md bg-sky-600 px-4 py-2 text-sm text-white"
+            className="mx-5 mb-4 inline-flex rounded-md bg-sky-700 px-4 py-2 text-sm text-white"
             href={backHref}
           >
             查看已导入题目（含待配置草稿） →
@@ -965,7 +965,7 @@ export function QuestionFileImport({
                     取消
                   </Link>
                   <button
-                    className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                    className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                     disabled={
                       busy ||
                       invalidCount > 0 ||

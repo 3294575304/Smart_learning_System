@@ -1,3 +1,4 @@
+import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import {
@@ -62,15 +63,17 @@ export default async function StudentSurveysPage({
       <SurveyAvailabilityRefresh at={nextChange?.toISOString()} />
       <PageHeader
         actions={
-          <StudentBackLink
-            href={
-              course
-                ? `/student/courses/${course.id}/learning-center${classroomId ? `?classroomId=${encodeURIComponent(classroomId)}` : ""}`
-                : "/student/tasks"
-            }
-          >
-            {course ? "返回我的课程" : "返回学习任务"}
-          </StudentBackLink>
+          course ? (
+            <StudentCourseReturnLink
+              courseId={course.id}
+              classroomId={classroomId}
+              tab="tasks"
+            />
+          ) : (
+            <StudentBackLink href="/student/tasks">
+              返回学习任务
+            </StudentBackLink>
+          )
         }
         description={
           course

@@ -1,4 +1,5 @@
 import { Role } from "@prisma/client";
+import { ArrowRight, CalendarClock, CircleCheck } from "lucide-react";
 import Link from "next/link";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
@@ -17,26 +18,19 @@ import {
 const groups: Array<{
   kind: StudentTaskKind;
   href: string;
-  action: string;
-  detail: string;
 }> = [
+  { kind: "exam", href: "/student/exams" },
   {
     kind: "assignment",
     href: "/student/assignments?status=ALL",
-    action: "查看作业",
-    detail: "继续作答或查看已提交记录与成绩。",
   },
   {
     kind: "attendance",
     href: "/student/attendance",
-    action: "查看出勤",
-    detail: "处理开放中的课堂签到，查看出勤记录。",
   },
   {
     kind: "survey",
     href: "/student/surveys",
-    action: "查看问卷",
-    detail: "填写已开放问卷；问卷不计入课程成绩。",
   },
 ];
 
@@ -48,79 +42,192 @@ export default async function StudentTasksPage() {
       <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
       <PageHeader
         title="学习任务"
-        description="查看各门课程的作业、签到和问卷，与学习主页使用相同的待办范围。"
+        description="集中处理各门课程的全部待办，也可查看考试、作业、签到和问卷记录。"
       />
-      <p className="rounded-xl border border-sky-100 bg-sky-50/70 px-4 py-3 text-sm text-slate-700">
-        当前有 <strong>{overview.total}</strong>{" "}
-        项待处理任务。开放中的签到优先处理，其他任务按截止时间排列。
-      </p>
-      <div className="grid items-start gap-4 lg:grid-cols-3">
-        {groups.map(({ kind, href, action, detail }) => {
-          const { icon: Icon, label } = STUDENT_TASK_PRESENTATION[kind];
-          const items = overview.items.filter((item) => item.kind === kind);
-          return (
+      <div className="@container">
+        <div className="grid items-start gap-4 @min-[52rem]:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="min-w-0 space-y-4">
             <section
-              key={kind}
-              id={kind}
-              aria-label={label}
-              className="min-w-0 scroll-mt-24 rounded-2xl border bg-white p-5"
+              aria-labelledby="student-pending-tasks"
+              className="rounded-2xl border bg-white"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="flex items-center gap-2 font-semibold">
-                  <Icon aria-hidden="true" className="size-5 text-sky-700" />
-                  {label}
-                </h2>
-                <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs text-sky-800">
-                  {overview.counts[kind]} 项待处理
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-slate-500">{detail}</p>
-              <div className="mt-4 border-t pt-4">
-                {items.length ? (
-                  <StudentTaskList items={items} />
-                ) : (
-                  <p className="text-sm text-slate-500">当前没有待处理事项。</p>
+              <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-100 px-4 py-4 sm:px-5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2
+                    id="student-pending-tasks"
+                    className="text-lg font-semibold text-slate-950"
+                  >
+                    我的待办
+                  </h2>
+                  <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-800 tabular-nums">
+                    {overview.total} 项待处理
+                  </span>
+                </div>
+                {overview.total > 1 && (
+                  <p className="text-xs leading-5 text-slate-600">
+                    正在进行的考试优先，其次签到，再按截止时间排序
+                  </p>
                 )}
-              </div>
-              <Link
-                className="mt-5 inline-flex min-h-10 items-center rounded-lg border px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-600"
-                href={href}
-              >
-                {action}
-              </Link>
+              </header>
+              {overview.items.length ? (
+                <StudentTaskList
+                  items={overview.items}
+                  priorityId={overview.items[0]?.id}
+                  layout="workspace"
+                />
+              ) : (
+                <div className="flex items-start gap-3 px-4 py-5 sm:px-5">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <CircleCheck aria-hidden="true" className="size-5" />
+                  </span>
+                  <div>
+                    <p className="font-semibold text-slate-900">暂无待办</p>
+                    <p className="mt-0.5 text-sm leading-5 text-slate-600">
+                      可以查看考试安排、作业、出勤和问卷记录。
+                    </p>
+                  </div>
+                </div>
+              )}
             </section>
-          );
-        })}
-      </div>
-      {overview.scheduledSurveys.length ? (
-        <section
-          aria-labelledby="scheduled-surveys-heading"
-          className="rounded-2xl border bg-white p-5"
-        >
-          <h2 id="scheduled-surveys-heading" className="font-semibold">
-            待开放问卷（{overview.scheduledSurveys.length} 份）
-          </h2>
-          <p className="mt-2 text-sm text-slate-500">
-            开放后才计入待处理任务，所有问卷均不计入成绩。
-          </p>
-          <ul className="mt-4 grid gap-4 sm:grid-cols-2">
-            {overview.scheduledSurveys.map((survey) => (
-              <li key={survey.id}>
-                <Link
-                  className="text-sm font-medium text-sky-700 hover:underline focus-visible:outline-2 focus-visible:outline-sky-600"
-                  href={survey.href}
+            {overview.scheduledExams.length > 0 && (
+              <section
+                aria-labelledby="scheduled-exams-heading"
+                className="rounded-2xl border bg-white p-5"
+              >
+                <h2
+                  id="scheduled-exams-heading"
+                  className="font-semibold text-slate-950"
                 >
-                  {survey.title}
-                </Link>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  {studentTaskContext(survey)} ·{" "}
-                  {studentTaskDate(survey.opensAt)} 开放
+                  近期考试
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  未开考的考试不计入待办。
                 </p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+                <ul className="mt-3 divide-y">
+                  {overview.scheduledExams.map((exam) => (
+                    <li
+                      key={exam.id}
+                      className="flex flex-wrap items-center justify-between gap-3 py-3"
+                    >
+                      <div>
+                        <h3 className="font-medium">{exam.title}</h3>
+                        <p className="text-sm text-slate-600">
+                          {studentTaskContext(exam)} ·{" "}
+                          {studentTaskDate(exam.opensAt)} 开考
+                        </p>
+                      </div>
+                      <Link
+                        href={exam.href}
+                        className="rounded-lg bg-sky-50 px-4 py-2 text-sm font-medium text-sky-800 focus-visible:outline-2"
+                      >
+                        查看安排
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {overview.scheduledSurveys.length > 0 && (
+              <section
+                aria-labelledby="scheduled-surveys-heading"
+                className="rounded-2xl border bg-white px-4 py-4 sm:px-5"
+              >
+                <h2
+                  id="scheduled-surveys-heading"
+                  className="flex items-center gap-2 font-semibold text-slate-950"
+                >
+                  <CalendarClock
+                    aria-hidden="true"
+                    className="size-5 shrink-0 text-violet-700"
+                  />
+                  待开放问卷
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  开放后显示在待办中，问卷不计入成绩。
+                </p>
+                <ul className="mt-2 divide-y divide-slate-100">
+                  {overview.scheduledSurveys.map((survey) => (
+                    <li key={survey.id} className="py-1 last:pb-0">
+                      <Link
+                        className="group flex min-h-11 items-center gap-3 rounded-lg py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+                        href={survey.href}
+                      >
+                        <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                          <p className="text-sm font-medium text-slate-900 group-hover:text-sky-800">
+                            {survey.title}
+                          </p>
+                          <p className="mt-0.5 text-xs leading-5 text-slate-600">
+                            {studentTaskContext(survey)} ·{" "}
+                            <time dateTime={survey.opensAt.toISOString()}>
+                              {studentTaskDate(survey.opensAt)}
+                            </time>{" "}
+                            开放
+                          </p>
+                        </div>
+                        <ArrowRight
+                          aria-hidden="true"
+                          className="size-4 shrink-0 text-sky-700"
+                        />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+          <section
+            aria-labelledby="student-task-records"
+            className="rounded-2xl border bg-white p-4"
+          >
+            <h2
+              id="student-task-records"
+              className="px-1 text-base font-semibold text-slate-950"
+            >
+              课程任务入口
+            </h2>
+            <ul className="mt-2 divide-y divide-slate-100">
+              {groups.map(({ kind, href }) => {
+                const {
+                  icon: Icon,
+                  label,
+                  color,
+                } = STUDENT_TASK_PRESENTATION[kind];
+                const count = overview.counts[kind];
+                return (
+                  <li
+                    key={kind}
+                    id={kind}
+                    className="scroll-mt-24 py-1.5 last:pb-0"
+                  >
+                    <Link
+                      href={href}
+                      className="group flex min-h-12 items-center gap-3 rounded-lg px-1 py-1.5 transition-colors hover:bg-sky-50/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+                    >
+                      <span
+                        className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${color}`}
+                      >
+                        <Icon aria-hidden="true" className="size-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-900">
+                          {label}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-600 tabular-nums">
+                          {count} 项待办
+                        </p>
+                      </div>
+                      <ArrowRight
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-sky-700"
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </div>
+      </div>
     </section>
   );
 }

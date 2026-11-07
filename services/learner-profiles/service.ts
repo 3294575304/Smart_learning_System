@@ -118,7 +118,11 @@ export async function ensureLearnerProfileSnapshot(
         },
       }),
       transaction.learningEvent.findFirst({
-        where: { studentId, courseId },
+        where: {
+          studentId,
+          courseId,
+          projectedEvidence: { none: { assignment: { status: "REVOKED" } } },
+        },
         orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
         select: { id: true, occurredAt: true },
       }),
@@ -497,6 +501,38 @@ export async function getStudentLearnerProfile(
   const snapshotId = await ensureSnapshot(studentId, courseId);
   const mastery = await getStudentCourseConceptMastery(studentId, courseId);
   return snapshotView(snapshotId, mastery);
+}
+
+/** Homepage reads the same immutable snapshot without loading evidence drill-downs. */
+export async function getStudentKnowledgeSnapshot(
+  studentId: string,
+  courseId: string,
+) {
+  await assertStudentAccess(studentId, courseId);
+  const snapshotId = await ensureSnapshot(studentId, courseId);
+  const snapshot = await prisma.learnerProfileSnapshot.findUniqueOrThrow({
+    where: { id: snapshotId },
+    select: {
+      revisionNumber: true,
+      createdAt: true,
+      concepts: {
+        select: {
+          conceptId: true,
+          evidenceState: true,
+          evidenceCount: true,
+          masteryScore: true,
+        },
+      },
+    },
+  });
+  return {
+    revisionNumber: snapshot.revisionNumber,
+    generatedAt: snapshot.createdAt,
+    concepts: snapshot.concepts.map((concept) => ({
+      ...concept,
+      masteryScore: concept.masteryScore?.toNumber() ?? null,
+    })),
+  };
 }
 
 export async function getTeacherStudentLearnerProfile(

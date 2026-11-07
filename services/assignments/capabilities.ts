@@ -14,11 +14,14 @@ export function assignmentCapabilities(
   const archived =
     assignment.status === "ARCHIVED" ||
     assignment.classroom.status === "ARCHIVED";
-  const gradingBlockedReason = archived
-    ? "已归档记录只读，不能继续批改或修改成绩"
-    : !["PUBLISHED", "CLOSED"].includes(assignment.status)
-      ? "当前作业尚未发布，不能批改或公布成绩"
-      : null;
+  const revoked = assignment.status === "REVOKED";
+  const gradingBlockedReason = revoked
+    ? "作业已撤销，作答与成绩仅供查看"
+    : archived
+      ? "已归档记录只读，不能继续批改或修改成绩"
+      : !["PUBLISHED", "CLOSED"].includes(assignment.status)
+        ? "当前作业尚未发布，不能批改或公布成绩"
+        : null;
   const teachingEnded = ["COMPLETED", "CLOSED"].includes(
     assignment.classroom.status,
   );
@@ -36,7 +39,7 @@ export function assignmentCapabilities(
               : null
       : null);
   return {
-    readOnly: archived,
+    readOnly: archived || revoked,
     canEditDraft:
       assignment.status === "DRAFT" && assignment.classroom.status === "ACTIVE",
     canGrade: gradingBlockedReason === null,

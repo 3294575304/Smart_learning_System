@@ -6,7 +6,10 @@ import {
 } from "@/services/assignments/lifecycle-lock";
 import { assertClassroomWorkAllowed } from "@/services/assignments/classroom-work";
 import "server-only";
-import { assertPracticeGroupWritable } from "@/services/practice-sets/management";
+import {
+  assertPracticeGroupWritable,
+  readPracticeManagement,
+} from "@/services/practice-sets/management";
 
 import {
   AuditAction,
@@ -419,13 +422,15 @@ export async function getProgrammingAttemptPayload(attemptId: string) {
       throw new AssignmentOperationError("判题 Attempt 已进入终态", 409);
     }
     const now = new Date();
-    await transaction.programmingAttempt.update({
-      where: { id: attempt.id },
+    const started = await transaction.programmingAttempt.updateMany({
+      where: { id: attempt.id, status: { in: ["PENDING", "RUNNING"] } },
       data: {
         status: ProgrammingAttemptStatus.RUNNING,
         startedAt: attempt.startedAt ?? now,
       },
     });
+    if (!started.count)
+      throw new AssignmentOperationError("判题 Attempt 已进入终态", 409);
     const config =
       attempt.configSnapshot?.configRevision ?? attempt.configRevision;
     if (!config) throw new AssignmentOperationError("判题配置不存在", 409);
@@ -796,9 +801,19 @@ export async function getStudentProgrammingAttempt(
 ) {
   const attempt = await prisma.programmingAttempt.findFirst({
     where: { id: attemptId, studentId },
-    include: attemptInclude,
+    include: {
+      ...attemptInclude,
+      recommendation: { select: { cycleKey: true } },
+      assignmentQuestion: {
+        select: { assignment: { select: { status: true } } },
+      },
+    },
   });
   if (!attempt) throw new ResourceNotFoundError("判题记录不存在");
+  if (attempt.assignmentQuestion?.assignment.status === "REVOKED")
+    throw new ResourceNotFoundError("判题记录不存在");
+  if (attempt.recommendation)
+    await readPracticeManagement(studentId, attempt.recommendation.cycleKey);
   return studentAttemptDto(attempt);
 }
 
@@ -819,6 +834,7 @@ export async function rejudgeProgrammingAttempt(
       include: {
         studentAnswer: {
           select: {
+            submissionId: true,
             submission: {
               select: {
                 assignment: {
@@ -845,6 +861,7 @@ export async function rejudgeProgrammingAttempt(
       teacherId,
       previous.studentAnswer.submission.assignment.id,
       previous.studentId,
+      previous.studentAnswer.submissionId,
     );
     const created = await createAttemptAndJob(transaction, {
       studentAnswerId: previous.studentAnswerId,
@@ -906,6 +923,7 @@ export async function revokeProgrammingAttempt(
       teacherId,
       previous.studentAnswer.submission.assignmentId,
       previous.studentId,
+      previous.studentAnswer.submissionId,
     );
     const latest = await transaction.programmingAttempt.findFirst({
       where: {

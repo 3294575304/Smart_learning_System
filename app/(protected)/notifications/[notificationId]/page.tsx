@@ -11,6 +11,7 @@ import { resolveNotificationDestination } from "@/components/notifications/prese
 
 import { NotificationLink } from "@/components/notifications/notification-link";
 import { NotificationReadStatus } from "@/components/notifications/notification-read-status";
+import { StudentNotificationAction } from "@/components/notifications/student-notification-action";
 
 interface NotificationPageProps {
   params: Promise<{ notificationId: string }>;
@@ -18,13 +19,15 @@ interface NotificationPageProps {
 
 const TYPE_LABELS: Record<NotificationType, string> = {
   ASSIGNMENT_PUBLISHED: "作业发布",
+  ASSIGNMENT_REVOKED: "作业撤销",
   ASSIGNMENT_DUE_SOON: "截止提醒",
   ASSIGNMENT_GRADED: "批改完成",
   LEARNING_ANALYSIS_READY: "学情分析",
   RECOMMENDATION_READY: "推荐更新",
   SYSTEM_ANNOUNCEMENT: "系统公告",
   COURSE_SURVEY_PUBLISHED: "课程问卷",
-  CLASSROOM_DISSOLVED: "班级解散",
+  CLASSROOM_DISSOLVED: "班级变更",
+  COURSE_ANNOUNCEMENT: "课程通知",
 };
 
 const PRIORITY_LABELS: Record<NotificationPriority, string> = {
@@ -53,12 +56,13 @@ export default async function NotificationDetailPage({
 
     const expired =
       notification.expiresAt !== null && notification.expiresAt <= new Date();
-    const destination = expired
-      ? null
-      : resolveNotificationDestination(
-          notification.type,
-          notification.actionUrl,
-        );
+    const destination =
+      expired || user.role === "STUDENT"
+        ? null
+        : resolveNotificationDestination(
+            notification.type,
+            notification.actionUrl,
+          );
 
     return (
       <section className="mx-auto max-w-3xl space-y-5">
@@ -103,6 +107,17 @@ export default async function NotificationDetailPage({
           </p>
         )}
         <div className="flex flex-wrap gap-2">
+          {!expired && notification.action && (
+            <StudentNotificationAction
+              action={notification.action}
+              title={notification.title}
+            />
+          )}
+          {notification.actionMessage && (
+            <p className="basis-full text-sm text-slate-600">
+              {notification.actionMessage}
+            </p>
+          )}
           {destination && destination !== "/notifications" ? (
             <NotificationLink href={destination} label="打开相关内容" />
           ) : null}

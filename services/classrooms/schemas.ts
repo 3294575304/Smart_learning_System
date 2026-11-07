@@ -23,6 +23,16 @@ export const createClassroomSchema = z.object({
 
 export const updateClassroomSchema = createClassroomSchema;
 
+export const deleteClassroomSchema = z
+  .object({
+    action: z.literal("DELETE_CLASSROOM"),
+    confirmed: z.literal(true),
+    confirmedName: classroomNameSchema,
+    token: z.string().regex(/^[a-f0-9]{64}$/),
+    reason: z.string().trim().max(500).default(""),
+  })
+  .strict();
+
 export const dissolveClassroomSchema = z.object({
   reason: z
     .string()

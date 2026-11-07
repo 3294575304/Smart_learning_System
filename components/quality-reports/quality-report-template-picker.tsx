@@ -247,7 +247,7 @@ export function QualityReportTemplatePicker({
                   type="button"
                   aria-pressed={onlyPending}
                   onClick={() => setOnlyPending(true)}
-                  className={`rounded-lg px-3 py-1.5 text-xs ${onlyPending ? "bg-sky-600 text-white" : "bg-white text-slate-600"}`}
+                  className={`rounded-lg px-3 py-1.5 text-xs ${onlyPending ? "bg-sky-700 text-white" : "bg-white text-slate-600"}`}
                 >
                   待处理 {pending.length}
                 </button>
@@ -255,7 +255,7 @@ export function QualityReportTemplatePicker({
                   type="button"
                   aria-pressed={!onlyPending}
                   onClick={() => setOnlyPending(false)}
-                  className={`rounded-lg px-3 py-1.5 text-xs ${!onlyPending ? "bg-sky-600 text-white" : "bg-white text-slate-600"}`}
+                  className={`rounded-lg px-3 py-1.5 text-xs ${!onlyPending ? "bg-sky-700 text-white" : "bg-white text-slate-600"}`}
                 >
                   全部 {template.slots.length}
                 </button>

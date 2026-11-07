@@ -1,4 +1,18 @@
-import type { NotificationPriority, NotificationType } from "@prisma/client";
+import type {
+  NotificationPriority,
+  NotificationType,
+  NotificationSourceType,
+} from "@prisma/client";
+
+export type StudentNotificationAction =
+  | { kind: "LINK"; label: string; href: string }
+  | {
+      kind: "START_ASSIGNMENT";
+      label: string;
+      assignmentId: string;
+      courseId?: string;
+      classroomId: string;
+    };
 
 export interface NotificationListItem {
   id: string;
@@ -10,6 +24,10 @@ export interface NotificationListItem {
   readAt: Date | null;
   createdAt: Date;
   expiresAt: Date | null;
+  sourceType?: NotificationSourceType;
+  sourceId?: string;
+  action?: StudentNotificationAction | null;
+  actionMessage?: string;
 }
 
 export interface NotificationListResult {

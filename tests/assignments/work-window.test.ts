@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { studentWorkWindow } from "@/services/assignments/work-window";
+import { assignmentDraftAction } from "@/services/assignments/draft-action";
 import { assignmentCapabilities } from "@/services/assignments/capabilities";
 import {
   issueMakeupSchema,
   extendAssignmentSchema,
+  revokeMakeupSchema,
 } from "@/services/assignments/makeup-schemas";
 import { notificationDeduplication } from "@/services/notifications/deduplication";
 const now = new Date("2026-10-27T12:00:00Z");
@@ -112,4 +114,45 @@ test("teacher requests reject duplicates/extra fields and reminder identity incl
     notificationDeduplication.assignmentDueSoon("a", "grant:1"),
     notificationDeduplication.assignmentDueSoon("a", "class:1"),
   );
+});
+
+test("schedule cancellation ends at the exact opening time", () => {
+  const upcoming = { ...task, publishedAt: now };
+  assert.equal(
+    assignmentDraftAction(upcoming, new Date(now.getTime() - 1)),
+    "CANCEL_SCHEDULE",
+  );
+  assert.equal(assignmentDraftAction(upcoming, now), null);
+  assert.equal(
+    assignmentDraftAction({ ...upcoming, status: "DRAFT" }, now),
+    "DELETE_DRAFT",
+  );
+  assert.equal(
+    assignmentDraftAction(
+      { ...upcoming, status: "DRAFT", classroom: { status: "ARCHIVED" } },
+      now,
+    ),
+    null,
+  );
+});
+
+test("makeup and extension reasons are optional while grant revocation requires one", () => {
+  const requestId = "11111111-1111-4111-8111-111111111111";
+  const studentIds = ["cm12345678901234567890123"];
+  assert.equal(
+    issueMakeupSchema.parse({ requestId, studentIds, expiresAt: now }).reason,
+    "",
+  );
+  assert.equal(
+    extendAssignmentSchema.parse({ requestId, dueAt: now, reason: "  " })
+      .reason,
+    "",
+  );
+  assert.equal(
+    extendAssignmentSchema.parse({ requestId, dueAt: now, reason: " 迟 " })
+      .reason,
+    "迟",
+  );
+  assert.equal(revokeMakeupSchema.safeParse({}).success, false);
+  assert.equal(revokeMakeupSchema.safeParse({ reason: "  " }).success, false);
 });

@@ -114,7 +114,7 @@ export function StudentGradeFilters({
         />
       </label>
       <button
-        className="min-h-11 self-end rounded-lg bg-sky-600 px-5 text-sm font-medium text-white hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+        className="min-h-11 self-end rounded-lg bg-sky-700 px-5 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
         type="submit"
         disabled={pending}
       >

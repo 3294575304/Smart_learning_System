@@ -1,5 +1,4 @@
 import {
-  ArrowRight,
   BrainCircuit,
   CheckCircle2,
   Clock3,
@@ -156,13 +155,6 @@ export function StudentCourseLearningCenterView({
                 先处理低掌握知识点，再补足证据，最后按课程顺序预习后续内容。
               </p>
             </div>
-            <Link
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-600"
-              href={`/student/courses/${data.course.id}/learning-center?tab=profile${data.classroom ? `&classroomId=${encodeURIComponent(data.classroom.id)}` : ""}`}
-            >
-              查看完整画像
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </Link>
           </div>
           <div className="mt-5 grid gap-4 xl:grid-cols-3">
             <PathColumn
@@ -198,7 +190,7 @@ export function StudentCourseLearningCenterView({
         <>
           <section className="scroll-mt-24 space-y-4" id="learning-trend">
             <div>
-              <h2 className="text-lg font-semibold">学习变化趋势</h2>
+              <h2 className="text-lg font-semibold">我的学习趋势</h2>
               <p className="mt-1 text-sm text-slate-500">
                 掌握度只采用达到证据门槛的画像；得分率按已发布作业、已完成整组练习展示，二者取样不同。
               </p>
@@ -230,7 +222,7 @@ export function StudentCourseLearningCenterView({
             <div className="min-w-0 rounded-2xl border bg-white p-5 sm:p-6">
               <div className="flex items-center gap-2">
                 <Clock3 aria-hidden="true" className="size-5 text-slate-500" />
-                <h2 className="text-lg font-semibold">近期学习记录</h2>
+                <h2 className="text-lg font-semibold">我的学习记录</h2>
               </div>
               {data.recentActivity.length ? (
                 <ol className="mt-4 divide-y">
@@ -389,7 +381,7 @@ function KnowledgeStatus({ data }: { data: StudentCourseLearningCenter }) {
                             </ul>
                             {concept.conceptId ? (
                               <Link
-                                className="mt-3 inline-flex rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-sky-700 active:scale-[0.98]"
+                                className="mt-3 inline-flex rounded-md bg-sky-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-sky-800 active:scale-[0.98]"
                                 href={`/student/recommendations?view=generate&courseId=${encodeURIComponent(data.course.id)}&conceptId=${encodeURIComponent(concept.conceptId)}${data.classroom ? `&classroomId=${encodeURIComponent(data.classroom.id)}` : ""}`}
                               >
                                 按此知识点选择练习或测试

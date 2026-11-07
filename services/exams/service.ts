@@ -23,7 +23,7 @@ import {
   overlapsThreeYears,
   plusThreeYears,
 } from "./fingerprint";
-import type { ExamCreateInput } from "./schemas";
+import { teacherExamListSchema, type ExamCreateInput } from "./schemas";
 
 async function ownedCourse(teacherId: string, courseId: string) {
   const course = await prisma.course.findFirst({
@@ -281,11 +281,36 @@ export async function createExamSession(
   );
 }
 
-export async function listTeacherExams(teacherId: string) {
+export async function listTeacherExams(
+  teacherId: string,
+  scope: { courseId?: string; classroomId?: string } = {},
+) {
+  const { courseId, classroomId } = teacherExamListSchema.parse(scope);
+  if (
+    courseId &&
+    !(await prisma.course.findFirst({
+      where: { id: courseId, teacherId },
+      select: { id: true },
+    }))
+  )
+    throw new ResourceNotFoundError("课程不存在");
+  if (
+    classroomId &&
+    !(await prisma.classroom.findFirst({
+      where: { id: classroomId, teacherId, ...(courseId ? { courseId } : {}) },
+      select: { id: true },
+    }))
+  )
+    throw new ResourceNotFoundError("班级不存在");
   return prisma.examSession.findMany({
-    where: { teacherId },
+    where: {
+      teacherId,
+      ...(courseId ? { courseId } : {}),
+      ...(classroomId ? { assignments: { some: { classroomId } } } : {}),
+    },
     include: {
       assignments: {
+        ...(classroomId ? { where: { classroomId } } : {}),
         select: { id: true, classroom: { select: { name: true } } },
       },
     },
@@ -399,9 +424,22 @@ export async function listStudentExams(studentId: string) {
     include: {
       assignments: {
         where: {
+          deletedAt: null,
+          status: { in: ["PUBLISHED", "CLOSED"] },
           classroom: { memberships: { some: { studentId, status: "ACTIVE" } } },
         },
-        select: { id: true, classroom: { select: { name: true } } },
+        select: {
+          id: true,
+          status: true,
+          classroomId: true,
+          classroom: { select: { name: true, status: true, courseId: true } },
+          submissions: {
+            where: { studentId, status: { not: "WITHDRAWN" } },
+            select: { status: true },
+            orderBy: { attemptNumber: "desc" },
+            take: 1,
+          },
+        },
       },
     },
     orderBy: { startsAt: "desc" },

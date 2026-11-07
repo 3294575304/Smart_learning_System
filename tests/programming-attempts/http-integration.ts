@@ -861,6 +861,40 @@ async function main(): Promise<void> {
       "Makeup HTTP checks passed: role/ownership/member isolation, redo despite single-submit rule, public-run gate and publication protection.",
     );
 
+    const sourceSubmission = await prisma.submission.findFirstOrThrow({
+      where: { assignmentId: assignment.data.id, studentId: student.id },
+      orderBy: { attemptNumber: "desc" },
+    });
+    const newer = await prisma.submission.create({
+      data: {
+        assignmentId: assignment.data.id,
+        studentId: student.id,
+        attemptNumber: sourceSubmission.attemptNumber + 1,
+        idempotencyKey: randomUUID(),
+        status: "PENDING_REVIEW",
+        startedAt: new Date(Date.now() - 1000),
+        submittedAt: new Date(),
+      },
+    });
+    for (const action of ["rejudge", "revoke"] as const) {
+      const response = await requestJson(
+        `/api/teacher/programming-attempts/${formal.id}/${action}`,
+        teacherCookie,
+        "POST",
+        {
+          reason: "历史提交只读核对",
+          ...(action === "rejudge" ? { idempotencyKey: randomUUID() } : {}),
+        },
+      );
+      assert.equal(response.status, 409);
+    }
+    await prisma.submission.update({
+      where: { id: newer.id },
+      data: { status: "WITHDRAWN" },
+    });
+    console.info(
+      "Historical programming HTTP checks passed: rejudge/revoke rejected for superseded valid submission.",
+    );
     if (!usesExternalExecutor) {
       archiveOnExecution = assignment.data.id;
       const response = await requestJson(

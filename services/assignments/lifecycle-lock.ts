@@ -11,24 +11,35 @@ export async function lockAssignmentLifecycle(
   teacherId?: string,
 ) {
   const owned = await transaction.assignment.findFirst({
-    where: { id: assignmentId, ...(teacherId ? { teacherId } : {}) },
+    where: {
+      id: assignmentId,
+      deletedAt: null,
+      ...(teacherId ? { teacherId } : {}),
+    },
     select: { id: true, classroomId: true },
   });
   if (!owned) throw new ResourceNotFoundError("作业不存在");
   await transaction.$queryRaw`SELECT id FROM "Classroom" WHERE id = ${owned.classroomId} FOR SHARE`;
   await transaction.$queryRaw`SELECT id FROM "Assignment" WHERE id = ${assignmentId} FOR UPDATE`;
-  return transaction.assignment.findUniqueOrThrow({
-    where: { id: assignmentId },
+  const assignment = await transaction.assignment.findFirst({
+    where: {
+      id: assignmentId,
+      deletedAt: null,
+      ...(teacherId ? { teacherId } : {}),
+    },
     select: {
       id: true,
       examSessionId: true,
       status: true,
       publishedAt: true,
       dueAt: true,
+      updatedAt: true,
       allowResubmission: true,
       classroom: { select: { id: true, status: true } },
     },
   });
+  if (!assignment) throw new ResourceNotFoundError("作业不存在");
+  return assignment;
 }
 
 // Advance the MVCC version so a SERIALIZABLE snapshot taken before waiting retries.
@@ -69,6 +80,7 @@ export async function assertGradingWritable(
   teacherId: string,
   assignmentId: string,
   studentId: string,
+  submissionId?: string,
 ) {
   const access = await gradingAccess(
     transaction,
@@ -77,5 +89,25 @@ export async function assertGradingWritable(
     teacherId,
   );
   if (access.reason) throw new AssignmentOperationError(access.reason, 409);
+  if (submissionId) {
+    const latest = await transaction.submission.findFirst({
+      where: {
+        assignmentId,
+        studentId,
+        status: { in: ["SUBMITTED", "PENDING_REVIEW", "GRADED", "PUBLISHED"] },
+      },
+      orderBy: [
+        { attemptNumber: "desc" },
+        { submittedAt: "desc" },
+        { id: "desc" },
+      ],
+      select: { id: true },
+    });
+    if (latest?.id !== submissionId)
+      throw new AssignmentOperationError(
+        "历史提交只读，提交状态已变化，请刷新后处理最新有效提交",
+        409,
+      );
+  }
   await touchAssignmentLifecycle(transaction, assignmentId);
 }

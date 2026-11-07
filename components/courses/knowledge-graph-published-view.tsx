@@ -289,11 +289,11 @@ export function KnowledgeGraphPublishedView({
                     相关练习
                   </h3>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    围绕当前知识点生成针对性练习，前往练习中心确认练习条件。自主练习不计入正式课程成绩。
+                    围绕当前知识点生成针对性练习，前往自主练习确认练习条件。自主练习不计入正式课程成绩。
                   </p>
                   {selectedMastery ? (
                     <Link
-                      className="mt-4 flex w-full items-center justify-center rounded-lg bg-sky-600 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                      className="mt-4 flex w-full items-center justify-center rounded-lg bg-sky-700 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
                       href={`/student/recommendations?view=generate&courseId=${encodeURIComponent(courseId)}&conceptId=${encodeURIComponent(selectedMastery.conceptId)}${classroomId ? `&classroomId=${encodeURIComponent(classroomId)}` : ""}`}
                     >
                       练习此知识点

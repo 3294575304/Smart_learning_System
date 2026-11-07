@@ -75,7 +75,7 @@ test("班级选择器仅显示关联班级，三个分类的入口都携带默�
   const links = [...html.matchAll(/href="([^"]+)"/g)].map(
     (match) => new URL(match[1].replaceAll("&amp;", "&"), "http://localhost"),
   );
-  assert.equal(links.length, 10);
+  assert.equal(links.length, 12);
   assert.ok(
     links.every((url) => url.searchParams.get("classroomId") === "class-b"),
   );
@@ -91,9 +91,21 @@ test("班级选择器仅显示关联班级，三个分类的入口都携带默�
     links.some((url) => url.pathname === "/teacher/courses/course-a/check-in"),
   );
   assert.ok(links.some((url) => url.pathname === "/teacher/assignments/new"));
+  assert.equal(
+    links
+      .find((url) => url.pathname === "/teacher/exams")
+      ?.searchParams.get("courseId"),
+    "course-a",
+  );
   assert.ok(
     links.some(
       (url) => url.pathname === "/teacher/courses/course-a/random-picker",
+    ),
+  );
+  // 「课堂活动」下新增课程通知入口，与同组其他入口一样携带默认班级。
+  assert.ok(
+    links.some(
+      (url) => url.pathname === "/teacher/courses/course-a/announcements",
     ),
   );
 });
@@ -136,7 +148,7 @@ test("课程建设独立展示，大纲只有一个入口且课程功能均有�
   assert.equal(
     (html.match(/href="\/teacher\/courses\/course-a\/classrooms"/g) ?? [])
       .length,
-    3,
+    5,
   );
   assert.equal(paths.filter((path) => path === "syllabus").length, 1);
   assert.doesNotMatch(

@@ -1,9 +1,22 @@
+import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
+
 export interface StudentEnrollmentContext {
   course: { id: string; name: string; term: string; status?: string };
   classroom: { id: string; name: string; status?: string };
 }
 export function studentEnrollmentLabel(item: StudentEnrollmentContext) {
   return `${item.course.name} · ${item.classroom.name} · ${item.course.term}`;
+}
+
+export function studentEnrollmentStatus(
+  courseStatus?: string,
+  classroomStatus?: string,
+) {
+  if (courseStatus === "ARCHIVED" || classroomStatus === "ARCHIVED")
+    return { label: "已归档", readOnly: true };
+  if (classroomStatus === "COMPLETED" || classroomStatus === "CLOSED")
+    return { label: CLASSROOM_STATUS_LABELS[classroomStatus], readOnly: true };
+  return { label: "学习中", readOnly: false };
 }
 export function selectStudentEnrollment<T extends StudentEnrollmentContext>(
   items: T[],

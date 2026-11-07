@@ -5,8 +5,7 @@ import {
   type StudentTaskScope,
 } from "@/services/student-experience/task-scope";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 
@@ -14,18 +13,26 @@ interface Props {
   assignmentId: string;
   disabled?: boolean;
   scope?: StudentTaskScope;
+  label?: string;
+  className?: string;
 }
 
 export function StartAttemptButton({
   assignmentId,
   disabled = false,
   scope = {},
+  label = "开始作答",
+  className,
 }: Props) {
-  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inFlight = useRef(false);
+  const requestId = useRef<string | null>(null);
 
   async function start() {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    requestId.current ??= crypto.randomUUID();
     setPending(true);
     setError(null);
     const response = await requestAssignmentApi<{ id: string }>(
@@ -33,31 +40,38 @@ export function StartAttemptButton({
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+        body: JSON.stringify({ idempotencyKey: requestId.current }),
       },
     );
     if (!response.success) {
       setError(response.error);
       setPending(false);
+      inFlight.current = false;
       return;
     }
-    router.push(
+    window.location.assign(
       studentTaskHref(`/student/submissions/${response.data.id}/answer`, scope),
     );
-    router.refresh();
   }
 
   return (
     <div>
       <button
-        className="rounded-md bg-sky-600 px-4 py-2 text-white disabled:opacity-50"
+        className={
+          className ??
+          "inline-flex min-h-11 items-center rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
+        }
         disabled={disabled || pending}
         onClick={start}
         type="button"
       >
-        {pending ? "正在开始…" : "开始作答"}
+        {pending ? "正在开始…" : label}
       </button>
-      {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="mt-2 max-w-xs text-sm text-red-700">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

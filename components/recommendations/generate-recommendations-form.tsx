@@ -96,7 +96,7 @@ export function GenerateRecommendationsForm({
         ) : null}
         <button
           aria-busy={pending}
-          className="h-10 rounded-md bg-sky-600 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-10 rounded-md bg-sky-700 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
           disabled={isGenerateRecommendationDisabled(
             pending,
             classrooms.length,

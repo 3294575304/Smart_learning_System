@@ -126,7 +126,7 @@ export default async function RecommendationDetailPage({ params }: Props) {
 
         {recommendation.status === RecommendationStatus.COMPLETED ? (
           <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-md bg-sky-600 px-4 text-sm font-medium text-white"
+            className="inline-flex min-h-10 items-center justify-center rounded-md bg-sky-700 px-4 text-sm font-medium text-white"
             href={recommendationPracticePath(recommendation.id)}
           >
             查看练习结果

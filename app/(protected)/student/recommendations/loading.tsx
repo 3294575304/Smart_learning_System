@@ -18,7 +18,7 @@ export default function RecommendationsLoading() {
           <div className="h-72 rounded-xl border bg-sky-100/70" key={item} />
         ))}
       </div>
-      <p className="sr-only">正在加载练习中心</p>
+      <p className="sr-only">正在加载自主练习</p>
     </main>
   );
 }

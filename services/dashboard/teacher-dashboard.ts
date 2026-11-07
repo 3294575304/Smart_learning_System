@@ -149,8 +149,9 @@ export async function getTeacherDashboard(
           teacherId,
           examSessionId: null,
           classroomId: { in: classroomIds },
+          deletedAt: null,
           classroom: { teacherId, courseId },
-          status: { not: "ARCHIVED" },
+          status: { notIn: ["ARCHIVED", "REVOKED"] },
         },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
         select: {

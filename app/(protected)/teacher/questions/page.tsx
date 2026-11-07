@@ -100,7 +100,7 @@ export default async function QuestionsPage({
               AI 出题
             </Link>
             <Link
-              className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
+              className="flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
               href="/teacher/questions/new"
             >
               <Plus className="h-4 w-4" />
@@ -164,7 +164,7 @@ export default async function QuestionsPage({
                   aria-label={`第 ${page} 页`}
                   className={`inline-flex size-9 items-center justify-center rounded-md border text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none ${
                     page === questions.pagination.page
-                      ? "border-sky-600 bg-sky-600 text-white"
+                      ? "border-sky-600 bg-sky-700 text-white"
                       : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                   href={pageHref(query, page)}

@@ -13,7 +13,7 @@ export default function StudentCoursesError({
         请检查网络连接后重试。已经加入的课程不会受到影响。
       </p>
       <button
-        className="mt-5 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white"
+        className="mt-5 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white"
         onClick={reset}
         type="button"
       >

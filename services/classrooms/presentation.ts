@@ -3,7 +3,7 @@ export const CLASSROOM_STATUS_LABELS: Record<ClassroomStatus, string> = {
   ACTIVE: "授课中",
   COMPLETED: "已结课",
   CLOSED: "已关闭",
-  ARCHIVED: "历史解散",
+  ARCHIVED: "历史班级",
 };
 
 export function classroomStatusLabel(status: string): string {

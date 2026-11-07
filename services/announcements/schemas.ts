@@ -3,10 +3,21 @@ import { z } from "zod";
 
 export const announcementIdSchema = z.string().cuid("公告 ID 格式无效");
 
+/**
+ * 系统公告只支持角色级受众。CLASSROOM 仅供教师端「课程通知」使用，
+ * 在接口边界就拒绝，避免管理员误建班级公告。
+ */
+export const roleAnnouncementTargetSchema = z.enum([
+  AnnouncementTargetType.ALL,
+  AnnouncementTargetType.ADMIN,
+  AnnouncementTargetType.TEACHER,
+  AnnouncementTargetType.STUDENT,
+]);
+
 const announcementFields = {
   title: z.string().trim().min(1, "公告标题不能为空").max(100),
   content: z.string().trim().min(1, "公告正文不能为空").max(2_000),
-  targetType: z.nativeEnum(AnnouncementTargetType),
+  targetType: roleAnnouncementTargetSchema,
   expiresAt: z.coerce.date().nullable().optional(),
 };
 
@@ -27,7 +38,7 @@ export const announcementListQuerySchema = z
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(50).default(20),
     status: z.nativeEnum(AnnouncementStatus).optional(),
-    targetType: z.nativeEnum(AnnouncementTargetType).optional(),
+    targetType: roleAnnouncementTargetSchema.optional(),
   })
   .strict();
 

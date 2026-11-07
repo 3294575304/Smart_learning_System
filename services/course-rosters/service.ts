@@ -156,6 +156,24 @@ export async function listCourseRoster(
   };
 }
 
+/** A class workspace exposes maintenance only while its class and owning course are active. */
+export async function listTeacherClassroomRoster(
+  teacherId: string,
+  classroomId: string,
+) {
+  const classroom = await prisma.classroom.findFirst({
+    where: {
+      id: classroomId,
+      teacherId,
+      status: "ACTIVE",
+      course: { teacherId, status: { not: "ARCHIVED" } },
+    },
+    select: { courseId: true },
+  });
+  if (!classroom?.courseId) return null;
+  return listCourseRoster(teacherId, classroom.courseId, { classroomId });
+}
+
 export async function mutateCourseRoster(
   teacherId: string,
   courseId: string,

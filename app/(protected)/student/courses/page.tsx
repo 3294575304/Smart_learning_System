@@ -3,6 +3,7 @@ import { ArrowRight, BookOpenCheck } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { requirePageRole } from "@/services/auth/page-authorization";
+import { studentEnrollmentStatus } from "@/services/courses/student-enrollment";
 import { listStudentCourseEvaluationContexts } from "@/services/gradebook/service";
 
 export default async function StudentCoursesPage() {
@@ -29,8 +30,10 @@ export default async function StudentCoursesPage() {
               classroomId: classroom.id,
             }).toString();
             const center = `/student/courses/${course.id}/learning-center?classroomId=${encodeURIComponent(classroom.id)}`;
-            const archived =
-              classroom.status === "ARCHIVED" || course.status === "ARCHIVED";
+            const { label, readOnly } = studentEnrollmentStatus(
+              course.status,
+              classroom.status,
+            );
             return (
               <article
                 key={classroom.id}
@@ -41,9 +44,9 @@ export default async function StudentCoursesPage() {
                     {course.name}
                   </h2>
                   <span
-                    className={`shrink-0 rounded-full px-2 py-1 text-xs ${archived ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}
+                    className={`shrink-0 rounded-full px-2 py-1 text-xs ${readOnly ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}
                   >
-                    {archived ? "已归档" : "学习中"}
+                    {label}
                   </span>
                 </div>
                 <p className="mt-2 text-sm font-medium [overflow-wrap:anywhere] break-words text-sky-800">
@@ -62,9 +65,9 @@ export default async function StudentCoursesPage() {
                 >
                   <Link
                     href={center}
-                    className="flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                    className="flex min-h-11 min-w-0 items-center justify-between gap-1.5 rounded-lg bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
                   >
-                    {archived ? "查看教学班" : "进入教学班"}
+                    {readOnly ? "查看教学班" : "进入教学班"}
                     <ArrowRight
                       aria-hidden="true"
                       className="size-4 shrink-0"
@@ -72,9 +75,9 @@ export default async function StudentCoursesPage() {
                   </Link>
                   <Link
                     href={`/student/analytics?${query}`}
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-medium whitespace-nowrap text-sky-700 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
                   >
-                    学情分析
+                    我的学习分析
                   </Link>
                 </nav>
               </article>

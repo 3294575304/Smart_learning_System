@@ -432,7 +432,7 @@ export function KnowledgeGraphCanvas3D({
               key={mode}
               type="button"
               aria-pressed={layoutMode === mode}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 ${layoutMode === mode ? "bg-sky-600 text-white shadow-sm" : "text-slate-600 hover:bg-white"}`}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 ${layoutMode === mode ? "bg-sky-700 text-white shadow-sm" : "text-slate-600 hover:bg-white"}`}
               onClick={() => changeLayout(mode)}
             >
               {label}

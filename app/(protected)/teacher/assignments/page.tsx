@@ -1,3 +1,7 @@
+import { DraftManagementMenu } from "@/components/assignments/draft-management-menu";
+import { assignmentDraftAction } from "@/services/assignments/draft-action";
+import { AssignmentCategoryBadge } from "@/components/assignments/category-badge";
+import { ASSIGNMENT_CATEGORY_LABELS } from "@/services/assignments/category";
 import { AssignmentManagementTabs } from "@/components/assignments/management-tabs";
 import { AssignmentCourseFilter } from "@/components/assignments/student-filters";
 import { TeacherStudentAssignmentsView } from "@/components/assignments/student-query-view";
@@ -44,6 +48,7 @@ const STATUS_LABELS: Record<AssignmentStatus, string> = {
   PUBLISHED: "已发布",
   CLOSED: "已关闭",
   ARCHIVED: "已归档",
+  REVOKED: "已撤销",
 };
 
 const STATUS_STYLES: Record<AssignmentFilterStatus, string> = {
@@ -51,6 +56,7 @@ const STATUS_STYLES: Record<AssignmentFilterStatus, string> = {
   PUBLISHED: "bg-emerald-50 text-emerald-700",
   CLOSED: "bg-amber-50 text-amber-700",
   ARCHIVED: "bg-slate-100 text-slate-600",
+  REVOKED: "bg-rose-50 text-rose-800",
   UPCOMING: "bg-sky-50 text-sky-700",
   IN_PROGRESS: "bg-emerald-50 text-emerald-700",
   EXPIRED: "bg-amber-50 text-amber-700",
@@ -71,6 +77,7 @@ function queryHref(query: AssignmentListQuery, page: number): string {
     section: query.section,
   });
   if (query.status) params.set("status", query.status);
+  if (query.category) params.set("category", query.category);
   if (query.classroomId) params.set("classroomId", query.classroomId);
   if (query.courseId) params.set("courseId", query.courseId);
   if (query.keyword) params.set("keyword", query.keyword);
@@ -125,6 +132,8 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
     listTeacherClassrooms(teacher.id, true),
     listTeacherCourses(teacher.id),
   ]);
+  const lastPage = Math.max(1, assignments.pagination.totalPages);
+  if (query.page > lastPage) redirect(queryHref(query, lastPage));
   const availableClassroomIds = new Set(assignments.availableClassroomIds);
   const sectionClassrooms = allClassrooms.filter((item) =>
     availableClassroomIds.has(item.id),
@@ -140,7 +149,7 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
       <PageHeader
         actions={
           <Link
-            className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
+            className="flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
             href="/teacher/assignments/new"
           >
             <Plus className="h-4 w-4" />
@@ -161,22 +170,25 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
         courseId={query.courseId}
         classroomId={query.classroomId}
         section={query.section}
+        category={query.category}
         notice={rawQuery.scopeChanged === "1"}
       />
       <AssignmentManagementTabs
         view="ASSIGNMENTS"
         section={query.section}
+        category={query.category}
         courseId={query.courseId}
         classroomId={query.classroomId}
       />
       {query.section === "HISTORY" ? (
         <p className="text-sm text-slate-500">
-          历史作业保留记录，可继续批改和发布成绩；学生不能继续作答。
+          历史作业仅用于归档查看，可继续批改和发布成绩；学生不能继续作答。已撤销的作业会直接删除，不会出现在这里。
         </p>
       ) : null}
       <form
         key={JSON.stringify([
           query.section,
+          query.category,
           query.keyword,
           query.status,
           query.classroomId,
@@ -184,9 +196,9 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
           query.courseId,
         ])}
         aria-label="作业列表筛选"
-        className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_9rem_minmax(10rem,14rem)_10rem_auto] xl:items-end"
+        className="grid grid-cols-2 gap-3 rounded-xl border bg-white p-4 xl:grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_minmax(0,1fr)_8rem_auto] xl:items-end"
       >
-        <label className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 xl:col-span-1">
+        <label className="col-span-2 flex min-w-0 flex-col gap-1.5 xl:col-span-1">
           <span className="text-xs font-medium">搜索</span>
           <input
             className="h-10 w-full min-w-0 rounded-lg border px-3 text-sm"
@@ -195,6 +207,23 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
             name="keyword"
             placeholder="搜索作业名称"
           />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-xs font-medium">作业类别</span>
+          <AutoSubmitSelect
+            className="h-10 w-full min-w-0 rounded-lg border px-3 text-sm"
+            name="category"
+            defaultValue={query.category ?? ""}
+          >
+            <option value="">全部类别</option>
+            {Object.entries(ASSIGNMENT_CATEGORY_LABELS).map(
+              ([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ),
+            )}
+          </AutoSubmitSelect>
         </label>
         <label className="flex min-w-0 flex-col gap-1.5">
           <span className="text-xs font-medium">状态</span>
@@ -257,7 +286,7 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
         {query.courseId ? (
           <input name="courseId" type="hidden" value={query.courseId} />
         ) : null}
-        <div className="flex items-end gap-2 sm:col-span-2 xl:col-span-1">
+        <div className="col-span-2 flex items-end gap-2 xl:col-span-1">
           <button
             className="inline-flex h-10 items-center justify-center rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800"
             type="submit"
@@ -270,6 +299,7 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
               {
                 ...query,
                 status: undefined,
+                category: undefined,
                 classroomId: undefined,
                 keyword: undefined,
                 sort: "CREATED_DESC",
@@ -294,13 +324,17 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
       {assignments.items.length === 0 ? (
         <EmptyState
           action={
-            query.keyword || query.status || query.classroomId ? (
+            query.keyword ||
+            query.status ||
+            query.classroomId ||
+            query.category ? (
               <a
                 className="text-sm font-medium underline"
                 href={queryHref(
                   {
                     ...query,
                     keyword: undefined,
+                    category: undefined,
                     status: undefined,
                     classroomId: undefined,
                   },
@@ -329,7 +363,8 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
             query.section === "HISTORY" &&
             !query.keyword &&
             !query.status &&
-            !query.classroomId
+            !query.classroomId &&
+            !query.category
               ? "班级结课或关闭后，相关作业会自动显示在这里。"
               : "当前条件下没有可显示的作业。"
           }
@@ -338,94 +373,146 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
         />
       ) : (
         <div className="space-y-3">
-          {assignments.items.map((assignment) => (
-            <article
-              className="rounded-xl border bg-white p-5"
-              key={assignment.id}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="font-semibold">
-                    <Link
-                      className="break-words text-slate-900 hover:text-sky-700 hover:underline"
-                      href={`/teacher/assignments/${assignment.id}`}
+          {assignments.items.map((assignment) => {
+            const batchSize = assignment.batchId
+              ? assignments.items.filter(
+                  (item) => item.batchId === assignment.batchId,
+                ).length
+              : 0;
+            const draftAction =
+              assignmentDraftAction(assignment) ??
+              (assignment.revocableSubmissionCount !== undefined
+                ? "REVOKE"
+                : assignment.status === "REVOKED" &&
+                    assignment.classroom.status === "ACTIVE"
+                  ? "COPY_REVOKED"
+                  : null);
+            return (
+              <article
+                className="rounded-xl border bg-white p-5"
+                key={assignment.id}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1 basis-64">
+                    <h2 className="flex min-w-0 flex-wrap items-center gap-2 font-semibold">
+                      <Link
+                        className="max-w-full min-w-0 [overflow-wrap:anywhere] text-slate-900 hover:text-sky-700 hover:underline"
+                        href={`/teacher/assignments/${assignment.id}`}
+                      >
+                        {assignment.title}
+                      </Link>
+                      <AssignmentCategoryBadge
+                        category={assignment.category ?? "PRACTICE"}
+                      />
+                      {batchSize > 1 ? (
+                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800 ring-1 ring-sky-200 ring-inset">
+                          同批 {batchSize} 个班级
+                        </span>
+                      ) : null}
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {assignment.classroom.name}
+                      {assignment.classroom.status !== "ACTIVE"
+                        ? `（${CLASSROOM_STATUS_LABELS[assignment.classroom.status]}）`
+                        : ""}{" "}
+                      · {assignment.questions.length} 题 ·{" "}
+                      {assignment.totalPoints} 分
+                    </p>
+                    <p className="mt-2 text-xs text-gray-500">
+                      发布：
+                      {assignment.publishedAt
+                        ? assignment.publishedAt.toLocaleString("zh-CN")
+                        : "未设置"}
+                      <span className="mx-2">·</span>
+                      截止：
+                      {assignment.dueAt
+                        ? assignment.dueAt.toLocaleString("zh-CN")
+                        : "未设置"}
+                    </p>
+                  </div>
+                  <div className="ms-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs ${STATUS_STYLES[assignmentDisplayStatus(assignment)]}`}
                     >
-                      {assignment.title}
-                    </Link>
-                  </h2>
-                  <p className="mt-1 text-sm text-gray-500">
-                    {assignment.classroom.name}
-                    {assignment.classroom.status !== "ACTIVE"
-                      ? `（${CLASSROOM_STATUS_LABELS[assignment.classroom.status]}）`
-                      : ""}{" "}
-                    · {assignment.questions.length} 题 ·{" "}
-                    {assignment.totalPoints} 分
-                  </p>
-                  <p className="mt-2 text-xs text-gray-500">
-                    发布：
-                    {assignment.publishedAt
-                      ? assignment.publishedAt.toLocaleString("zh-CN")
-                      : "未设置"}
-                    <span className="mx-2">·</span>
-                    截止：
-                    {assignment.dueAt
-                      ? assignment.dueAt.toLocaleString("zh-CN")
-                      : "未设置"}
-                  </p>
-                </div>
-                <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs ${STATUS_STYLES[assignmentDisplayStatus(assignment)]}`}
-                  >
-                    {query.section === "HISTORY"
-                      ? STATUS_LABELS[assignment.status]
-                      : displayStatus(assignment)}
-                  </span>
-                  <Link
-                    className={actionLinkClassName}
-                    href={`/teacher/assignments/${assignment.id}`}
-                    aria-label={`查看作业：${assignment.title}`}
-                  >
-                    <Eye aria-hidden="true" className="size-4" />
-                    详情
-                  </Link>
-                  {assignment.status === AssignmentStatus.DRAFT &&
-                  assignment.classroom.status === "ACTIVE" ? (
+                      {query.section === "HISTORY"
+                        ? STATUS_LABELS[assignment.status]
+                        : displayStatus(assignment)}
+                    </span>
                     <Link
-                      aria-label="编辑作业"
                       className={actionLinkClassName}
-                      href={`/teacher/assignments/${assignment.id}/edit`}
-                      title="编辑作业"
+                      href={`/teacher/assignments/${assignment.id}`}
+                      aria-label={`查看作业：${assignment.title}`}
                     >
-                      <Pencil aria-hidden="true" className="size-4" />
-                      <span>编辑</span>
+                      <Eye aria-hidden="true" className="size-4" />
+                      详情
                     </Link>
-                  ) : assignment.status !== AssignmentStatus.DRAFT ? (
-                    <>
+                    {assignment.status === AssignmentStatus.DRAFT &&
+                    assignment.classroom.status === "ACTIVE" ? (
                       <Link
-                        aria-label="批改提交"
+                        aria-label={
+                          batchSize > 1
+                            ? `编辑作业（同时作用于 ${batchSize} 个班级）`
+                            : "编辑作业"
+                        }
                         className={actionLinkClassName}
-                        href={`/teacher/assignments/${assignment.id}/submissions`}
-                        title="批改提交"
+                        href={`/teacher/assignments/${assignment.id}/edit`}
+                        title={
+                          batchSize > 1
+                            ? `一次编辑 ${batchSize} 个班级的草稿`
+                            : "编辑作业"
+                        }
                       >
-                        <ClipboardCheck aria-hidden="true" className="size-4" />
-                        <span>批改</span>
+                        <Pencil aria-hidden="true" className="size-4" />
+                        <span>编辑</span>
                       </Link>
-                      <Link
-                        aria-label="成绩统计"
-                        className={actionLinkClassName}
-                        href={`/teacher/assignments/${assignment.id}/results`}
-                        title="成绩统计"
-                      >
-                        <BarChart3 aria-hidden="true" className="size-4" />
-                        <span>成绩</span>
-                      </Link>
-                    </>
-                  ) : null}
+                    ) : assignment.status !== AssignmentStatus.DRAFT ? (
+                      <>
+                        <Link
+                          aria-label={
+                            assignment.status === "REVOKED"
+                              ? "查看提交"
+                              : "批改提交"
+                          }
+                          className={actionLinkClassName}
+                          href={`/teacher/assignments/${assignment.id}/submissions`}
+                          title="批改提交"
+                        >
+                          <ClipboardCheck
+                            aria-hidden="true"
+                            className="size-4"
+                          />
+                          <span>
+                            {assignment.status === "REVOKED"
+                              ? "提交记录"
+                              : "批改"}
+                          </span>
+                        </Link>
+                        <Link
+                          aria-label="成绩统计"
+                          className={actionLinkClassName}
+                          href={`/teacher/assignments/${assignment.id}/results`}
+                          title="成绩统计"
+                        >
+                          <BarChart3 aria-hidden="true" className="size-4" />
+                          <span>成绩</span>
+                        </Link>
+                      </>
+                    ) : null}
+                    {draftAction && (
+                      <DraftManagementMenu
+                        id={assignment.id}
+                        title={assignment.title}
+                        classroom={assignment.classroom.name}
+                        action={draftAction}
+                        submissionCount={assignment.revocableSubmissionCount}
+                        updatedAt={assignment.updatedAt.toISOString()}
+                      />
+                    )}
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
 

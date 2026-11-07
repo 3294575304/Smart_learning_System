@@ -7,7 +7,7 @@ import {
 import { studentAssignmentState } from "@/services/student-experience/task-policy";
 import { studentTaskHref } from "@/services/student-experience/task-scope";
 
-export type StudentTaskKind = "assignment" | "attendance" | "survey";
+export type StudentTaskKind = "assignment" | "attendance" | "survey" | "exam";
 export type StudentTaskItem = {
   id: string;
   kind: StudentTaskKind;
@@ -65,6 +65,8 @@ export function summarizeStudentTasks(
     contexts: AssignmentContext[];
     attendance: Attendance[];
     surveys: Survey[];
+    exams?: StudentTaskItem[];
+    scheduledExams?: Array<StudentTaskItem & { opensAt: Date }>;
   },
   now: Date,
 ) {
@@ -132,8 +134,10 @@ export function summarizeStudentTasks(
       state: "待完成",
     });
   }
+  items.push(...(input.exams ?? []));
   items.sort(
     (left, right) =>
+      Number(right.kind === "exam") - Number(left.kind === "exam") ||
       Number(right.kind === "attendance") -
         Number(left.kind === "attendance") ||
       left.dueAt.getTime() - right.dueAt.getTime() ||
@@ -158,17 +162,20 @@ export function summarizeStudentTasks(
     }));
   const changes = [
     nextCourseSurveyChangeAt(input.surveys, now),
+    ...(input.scheduledExams ?? []).map((item) => item.opensAt),
     ...items.map((item) => item.dueAt),
   ].filter((date): date is Date => date !== null && date > now);
   return {
     items,
     total: items.length,
     counts: {
+      exam: items.filter((item) => item.kind === "exam").length,
       assignment: items.filter((item) => item.kind === "assignment").length,
       attendance: items.filter((item) => item.kind === "attendance").length,
       survey: items.filter((item) => item.kind === "survey").length,
     },
     scheduledSurveys,
+    scheduledExams: input.scheduledExams ?? [],
     nextChangeAt: changes.length
       ? changes.sort((a, b) => a.getTime() - b.getTime())[0]
       : null,

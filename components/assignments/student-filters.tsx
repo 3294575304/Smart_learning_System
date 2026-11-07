@@ -19,6 +19,7 @@ export function AssignmentCourseFilter({
   section,
   notice,
   studentQuery,
+  category,
 }: {
   courses: { id: string; name: string; term: string }[];
   classrooms: { id: string; courseId: string | null }[];
@@ -27,6 +28,7 @@ export function AssignmentCourseFilter({
   section: string;
   notice: boolean;
   studentQuery?: TeacherStudentQuery;
+  category?: string;
 }) {
   useEffect(() => {
     if (notice) {
@@ -77,6 +79,9 @@ export function AssignmentCourseFilter({
               value={studentQuery.pageSize}
             />
           </>
+        )}
+        {category && !studentQuery && (
+          <input type="hidden" name="category" value={category} />
         )}
         <input type="hidden" name="section" value={section} />
         <input

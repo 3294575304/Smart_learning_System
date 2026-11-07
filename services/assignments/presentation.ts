@@ -7,6 +7,7 @@ export const ASSIGNMENT_FILTER_LABELS = {
   EXPIRED: "已截止",
   CLOSED: "已关闭",
   ARCHIVED: "已归档",
+  REVOKED: "已撤销",
   PUBLISHED: "已发布（全部）",
 } as const;
 export type AssignmentFilterStatus = keyof typeof ASSIGNMENT_FILTER_LABELS;
@@ -22,7 +23,7 @@ export function assignmentStatusOptions(
     "IN_PROGRESS",
     "EXPIRED",
   ];
-  for (const status of ["CLOSED", "ARCHIVED"] as const) {
+  for (const status of ["CLOSED", "ARCHIVED", "REVOKED"] as const) {
     if (availableHistory.includes(status) || selected === status)
       options.push(status);
   }
@@ -92,12 +93,12 @@ export function assignmentSectionWhere(
   return section === "CURRENT"
     ? {
         classroom: { status: "ACTIVE" },
-        status: { notIn: ["CLOSED", "ARCHIVED"] },
+        status: { notIn: ["CLOSED", "ARCHIVED", "REVOKED"] },
       }
     : {
         OR: [
           { classroom: { status: { not: "ACTIVE" } } },
-          { status: { in: ["CLOSED", "ARCHIVED"] } },
+          { status: { in: ["CLOSED", "ARCHIVED", "REVOKED"] } },
         ],
       };
 }

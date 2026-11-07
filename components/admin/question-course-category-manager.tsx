@@ -98,7 +98,7 @@ export function QuestionCourseCategoryManager({ initialCategories }: Props) {
           />
         </label>
         <button
-          className="mt-6 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="mt-6 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           disabled={pending}
         >
           {pending ? "保存中…" : editingId ? "保存修改" : "添加分类"}

@@ -1,16 +1,49 @@
 import type { RecommendationDetailView } from "@/services/recommendations/types";
+import {
+  practiceDraftFilled,
+  type PracticeDraft,
+} from "@/services/practice-sets/submission";
 
 /** History uses stored content and the learner's own answer, without any write controls. */
 export function PracticeHistoryQuestion({
   item,
+  draft,
+  embedded = false,
 }: {
   item: RecommendationDetailView;
+  draft?: PracticeDraft;
+  embedded?: boolean;
 }) {
   const answer = item.practiceResult?.answers[0] ?? item.historyFeedback;
   const ownAnswer = answer?.studentAnswer ?? item.savedAnswer;
+  const showDraft =
+    draft &&
+    !answer &&
+    ownAnswer == null &&
+    item.status !== "COMPLETED" &&
+    !item.programmingAttempt &&
+    practiceDraftFilled(draft);
+  const draftText = showDraft
+    ? draft.kind === "CHOICE"
+      ? draft.optionIds
+          .map(
+            (id) =>
+              item.options.find((option) => option.id === id)?.label ??
+              "原选项",
+          )
+          .join("、")
+      : draft.kind === "BOOLEAN"
+        ? draft.value
+          ? "正确"
+          : "错误"
+        : draft.value
+    : null;
   return (
     <article
-      className="min-w-0 space-y-5 rounded-xl border bg-white p-5 sm:p-6"
+      className={
+        "min-w-0 space-y-4" +
+        (embedded ? "" : " rounded-xl border bg-white p-5 sm:p-6")
+      }
       aria-label="历史题目只读回看"
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -42,9 +75,9 @@ export function PracticeHistoryQuestion({
         </ul>
       ) : null}
       <section className="rounded-lg bg-sky-50 p-4 text-sm">
-        <h3 className="font-medium">你的答案</h3>
+        <h3 className="font-medium">{showDraft ? "未提交草稿" : "你的答案"}</h3>
         <p className="mt-2 [overflow-wrap:anywhere] break-words whitespace-pre-wrap">
-          {ownAnswer ?? "未作答，未保存答案。"}
+          {draftText ?? ownAnswer ?? "未作答，未保存答案。"}
         </p>
       </section>
       {answer ? (

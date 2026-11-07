@@ -107,7 +107,7 @@ export default async function TeacherCourseProfilesPage({
                   {item.revisionNumber}
                 </p>
                 <a
-                  className="mt-4 inline-flex rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white"
+                  className="mt-4 inline-flex rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white"
                   href={withClassroomQuery(
                     `/teacher/courses/${path.data.courseId}/students/${item.student.id}/profile`,
                     query.classroomId,

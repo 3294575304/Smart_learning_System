@@ -1,3 +1,5 @@
+import { StudentRevokedAssignment } from "@/components/assignments/student-revoked-assignment";
+import { AssignmentRevokedError } from "@/services/assignments/errors";
 import {
   studentTaskScopeSchema,
   studentTaskHref,
@@ -89,7 +91,7 @@ export default async function StudentAssignmentPage({
         <div className="flex flex-wrap gap-3">
           {inProgress ? (
             <Link
-              className="rounded-md bg-sky-600 px-4 py-2 text-white"
+              className="rounded-md bg-sky-700 px-4 py-2 text-white"
               href={studentTaskHref(
                 `/student/submissions/${inProgress.id}/answer`,
                 scope.data,
@@ -150,6 +152,12 @@ export default async function StudentAssignmentPage({
       </section>
     );
   } catch (error: unknown) {
+    if (error instanceof AssignmentRevokedError)
+      return (
+        <StudentRevokedAssignment
+          backHref={studentTaskHref("/student/assignments", scope.data)}
+        />
+      );
     if (error instanceof ResourceNotFoundError) notFound();
     throw error;
   }

@@ -80,7 +80,7 @@ export default async function StudentWrongQuestionsPage({
       <section className="mx-auto max-w-[1440px] min-w-0 space-y-4">
         <PageHeader
           actions={returnAction}
-          title="复习中心"
+          title="我的题库"
           description="请检查筛选条件。"
         />
         <p role="alert" className="rounded-xl border bg-white p-5">
@@ -99,7 +99,7 @@ export default async function StudentWrongQuestionsPage({
       <section className="mx-auto max-w-[1440px] min-w-0 space-y-4">
         <PageHeader
           actions={returnAction}
-          title="复习中心"
+          title="我的题库"
           description="整理错题和收藏，按课程与章节复习。收藏和掌握状态分别保存。"
         />
         <ReviewTabs favorites />
@@ -128,7 +128,7 @@ export default async function StudentWrongQuestionsPage({
       <PageHeader
         actions={returnAction}
         description="整理错题和收藏，按课程与章节复习。收藏和掌握状态分别保存。"
-        title="复习中心"
+        title="我的题库"
       />
       <ReviewTabs favorites={favorites} />
       {!parsed.success ? (

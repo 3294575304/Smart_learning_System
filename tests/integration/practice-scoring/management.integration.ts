@@ -19,8 +19,14 @@ import {
 import {
   startRecommendation,
   getRecommendationDetail,
+  listRecommendations,
 } from "../../../services/recommendations/service";
 import { submitRecommendationPractice } from "../../../services/recommendations/practice";
+import {
+  getPracticeAccountDraft,
+  PracticeDraftConflict,
+  savePracticeAccountDraft,
+} from "../../../services/practice-sets/draft-service";
 async function setup(label: string) {
   const factory = new RecommendationTestFactory(label);
   const teacher = await factory.teacher(),
@@ -244,6 +250,210 @@ test("list sections, course validation, search, stable paging and missing manage
     "HISTORY",
   );
 });
+test("permanent removal is trash-only, private, and preserves scores and evidence", async () => {
+  const { actor, other, question, create } = await setup("purge");
+  const first = await create();
+  const second = await create();
+  const foreign = await create(other.id);
+  await startRecommendation(actor, first.id);
+  await submitRecommendationPractice(actor, first.id, {
+    idempotencyKey: randomUUID(),
+    answers: [{ questionId: question.id, kind: "BOOLEAN", value: true }],
+  });
+  const where = { recommendationId: first.id };
+  const saved = await prisma.recommendationPracticeAnswer.findUniqueOrThrow({
+    where,
+  });
+  const evidenceCount = await prisma.learningEvent.count();
+  const trash = await managePracticeSet(actor, first.id, {
+    action: "TRASH",
+    expectedRevision: 0,
+  });
+  const firstItem = { id: first.id, expectedRevision: trash.revision };
+  const purge = { action: "PURGE", expectedRevision: trash.revision };
+  await assert.rejects(
+    managePracticeSet(actor, first.id, {
+      ...purge,
+      expectedRevision: 0,
+    }),
+    { status: 409 },
+  );
+  await assert.rejects(
+    managePracticeSets(actor, {
+      action: "PURGE",
+      items: [firstItem, { id: foreign.id, expectedRevision: 0 }],
+    }),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    managePracticeSets(actor, {
+      action: "PURGE",
+      items: [firstItem, { id: second.id, expectedRevision: 0 }],
+    }),
+    { status: 409 },
+  );
+  assert.equal((await listPracticeSets(actor, { section: "TRASH" })).total, 1);
+  const secondTrash = await managePracticeSet(actor, second.id, {
+    action: "TRASH",
+    expectedRevision: 0,
+  });
+  await managePracticeSets(actor, {
+    action: "PURGE",
+    items: [
+      firstItem,
+      { id: second.id, expectedRevision: secondTrash.revision },
+    ],
+  });
+  const removed = await managePracticeSet(actor, first.id, purge);
+  assert.ok(removed.purgedAt);
+  assert.equal(removed.revision, trash.revision + 1);
+  for (const section of ["ACTIVE", "HISTORY", "TRASH"]) {
+    assert.equal((await listPracticeSets(actor, { section })).total, 0);
+  }
+  assert.equal((await listRecommendations(actor, {})).items.length, 0);
+  await assert.rejects(getPracticeSet(actor, first.id), ResourceNotFoundError);
+  await assert.rejects(
+    getRecommendationDetail(actor, first.id),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    startRecommendation(actor, first.id),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    managePracticeSet(actor, first.id, {
+      action: "RESTORE",
+      expectedRevision: removed.revision,
+    }),
+    ResourceNotFoundError,
+  );
+  assert.deepEqual(
+    await prisma.recommendationPracticeAnswer.findUniqueOrThrow({ where }),
+    saved,
+  );
+  assert.equal(await prisma.learningEvent.count(), evidenceCount);
+});
+
+test("account drafts share a group revision and preserve only unsubmitted history", async () => {
+  const { actor, other, question, create } = await setup("account_draft");
+  const first = await create();
+  const second = await create();
+  await prisma.personalizedRecommendation.update({
+    where: { id: second.id },
+    data: { cycleKey: first.cycleKey },
+  });
+  const path = first.id;
+  const snapshot = {
+    current: second.id,
+    drafts: {
+      [first.id]: { kind: "BOOLEAN", value: true },
+      [second.id]: { kind: "BOOLEAN", value: false },
+    },
+  };
+  assert.deepEqual(await getPracticeAccountDraft(actor, path), {
+    snapshot: null,
+    revision: 0,
+    savedAt: null,
+  });
+  const evidenceBefore = await prisma.learningEvent.count();
+  const saved = await savePracticeAccountDraft(actor, path, {
+    ...snapshot,
+    expectedRevision: 0,
+  });
+  assert.equal(saved.revision, 1);
+  assert.deepEqual(saved.snapshot, snapshot);
+  assert.deepEqual(
+    await savePracticeAccountDraft(actor, second.id, {
+      ...snapshot,
+      expectedRevision: 0,
+    }),
+    saved,
+  );
+  await assert.rejects(
+    getPracticeAccountDraft(other, path),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    savePracticeAccountDraft(other, path, { ...snapshot, expectedRevision: 1 }),
+    ResourceNotFoundError,
+  );
+  await assert.rejects(
+    savePracticeAccountDraft(actor, path, {
+      ...snapshot,
+      expectedRevision: 0,
+      drafts: {},
+    }),
+    PracticeDraftConflict,
+  );
+  assert.equal(await prisma.learningEvent.count(), evidenceBefore);
+  await startRecommendation(actor, first.id);
+  await submitRecommendationPractice(actor, first.id, {
+    idempotencyKey: randomUUID(),
+    answers: [{ questionId: question.id, kind: "BOOLEAN", value: true }],
+  });
+  const onlyUnsubmitted = { [second.id]: snapshot.drafts[second.id] };
+  assert.deepEqual(
+    (await getPracticeAccountDraft(actor, path)).snapshot?.drafts,
+    onlyUnsubmitted,
+  );
+  const ended = await managePracticeSet(actor, path, {
+    action: "END",
+    expectedRevision: 0,
+  });
+  assert.deepEqual(
+    (await getPracticeAccountDraft(actor, path)).snapshot?.drafts,
+    onlyUnsubmitted,
+  );
+  await assert.rejects(
+    savePracticeAccountDraft(actor, path, { ...snapshot, expectedRevision: 1 }),
+    { status: 409 },
+  );
+  const trashed = await managePracticeSet(actor, path, {
+    action: "TRASH",
+    expectedRevision: ended.revision,
+  });
+  const restored = await managePracticeSet(actor, path, {
+    action: "RESTORE",
+    expectedRevision: trashed.revision,
+  });
+  assert.deepEqual(
+    (await getPracticeAccountDraft(actor, path)).snapshot?.drafts,
+    onlyUnsubmitted,
+  );
+  await prisma.personalizedRecommendation.update({
+    where: { id: second.id },
+    data: { expiresAt: new Date(Date.now() - 1000) },
+  });
+  assert.deepEqual(
+    (await getPracticeAccountDraft(actor, path)).snapshot?.drafts,
+    onlyUnsubmitted,
+  );
+  const trashedAgain = await managePracticeSet(actor, path, {
+    action: "TRASH",
+    expectedRevision: restored.revision,
+  });
+  await managePracticeSet(actor, path, {
+    action: "PURGE",
+    expectedRevision: trashedAgain.revision,
+  });
+  await assert.rejects(
+    getPracticeAccountDraft(actor, path),
+    ResourceNotFoundError,
+  );
+  const row = await prisma.practiceSetManagement.findUniqueOrThrow({
+    where: {
+      studentId_cycleKey: { studentId: actor.id, cycleKey: first.cycleKey },
+    },
+  });
+  assert.equal(row.draftData, null);
+  assert.equal(
+    await prisma.recommendationPracticeAnswer.count({
+      where: { recommendationId: first.id },
+    }),
+    1,
+  );
+});
+
 test.after(async () => {
   await Promise.all([prisma.$disconnect(), integrationPrisma.$disconnect()]);
 });

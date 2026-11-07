@@ -56,6 +56,7 @@ export default async function StudentResultsPage({ searchParams }: Props) {
           <StudentCourseReturnLink
             courseId={filters.courseId}
             classroomId={filters.classroomId}
+            tab="tasks"
           />
         }
       />

@@ -154,7 +154,7 @@ export function CourseGradebooksWorkspace({
                       key={item.value}
                       aria-pressed={status === item.value}
                       onClick={() => setStatus(item.value)}
-                      className={`rounded-lg px-3 py-2 text-sm transition ${status === item.value ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-sky-50"}`}
+                      className={`rounded-lg px-3 py-2 text-sm transition ${status === item.value ? "bg-sky-700 text-white" : "text-slate-600 hover:bg-sky-50"}`}
                     >
                       {item.label}{" "}
                       <span className="ml-1">
@@ -260,7 +260,7 @@ export function CourseGradebooksWorkspace({
                         )}
                         {row.primary && (
                           <Link
-                            className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
+                            className="inline-flex items-center justify-center rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
                             href={withClassroomQuery(
                               `${base}/gradebook/${row.primary.id}`,
                               classroomId,

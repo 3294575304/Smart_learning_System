@@ -1,8 +1,9 @@
 "use client";
 
-import { Users } from "lucide-react";
+import { Users, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { DeleteClassroomButton } from "./delete-classroom-button";
 
 import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import { EmptyState } from "@/components/dashboard/empty-state";
@@ -14,7 +15,8 @@ export function TeacherClassroomList({
 }: {
   initialClassrooms: TeacherClassroomListItem[];
 }) {
-  const classrooms = initialClassrooms;
+  const [classrooms, setClassrooms] = useState(initialClassrooms);
+  useEffect(() => setClassrooms(initialClassrooms), [initialClassrooms]);
   return (
     <section>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -50,6 +52,25 @@ export function TeacherClassroomList({
                 <span className="shrink-0 rounded-full bg-sky-50 px-2.5 py-1 text-xs text-sky-800">
                   {CLASSROOM_STATUS_LABELS[classroom.status]}
                 </span>
+                <details className="relative shrink-0">
+                  <summary
+                    aria-label={`更多操作：${classroom.name}`}
+                    className="cursor-pointer list-none rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden"
+                  >
+                    <MoreHorizontal aria-hidden="true" className="size-5" />
+                  </summary>
+                  <div className="absolute end-0 top-full z-10 mt-1 w-36 rounded-xl border bg-white p-1 shadow-lg">
+                    <DeleteClassroomButton
+                      classroomId={classroom.id}
+                      menu
+                      onDeleted={(id) =>
+                        setClassrooms((rows) =>
+                          rows.filter((row) => row.id !== id),
+                        )
+                      }
+                    />
+                  </div>
+                </details>
               </div>
               <Link
                 className="block"

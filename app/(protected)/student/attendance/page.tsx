@@ -1,3 +1,4 @@
+import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { StudentTaskScope } from "@/components/dashboard/student-task-scope";
 import { studentTaskScopeSchema } from "@/services/student-experience/task-scope";
@@ -40,15 +41,17 @@ export default async function StudentAttendancePage({
     <section className="space-y-4">
       <PageHeader
         actions={
-          <StudentBackLink
-            href={
-              courseId
-                ? `/student/courses/${courseId}/learning-center${classroomId ? `?classroomId=${encodeURIComponent(classroomId)}` : ""}`
-                : "/student/tasks"
-            }
-          >
-            {courseId ? "返回我的课程" : "返回学习任务"}
-          </StudentBackLink>
+          courseId ? (
+            <StudentCourseReturnLink
+              courseId={courseId}
+              classroomId={classroomId}
+              tab="tasks"
+            />
+          ) : (
+            <StudentBackLink href="/student/tasks">
+              返回学习任务
+            </StudentBackLink>
+          )
         }
         title="签到与出勤"
         description={

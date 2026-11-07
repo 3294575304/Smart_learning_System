@@ -160,7 +160,7 @@ export function AssessmentSchemeWorkspace({ courseId }: { courseId: string }) {
             ) : null}
           </div>
           <button
-            className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             disabled={submitting}
             onClick={() =>
               void perform(
@@ -299,6 +299,9 @@ export function AssessmentSchemeWorkspace({ courseId }: { courseId: string }) {
                         const next = structuredClone(structure);
                         next.components[componentIndex]!.sourceType = (event
                           .target.value || null) as typeof component.sourceType;
+                        next.components[
+                          componentIndex
+                        ]!.assignmentAggregationConfirmed = false;
                         setStructure(next);
                       }}
                     >
@@ -310,6 +313,32 @@ export function AssessmentSchemeWorkspace({ courseId }: { courseId: string }) {
                       ))}
                     </select>
                   </label>
+                  {component.sourceType === "PLATFORM_ASSIGNMENT" &&
+                  [
+                    "REGULAR_PERFORMANCE",
+                    "COURSE_ASSIGNMENT",
+                    "COURSE_EXPERIMENT",
+                  ].includes(component.type) ? (
+                    <label className="flex items-start gap-2 text-sm md:col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={
+                          component.assignmentAggregationConfirmed ?? false
+                        }
+                        onChange={(event) => {
+                          const next = structuredClone(structure);
+                          next.components[
+                            componentIndex
+                          ]!.assignmentAggregationConfirmed =
+                            event.target.checked;
+                          setStructure(next);
+                        }}
+                      />
+                      <span>
+                        经核对大纲，此项目完全由对应类别作业构成，各作业换算百分制后等权平均。含出勤、课堂表现等混合构成时不要勾选；项目总评占比仍以上方确认值为准。
+                      </span>
+                    </label>
+                  ) : null}
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       checked={component.enabled}

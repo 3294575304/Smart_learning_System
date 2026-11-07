@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import {
   listCourseRoster,
   mutateCourseRoster,
+  listTeacherClassroomRoster,
 } from "@/services/course-rosters/service";
 import { claimStudentAccount } from "@/services/auth/registration";
 import { registerSchema } from "@/services/auth/schemas";
@@ -79,6 +80,23 @@ async function main() {
     status: "PENDING",
   });
   assert.equal(list.total, 1);
+  const classRoster = await listTeacherClassroomRoster(teacher.id, first.id);
+  assert.equal(classRoster?.counts.pending, 1);
+  assert.equal(classRoster?.items[0]?.classroomId, first.id);
+  assert.equal(
+    (await listTeacherClassroomRoster(teacher.id, second.id))?.total,
+    0,
+  );
+  assert.equal(await listTeacherClassroomRoster(other.id, first.id), null);
+  await prisma.classroom.update({
+    where: { id: second.id },
+    data: { status: "COMPLETED" },
+  });
+  assert.equal(await listTeacherClassroomRoster(teacher.id, second.id), null);
+  await prisma.classroom.update({
+    where: { id: second.id },
+    data: { status: "ACTIVE" },
+  });
   let row = list.items[0];
   assert.ok(row && "identityUpdatedAt" in row);
   await assert.rejects(() => mutateCourseRoster(other.id, course.id, add));

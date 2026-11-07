@@ -5,11 +5,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { StudentHomeInsights } from "../../components/dashboard/student-home-insights";
 import type { StudentClassAnalysis } from "../../services/dashboard/student-class-analytics";
 import type { StudentTaskOverview } from "../../services/dashboard/student-task-overview";
+import { StudentAssignmentRings } from "../../components/dashboard/student-assignment-rings";
 const overview: StudentTaskOverview = {
   total: 0,
-  counts: { assignment: 0, attendance: 0, survey: 0 },
+  counts: { exam: 0, assignment: 0, attendance: 0, survey: 0 },
   items: [],
   scheduledSurveys: [],
+  scheduledExams: [],
   nextChangeAt: null,
 };
 function item(
@@ -56,7 +58,7 @@ test("主页空看板不补造学习时长、成绩或知识评估", () => {
   );
   assert.match(html, /学习主页数据看板/);
   assert.match(html, /暂无已开放正式作业/);
-  assert.match(html, /暂无待处理任务/);
+  assert.match(html, /暂无待办/);
   assert.doesNotMatch(html, /NaN|Infinity|学习时长|AI互动次数|累计登录/);
 });
 test("同名课程分别展示，结课记录不混入当前汇总，待办分布使用完整聚合", () => {
@@ -72,15 +74,31 @@ test("同名课程分别展示，结课记录不混入当前汇总，待办分�
       overview: {
         ...overview,
         total: 4,
-        counts: { assignment: 2, attendance: 1, survey: 1 },
+        counts: { exam: 0, assignment: 2, attendance: 1, survey: 1 },
       },
     }),
   );
   assert.match(html, /75%/);
   assert.match(html, /已交 3\/4 项正式作业/);
-  assert.match(html, /作业2项，签到1项，问卷1项/);
+  assert.match(html, /作业 2/);
+  assert.match(html, /签到 1/);
+  assert.match(html, /问卷 1/);
   assert.ok(html.includes('value="one"'));
   assert.ok(html.includes('value="two" selected=""'));
   assert.match(html, /Python · 班级one/);
   assert.match(html, /Python · 班级two/);
+});
+
+test("作业环图区分未到期、逾期和已交，无作业不显示零提交率", () => {
+  const row = { ...item("one", 9, 6), overdue: 2 };
+  const html = renderToStaticMarkup(
+    React.createElement(StudentAssignmentRings, {
+      classes: [row, item("two", 0, 0)],
+    }),
+  );
+  assert.match(html, /已提交6项，未交未截止1项，逾期未交2项/);
+  assert.match(html, /classroomId=one/);
+  assert.match(html, /classroomId=two/);
+  assert.match(html, /暂无作业/);
+  assert.doesNotMatch(html, />0%<|NaN|Infinity/);
 });

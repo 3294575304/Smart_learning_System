@@ -1,7 +1,12 @@
 import { z } from "zod";
 const reason = z.string().trim().min(2, "请填写至少2字的原因").max(500);
+const optionalReason = z.string().trim().max(500).default("");
 export const extendAssignmentSchema = z
-  .object({ requestId: z.string().uuid(), dueAt: z.coerce.date(), reason })
+  .object({
+    requestId: z.string().uuid(),
+    dueAt: z.coerce.date(),
+    reason: optionalReason,
+  })
   .strict();
 export const issueMakeupSchema = z
   .object({
@@ -12,7 +17,7 @@ export const issueMakeupSchema = z
       .max(200)
       .refine((v) => new Set(v).size === v.length, "学生不能重复"),
     expiresAt: z.coerce.date(),
-    reason,
+    reason: optionalReason,
   })
   .strict();
 export const revokeMakeupSchema = z.object({ reason }).strict();

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   selectStudentEnrollment,
   studentEnrollmentLabel,
+  studentEnrollmentStatus,
 } from "../../services/courses/student-enrollment";
 const items = [
   {
@@ -22,6 +23,19 @@ const items = [
     classroom: { id: "three", name: "三班", status: "ACTIVE" },
   },
 ];
+test("学生状态区分结课、关闭及归档，已结束时只读", () => {
+  for (const [course, classroom, label, readOnly] of [
+    ["ACTIVE", "ACTIVE", "学习中", false],
+    ["ACTIVE", "COMPLETED", "已结课", true],
+    ["ACTIVE", "CLOSED", "已关闭", true],
+    ["ACTIVE", "ARCHIVED", "已归档", true],
+    ["ARCHIVED", "ACTIVE", "已归档", true],
+  ] as const)
+    assert.deepEqual(studentEnrollmentStatus(course, classroom), {
+      label,
+      readOnly,
+    });
+});
 test("学生课程按加入班级独立，默认当前课程且不合并同名课", () => {
   assert.equal(selectStudentEnrollment(items, {})?.classroom.id, "one");
   assert.equal(

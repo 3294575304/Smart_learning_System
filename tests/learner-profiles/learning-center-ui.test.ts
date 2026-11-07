@@ -87,7 +87,7 @@ test("学生课程学习中心复用正式图谱、画像、进度与学习事�
   assert.match(courses, /key=\{classroom.id\}/u);
   assert.match(courses, /进入教学班/u);
   assert.match(courses, /查看教学班/u);
-  assert.match(courses, /学情分析/u);
+  assert.match(courses, /我的学习分析/u);
   assert.doesNotMatch(
     courses,
     /成绩与评价|自主练习|href=\{`\/student\/assignments/u,

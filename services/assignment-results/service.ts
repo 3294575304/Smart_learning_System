@@ -490,7 +490,7 @@ export async function getTeacherAssignmentStudentAnswer(
   return prisma.$transaction(
     async (transaction) => {
       const assignment = await transaction.assignment.findFirst({
-        where: { id: assignmentId, teacherId },
+        where: { id: assignmentId, teacherId, deletedAt: null },
         select: {
           id: true,
           teacherId: true,
@@ -521,7 +521,7 @@ export async function getTeacherAssignmentResults(
   return prisma.$transaction(
     async (transaction) => {
       const assignment = await transaction.assignment.findFirst({
-        where: { id: assignmentId, teacherId },
+        where: { id: assignmentId, teacherId, deletedAt: null },
         select: {
           id: true,
           teacherId: true,
