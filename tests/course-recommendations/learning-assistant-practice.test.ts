@@ -78,13 +78,12 @@ test("陌生章节不会被当作已确认的练习范围", () => {
   assert.doesNotMatch(html, /type="checkbox" checked/u);
 });
 
-test("AI 多章节确认入口预选所有章节、模板与难度", () => {
+test("AI 多章节确认入口预选所有章节与模板", () => {
   const html = renderToStaticMarkup(
     React.createElement(CoursePracticeCenter, {
       courses,
       initialCourseId: "python",
       initialChapterIds: ["ch1", "ch2"],
-      initialDifficulty: 2,
       initialTemplate: "TRUE_FALSE10",
     }),
   );

@@ -96,7 +96,6 @@ export async function createPersonalizedRecommendations(
     recentCompletedQuestionIds: context.recentCompletedQuestionIds,
     activeRecommendationQuestionIds,
     recentErrorTypes: context.recentErrorTypes,
-    recommendedDifficulty: request.recommendedDifficulty,
     consecutiveCorrect: context.consecutiveCorrect,
     consecutiveWrong: context.consecutiveWrong,
     teacherScope: {
@@ -129,7 +128,7 @@ export async function createPersonalizedRecommendations(
   const persisted = await persistRecommendations({
     studentId: request.studentId,
     cycleKey,
-    targetDifficulty: request.recommendedDifficulty,
+    targetDifficulty: null,
     source,
     analysisId: context.analysisId,
     items: enhanced.items,
@@ -143,7 +142,6 @@ export async function createPersonalizedRecommendations(
         questionId: record.question.id,
         title: record.question.title,
         type: record.question.type,
-        difficulty: record.question.difficulty,
         score: 0,
         primaryKnowledgePointId: null,
         matchedKnowledgePoints: [],
@@ -159,7 +157,7 @@ export async function createPersonalizedRecommendations(
   return {
     cycleKey,
     studentId: request.studentId,
-    targetDifficulty: request.recommendedDifficulty,
+    targetDifficulty: null,
     source,
     generatedAt: now,
     createdItemCount: persisted.createdCount,
@@ -183,7 +181,6 @@ function listItemFromRecord(
     title: record.question.title,
     content: record.question.content,
     type: record.question.type,
-    difficulty: record.question.difficulty,
     knowledgePoints: record.conceptSnapshots.length
       ? record.conceptSnapshots.map((snapshot) => ({
           id: snapshot.conceptId,

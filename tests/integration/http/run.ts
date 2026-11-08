@@ -52,11 +52,21 @@ async function main(): Promise<void> {
     "tests/notifications/http-integration.ts",
     "tests/wrong-questions/http-integration.ts",
   ];
+  const requestedSuites = process.env.HTTP_INTEGRATION_SUITES?.split(",")
+    .map((suite) => suite.trim())
+    .filter(Boolean);
+  const selectedFiles = requestedSuites?.length
+    ? testFiles.filter((file) =>
+        requestedSuites.some((suite) => file.startsWith(`tests/${suite}/`)),
+      )
+    : testFiles;
+  if (selectedFiles.length === 0)
+    throw new Error("HTTP_INTEGRATION_SUITES 未匹配任何测试目录");
 
   try {
     run(process.execPath, [prismaCli, "migrate", "deploy"], environment);
     run(process.execPath, [prismaCli, "db", "seed"], environment);
-    for (const testFile of testFiles) {
+    for (const testFile of selectedFiles) {
       run(
         process.execPath,
         ["--conditions=react-server", "--import", "tsx", resolve(testFile)],

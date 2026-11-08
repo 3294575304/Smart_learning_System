@@ -18,7 +18,6 @@ const recommendation = {
   title: "分数加法",
   content: "题目内容",
   type: QuestionType.SINGLE_CHOICE,
-  difficulty: 2,
   knowledgePoints: [{ id: "kp-1", name: "异分母分数" }],
   reason: "你近期在异分母分数计算中容易出错，建议巩固基础步骤。",
   status: RecommendationStatus.STARTED,
@@ -28,7 +27,7 @@ const recommendation = {
   explanation: "不应显示的完整解析",
 };
 
-test("recommendation card renders reason, knowledge, difficulty and status safely", () => {
+test("recommendation card renders reason, knowledge and status safely", () => {
   const markup = renderToStaticMarkup(
     React.createElement(RecommendationCard, {
       item: recommendation,
@@ -37,7 +36,7 @@ test("recommendation card renders reason, knowledge, difficulty and status safel
   );
 
   assert.match(markup, /单选题/u);
-  assert.match(markup, /难度：简单/u);
+  assert.doesNotMatch(markup, /难度/u);
   assert.match(markup, /进行中/u);
   assert.match(markup, /异分母分数/u);
   assert.match(markup, /建议巩固基础步骤/u);

@@ -60,7 +60,7 @@ function riskLevelFor(output: StudentAnalysisOutput): RiskLevel {
 }
 
 function summaryFor(output: StudentAnalysisOutput): string {
-  return `总体水平：${ANALYSIS_LABELS[output.overallLevel] ?? "待评估"}；已掌握 ${output.masteredKnowledgePoints.length} 个知识点，薄弱 ${output.weakKnowledgePoints.length} 个知识点；推荐难度 ${output.recommendedDifficulty}。`;
+  return `总体水平：${ANALYSIS_LABELS[output.overallLevel] ?? "待评估"}；已掌握 ${output.masteredKnowledgePoints.length} 个知识点，薄弱 ${output.weakKnowledgePoints.length} 个知识点。`;
 }
 
 function insightRows(

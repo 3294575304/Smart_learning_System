@@ -9,10 +9,8 @@ import {
 import { rankCourseRecommendationCandidates } from "../../services/course-recommendations/algorithm";
 
 const policy = {
-  weaknessWeight: 35,
-  difficultyWeight: 15,
+  weaknessWeight: 50,
   freshnessWeight: 10,
-  difficultyTolerance: 1,
 };
 
 test("course ranking prioritizes conclusive weak concepts deterministically", () => {
@@ -51,7 +49,6 @@ test("course ranking prioritizes conclusive weak concepts deterministically", ()
         masteryScore: 30,
       },
     ],
-    requestedDifficulty: 3,
     policy,
     limit: 2,
   });
@@ -77,7 +74,6 @@ test("insufficient evidence creates a diagnostic reason instead of a weak label"
       },
     ],
     profiles: [],
-    requestedDifficulty: 2,
     policy,
     limit: 1,
   });
@@ -113,7 +109,6 @@ test("shared questions follow the same ranking while core concepts receive prior
       },
     ],
     profiles: [],
-    requestedDifficulty: 3,
     policy,
     limit: 2,
   });

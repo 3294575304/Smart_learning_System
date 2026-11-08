@@ -35,7 +35,7 @@ test("course recommendation conditions are bounded and only accept supported pra
   assert.deepEqual(parsed.conceptIds, ["concept-1"]);
   assert.deepEqual(parsed.questionTypes, [QuestionType.FILL_BLANK]);
   assert.equal(parsed.count, 10);
-  assert.equal(parsed.difficulty, 3);
+  assert.equal(parsed.objectiveCode, undefined);
   assert.equal(
     courseRecommendationGenerationSchema.safeParse({
       classroomId: "classroom-1",

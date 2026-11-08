@@ -11,6 +11,7 @@ import { claimBackgroundJobById } from "@/services/background-jobs/repository";
 import { EXAM_PAPER_JOB_TYPE } from "@/services/exams/paper-ai";
 import { executeClaimedExamPaperJob } from "@/services/exams/paper-worker";
 import { assertIsolatedIntegrationEnvironment } from "../integration/database";
+import { publishExamTestSyllabus } from "./syllabus-fixture";
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
@@ -111,6 +112,11 @@ async function main() {
         status: "ACTIVE",
       },
     });
+    const publishedSyllabus = await publishExamTestSyllabus(
+      prisma,
+      course.id,
+      teacher.id,
+    );
     const classroom = await prisma.classroom.create({
       data: {
         teacherId: teacher.id,
@@ -241,10 +247,21 @@ async function main() {
     });
     assert.equal(edited.status, 200);
     current = await draft();
-    const reviewed = await fetch(`${questionBase}/review`, {
+    const reviewAllUrl = `${base}/api/teacher/exams/drafts/${draftId}/review-all`;
+    assert.equal(
+      (
+        await fetch(reviewAllUrl, {
+          method: "POST",
+          headers: { cookie: otherCookie, "content-type": "application/json" },
+          body: JSON.stringify({ expectedRevision: current.revision }),
+        })
+      ).status,
+      404,
+    );
+    const reviewed = await fetch(reviewAllUrl, {
       method: "POST",
       headers: { cookie: teacherCookie, "content-type": "application/json" },
-      body: JSON.stringify({ expectedRevision: current.questions[0].revision }),
+      body: JSON.stringify({ expectedRevision: current.revision }),
     });
     assert.equal(reviewed.status, 200);
     current = await draft();
@@ -295,6 +312,14 @@ async function main() {
         where: { questionCategoryId: category.id },
       }),
       1,
+    );
+    assert.equal(
+      (
+        await prisma.examQuestionUse.findFirstOrThrow({
+          where: { examSessionId: result.data.id },
+        })
+      ).syllabusStructureId,
+      publishedSyllabus.id,
     );
     console.log("Exam HTTP integration passed");
   } finally {

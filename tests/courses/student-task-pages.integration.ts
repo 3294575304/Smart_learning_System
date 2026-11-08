@@ -117,7 +117,6 @@ async function main() {
       title: "验收判断题",
       content: "Python 是编程语言。",
       type: "TRUE_FALSE",
-      difficulty: 1,
       status: "ACTIVE",
       correctBoolean: true,
       explanation: "验收解析",

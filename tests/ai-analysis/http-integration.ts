@@ -20,7 +20,7 @@ interface ApiEnvelope {
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
-const port = 3105;
+const port = 13305;
 const baseUrl = `http://127.0.0.1:${port}`;
 const serverOutput: string[] = [];
 const sessionIds: string[] = [];

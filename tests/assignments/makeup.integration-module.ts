@@ -60,7 +60,6 @@ export async function verifyAssignmentMakeup(ids: {
       type: "TRUE_FALSE",
       correctBoolean: true,
       explanation: "判定说明",
-      difficulty: 1,
       status: "ACTIVE",
     },
   });

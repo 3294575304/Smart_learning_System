@@ -196,7 +196,6 @@ test("高校管理员只读取本校师生和统计，拒绝跨校编辑、班�
       title: "本校题目",
       content: "1 == 1",
       type: "TRUE_FALSE",
-      difficulty: 1,
       explanation: "相等",
       correctBoolean: true,
     },
@@ -208,7 +207,6 @@ test("高校管理员只读取本校师生和统计，拒绝跨校编辑、班�
       title: "其他学校题目",
       content: "2 == 2",
       type: "TRUE_FALSE",
-      difficulty: 1,
       explanation: "相等",
       correctBoolean: true,
     },
@@ -550,7 +548,6 @@ test("删除管理员撤销会话、隐藏账号并释放邮箱，保留学校�
       content: "True",
       explanation: "正确",
       type: "TRUE_FALSE",
-      difficulty: 1,
       correctBoolean: true,
     },
   });

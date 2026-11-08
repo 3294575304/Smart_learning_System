@@ -99,7 +99,7 @@ export interface DashboardDistributions {
   roles: DistributionItem<Role>[];
   userStatuses: DistributionItem<UserStatus>[];
   questionTypes: DistributionItem<QuestionType>[];
-  questionDifficulties: DistributionItem<number>[];
+  questionObjectives: DistributionItem<string>[];
   assignmentStatuses: DistributionItem<AssignmentStatus>[];
   submissionStatuses: DistributionItem<SubmissionStatus>[];
   recommendationStatuses: DistributionItem<RecommendationStatus>[];

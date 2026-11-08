@@ -24,7 +24,7 @@ function request(mode: "RANGE" | "ANALOGY" | "FILE" = "RANGE") {
     conceptIds: [],
     sourceQuestionId: mode === "ANALOGY" ? "cquestion000000000000001" : null,
     bloomLevel: "APPLY",
-    difficulty: 3,
+    objectiveCode: null,
     counts: { SINGLE_CHOICE: 1 },
     singleChoiceOptions: 4,
     multipleChoiceOptions: 4,
@@ -77,7 +77,9 @@ test("Mock Provider 的六类候选符合现有题目与编程配置契约", asy
       type,
       count: 1,
       sequence: 1,
-      difficulty: 3,
+      objectives: [
+        { code: "KNOWLEDGE", title: "1 · 知识", description: "概念" },
+      ],
       bloomLevel: "APPLY",
       optionCount:
         type === QuestionType.SINGLE_CHOICE ||
@@ -116,7 +118,7 @@ test("Mock Provider 的六类候选符合现有题目与编程配置契约", asy
       await provider.reviewGeneratedQuestions(
         {
           type,
-          difficulty: 3,
+          objectives: input.objectives,
           evidence: input.evidence,
           draftText: JSON.stringify(candidate),
           count: 1,
@@ -158,7 +160,9 @@ test("外部 Provider 仅发送经清理、限长的证据片段与原题摘录"
         type: QuestionType.SINGLE_CHOICE,
         count: 1,
         sequence: 1,
-        difficulty: 3,
+        objectives: [
+          { code: "KNOWLEDGE", title: "1 · 知识", description: "概念" },
+        ],
         bloomLevel: "APPLY",
         optionCount: 4,
         evidence: [
@@ -189,7 +193,9 @@ test("外部 Provider 仅发送经清理、限长的证据片段与原题摘录"
         type: QuestionType.PYTHON_PROGRAMMING,
         count: 1,
         sequence: 1,
-        difficulty: 3,
+        objectives: [
+          { code: "KNOWLEDGE", title: "1 · 知识", description: "概念" },
+        ],
         bloomLevel: "APPLY",
         optionCount: null,
         evidence: [{ id: "one", locator: "第一章", text: "Python 输入输出" }],
@@ -210,7 +216,9 @@ test("外部 Provider 仅发送经清理、限长的证据片段与原题摘录"
         type: QuestionType.MULTIPLE_CHOICE,
         count: 1,
         sequence: 5,
-        difficulty: 3,
+        objectives: [
+          { code: "KNOWLEDGE", title: "1 · 知识", description: "概念" },
+        ],
         bloomLevel: "REMEMBER",
         optionCount: 4,
         evidence: [{ id: "one", locator: "第一章", text: "Python 序列长度" }],

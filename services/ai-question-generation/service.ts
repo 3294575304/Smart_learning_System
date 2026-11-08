@@ -33,8 +33,24 @@ import { createQuestionInTransaction } from "@/services/questions/service";
 import { questionUpsertSchema } from "@/services/questions/schemas";
 import { getStorageService } from "@/services/storage";
 import { verifyProgrammingCandidate } from "@/services/ai-question-generation/verify-programming";
+import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 
 export const FILE_LIFETIME_MS = 30 * 24 * 60 * 60 * 1_000;
+const GENERIC_OBJECTIVE_CODES = ["KNOWLEDGE", "ABILITY", "LITERACY"] as const;
+
+async function allowedObjectiveCodes(syllabusStructureId: string | null) {
+  if (!syllabusStructureId) return [...GENERIC_OBJECTIVE_CODES];
+  const syllabus = await prisma.publishedSyllabusStructure.findUnique({
+    where: { id: syllabusStructureId },
+    select: { structureJson: true },
+  });
+  const parsed = storedPublishableSyllabusStructureSchema.safeParse(
+    syllabus?.structureJson,
+  );
+  if (!parsed.success)
+    throw new AIQuestionGenerationError("正式大纲目标已变化，请重新生成", 409);
+  return parsed.data.objectives.map(({ code }) => code);
+}
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value))
@@ -58,6 +74,7 @@ async function ownedCourse(teacherId: string, courseId: string) {
       questionCategoryId: true,
       currentPublishedKnowledgeGraphVersionId: true,
       currentPublishedSyllabusStructureId: true,
+      currentPublishedSyllabusStructure: { select: { structureJson: true } },
       questionCategory: { select: { isActive: true } },
     },
   });
@@ -92,6 +109,7 @@ export async function listGenerationOptions(teacherId: string) {
       name: true,
       term: true,
       questionCategoryId: true,
+      currentPublishedSyllabusStructure: { select: { structureJson: true } },
       currentPublishedKnowledgeGraphVersion: {
         select: {
           id: true,
@@ -126,7 +144,20 @@ export async function listGenerationOptions(teacherId: string) {
     orderBy: [{ createdAt: "desc" }],
     select: { id: true, questionCategoryId: true, title: true, type: true },
   });
-  return { courses, sourceQuestions };
+  return {
+    courses: courses.map((course) => {
+      const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+        course.currentPublishedSyllabusStructure?.structureJson,
+      );
+      return {
+        ...course,
+        objectives: syllabus.success
+          ? syllabus.data.objectives.map(({ code, title }) => ({ code, title }))
+          : [],
+      };
+    }),
+    sourceQuestions,
+  };
 }
 
 async function validateRange(
@@ -222,6 +253,14 @@ export async function queueQuestionGeneration(
     return { id: existing.id, status: existing.status };
   }
   const course = await ownedCourse(teacherId, input.courseId);
+  const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+    course.currentPublishedSyllabusStructure?.structureJson,
+  );
+  const allowedCodes = syllabus.success
+    ? syllabus.data.objectives.map(({ code }) => code)
+    : ["KNOWLEDGE", "ABILITY", "LITERACY"];
+  if (input.objectiveCode && !allowedCodes.includes(input.objectiveCode))
+    throw new AIQuestionGenerationError("课程目标不属于当前正式大纲", 400);
   await validateRange(course, input);
   if (input.mode === "ANALOGY") {
     const source = await prisma.question.findFirst({
@@ -489,6 +528,16 @@ export async function editQuestionCandidate(
   if (input.data.question.questionCategoryId !== batch.questionCategoryId)
     throw new AIQuestionGenerationError("课程分类不可修改", 409);
   if (
+    !input.data.question.objectiveCode ||
+    !(await allowedObjectiveCodes(batch.syllabusStructureId)).includes(
+      input.data.question.objectiveCode,
+    )
+  )
+    throw new AIQuestionGenerationError(
+      "请选择当前大纲中的一个主课程目标",
+      400,
+    );
+  if (
     (input.data.question.type === QuestionType.PYTHON_PROGRAMMING) !==
     Boolean(input.data.programmingConfig)
   )
@@ -611,6 +660,17 @@ export async function confirmQuestionCandidate(
   )
     throw new AIQuestionGenerationError("候选题已变化，请刷新", 409);
   const question = questionUpsertSchema.parse(candidate.questionJson);
+  const objectiveCode = question.objectiveCode;
+  if (
+    !objectiveCode ||
+    !(await allowedObjectiveCodes(batch.syllabusStructureId)).includes(
+      objectiveCode,
+    )
+  )
+    throw new AIQuestionGenerationError(
+      "请选择当前大纲中的一个主课程目标",
+      400,
+    );
   const config =
     candidate.programmingConfig === null
       ? null
@@ -621,7 +681,8 @@ export async function confirmQuestionCandidate(
   const course = await ownedCourse(teacherId, batch.courseId);
   if (
     course.questionCategoryId !== batch.questionCategoryId ||
-    course.currentPublishedKnowledgeGraphVersionId !== batch.graphVersionId
+    course.currentPublishedKnowledgeGraphVersionId !== batch.graphVersionId ||
+    course.currentPublishedSyllabusStructureId !== batch.syllabusStructureId
   )
     throw new AIQuestionGenerationError(
       "课程分类或正式图谱已变化，请重新核对后生成",
@@ -665,13 +726,16 @@ export async function confirmQuestionCandidate(
           select: {
             questionCategoryId: true,
             currentPublishedKnowledgeGraphVersionId: true,
+            currentPublishedSyllabusStructureId: true,
           },
         });
         if (
           !currentCourse ||
           currentCourse.questionCategoryId !== batch.questionCategoryId ||
           currentCourse.currentPublishedKnowledgeGraphVersionId !==
-            batch.graphVersionId
+            batch.graphVersionId ||
+          currentCourse.currentPublishedSyllabusStructureId !==
+            batch.syllabusStructureId
         )
           throw new AIQuestionGenerationError(
             "课程分类或正式图谱已变化，请重新核对",
@@ -680,9 +744,28 @@ export async function confirmQuestionCandidate(
         const createdId = await createQuestionInTransaction(
           tx,
           teacherId,
-          question,
+          {
+            ...question,
+            defaultObjectiveKind: batch.syllabusStructureId
+              ? null
+              : objectiveCode === "KNOWLEDGE" ||
+                  objectiveCode === "ABILITY" ||
+                  objectiveCode === "LITERACY"
+                ? objectiveCode
+                : null,
+          },
           config ? QuestionStatus.DRAFT : undefined,
         );
+        if (batch.syllabusStructureId)
+          await tx.questionCourseObjective.create({
+            data: {
+              questionId: createdId,
+              courseId: batch.courseId,
+              syllabusStructureId: batch.syllabusStructureId,
+              objectiveCode,
+              source: "TEACHER_CONFIRMED_AI",
+            },
+          });
         if (config)
           await createProgrammingConfigInTransaction(
             tx,

@@ -34,7 +34,8 @@ export interface QuestionListItem {
   title: string;
   content: string;
   type: QuestionType;
-  difficulty: number;
+  defaultObjectiveKind?: string | null;
+  courseObjective?: { code: string; title: string } | null;
   status: QuestionStatus;
   questionCategoryId: string | null;
   questionCategoryName: string | null;

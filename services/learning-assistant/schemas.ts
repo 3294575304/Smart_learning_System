@@ -54,7 +54,7 @@ export const learningPracticeSuggestionSchema = z
     note: z.string().max(300),
     count: z.number().int().min(1).max(50),
     typeLabel: z.string().max(100),
-    difficulty: z.number().int().min(1).max(5),
+    difficulty: z.number().int().min(1).max(5).optional(),
     practiceUrl: z.string().max(3000),
     testUrl: z.string().max(3000),
   })

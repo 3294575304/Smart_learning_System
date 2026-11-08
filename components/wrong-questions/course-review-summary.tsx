@@ -37,7 +37,6 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
     Record<string, PracticeType[]>
   >({});
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [difficulties, setDifficulties] = useState<Record<string, number>>({});
   const [pendingCourseId, setPendingCourseId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Record<string, string>>({});
 
@@ -67,7 +66,6 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
       "MULTIPLE_CHOICE",
     ];
     const count = counts[course.courseId] ?? 10;
-    const difficulty = difficulties[course.courseId] ?? 3;
 
     if (!classroomId) {
       setFeedback((current) => ({
@@ -97,7 +95,6 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
       conceptIds,
       questionTypes,
       count,
-      difficulty,
       mode: "PRACTICE",
     };
     const signature = JSON.stringify([course.courseId, payload]);
@@ -289,7 +286,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
 
               <details className="mt-3 border-t border-slate-100 pt-3">
                 <summary className="cursor-pointer text-sm text-slate-600 hover:text-sky-800">
-                  调整练习范围、题型和难度
+                  调整练习范围和题型
                 </summary>
                 <div className="pt-3">
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -431,25 +428,8 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
                     </div>
                   </fieldset>
 
-                  <label className="mt-4 block max-w-sm text-sm">
-                    题目难度：{difficulties[course.courseId] ?? 3} / 5
-                    <input
-                      aria-label={`${course.name}练习难度`}
-                      className="mt-2 block w-full accent-sky-600"
-                      type="range"
-                      min={1}
-                      max={5}
-                      value={difficulties[course.courseId] ?? 3}
-                      onChange={(event) =>
-                        setDifficulties((current) => ({
-                          ...current,
-                          [course.courseId]: Number(event.target.value),
-                        }))
-                      }
-                    />
-                  </label>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    题量是本次请求上限；所选课程、知识范围、题型和难度下题目不足时，只使用符合条件的题目，不跨课程或扩展知识范围补题。若没有可用题目，系统会提示调整条件。
+                    题量是本次请求上限；所选课程、知识范围和题型下题目不足时，只使用符合条件的题目，不跨课程或扩展知识范围补题。若没有可用题目，系统会提示调整条件。
                   </p>
 
                   <div className="mt-4 flex flex-wrap items-center gap-2">

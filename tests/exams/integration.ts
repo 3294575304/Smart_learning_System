@@ -1,18 +1,20 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createCanvas } from "@napi-rs/canvas";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { startOrResumeAttempt } from "@/services/assignments/service";
 import { claimBackgroundJobById } from "@/services/background-jobs/repository";
+import { createBackgroundJob } from "@/services/background-jobs/repository";
 import {
   createPaperDraft,
   cropPaperDraftImage,
   getPaperDraft,
   removePaperDraftQuestion,
   reviewPaperDraftQuestion,
+  reviewAllPaperDraftQuestions,
   retryPaperDraft,
   updatePaperDraftConfig,
   updatePaperDraftQuestion,
@@ -29,6 +31,13 @@ import {
   recordExamSwitch,
 } from "@/services/exams/service";
 import { examCreateSchema } from "@/services/exams/schemas";
+import { QUESTION_OBJECTIVE_JOB_TYPE } from "@/services/question-objectives/schemas";
+import { executeClaimedQuestionObjectiveJob } from "@/services/question-objectives/worker";
+import {
+  saveQuestionCourseObjective,
+  listQuestionObjectiveCourses,
+} from "@/services/question-objectives/editing";
+import { publishExamTestSyllabus } from "./syllabus-fixture";
 
 async function main() {
   const teacher = await prisma.user.findUniqueOrThrow({
@@ -55,6 +64,19 @@ async function main() {
       status: "ACTIVE",
     },
   });
+  await assert.rejects(
+    createPaperDraft(
+      teacher.id,
+      course.id,
+      new File(["test"], "test.txt", { type: "text/plain" }),
+      { ipAddress: null, userAgent: null },
+    ),
+  );
+  const publishedSyllabus = await publishExamTestSyllabus(
+    prisma,
+    course.id,
+    teacher.id,
+  );
   const first = await prisma.classroom.create({
     data: {
       teacherId: teacher.id,
@@ -80,7 +102,6 @@ async function main() {
       title: "考试题",
       content,
       type: "FILL_BLANK",
-      difficulty: 1,
       status: "ACTIVE",
       explanation: "解析",
       acceptableAnswers: ["答案"],
@@ -93,7 +114,6 @@ async function main() {
       title: "重复导入的题",
       content: ` ${content} `,
       type: "FILL_BLANK",
-      difficulty: 1,
       status: "ACTIVE",
       explanation: "解析",
       acceptableAnswers: ["答案"],
@@ -114,6 +134,11 @@ async function main() {
   await assert.rejects(createExamSession(other.id, input));
   const exam = await createExamSession(teacher.id, input);
   assert.equal(exam.assignments.length, 2);
+  const pendingObjectiveUse = await prisma.examQuestionUse.findFirstOrThrow({
+    where: { examSessionId: exam.id, questionId: question.id },
+  });
+  assert.equal(pendingObjectiveUse.objectiveCode, null);
+  assert.equal(pendingObjectiveUse.syllabusStructureId, publishedSyllabus.id);
   assert.equal((await createExamSession(teacher.id, input)).id, exam.id);
   await assert.rejects(
     createExamSession(teacher.id, { ...input, title: "其他试卷" }),
@@ -215,16 +240,41 @@ async function main() {
       context,
     );
     draft = await getPaperDraft(teacher.id, draftId);
-    await reviewPaperDraftQuestion(
+    const invalid = await prisma.examPaperDraftQuestion.create({
+      data: {
+        draftId,
+        ordinal: 2,
+        sourceLocator: "测试缺失分值",
+        questionJson: draft.questions[0].questionJson as Prisma.InputJsonObject,
+        points: 10,
+        pointsInferred: true,
+      },
+    });
+    await assert.rejects(
+      reviewAllPaperDraftQuestions(
+        teacher.id,
+        draftId,
+        { expectedRevision: draft.revision },
+        context,
+      ),
+      /第 2 题/u,
+    );
+    assert.equal(
+      (await getPaperDraft(teacher.id, draftId)).questions[0].reviewedRevision,
+      null,
+    );
+    await prisma.examPaperDraftQuestion.delete({ where: { id: invalid.id } });
+    await reviewAllPaperDraftQuestions(
       teacher.id,
       draftId,
-      row.id,
-      {
-        expectedRevision: draft.questions[0].revision,
-      },
+      { expectedRevision: draft.revision },
       context,
     );
     draft = await getPaperDraft(teacher.id, draftId);
+    assert.equal(
+      draft.questions[0].reviewedRevision,
+      draft.questions[0].revision,
+    );
     await updatePaperDraftConfig(teacher.id, draftId, {
       expectedRevision: draft.revision,
       type: "MIDTERM",
@@ -248,6 +298,174 @@ async function main() {
     context,
   );
   assert.equal(published.assignments.length, 2);
+  const frozenObjective = await prisma.examQuestionUse.findFirstOrThrow({
+    where: { examSessionId: published.id },
+  });
+  assert.equal(frozenObjective.objectiveCode, "O1");
+  assert.equal(frozenObjective.syllabusStructureId, publishedSyllabus.id);
+  const genericJob = await createBackgroundJob({
+    type: QUESTION_OBJECTIVE_JOB_TYPE,
+    maxAttempts: 3,
+    idempotencyKey: `${question.id}:base:${question.revision}`,
+    input: {
+      questionId: question.id,
+      revision: question.revision,
+      courseId: null,
+      syllabusStructureId: null,
+    },
+  });
+  const genericClaim = await claimBackgroundJobById(genericJob.id, {
+    workerId: "exam-integration",
+    executorVersion: "test-v1",
+    acceptedTypes: [QUESTION_OBJECTIVE_JOB_TYPE],
+    leaseDurationMs: 180_000,
+  });
+  assert.ok(genericClaim?.currentLeaseId);
+  await executeClaimedQuestionObjectiveJob(
+    genericJob.id,
+    genericClaim.currentLeaseId,
+    genericJob.input,
+  );
+  assert.equal(
+    (await prisma.question.findUniqueOrThrow({ where: { id: question.id } }))
+      .defaultObjectiveKind,
+    "KNOWLEDGE",
+  );
+  const courseJob = await createBackgroundJob({
+    type: QUESTION_OBJECTIVE_JOB_TYPE,
+    maxAttempts: 3,
+    courseId: course.id,
+    idempotencyKey: `${question.id}:course:${course.id}:${publishedSyllabus.id}:${question.revision}`,
+    input: {
+      questionId: question.id,
+      revision: question.revision,
+      courseId: course.id,
+      syllabusStructureId: publishedSyllabus.id,
+    },
+  });
+  const courseClaim = await claimBackgroundJobById(courseJob.id, {
+    workerId: "exam-integration",
+    executorVersion: "test-v1",
+    acceptedTypes: [QUESTION_OBJECTIVE_JOB_TYPE],
+    leaseDurationMs: 180_000,
+  });
+  assert.ok(courseClaim?.currentLeaseId);
+  await executeClaimedQuestionObjectiveJob(
+    courseJob.id,
+    courseClaim.currentLeaseId,
+    courseJob.input,
+  );
+  assert.equal(
+    (
+      await prisma.questionCourseObjective.findUniqueOrThrow({
+        where: {
+          questionId_courseId_syllabusStructureId: {
+            questionId: question.id,
+            courseId: course.id,
+            syllabusStructureId: publishedSyllabus.id,
+          },
+        },
+      })
+    ).objectiveCode,
+    "O1",
+  );
+  await assert.rejects(
+    saveQuestionCourseObjective(
+      other.id,
+      question.id,
+      {
+        courseId: course.id,
+        syllabusStructureId: publishedSyllabus.id,
+        objectiveCode: "O2",
+        expectedObjectiveCode: "O1",
+      },
+      context,
+    ),
+  );
+  await assert.rejects(
+    saveQuestionCourseObjective(
+      teacher.id,
+      question.id,
+      {
+        courseId: course.id,
+        syllabusStructureId: publishedSyllabus.id,
+        objectiveCode: "OUTSIDE",
+        expectedObjectiveCode: "O1",
+      },
+      context,
+    ),
+  );
+  await saveQuestionCourseObjective(
+    teacher.id,
+    question.id,
+    {
+      courseId: course.id,
+      syllabusStructureId: publishedSyllabus.id,
+      objectiveCode: "O2",
+      expectedObjectiveCode: "O1",
+    },
+    context,
+  );
+  await assert.rejects(
+    saveQuestionCourseObjective(
+      teacher.id,
+      question.id,
+      {
+        courseId: course.id,
+        syllabusStructureId: publishedSyllabus.id,
+        objectiveCode: "O1",
+        expectedObjectiveCode: "O1",
+      },
+      context,
+    ),
+  );
+  assert.equal(
+    (await listQuestionObjectiveCourses(teacher.id, question.id)).find(
+      (item) => item.courseId === course.id,
+    )?.objectiveCode,
+    "O2",
+  );
+  const siblingCourse = await prisma.course.create({
+    data: {
+      teacherId: teacher.id,
+      templateId: template.id,
+      questionCategoryId: category.id,
+      name: "同分类另一课程",
+      courseNo: `EX-${randomUUID().slice(0, 6)}`,
+      term: "2026",
+      status: "ACTIVE",
+    },
+  });
+  const siblingSyllabus = await publishExamTestSyllabus(
+    prisma,
+    siblingCourse.id,
+    teacher.id,
+  );
+  await saveQuestionCourseObjective(
+    teacher.id,
+    question.id,
+    {
+      courseId: siblingCourse.id,
+      syllabusStructureId: siblingSyllabus.id,
+      objectiveCode: "O1",
+      expectedObjectiveCode: null,
+    },
+    context,
+  );
+  const perCourseObjectives = await listQuestionObjectiveCourses(
+    teacher.id,
+    question.id,
+  );
+  assert.equal(
+    perCourseObjectives.find((item) => item.courseId === course.id)
+      ?.objectiveCode,
+    "O2",
+  );
+  assert.equal(
+    perCourseObjectives.find((item) => item.courseId === siblingCourse.id)
+      ?.objectiveCode,
+    "O1",
+  );
   await assert.rejects(
     updatePaperDraftQuestion(
       teacher.id,

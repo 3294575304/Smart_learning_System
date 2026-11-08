@@ -24,6 +24,7 @@ import { extractQuestionFile } from "@/services/question-import/file-extractor";
 import { questionUpsertSchema } from "@/services/questions/schemas";
 import { getStorageService } from "@/services/storage";
 import { extractTextFromPdf } from "@/services/syllabus-parsing/pdf-extractor";
+import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 
 interface Evidence {
   id: string;
@@ -193,12 +194,26 @@ async function loadEvidence(batch: {
     text: `${node.name}。${node.description ?? ""}`,
   }));
   const keywords = nodes.map((node) => node.name);
+  let objectives: QuestionGenerationAIInput["objectives"] = [
+    { code: "KNOWLEDGE", title: "1 · 知识", description: "知识理解与记忆" },
+    { code: "ABILITY", title: "2 · 能力", description: "知识运用与问题解决" },
+    { code: "LITERACY", title: "3 · 素养", description: "责任、伦理与规范" },
+  ];
   if (batch.syllabusStructureId) {
     const syllabus = await prisma.publishedSyllabusStructure.findUnique({
       where: { id: batch.syllabusStructureId },
       select: { structureJson: true },
     });
-    if (syllabus)
+    if (!syllabus) throw new Error("SYLLABUS_VERSION_MISSING");
+    if (syllabus) {
+      const structure = storedPublishableSyllabusStructureSchema.parse(
+        syllabus.structureJson,
+      );
+      objectives = structure.objectives.map(({ code, title, description }) => ({
+        code,
+        title,
+        description,
+      }));
       evidence.push(
         ...chunks(
           JSON.stringify(syllabus.structureJson),
@@ -206,6 +221,7 @@ async function loadEvidence(batch: {
           "正式大纲",
         ),
       );
+    }
   }
   if (
     batch.mode === "FILE" &&
@@ -274,6 +290,9 @@ async function loadEvidence(batch: {
   return {
     request,
     courseName: course.name,
+    objectives: request.objectiveCode
+      ? objectives.filter(({ code }) => code === request.objectiveCode)
+      : objectives,
     evidence: selected,
     concepts: nodes.flatMap((node) =>
       node.conceptId
@@ -324,7 +343,7 @@ function generationFailureCode(error: unknown): string {
   if (error.message.startsWith("题目审查未通过")) return "REVIEW_REJECTED";
   const known = [
     "题目数量与请求不一致",
-    "题型或难度与请求不一致",
+    "题型与请求不一致",
     "选项数量与请求不一致",
     "编程判题配置缺失或多余",
     "编程题测试用例超过 10 个",
@@ -487,7 +506,7 @@ export async function executeClaimedAIQuestionGenerationJob(
               type,
               count: 1,
               sequence: ordinal,
-              difficulty: source.request.difficulty,
+              objectives: source.objectives,
               bloomLevel: source.request.bloomLevel,
               optionCount:
                 type === QuestionType.SINGLE_CHOICE
@@ -508,11 +527,14 @@ export async function executeClaimedAIQuestionGenerationJob(
               throw new Error("题目数量与请求不一致");
             const local: typeof generated = [];
             for (const item of parsed.questions) {
+              if (item.question.type !== type)
+                throw new Error("题型与请求不一致");
               if (
-                item.question.type !== type ||
-                item.question.difficulty !== source.request.difficulty
+                !source.objectives.some(
+                  ({ code }) => code === item.question.objectiveCode,
+                )
               )
-                throw new Error("题型或难度与请求不一致");
+                throw new Error("课程目标不在当前大纲范围内");
               if (
                 (type === QuestionType.SINGLE_CHOICE ||
                   type === QuestionType.MULTIPLE_CHOICE) &&
@@ -554,6 +576,9 @@ export async function executeClaimedAIQuestionGenerationJob(
                 throw new Error("主知识点不在正式图谱范围内");
               const question = questionUpsertSchema.parse({
                 ...item.question,
+                defaultObjectiveKind: batch.syllabusStructureId
+                  ? null
+                  : item.question.objectiveCode,
                 questionCategoryId: batch.questionCategoryId,
                 knowledgePointIds: [],
                 tags: item.question.tags.length
@@ -588,7 +613,7 @@ export async function executeClaimedAIQuestionGenerationJob(
               await provider.reviewGeneratedQuestions(
                 {
                   type,
-                  difficulty: source.request.difficulty,
+                  objectives: source.objectives,
                   evidence: source.evidence,
                   draftText: scrubSensitiveText(
                     JSON.stringify(parsed.questions),
@@ -608,11 +633,11 @@ export async function executeClaimedAIQuestionGenerationJob(
                   !item.factsSupported ||
                   !item.answerConsistent ||
                   !item.clear ||
-                  !item.difficultyAligned,
+                  !item.objectiveAligned,
               )
             )
               throw new Error(
-                `题目审查未通过：${review.reviews.find((item) => !item.factsSupported || !item.answerConsistent || !item.clear || !item.difficultyAligned)?.reason ?? "审查结果数量或顺序错误"}`,
+                `题目审查未通过：${review.reviews.find((item) => !item.factsSupported || !item.answerConsistent || !item.clear || !item.objectiveAligned)?.reason ?? "审查结果数量或顺序错误"}`,
               );
             for (const [index, item] of local.entries()) {
               const reason = review.reviews[index]?.reason.trim();

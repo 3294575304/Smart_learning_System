@@ -15,7 +15,6 @@ function detail(): RecommendationDetailView {
     title: "历史题目",
     content: "这里是保留的题干",
     type: "TRUE_FALSE",
-    difficulty: 2,
     knowledgePoints: [],
     reason: "review",
     status: "EXPIRED",

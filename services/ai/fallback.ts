@@ -23,27 +23,14 @@ function weaknessSeverity(accuracy: number): number {
   return 1;
 }
 
-function recommendedDifficulty(
-  accuracy: number,
-  currentAverageDifficulty: number,
-): number {
-  const adjustment = accuracy >= 0.85 ? 1 : accuracy < 0.6 ? -1 : 0;
-  return Math.max(
-    1,
-    Math.min(5, Math.round(currentAverageDifficulty) + adjustment),
-  );
-}
-
 export function generateRuleBasedAnalysis(
   input: StudentAnalysisInput,
 ): StudentAnalysisOutput {
   const knowledgePointStats = new Map<string, KnowledgePointStats>();
   let correctAnswers = 0;
-  let difficultyTotal = 0;
 
   for (const answer of input.answers) {
     if (answer.isCorrect) correctAnswers += 1;
-    difficultyTotal += answer.difficulty;
     for (const knowledgePointId of answer.knowledgePointIds) {
       const current = knowledgePointStats.get(knowledgePointId) ?? {
         correct: 0,
@@ -100,7 +87,7 @@ export function generateRuleBasedAnalysis(
     .slice(0, 3)
     .map(
       (item) =>
-        `优先复习知识点 ${item.knowledgePointId}，完成基础例题后再做同难度练习。`,
+        `优先复习知识点 ${item.knowledgePointId}，完成相关例题后再做巩固练习。`,
     );
   if (suggestions.length === 0) {
     suggestions.push("保持当前练习节奏，并通过间隔复习巩固已掌握知识点。");
@@ -120,10 +107,6 @@ export function generateRuleBasedAnalysis(
           ]
         : [],
     suggestions,
-    recommendedDifficulty: recommendedDifficulty(
-      accuracy,
-      difficultyTotal / input.answers.length,
-    ),
     confidence: Math.min(
       0.78,
       Number((0.35 + Math.min(input.answers.length, 10) * 0.035).toFixed(2)),

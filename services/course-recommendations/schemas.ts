@@ -44,7 +44,7 @@ export const courseRecommendationGenerationSchema = z
       .transform((types) => [...new Set(types)]),
     practiceCount: z.number().int().min(1).max(50).optional(),
     count: z.number().int().min(1).max(50).default(10),
-    difficulty: z.number().int().min(1).max(5).default(3),
+    objectiveCode: z.string().trim().min(1).max(50).optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -83,12 +83,10 @@ export const courseRecommendationPolicySchema = z
     expectedRevision: z.number().int().min(0),
     weaknessWeight: z.number().int().min(0).max(100),
     prerequisiteWeight: z.number().int().min(0).max(100),
-    difficultyWeight: z.number().int().min(0).max(100),
     errorPatternWeight: z.number().int().min(0).max(100),
     freshnessWeight: z.number().int().min(0).max(100),
     teacherPriorityWeight: z.number().int().min(0).max(100),
     recentWindowDays: z.number().int().min(1).max(90),
-    difficultyTolerance: z.number().int().min(0).max(4),
     maxQuestionCount: z.number().int().min(1).max(50),
   })
   .strict()
@@ -96,7 +94,6 @@ export const courseRecommendationPolicySchema = z
     (value) =>
       value.weaknessWeight +
         value.prerequisiteWeight +
-        value.difficultyWeight +
         value.errorPatternWeight +
         value.freshnessWeight +
         value.teacherPriorityWeight ===

@@ -29,7 +29,6 @@ export interface RecommendationCandidate {
   id: string;
   title: string;
   type: QuestionType;
-  difficulty: number;
   status: QuestionStatus;
   deletedAt: Date | null;
   tags: string[];
@@ -51,7 +50,6 @@ export interface RecommendationAlgorithmInput {
   recentCompletedQuestionIds: string[];
   activeRecommendationQuestionIds: string[];
   recentErrorTypes: RecentErrorType[];
-  recommendedDifficulty: number;
   consecutiveCorrect: number;
   consecutiveWrong: number;
   teacherScope: TeacherPracticeScope;
@@ -88,7 +86,6 @@ export interface RecommendationItem {
   questionId: string;
   title: string;
   type: QuestionType;
-  difficulty: number;
   score: number;
   primaryKnowledgePointId: string | null;
   matchedKnowledgePoints: MatchedKnowledgePoint[];
@@ -114,7 +111,7 @@ export interface RecommendationAlgorithmResult {
 export interface PersonalizedRecommendationResult extends RecommendationAlgorithmResult {
   cycleKey: string;
   studentId: string;
-  targetDifficulty: number;
+  targetDifficulty: number | null;
   source: RecommendationSource;
   generatedAt: Date;
   createdItemCount: number;
@@ -134,7 +131,6 @@ export interface RecommendationListItemView {
   title: string;
   content: string;
   type: QuestionType;
-  difficulty: number;
   knowledgePoints: RecommendationKnowledgePointView[];
   reason: string;
   status: RecommendationStatus;
@@ -205,7 +201,7 @@ export interface RecommendationGenerationResult {
   };
   cycleKey: string;
   studentId: string;
-  targetDifficulty: number;
+  targetDifficulty: number | null;
   source: RecommendationSource;
   generatedAt: string;
   items: RecommendationListItemView[];

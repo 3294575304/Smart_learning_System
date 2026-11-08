@@ -14,6 +14,7 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { createBackgroundJob } from "@/services/background-jobs/repository";
 import { getStorageService } from "@/services/storage";
 import { questionUpsertSchema } from "@/services/questions/schemas";
+import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 import { EXAM_PAPER_JOB_TYPE, EXAM_PAPER_PROMPT_VERSION } from "./paper-ai";
 import {
   paperDraftConfigSchema,
@@ -59,9 +60,19 @@ export async function createPaperDraft(
       status: { not: "ARCHIVED" },
       questionCategory: { isActive: true },
     },
-    select: { id: true, questionCategoryId: true },
+    select: {
+      id: true,
+      questionCategoryId: true,
+      currentPublishedSyllabusStructure: { select: { structureJson: true } },
+    },
   });
   if (!course) throw new ResourceNotFoundError("课程不存在");
+  if (
+    !storedPublishableSyllabusStructureSchema.safeParse(
+      course.currentPublishedSyllabusStructure?.structureJson,
+    ).success
+  )
+    throw new AssignmentOperationError("请先发布课程教学大纲，再上传试卷", 409);
   const name = path
     .basename(file.name)
     .replace(/[\x00-\x1f/\\]/gu, "_")
@@ -235,8 +246,24 @@ export async function getPaperDraft(teacherId: string, draftId: string) {
       },
     },
   });
+  const course = await prisma.course.findUnique({
+    where: { id: draft.courseId },
+    select: {
+      currentPublishedSyllabusStructure: { select: { structureJson: true } },
+    },
+  });
+  const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+    course?.currentPublishedSyllabusStructure?.structureJson,
+  );
   return {
     ...draft,
+    objectives: syllabus.success
+      ? syllabus.data.objectives.map(({ code, title, description }) => ({
+          code,
+          title,
+          description,
+        }))
+      : [],
     questions: draft.questions.map((question) => ({
       ...question,
       points: question.points.toNumber(),
@@ -357,34 +384,12 @@ export async function reviewPaperDraftQuestion(
       include: { assets: { where: { kind: "QUESTION_CROP", isActive: true } } },
     });
     if (!row) throw new ResourceNotFoundError("题目不存在");
-    const question = paperDraftQuestionSchema.parse(row.questionJson);
-    if (!question.answer)
-      throw new AssignmentOperationError("请核对并补齐标准答案", 400);
-    if (question.type === "PYTHON_PROGRAMMING" && !question.programmingConfig)
-      throw new AssignmentOperationError(
-        "编程题需要完整判题配置，或改为简答题",
-        400,
-      );
-    const valid = questionUpsertSchema.safeParse({
-      ...question,
-      questionCategoryId: draft.questionCategoryId,
-      knowledgePointIds: [],
-      tags: question.tags.length ? question.tags : ["试卷导入"],
-    });
-    if (!valid.success)
-      throw new AssignmentOperationError(
-        valid.error.issues[0]?.message ?? "题目内容无效",
-        400,
-      );
-    if (row.pointsInferred)
-      throw new AssignmentOperationError("请先确认分值", 400);
-    if (
-      row.issues &&
-      Array.isArray(row.issues) &&
-      row.issues.some((issue) => String(issue).includes("图片待裁切")) &&
-      !row.assets.length
-    )
-      throw new AssignmentOperationError("请裁切并确认题目图片", 400);
+    const objectiveCodes = await currentObjectiveCodes(tx, draft.courseId);
+    await validatePaperDraftQuestion(
+      row,
+      draft.questionCategoryId,
+      objectiveCodes,
+    );
     const updated = await tx.examPaperDraftQuestion.updateMany({
       where: { id: questionId, draftId, revision: input.expectedRevision },
       data: { reviewedRevision: input.expectedRevision, issues: [] },
@@ -407,6 +412,141 @@ export async function reviewPaperDraftQuestion(
     });
     return { reviewedRevision: input.expectedRevision };
   });
+}
+
+type ReviewRow = Prisma.ExamPaperDraftQuestionGetPayload<{
+  include: { assets: true };
+}>;
+
+async function validatePaperDraftQuestion(
+  row: ReviewRow,
+  questionCategoryId: string,
+  codes: Set<string>,
+) {
+  const question = paperDraftQuestionSchema.parse(row.questionJson);
+  if (!question.answer)
+    throw new AssignmentOperationError("请核对并补齐标准答案", 400);
+  if (question.type === "PYTHON_PROGRAMMING" && !question.programmingConfig)
+    throw new AssignmentOperationError(
+      "编程题需要完整判题配置，或改为简答题",
+      400,
+    );
+  const valid = questionUpsertSchema.safeParse({
+    ...question,
+    questionCategoryId,
+    knowledgePointIds: [],
+    tags: question.tags.length ? question.tags : ["试卷导入"],
+  });
+  if (!valid.success)
+    throw new AssignmentOperationError(
+      valid.error.issues[0]?.message ?? "题目内容无效",
+      400,
+    );
+  if (row.pointsInferred)
+    throw new AssignmentOperationError("请先确认分值", 400);
+  if (
+    row.issues &&
+    Array.isArray(row.issues) &&
+    row.issues.some((issue) => String(issue).includes("图片待裁切")) &&
+    !row.assets.length
+  )
+    throw new AssignmentOperationError("请裁切并确认题目图片", 400);
+  if (question.objectiveCodes.some((code) => !codes.has(code)))
+    throw new AssignmentOperationError("课程目标不属于当前正式教学大纲", 400);
+  if (!question.objectiveCodes.length)
+    throw new AssignmentOperationError("请确认课程目标", 400);
+  if (question.objectiveCodes.length !== 1)
+    throw new AssignmentOperationError("每题只能选择一个主课程目标", 400);
+}
+
+async function currentObjectiveCodes(
+  tx: Prisma.TransactionClient,
+  courseId: string,
+) {
+  const course = await tx.course.findUnique({
+    where: { id: courseId },
+    select: {
+      currentPublishedSyllabusStructure: { select: { structureJson: true } },
+    },
+  });
+  const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+    course?.currentPublishedSyllabusStructure?.structureJson,
+  );
+  const codes = new Set(
+    syllabus.success
+      ? syllabus.data.objectives.map((objective) => objective.code)
+      : [],
+  );
+  return codes;
+}
+
+export async function reviewAllPaperDraftQuestions(
+  teacherId: string,
+  draftId: string,
+  raw: unknown,
+  context: AuditRequestContext,
+) {
+  const input = paperDraftReviewSchema.parse(raw);
+  await editable(teacherId, draftId);
+  return prisma.$transaction(
+    async (tx) => {
+      const draft = await lockEditableDraft(tx, teacherId, draftId);
+      if (draft.revision !== input.expectedRevision)
+        throw new AssignmentOperationError("草稿已变化，请刷新", 409);
+      const rows = await tx.examPaperDraftQuestion.findMany({
+        where: { draftId },
+        include: {
+          assets: { where: { kind: "QUESTION_CROP", isActive: true } },
+        },
+        orderBy: { ordinal: "asc" },
+      });
+      if (!rows.length)
+        throw new AssignmentOperationError("草稿中没有题目", 400);
+      const pending = rows.filter(
+        (row) => row.reviewedRevision !== row.revision,
+      );
+      const objectiveCodes = await currentObjectiveCodes(tx, draft.courseId);
+      for (const row of pending) {
+        try {
+          await validatePaperDraftQuestion(
+            row,
+            draft.questionCategoryId,
+            objectiveCodes,
+          );
+        } catch (error) {
+          if (error instanceof AssignmentOperationError)
+            throw new AssignmentOperationError(
+              `第 ${row.ordinal} 题：${error.message}`,
+              error.status,
+            );
+          throw error;
+        }
+      }
+      for (const row of pending)
+        await tx.examPaperDraftQuestion.update({
+          where: { id: row.id },
+          data: { reviewedRevision: row.revision, issues: [] },
+        });
+      if (pending.length) {
+        await tx.examPaperDraft.update({
+          where: { id: draftId },
+          data: { revision: { increment: 1 } },
+        });
+        await writeTeachingAuditLog(tx, {
+          actorId: teacherId,
+          action: AuditAction.EXAM_DRAFT_REVIEWED,
+          targetType: AuditTargetType.EXAM_DRAFT,
+          targetId: draftId,
+          summary: "批量确认考试草稿题目",
+          beforeData: { revision: input.expectedRevision },
+          afterData: { questionIds: pending.map((row) => row.id) },
+          context,
+        });
+      }
+      return { reviewedCount: pending.length };
+    },
+    { timeout: 30_000 },
+  );
 }
 
 export async function reorderPaperDraftQuestions(

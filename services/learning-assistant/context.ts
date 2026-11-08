@@ -143,8 +143,6 @@ export function suggestLearningPractice(
       course.concepts.find((item) => item.id === topic.id)?.name ?? "";
   }
   if (!scopeLabel) return null;
-  const difficulty = /基础|入门|不牢|不太牢/u.test(text) ? 2 : 3;
-  params.set("difficulty", String(difficulty));
   const template = /判断题/u.test(text)
     ? "TRUE_FALSE10"
     : /编程题/u.test(text)
@@ -163,7 +161,6 @@ export function suggestLearningPractice(
         : template === "PYTHON5"
           ? "Python 编程题"
           : "单选与多选",
-    difficulty,
     practiceUrl: `/student/recommendations?${params}&mode=PRACTICE#course-practice-center`,
     testUrl: `/student/recommendations?${params}&mode=TEST#course-practice-center`,
   };

@@ -5,7 +5,7 @@ export interface AdminQuestionView {
   title: string;
   content: string;
   type: QuestionType;
-  difficulty: number;
+  defaultObjectiveKind: string | null;
   explanation: string;
   correctBoolean: boolean | null;
   referenceAnswer: string | null;

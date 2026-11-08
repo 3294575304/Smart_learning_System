@@ -18,7 +18,7 @@ export const paperDraftQuestionSchema = z.object({
   title: z.string().trim().max(120),
   content: z.string().trim().max(5000),
   type: z.nativeEnum(QuestionType),
-  difficulty: z.number().int().min(1).max(5),
+  objectiveCodes: z.array(z.string().trim()).max(20).default([]),
   options: z
     .array(
       z.object({

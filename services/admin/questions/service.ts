@@ -27,7 +27,7 @@ function toView(record: AdminQuestionRecord): AdminQuestionView {
     title: record.title,
     content: record.content,
     type: record.type,
-    difficulty: record.difficulty,
+    defaultObjectiveKind: record.defaultObjectiveKind,
     explanation: record.explanation,
     correctBoolean: record.correctBoolean,
     referenceAnswer: record.referenceAnswer,

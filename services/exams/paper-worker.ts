@@ -14,6 +14,7 @@ import {
   heartbeatBackgroundJob,
 } from "@/services/background-jobs/repository";
 import { getStorageService } from "@/services/storage";
+import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 import { examPaperAIOutputSchema, type ExamPaperAIQuestion } from "./paper-ai";
 import { extractExamPaperSource, type PaperSourceImage } from "./paper-source";
 
@@ -44,7 +45,7 @@ function cleanQuestion(item: ExamPaperAIQuestion) {
     title: item.title || item.content.slice(0, 40) || "待核对题目",
     content: item.content.replace(trailing, "").trim(),
     type: item.type,
-    difficulty: item.difficulty,
+    objectiveCodes: item.objectiveCodes,
     options: item.options,
     answer: item.answer,
     explanation: item.explanation,
@@ -146,6 +147,25 @@ export async function executeClaimedExamPaperJob(
   }
   try {
     const provider = createAIProvider();
+    const course = await prisma.course.findUnique({
+      where: { id: draft.courseId },
+      select: {
+        currentPublishedSyllabusStructure: { select: { structureJson: true } },
+      },
+    });
+    const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+      course?.currentPublishedSyllabusStructure?.structureJson,
+    );
+    const objectives = syllabus.success
+      ? syllabus.data.objectives.map(({ code, title, description }) => ({
+          code,
+          title,
+          description: description.slice(0, 1_200),
+        }))
+      : [];
+    const objectiveCodes = new Set(
+      objectives.map((objective) => objective.code),
+    );
     if (!provider.parseExamPaper)
       throw Object.assign(new Error("AI 视觉解析不可用"), {
         code: "AI_PAPER_UNSUPPORTED",
@@ -190,6 +210,7 @@ export async function executeClaimedExamPaperJob(
                 id,
                 dataUrl: `data:image/jpeg;base64,${image.bytes.toString("base64")}`,
               })),
+              objectives,
             },
             { signal: AbortSignal.timeout(90_000), validationError },
           );
@@ -202,6 +223,12 @@ export async function executeClaimedExamPaperJob(
             )
           )
             throw new Error("AI 引用了未提供的图片");
+          if (
+            output.questions.some((item) =>
+              item.objectiveCodes.some((code) => !objectiveCodes.has(code)),
+            )
+          )
+            throw new Error("AI 引用了非本课程正式大纲的课程目标");
           questions = output.questions;
           break;
         } catch (error) {
@@ -235,9 +262,12 @@ export async function executeClaimedExamPaperJob(
       const item = entry.item;
       const question = cleanQuestion(item);
       const issues: string[] = [];
+      issues.push(...item.reviewIssues);
       if (!question.content) issues.push("题干未识别");
       if (!question.answer) issues.push("答案需教师确认或补充");
       if (!question.explanation) issues.push("解析需教师补充");
+      if (objectives.length && !question.objectiveCodes.length)
+        issues.push("课程目标待教师确认");
       if (item.points === null) issues.push("分值未识别，暂按 10 分");
       if (item.type === "PYTHON_PROGRAMMING")
         issues.push("编程题需补齐判题配置或改为简答题");

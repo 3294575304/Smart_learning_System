@@ -73,7 +73,11 @@ export const questionUpsertSchema = z
     type: z.nativeEnum(QuestionType),
     questionCategoryId: z.string().cuid("课程分类 ID 格式无效"),
     revision: z.number().int().min(1).optional(),
-    difficulty: z.number().int().min(1, "难度最低为 1").max(5, "难度最高为 5"),
+    defaultObjectiveKind: z
+      .enum(["KNOWLEDGE", "ABILITY", "LITERACY"])
+      .nullable()
+      .optional(),
+    objectiveCode: z.string().trim().min(1).max(50).nullable().optional(),
     options: z.array(optionSchema).max(20, "选项不能超过 20 个"),
     answer: questionAnswerSchema,
     explanation: z
@@ -265,7 +269,8 @@ export const questionListQuerySchema = z.object({
     .max(120, "搜索关键词不能超过 120 个字符")
     .optional(),
   type: z.nativeEnum(QuestionType).optional(),
-  difficulty: z.coerce.number().int().min(1).max(5).optional(),
+  defaultObjectiveKind: z.enum(["KNOWLEDGE", "ABILITY", "LITERACY"]).optional(),
+  objectiveCode: z.string().trim().min(1).max(50).optional(),
   knowledgePointId: z.string().cuid("知识点 ID 格式无效").optional(),
   courseId: z.string().cuid("课程 ID 格式无效").optional(),
   courseConceptId: z.string().trim().min(1).max(120).optional(),

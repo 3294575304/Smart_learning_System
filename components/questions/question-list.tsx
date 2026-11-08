@@ -2,10 +2,17 @@ import Link from "next/link";
 import { questionContentReview } from "@/services/questions/content-review";
 
 import { QuestionActions } from "@/components/questions/question-actions";
+import { QuestionObjectiveRetry } from "@/components/questions/question-objective-retry";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import type { QuestionListItem } from "@/services/questions/types";
 
-export function QuestionList({ items }: { items: QuestionListItem[] }) {
+export function QuestionList({
+  items,
+  courseId = null,
+}: {
+  items: QuestionListItem[];
+  courseId?: string | null;
+}) {
   if (items.length === 0) {
     return (
       <div className="text-muted-foreground rounded-xl border border-dashed p-10 text-center">
@@ -21,7 +28,30 @@ export function QuestionList({ items }: { items: QuestionListItem[] }) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
                 <span>{QUESTION_TYPE_LABELS[question.type]}</span>
-                <span>难度 {question.difficulty}</span>
+                <span>
+                  课程目标：
+                  {question.courseObjective
+                    ? `${question.courseObjective.code} · ${question.courseObjective.title}`
+                    : question.courseObjective === null
+                      ? "待分类"
+                      : question.defaultObjectiveKind === "KNOWLEDGE"
+                        ? "1 · 知识"
+                        : question.defaultObjectiveKind === "ABILITY"
+                          ? "2 · 能力"
+                          : question.defaultObjectiveKind === "LITERACY"
+                            ? "3 · 素养"
+                            : "待分类"}
+                </span>
+                {(question.courseObjective === null ||
+                  (question.courseObjective === undefined &&
+                    !question.defaultObjectiveKind)) && (
+                  <QuestionObjectiveRetry
+                    questionId={question.id}
+                    courseId={
+                      question.courseObjective === null ? courseId : null
+                    }
+                  />
+                )}
                 <span>{question.questionCategoryName ?? "待补课程分类"}</span>
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
                   {question.status === "ACTIVE"

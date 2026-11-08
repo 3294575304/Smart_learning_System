@@ -59,7 +59,6 @@ function fallback(input: SelfReflectionAIInput) {
             conceptIds: mentioned.map((concept) => concept.id).slice(0, 20),
             questionTypes: [],
             count: 5,
-            difficulty: 2,
           }
         : null,
     },

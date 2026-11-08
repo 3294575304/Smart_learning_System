@@ -38,7 +38,7 @@ export const examQuestionQuerySchema = z.object({
   courseId: z.string().cuid(),
   startsAt: z.coerce.date(),
   questionType: z.nativeEnum(QuestionType).optional(),
-  difficulty: z.coerce.number().int().min(1).max(5).optional(),
+  objectiveCode: z.string().trim().min(1).max(50).optional(),
   conceptId: z.string().cuid().optional(),
 });
 export const examSwitchSchema = z.object({ eventKey: z.string().uuid() });

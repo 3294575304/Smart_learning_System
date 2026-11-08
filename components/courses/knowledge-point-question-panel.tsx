@@ -204,7 +204,6 @@ export function KnowledgePointQuestionPanel({
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
                     <span>{QUESTION_TYPE_LABELS[question.type]}</span>
-                    <span>难度 {question.difficulty}/5</span>
                     <span>{QUESTION_STATUS_LABELS[question.status]}</span>
                     {question.bindingType ? (
                       <span className="text-emerald-700">

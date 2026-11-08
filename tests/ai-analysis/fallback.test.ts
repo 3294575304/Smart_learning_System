@@ -4,10 +4,10 @@ import test from "node:test";
 import { generateRuleBasedAnalysis } from "../../services/ai/fallback";
 import { analysisInputFixture } from "./fixtures";
 
-test("rule fallback derives levels, weaknesses and bounded difficulty", () => {
+test("rule fallback derives levels and weaknesses without difficulty", () => {
   const result = generateRuleBasedAnalysis(analysisInputFixture);
   assert.equal(result.overallLevel, "BEGINNER");
-  assert.equal(result.recommendedDifficulty, 2);
+  assert.equal(result.recommendedDifficulty, undefined);
   assert.deepEqual(result.weakKnowledgePoints, [
     {
       knowledgePointId: "kp-algebra",

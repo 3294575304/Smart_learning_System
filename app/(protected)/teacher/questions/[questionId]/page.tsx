@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import { notFound } from "next/navigation";
 
 import { QuestionActions } from "@/components/questions/question-actions";
+import { QuestionCourseObjectivePanel } from "@/components/questions/question-course-objective-panel";
 import { QuestionGraphBindingPanel } from "@/components/questions/question-graph-binding-panel";
 import { listTeacherBindingCourses } from "@/services/question-graph-bindings/service";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
@@ -10,6 +11,7 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import { questionIdSchema } from "@/services/questions/schemas";
 import { getTeacherQuestion } from "@/services/questions/service";
+import { listQuestionObjectiveCourses } from "@/services/question-objectives/editing";
 
 interface QuestionDetailPageProps {
   params: Promise<{ questionId: string }>;
@@ -35,6 +37,10 @@ export default async function QuestionDetailPage({
       ? new Set(question.answer.correctOptionLabels)
       : new Set<string>();
   const courses = await listTeacherBindingCourses(teacher.id);
+  const objectiveCourses = await listQuestionObjectiveCourses(
+    teacher.id,
+    question.id,
+  );
   const initialCourseId = (await searchParams).courseId;
   return (
     <section className="space-y-6">
@@ -43,7 +49,8 @@ export default async function QuestionDetailPage({
           <TeacherBackLink href="/teacher/questions">返回题库</TeacherBackLink>
           <h1 className="mt-2 text-2xl font-semibold">{question.title}</h1>
           <p className="mt-2 text-sm text-gray-500">
-            {QUESTION_TYPE_LABELS[question.type]} · 难度 {question.difficulty} ·{" "}
+            {QUESTION_TYPE_LABELS[question.type]} · 通用分类{" "}
+            {question.defaultObjectiveKind ?? "待分类"} ·{" "}
             {question.questionCategoryName ?? "待补课程分类"} · 创建者{" "}
             {question.creator.displayName}
           </p>
@@ -135,6 +142,10 @@ export default async function QuestionDetailPage({
         courses={courses}
         initialCourseId={initialCourseId}
         questionId={question.id}
+      />
+      <QuestionCourseObjectivePanel
+        questionId={question.id}
+        courses={objectiveCourses}
       />
     </section>
   );

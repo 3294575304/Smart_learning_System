@@ -197,16 +197,12 @@ export async function assembleAssignmentReview(
       questionCategoryId: course.questionCategoryId,
       graphBindings: { some: binding },
       ...(input.types.length ? { type: { in: input.types } } : {}),
-      ...(input.difficulty === undefined
-        ? {}
-        : { difficulty: input.difficulty }),
     },
     orderBy: [{ id: "asc" }],
     select: {
       id: true,
       title: true,
       type: true,
-      difficulty: true,
       graphBindings: { where: binding, select: { conceptId: true } },
     },
   });
@@ -269,7 +265,6 @@ export async function assembleAssignmentReview(
                 key: index + 1,
                 title: q.title.slice(0, 100),
                 type: q.type,
-                difficulty: q.difficulty,
                 concepts: q.conceptNames,
                 recent: q.recentClassrooms.length > 0,
               })),
@@ -340,7 +335,6 @@ export async function assembleAssignmentReview(
     id: q.id,
     title: q.title,
     type: q.type,
-    difficulty: q.difficulty,
     conceptNames: q.conceptNames,
     lastUsedAt: q.lastUsedAt,
     recentClassrooms: q.recentClassrooms,

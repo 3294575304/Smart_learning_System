@@ -100,7 +100,6 @@ const recommendationViewSelect =
         title: true,
         content: true,
         type: true,
-        difficulty: true,
         explanation: true,
         gradingConfig: true,
         programmingConfigRevisions: {
@@ -243,7 +242,6 @@ export async function buildRecommendationRequest(
   return {
     studentId: input.studentId,
     classroomId: classroom.id,
-    recommendedDifficulty: input.recommendedDifficulty,
     count: input.limit,
     requestId: input.requestId,
     teacherScope: {
@@ -440,7 +438,6 @@ export function createRecommendationCycleKey(
   const payload = JSON.stringify({
     studentId: request.studentId,
     classroomId: request.classroomId,
-    recommendedDifficulty: request.recommendedDifficulty,
     count: request.count,
     ...(request.requestId
       ? { requestId: request.requestId }
@@ -460,7 +457,7 @@ export function createRecommendationCycleKey(
     .update(payload)
     .digest("hex")
     .slice(0, 24);
-  return `recommendation-v1:${digest}`;
+  return `recommendation-v2:${digest}`;
 }
 
 export async function loadActiveRecommendationQuestionIds(
@@ -487,8 +484,6 @@ export async function loadEligibleRecommendationCandidates(
   teacherId: string,
   excludedQuestionIds: string[],
 ): Promise<RecommendationCandidate[]> {
-  const minimumDifficulty = Math.max(1, request.recommendedDifficulty - 1);
-  const maximumDifficulty = Math.min(5, request.recommendedDifficulty + 1);
   const allowedTypes =
     request.teacherScope.types.length === 0
       ? AUTO_GRADABLE_QUESTION_TYPES
@@ -509,7 +504,6 @@ export async function loadEligibleRecommendationCandidates(
       isAssignmentOnly: false,
       deletedAt: null,
       type: { in: allowedTypes },
-      difficulty: { gte: minimumDifficulty, lte: maximumDifficulty },
       ...(request.teacherScope.knowledgePointIds.length > 0
         ? {
             knowledgePointLinks: {
@@ -531,7 +525,6 @@ export async function loadEligibleRecommendationCandidates(
       id: true,
       title: true,
       type: true,
-      difficulty: true,
       status: true,
       deletedAt: true,
       tags: true,
@@ -550,7 +543,6 @@ export async function loadEligibleRecommendationCandidates(
     id: question.id,
     title: question.title,
     type: question.type,
-    difficulty: question.difficulty,
     status: question.status,
     deletedAt: question.deletedAt,
     tags: question.tags,
@@ -563,7 +555,7 @@ export async function loadEligibleRecommendationCandidates(
 export async function persistRecommendations(input: {
   studentId: string;
   cycleKey: string;
-  targetDifficulty: number;
+  targetDifficulty: number | null;
   source: RecommendationSource;
   analysisId: string | null;
   items: RecommendationItem[];

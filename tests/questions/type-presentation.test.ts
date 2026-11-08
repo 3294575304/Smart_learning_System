@@ -47,6 +47,7 @@ test("course filters explain unavailable concepts and retain course selection", 
           courseNo: "EN",
           classrooms: [],
           concepts: [],
+          objectives: [],
         },
       ],
       categories: [],
@@ -64,7 +65,6 @@ function question(type: QuestionType): QuestionDetail {
     title: "通用课程题目",
     content: "请给出解答过程。",
     type,
-    difficulty: 3,
     status: "ACTIVE",
     questionCategoryId: "ccategory00000000000000001",
     questionCategoryName: "Python 程序设计",
@@ -122,7 +122,6 @@ test("subjective question editing supports mathematics, English and code analysi
         title,
         content: detail.content,
         type: detail.type,
-        difficulty: detail.difficulty,
         options: [],
         answer: detail.answer,
         explanation: detail.explanation,
@@ -171,7 +170,7 @@ test("六种题型入口可见，选中状态明确，编程创建提供下一�
   assert.doesNotMatch(html, /name="correct-option"[^>]* checked/u);
 });
 
-test("高级筛选默认折叠，已选知识点或难度时展开，筛选值不丢失", () => {
+test("高级筛选默认折叠，已选知识点或课程目标时展开，筛选值不丢失", () => {
   const plain = render(
     React.createElement(QuestionFilters, {
       query: questionListQuerySchema.parse({}),
@@ -183,11 +182,11 @@ test("高级筛选默认折叠，已选知识点或难度时展开，筛选值�
   assert.doesNotMatch(plain, /<details[^>]*open/u);
   const selected = render(
     React.createElement(QuestionFilters, {
-      query: questionListQuerySchema.parse({ difficulty: 4 }),
+      query: questionListQuerySchema.parse({ defaultObjectiveKind: "ABILITY" }),
       courses: [],
       categories: [],
     }),
   );
   assert.match(selected, /<details[^>]*open/u);
-  assert.match(selected, /value="4" selected/u);
+  assert.match(selected, /value="ABILITY" selected/u);
 });

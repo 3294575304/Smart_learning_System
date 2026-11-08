@@ -36,7 +36,7 @@ export function persistenceFields(input: QuestionUpsertData) {
     title: input.title,
     content: input.content,
     type: input.type,
-    difficulty: input.difficulty,
+    defaultObjectiveKind: input.defaultObjectiveKind ?? null,
     visibility: QuestionVisibility.PUBLIC,
     status: QuestionStatus.ACTIVE,
     explanation: input.explanation,

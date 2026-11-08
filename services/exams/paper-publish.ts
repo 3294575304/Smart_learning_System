@@ -8,6 +8,7 @@ import { writeTeachingAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { createProgrammingConfigInTransaction } from "@/services/programming-questions/service";
+import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 import {
   optionCreateData,
   persistenceFields,
@@ -134,9 +135,23 @@ export async function publishPaperDraft(
           status: { not: "ARCHIVED" },
           questionCategory: { isActive: true },
         },
-        select: { id: true },
+        select: {
+          id: true,
+          currentPublishedSyllabusStructureId: true,
+          currentPublishedSyllabusStructure: {
+            select: { structureJson: true },
+          },
+        },
       });
       if (!course) throw new ResourceNotFoundError("课程不存在");
+      const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+        course.currentPublishedSyllabusStructure?.structureJson,
+      );
+      if (!course.currentPublishedSyllabusStructureId || !syllabus.success)
+        throw new AssignmentOperationError("请先发布课程教学大纲", 409);
+      const objectiveCodes = new Set(
+        syllabus.data.objectives.map((objective) => objective.code),
+      );
       const existing = await tx.question.findMany({
         where: {
           questionCategoryId: draft.questionCategoryId,
@@ -150,7 +165,11 @@ export async function publishPaperDraft(
         existing.map((question) => [examQuestionHash(question), question]),
       );
       const selectedHashes = new Set<string>();
-      const selected: Array<{ questionId: string; points: number }> = [];
+      const selected: Array<{
+        questionId: string;
+        points: number;
+        objectiveCode: string;
+      }> = [];
       for (const row of draft.questions) {
         if (row.reviewedRevision !== row.revision)
           throw new AssignmentOperationError(
@@ -158,6 +177,15 @@ export async function publishPaperDraft(
             400,
           );
         const draftQuestion = paperDraftQuestionSchema.parse(row.questionJson);
+        const objectiveCode = draftQuestion.objectiveCodes[0];
+        if (
+          draftQuestion.objectiveCodes.length !== 1 ||
+          !objectiveCodes.has(objectiveCode)
+        )
+          throw new AssignmentOperationError(
+            `第 ${row.ordinal} 题课程目标无效，请重新审核`,
+            400,
+          );
         const validated = questionUpsertSchema.safeParse({
           ...draftQuestion,
           questionCategoryId: draft.questionCategoryId,
@@ -238,6 +266,7 @@ export async function publishPaperDraft(
         selected.push({
           questionId: bankQuestion.id,
           points: Number(row.points),
+          objectiveCode,
         });
       }
       const examInput = examCreateSchema.parse({
@@ -249,7 +278,10 @@ export async function publishPaperDraft(
         startsAt: draft.startsAt,
         endsAt: draft.endsAt,
         allowedSwitches: draft.allowedSwitches,
-        questions: selected,
+        questions: selected.map(({ questionId, points }) => ({
+          questionId,
+          points,
+        })),
       });
       const exam = await createExamSessionInTransaction(
         tx,
@@ -257,6 +289,37 @@ export async function publishPaperDraft(
         examInput,
         context,
       );
+      for (const item of selected) {
+        await tx.questionCourseObjective.upsert({
+          where: {
+            questionId_courseId_syllabusStructureId: {
+              questionId: item.questionId,
+              courseId: draft.courseId,
+              syllabusStructureId: course.currentPublishedSyllabusStructureId,
+            },
+          },
+          create: {
+            questionId: item.questionId,
+            courseId: draft.courseId,
+            syllabusStructureId: course.currentPublishedSyllabusStructureId,
+            objectiveCode: item.objectiveCode,
+            source: "TEACHER",
+          },
+          update: { objectiveCode: item.objectiveCode, source: "TEACHER" },
+        });
+        await tx.examQuestionUse.update({
+          where: {
+            examSessionId_questionId: {
+              examSessionId: exam.id,
+              questionId: item.questionId,
+            },
+          },
+          data: {
+            objectiveCode: item.objectiveCode,
+            syllabusStructureId: course.currentPublishedSyllabusStructureId,
+          },
+        });
+      }
       await tx.examPaperDraft.update({
         where: { id: draft.id },
         data: {

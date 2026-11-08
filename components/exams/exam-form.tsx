@@ -9,7 +9,7 @@ type Q = {
   id: string;
   title: string;
   type: QuestionType;
-  difficulty: number;
+  objectiveCode: string | null;
   blocked: boolean;
 };
 type Selected = { questionId: string; title: string; points: number };
@@ -17,6 +17,7 @@ export function ExamForm({
   courses,
   classrooms,
   conceptGroups,
+  courseObjectives,
 }: {
   courses: { id: string; name: string; term: string }[];
   classrooms: { id: string; name: string; courseId: string | null }[];
@@ -28,6 +29,10 @@ export function ExamForm({
       nodes: { conceptId: string; name?: string }[];
     }[];
   }[];
+  courseObjectives: Array<{
+    courseId: string;
+    objectives: Array<{ code: string; title: string }>;
+  }>;
 }) {
   const router = useRouter();
   const requestIdRef = useRef<string | null>(null);
@@ -39,8 +44,8 @@ export function ExamForm({
   const [endsAt, setEndsAt] = useState("");
   const [allowedSwitches, setAllowedSwitches] = useState(2);
   const [questionType, setQuestionType] = useState("");
-  const [difficulty, setDifficulty] = useState("");
   const [conceptId, setConceptId] = useState("");
+  const [objectiveCode, setObjectiveCode] = useState("");
   const [count, setCount] = useState(10);
   const [questions, setQuestions] = useState<Q[]>([]);
   const [selected, setSelected] = useState<Selected[]>([]);
@@ -59,8 +64,8 @@ export function ExamForm({
         startsAt: new Date(startsAt).toISOString(),
       });
       if (questionType) params.set("questionType", questionType);
-      if (difficulty) params.set("difficulty", difficulty);
       if (conceptId) params.set("conceptId", conceptId);
+      if (objectiveCode) params.set("objectiveCode", objectiveCode);
       const response = await fetch(`/api/teacher/exams/questions?${params}`);
       const body = await response.json();
       if (!response.ok || !body.success)
@@ -155,6 +160,7 @@ export function ExamForm({
               setClassroomIds([]);
               setQuestions([]);
               setSelected([]);
+              setObjectiveCode("");
             }}
           >
             {courses.map((item) => (
@@ -265,16 +271,6 @@ export function ExamForm({
           </select>
           <select
             className="rounded border p-2"
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
-          >
-            <option value="">全部难度</option>
-            {[1, 2, 3, 4, 5].map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-          <select
-            className="rounded border p-2"
             value={conceptId}
             onChange={(e) => setConceptId(e.target.value)}
           >
@@ -288,6 +284,21 @@ export function ExamForm({
                   </option>
                 )),
               )}
+          </select>
+          <select
+            className="rounded border p-2"
+            value={objectiveCode}
+            onChange={(event) => setObjectiveCode(event.target.value)}
+            aria-label="课程目标筛选"
+          >
+            <option value="">全部课程目标</option>
+            {courseObjectives
+              .find((item) => item.courseId === courseId)
+              ?.objectives.map((objective) => (
+                <option key={objective.code} value={objective.code}>
+                  {objective.code} · {objective.title}
+                </option>
+              ))}
           </select>
           <button
             className="rounded border px-3"
@@ -319,7 +330,7 @@ export function ExamForm({
               className="flex justify-between border-b py-2 text-sm"
             >
               <span>
-                {item.title} · 难度 {item.difficulty}
+                {item.title}
                 {item.blocked ? " · 三年禁重" : ""}
               </span>
               <button

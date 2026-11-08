@@ -77,7 +77,6 @@ async function main() {
         title: "Python 判断练习",
         content: "range(5) 包含 5",
         type: "TRUE_FALSE",
-        difficulty: 2,
         status: "ACTIVE",
         visibility: "PRIVATE",
         explanation: "左闭右开",
@@ -422,7 +421,6 @@ async function main() {
       template: "TRUE_FALSE10",
       practiceCount: 1,
       count: 1,
-      difficulty: 2,
     });
     assert.equal(originalCycle.items.length, 1);
     const originalItem = originalCycle.items[0];
@@ -487,7 +485,6 @@ async function main() {
           title: "空答规则验收",
           content: "验收样本",
           type,
-          difficulty: 2,
           status: "ACTIVE",
           visibility: "PUBLIC",
           explanation: "空答为零分",

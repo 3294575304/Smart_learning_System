@@ -24,18 +24,6 @@ export const RECOMMENDATION_STATUS_STYLES: Record<
   EXPIRED: "bg-sky-100/70 text-gray-600",
 };
 
-export const DIFFICULTY_LABELS: Record<number, string> = {
-  1: "入门",
-  2: "简单",
-  3: "中等",
-  4: "较难",
-  5: "挑战",
-};
-
-export function difficultyLabel(difficulty: number): string {
-  return DIFFICULTY_LABELS[difficulty] ?? `${difficulty} 级`;
-}
-
 export function questionTypeLabel(type: QuestionType): string {
   return QUESTION_TYPE_LABELS[type];
 }

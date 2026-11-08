@@ -47,7 +47,6 @@ async function main() {
     content: "Python 中如何把用户输入的一行文本输出到标准输出？",
     type: QuestionType.SHORT_ANSWER,
     questionCategoryId: course.questionCategoryId,
-    difficulty: 3,
     options: [],
     answer: {
       kind: "REFERENCE",
@@ -458,7 +457,7 @@ async function main() {
                 factsSupported: true,
                 answerConsistent: true,
                 clear: true,
-                difficultyAligned: true,
+                objectiveAligned: true,
                 reason: "已核对",
               },
             ],
@@ -471,6 +470,7 @@ async function main() {
                     title: "len 函数多选题",
                     content: "下列关于 len 函数的说法，哪些正确？",
                     type: "MULTIPLE_CHOICE",
+                    objectiveCode: input.objectives[0].code,
                     difficulty: 3,
                     options: [
                       {
@@ -516,6 +516,7 @@ async function main() {
                       title: `序列长度题 ${input.sequence}`,
                       content: `字符串 s = 'abc'，请说明 len(s) 的结果，并解释原因。题号 ${input.sequence}`,
                       type: "SHORT_ANSWER",
+                      objectiveCode: input.objectives[0].code,
                       difficulty: 3,
                       options: [],
                       answer: {

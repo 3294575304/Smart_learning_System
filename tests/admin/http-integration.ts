@@ -89,7 +89,7 @@ interface DashboardDistributionsView {
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
-const port = 3107;
+const port = Number(process.env.ADMIN_HTTP_TEST_PORT ?? 13307);
 const baseUrl = `http://127.0.0.1:${port}`;
 const serverOutput: string[] = [];
 const sessionIds: string[] = [];
@@ -348,9 +348,15 @@ async function main(): Promise<void> {
       (await overviewResponse.json()) as ApiSuccess<DashboardOverviewView>;
     const [databaseUserCount, databaseClassroomCount, databaseQuestionCount] =
       await Promise.all([
-        prisma.user.count(),
-        prisma.classroom.count(),
-        prisma.question.count({ where: { deletedAt: null } }),
+        prisma.user.count({
+          where: { schoolId: admin.schoolId, deletedAt: null },
+        }),
+        prisma.classroom.count({
+          where: { teacher: { schoolId: admin.schoolId } },
+        }),
+        prisma.question.count({
+          where: { deletedAt: null, creator: { schoolId: admin.schoolId } },
+        }),
       ]);
     assert.equal(overview.data.users.total, databaseUserCount);
     assert.equal(overview.data.teaching.classroomTotal, databaseClassroomCount);

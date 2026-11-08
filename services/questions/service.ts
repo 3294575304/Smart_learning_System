@@ -19,6 +19,7 @@ import {
   requireActiveQuestionCourseCategory,
 } from "@/services/question-course-categories/service";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
+import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 import type { AuditRequestContext } from "@/services/audit/types";
 import type {
   DeleteQuestionResult,
@@ -101,7 +102,7 @@ function listItemFromRecord(
     title: question.title,
     content: question.content,
     type: question.type,
-    difficulty: question.difficulty,
+    defaultObjectiveKind: question.defaultObjectiveKind,
     status: question.status,
     questionCategoryId: question.questionCategoryId,
     questionCategoryName: question.questionCategory?.name ?? null,
@@ -146,7 +147,9 @@ function persistenceFields(input: QuestionUpsertData) {
     title: input.title,
     content: input.content,
     type: input.type,
-    difficulty: input.difficulty,
+    ...(input.defaultObjectiveKind !== undefined
+      ? { defaultObjectiveKind: input.defaultObjectiveKind }
+      : {}),
     visibility: QuestionVisibility.PUBLIC,
     status: QuestionStatus.ACTIVE,
     isAssignmentOnly: false,
@@ -285,6 +288,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
           },
         },
       },
+      currentPublishedSyllabusStructure: { select: { structureJson: true } },
     },
   });
   const groups = new Map<
@@ -301,6 +305,7 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
         string,
         ReturnType<typeof orderedCourseConceptOptions>[number]
       >;
+      objectives: Array<{ code: string; title: string }>;
     }
   >();
   for (const course of courses) {
@@ -322,10 +327,19 @@ export async function listTeacherQuestionCourseOptions(teacherId: string) {
         term: course.term,
         classrooms: [],
         concepts: new Map(),
+        objectives: [],
       };
       groups.set(key, group);
     }
     group.courseIds.push(course.id);
+    if (course.id === group.id) {
+      const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+        course.currentPublishedSyllabusStructure?.structureJson,
+      );
+      group.objectives = syllabus.success
+        ? syllabus.data.objectives.map(({ code, title }) => ({ code, title }))
+        : [];
+    }
     group.classrooms.push(
       ...course.classrooms.map((classroom) => classroom.name),
     );
@@ -366,6 +380,8 @@ export async function listTeacherQuestions(
   let courseGraphConceptIds: string[] | undefined;
   let courseIds: string[] = [];
   let courseQuestionCategoryId: string | undefined;
+  let syllabusStructureId: string | null = null;
+  let syllabusObjectives: Array<{ code: string; title: string }> = [];
   if (query.courseId) {
     const selectedCourse = await prisma.course.findFirst({
       where: {
@@ -379,11 +395,28 @@ export async function listTeacherQuestions(
         courseNo: true,
         name: true,
         term: true,
+        currentPublishedSyllabusStructureId: true,
+        currentPublishedSyllabusStructure: { select: { structureJson: true } },
       },
     });
     if (!selectedCourse)
       throw new ResourceNotFoundError("课程不存在或无权访问");
     courseQuestionCategoryId = selectedCourse.questionCategoryId;
+    syllabusStructureId = selectedCourse.currentPublishedSyllabusStructureId;
+    const parsedSyllabus = storedPublishableSyllabusStructureSchema.safeParse(
+      selectedCourse.currentPublishedSyllabusStructure?.structureJson,
+    );
+    syllabusObjectives = parsedSyllabus.success
+      ? parsedSyllabus.data.objectives.map(({ code, title }) => ({
+          code,
+          title,
+        }))
+      : [];
+    if (
+      query.objectiveCode &&
+      !syllabusObjectives.some(({ code }) => code === query.objectiveCode)
+    )
+      throw new ResourceNotFoundError("课程目标不存在");
     if (query.categoryId && query.categoryId !== courseQuestionCategoryId) {
       throw new ResourceNotFoundError("所选课程与课程分类不匹配");
     }
@@ -433,6 +466,8 @@ export async function listTeacherQuestions(
   } else if (query.courseConceptId) {
     throw new ResourceNotFoundError("请选择课程后再筛选课程知识点");
   }
+  if (query.objectiveCode && !query.courseId)
+    throw new ResourceNotFoundError("请选择课程后再筛选课程目标");
   const where: Prisma.QuestionWhereInput = {
     ...teacherQuestionAccessWhere(teacherId),
     deletedAt: null,
@@ -451,7 +486,20 @@ export async function listTeacherQuestions(
         }
       : {}),
     ...(query.type ? { type: query.type } : {}),
-    ...(query.difficulty ? { difficulty: query.difficulty } : {}),
+    ...(!syllabusStructureId && query.defaultObjectiveKind
+      ? { defaultObjectiveKind: query.defaultObjectiveKind }
+      : {}),
+    ...(query.objectiveCode && syllabusStructureId
+      ? {
+          courseObjectiveMappings: {
+            some: {
+              courseId: query.courseId,
+              syllabusStructureId,
+              objectiveCode: query.objectiveCode,
+            },
+          },
+        }
+      : {}),
     ...(query.knowledgePointId
       ? {
           knowledgePointLinks: {
@@ -498,6 +546,28 @@ export async function listTeacherQuestions(
       })
     : [];
   const conceptsByQuestion = new Map<string, typeof courseBindings>();
+  const objectiveMappings =
+    query.courseId && syllabusStructureId
+      ? await prisma.questionCourseObjective.findMany({
+          where: {
+            courseId: query.courseId,
+            syllabusStructureId,
+            questionId: { in: records.map(({ id }) => id) },
+          },
+          select: { questionId: true, objectiveCode: true },
+        })
+      : [];
+  const objectiveByQuestion = new Map(
+    objectiveMappings.map(({ questionId, objectiveCode }) => [
+      questionId,
+      {
+        code: objectiveCode,
+        title:
+          syllabusObjectives.find(({ code }) => code === objectiveCode)
+            ?.title ?? objectiveCode,
+      },
+    ]),
+  );
   for (const binding of courseBindings) {
     const current = conceptsByQuestion.get(binding.questionId) ?? [];
     current.push(binding);
@@ -507,6 +577,9 @@ export async function listTeacherQuestions(
   return {
     items: records.map((question) => ({
       ...listItemFromRecord(teacherId, question),
+      ...(query.courseId && syllabusStructureId
+        ? { courseObjective: objectiveByQuestion.get(question.id) ?? null }
+        : {}),
       ...(query.courseId
         ? {
             courseGraphConcepts: [

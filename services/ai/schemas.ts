@@ -46,7 +46,7 @@ export const studentAnalysisOutputSchema = z
     weakKnowledgePoints: z.array(weakKnowledgePointSchema).max(50),
     errorPatterns: z.array(errorPatternSchema).max(20),
     suggestions: z.array(z.string().trim().min(1).max(500)).max(20),
-    recommendedDifficulty: z.number().int().min(1).max(5),
+    recommendedDifficulty: z.number().int().min(1).max(5).optional(),
     confidence: z.number().min(0).max(1),
   })
   .strict()
@@ -84,7 +84,7 @@ export const studentAnalysisOutputSchema = z
 const analyzedAnswerSchema = z
   .object({
     knowledgePointIds: z.array(knowledgePointIdSchema).min(1).max(20),
-    difficulty: z.number().int().min(1).max(5),
+    difficulty: z.number().int().min(1).max(5).optional(),
     studentAnswer: z.string().max(4_000),
     standardAnswer: z.string().max(4_000),
     isCorrect: z.boolean(),
@@ -104,7 +104,7 @@ const historicalAccuracySchema = z
 const recentErrorSchema = z
   .object({
     knowledgePointIds: z.array(knowledgePointIdSchema).max(20),
-    difficulty: z.number().int().min(1).max(5),
+    difficulty: z.number().int().min(1).max(5).optional(),
     occurredAt: z.string().datetime(),
   })
   .strict();

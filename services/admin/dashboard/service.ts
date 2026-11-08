@@ -220,8 +220,8 @@ export async function getDashboardDistributions(
       key: row.type,
       count: row._count._all,
     })),
-    questionDifficulties: raw.questionDifficulties.map((row) => ({
-      key: row.difficulty,
+    questionObjectives: raw.questionObjectives.map((row) => ({
+      key: row.defaultObjectiveKind ?? "UNCLASSIFIED",
       count: row._count._all,
     })),
     assignmentStatuses: raw.assignmentStatuses.map((row) => ({

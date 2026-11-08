@@ -103,10 +103,6 @@ function filterCandidates(input: RecommendationAlgorithmInput): {
       excludedCounts.ALREADY_RECOMMENDED += 1;
       continue;
     }
-    if (Math.abs(candidate.difficulty - input.recommendedDifficulty) > 1) {
-      excludedCounts.DIFFICULTY_MISMATCH += 1;
-      continue;
-    }
     candidates.push(candidate);
   }
 
@@ -161,23 +157,12 @@ function scoreCandidates(
               Math.min(10, (matchedScores.length - 1) * 5),
           );
 
-    const difficultyDifference = Math.abs(
-      candidate.difficulty - input.recommendedDifficulty,
-    );
-    const difficultyScore = difficultyDifference === 0 ? 15 : 8;
-    let streakScore = 0;
-    if (input.consecutiveWrong >= 3) {
-      if (candidate.difficulty < input.recommendedDifficulty) {
-        streakScore = 20;
-      } else if (candidate.difficulty === input.recommendedDifficulty) {
-        streakScore = 10;
-      }
-    }
-
     return {
       candidate,
       matchedKnowledgePoints,
-      baseScore: weakKnowledgePointScore + difficultyScore + streakScore,
+      baseScore:
+        weakKnowledgePointScore +
+        (input.consecutiveWrong >= 3 && matchedKnowledgePoints.length ? 10 : 0),
     };
   });
 }
@@ -277,29 +262,10 @@ function buildRecommendationItem(
     reasons.push("位于教师指定练习范围，可作为补充巩固练习");
   }
 
-  reasonCodes.add("DIFFICULTY_MATCH");
-  if (item.candidate.difficulty === input.recommendedDifficulty) {
-    reasons.push(`难度 ${item.candidate.difficulty} 与推荐难度一致`);
-  } else {
-    reasons.push(
-      `难度 ${item.candidate.difficulty} 与推荐难度相差 1，符合难度范围`,
-    );
-  }
-
-  if (
-    input.consecutiveWrong >= 3 &&
-    item.candidate.difficulty <= input.recommendedDifficulty
-  ) {
+  if (input.consecutiveWrong >= 3 && primaryKnowledgePoint) {
     reasonCodes.add("FOUNDATION_AFTER_WRONG_STREAK");
-    reasons.push(`近期连续答错 ${input.consecutiveWrong} 道，优先安排基础巩固`);
-  }
-  if (
-    input.consecutiveCorrect >= 3 &&
-    item.candidate.difficulty === input.recommendedDifficulty + 1
-  ) {
-    reasonCodes.add("ADVANCED_AFTER_CORRECT_STREAK");
     reasons.push(
-      `近期连续答对 ${input.consecutiveCorrect} 道，加入少量进阶练习`,
+      `近期连续答错 ${input.consecutiveWrong} 道，优先复习相关知识点`,
     );
   }
   const recentErrorType = input.recentErrorTypes[0];
@@ -313,7 +279,6 @@ function buildRecommendationItem(
     questionId: item.candidate.id,
     title: item.candidate.title,
     type: item.candidate.type,
-    difficulty: item.candidate.difficulty,
     score: item.baseScore,
     primaryKnowledgePointId: primaryKnowledgePoint?.id ?? null,
     matchedKnowledgePoints: item.matchedKnowledgePoints,
@@ -331,57 +296,8 @@ export function recommendQuestions(
   const relaxedConstraints: string[] = [];
   const targetCount = Math.min(input.limit, scoredCandidates.length);
 
-  if (input.consecutiveWrong >= 3) {
-    const foundationPool = scoredCandidates.filter((item) =>
-      input.recommendedDifficulty === 1
-        ? item.candidate.difficulty === 1
-        : item.candidate.difficulty < input.recommendedDifficulty,
-    );
-    const foundationTarget = Math.min(
-      Math.ceil(targetCount * 0.6),
-      foundationPool.length,
-    );
-    selectBest(foundationPool, selected, foundationTarget);
-    if (targetCount > 0 && foundationTarget < Math.ceil(targetCount * 0.6)) {
-      relaxedConstraints.push("基础题数量不足，已使用同难度题目补足");
-    }
-    selectBest(scoredCandidates, selected, targetCount);
-  } else if (input.consecutiveCorrect >= 3 && targetCount >= 3) {
-    const advancedPool = scoredCandidates.filter(
-      (item) => item.candidate.difficulty === input.recommendedDifficulty + 1,
-    );
-    const corePool = scoredCandidates.filter(
-      (item) => item.candidate.difficulty !== input.recommendedDifficulty + 1,
-    );
-    const advancedQuota = Math.min(
-      Math.max(1, Math.floor(targetCount * 0.2)),
-      advancedPool.length,
-    );
-    selectBest(corePool, selected, targetCount - advancedQuota);
-    selectBest(
-      advancedPool,
-      selected,
-      Math.min(targetCount, selected.length + advancedQuota),
-    );
-    if (selected.length < targetCount) {
-      relaxedConstraints.push("常规题数量不足，已放宽进阶题比例");
-      selectBest(scoredCandidates, selected, targetCount);
-    }
-  } else {
-    selectBest(scoredCandidates, selected, targetCount);
-  }
-
-  const protectedAdvancedQuestionIds = new Set(
-    input.consecutiveCorrect >= 3
-      ? selected
-          .filter(
-            (item) =>
-              item.candidate.difficulty === input.recommendedDifficulty + 1,
-          )
-          .map((item) => item.candidate.id)
-      : [],
-  );
-  ensureTypeDiversity(selected, scoredCandidates, protectedAdvancedQuestionIds);
+  selectBest(scoredCandidates, selected, targetCount);
+  ensureTypeDiversity(selected, scoredCandidates, new Set());
   const representedTypes = [
     ...new Set(selected.map((item) => item.candidate.type)),
   ];

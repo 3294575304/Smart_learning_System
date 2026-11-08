@@ -16,7 +16,10 @@ export const questionImportCommitItemSchema = z.object({
   title: z.string(),
   content: z.string(),
   type: z.nativeEnum(QuestionType),
-  difficulty: z.number(),
+  defaultObjectiveKind: z
+    .enum(["KNOWLEDGE", "ABILITY", "LITERACY"])
+    .nullable()
+    .optional(),
   options: z.array(importOptionSchema).max(20),
   answer: questionAnswerSchema,
   explanation: z.string(),

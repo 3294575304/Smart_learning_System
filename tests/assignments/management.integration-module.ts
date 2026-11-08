@@ -401,7 +401,6 @@ export async function verifyAssignmentManagement(ids: {
           content: "草稿恢复与冻结测试",
           explanation: "测试解析",
           type: "SHORT_ANSWER",
-          difficulty: 1,
           referenceAnswer: "评分参考",
           status: "ACTIVE",
         },

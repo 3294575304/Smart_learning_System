@@ -177,7 +177,6 @@ export async function buildStudentAnalysisInput(
       knowledgePointIds: answer.assignmentQuestion.knowledgePointSnapshots.map(
         (item) => item.knowledgePointId,
       ),
-      difficulty: answer.assignmentQuestion.difficultySnapshot,
       studentAnswer: scrubSensitiveText(
         formatStudentAnswer(answer),
         privateValues,
@@ -206,7 +205,6 @@ export async function buildStudentAnalysisInput(
                 error.assignmentQuestion.knowledgePointSnapshots.map(
                   (item) => item.knowledgePointId,
                 ),
-              difficulty: error.assignmentQuestion.difficultySnapshot,
               occurredAt: error.firstWrongAt.toISOString(),
             },
           ]

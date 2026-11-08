@@ -1081,6 +1081,7 @@ model QuestionCourseCategory {
 model Course {
   examSessions                            ExamSession[]
   examPaperDrafts                         ExamPaperDraft[]
+  questionObjectiveMappings               QuestionCourseObjective[]
   categorizedQuestions                    Question[]       @relation("QuestionCategoryCourse")
   questionCategoryId                      String
   id                                      String           @id @default(cuid())
@@ -1307,6 +1308,7 @@ model PublishedSyllabusStructure {
   assessmentSchemeReviews       AssessmentSchemeReviewRevision[]
   publishedAssessmentSchemes    PublishedAssessmentScheme[]
   sourceCourseSurveys           CourseSurvey[]
+  questionObjectiveMappings     QuestionCourseObjective[]
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
@@ -2550,6 +2552,7 @@ model AIQuestionGenerationCandidate {
 model Question {
   examQuestionUses   ExamQuestionUse[]
   examImages         QuestionImage[]
+  courseObjectiveMappings QuestionCourseObjective[]
   categoryCourseId   String?
   categoryCourse     Course?                 @relation("QuestionCategoryCourse", fields: [categoryCourseId], references: [id], onDelete: Restrict)
   questionCategoryId String?
@@ -2560,7 +2563,7 @@ model Question {
   title              String
   content            String                  @db.Text
   type               QuestionType
-  difficulty         Int
+  defaultObjectiveKind String? @db.VarChar(20)
   visibility         QuestionVisibility      @default(PRIVATE)
   status             QuestionStatus          @default(DRAFT)
   explanation        String                  @db.Text
@@ -2599,8 +2602,8 @@ model Question {
   @@index([categoryCourseId, status, deletedAt])
   @@index([questionCategoryId, status, deletedAt])
   @@index([creatorId, status, deletedAt, createdAt])
-  @@index([visibility, status, deletedAt, type, difficulty])
-  @@index([type, difficulty])
+  @@index([visibility, status, deletedAt, type])
+  @@index([type])
 }
 
 model QuestionKnowledgeGraphBindingSet {
@@ -2980,6 +2983,8 @@ model ExamQuestionUse {
   questionId         String
   questionCategoryId String
   contentHash        String      @db.Char(64)
+  objectiveCode      String?     @db.VarChar(50)
+  syllabusStructureId String?
   startsAt           DateTime
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
@@ -2989,6 +2994,24 @@ model ExamQuestionUse {
   @@unique([examSessionId, questionId])
   @@index([questionCategoryId, questionId, startsAt])
   @@index([questionCategoryId, contentHash, startsAt])
+}
+
+model QuestionCourseObjective {
+  id                  String   @id @default(cuid())
+  questionId          String
+  courseId            String
+  syllabusStructureId String
+  objectiveCode       String   @db.VarChar(50)
+  source              String   @db.VarChar(20)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  question  Question                   @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  course    Course                     @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  syllabus  PublishedSyllabusStructure @relation(fields: [syllabusStructureId], references: [id], onDelete: Restrict)
+
+  @@unique([questionId, courseId, syllabusStructureId])
+  @@index([courseId, syllabusStructureId, objectiveCode])
 }
 
 model ExamSwitchEvent {
@@ -3016,7 +3039,7 @@ model AssignmentQuestion {
   titleSnapshot             String
   contentSnapshot           String                    @db.Text
   typeSnapshot              QuestionType
-  difficultySnapshot        Int
+  difficultySnapshot        Int?
   explanationSnapshot       String                    @db.Text
   correctBooleanSnapshot    Boolean?
   referenceAnswerSnapshot   String?                   @db.Text
@@ -3824,7 +3847,7 @@ model PersonalizedRecommendation {
   source             RecommendationSource
   status             RecommendationStatus @default(PENDING)
   reason             String               @db.Text
-  targetDifficulty   Int
+  targetDifficulty   Int?
   priority           Int                  @default(0)
   expiresAt          DateTime?
   startedAt          DateTime?

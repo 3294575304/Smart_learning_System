@@ -30,7 +30,6 @@ export function AssignmentAssemblyDialog({
 }) {
   const [conceptIds, setConceptIds] = useState<string[]>([]);
   const [types, setTypes] = useState<QuestionType[]>([]);
-  const [difficulty, setDifficulty] = useState("");
   const [count, setCount] = useState("10");
   const [result, setResult] = useState<AssignmentAssemblyReview | null>(null);
   const [checked, setChecked] = useState<string[]>([]);
@@ -75,7 +74,6 @@ export function AssignmentAssemblyDialog({
           conceptIds,
           types,
           count: requested,
-          difficulty: difficulty ? Number(difficulty) : undefined,
         }),
       },
     );
@@ -110,8 +108,7 @@ export function AssignmentAssemblyDialog({
           <span className="min-w-0 [overflow-wrap:anywhere]">
             <span className="block font-medium">{q.title}</span>
             <span className="block text-xs text-slate-600">
-              {QUESTION_TYPE_LABELS[q.type]} · 难度 {q.difficulty} ·{" "}
-              {q.conceptNames.join("、")}
+              {QUESTION_TYPE_LABELS[q.type]} · {q.conceptNames.join("、")}
             </span>
             <span className="block text-xs text-slate-700">{q.reason}</span>
             <span className="mt-1 block text-xs text-sky-800">
@@ -156,21 +153,6 @@ export function AssignmentAssemblyDialog({
                   onChange={(e) => setCount(e.target.value)}
                   className="h-10 w-20 rounded-lg border px-2"
                 />
-              </label>
-              <label className="flex items-center gap-2">
-                难度
-                <select
-                  value={difficulty}
-                  onChange={(e) => setDifficulty(e.target.value)}
-                  className="h-10 rounded-lg border px-2"
-                >
-                  <option value="">全部难度</option>
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <option key={value} value={value}>
-                      {value} 级
-                    </option>
-                  ))}
-                </select>
               </label>
             </div>
             <fieldset className="flex flex-wrap gap-x-3 gap-y-2">

@@ -10,10 +10,7 @@ import {
   type QuestionAnswerState,
 } from "@/components/assignments/question-answer-input";
 import { ProgrammingAttemptStatus } from "@/components/assignments/programming-attempt-status";
-import {
-  difficultyLabel,
-  questionTypeLabel,
-} from "@/components/recommendations/recommendation-presenters";
+import { questionTypeLabel } from "@/components/recommendations/recommendation-presenters";
 import type { getStudentPracticeSession } from "@/services/course-recommendations/service";
 
 type Session = Awaited<ReturnType<typeof getStudentPracticeSession>>;
@@ -267,10 +264,7 @@ export function CoursePracticeSession({ session }: Props) {
           <span>
             第 {index + 1} / {session.items.length} 题
           </span>
-          <span>
-            {questionTypeLabel(item.question.type)} · 难度{" "}
-            {difficultyLabel(item.question.difficulty)}
-          </span>
+          <span>{questionTypeLabel(item.question.type)}</span>
         </div>
         <h2 className="mt-4 text-lg font-semibold">{item.question.title}</h2>
         <p className="mt-4 text-sm leading-7 whitespace-pre-wrap">

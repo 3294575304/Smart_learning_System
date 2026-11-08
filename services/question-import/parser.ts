@@ -232,18 +232,6 @@ function inferImplicitOptions(lines: string[]): QuestionImportOption[] {
   }));
 }
 
-function parseDifficulty(text: string): number {
-  const raw =
-    text.match(/(?:难易度|难度)\s*[：:]?\s*(\d|[^\n]+)/u)?.[1]?.trim() ?? "";
-  if (/难/u.test(raw)) return 5;
-  if (/中/u.test(raw)) return 3;
-  if (/易/u.test(raw)) return 1;
-  const numeric = Number.parseInt(raw, 10);
-  return Number.isInteger(numeric) && numeric >= 1 && numeric <= 5
-    ? numeric
-    : 2;
-}
-
 function parseExplicitTags(text: string): string[] {
   const raw = text.match(/^\s*知识点\s*[：:]?\s*([^\n]+)/mu)?.[1] ?? "";
   return (raw.split(/[;；]\s*建议难度/u)[0] ?? "")
@@ -424,7 +412,6 @@ function draftFromBlock(
     ).slice(0, 120),
     content,
     type,
-    difficulty: parseDifficulty(visibleText),
     options:
       type === QuestionType.SINGLE_CHOICE ||
       type === QuestionType.MULTIPLE_CHOICE
@@ -509,7 +496,6 @@ function parseJsonDrafts(
       ),
       content,
       type,
-      difficulty: Number(item.difficulty ?? 2),
       options,
       answer:
         item.answer && typeof item.answer === "object"

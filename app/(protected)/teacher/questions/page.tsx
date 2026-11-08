@@ -41,7 +41,9 @@ function pageHref(query: QuestionListQuery, page: number): string {
   });
   if (query.keyword) params.set("keyword", query.keyword);
   if (query.type) params.set("type", query.type);
-  if (query.difficulty) params.set("difficulty", String(query.difficulty));
+  if (query.defaultObjectiveKind)
+    params.set("defaultObjectiveKind", query.defaultObjectiveKind);
+  if (query.objectiveCode) params.set("objectiveCode", query.objectiveCode);
   if (query.knowledgePointId)
     params.set("knowledgePointId", query.knowledgePointId);
   if (query.courseId) params.set("courseId", query.courseId);
@@ -108,7 +110,7 @@ export default async function QuestionsPage({
             </Link>
           </div>
         }
-        description="教师共同维护的课程题库。按课程分类管理题目，课程知识点、题型、难度和标签可继续筛选。"
+        description="教师共同维护的课程题库。可按课程目标、知识点、题型和标签筛选。"
         title="题库管理"
       />
       <QuestionFilters
@@ -124,7 +126,7 @@ export default async function QuestionsPage({
           {Math.max(questions.pagination.totalPages, 1)} 页
         </span>
       </div>
-      <QuestionList items={questions.items} />
+      <QuestionList items={questions.items} courseId={query.courseId} />
       {questions.pagination.totalPages > 1 ? (
         <nav
           aria-label="题库分页"

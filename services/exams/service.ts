@@ -24,6 +24,7 @@ import {
   plusThreeYears,
 } from "./fingerprint";
 import type { ExamCreateInput } from "./schemas";
+import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 
 async function ownedCourse(teacherId: string, courseId: string) {
   const course = await prisma.course.findFirst({
@@ -31,12 +32,44 @@ async function ownedCourse(teacherId: string, courseId: string) {
     select: {
       id: true,
       questionCategoryId: true,
+      currentPublishedSyllabusStructureId: true,
+      currentPublishedSyllabusStructure: { select: { structureJson: true } },
       questionCategory: { select: { isActive: true } },
     },
   });
   if (!course?.questionCategoryId || !course.questionCategory.isActive)
     throw new ResourceNotFoundError("课程不存在或未设置题库分类");
-  return { id: course.id, categoryId: course.questionCategoryId };
+  return {
+    id: course.id,
+    categoryId: course.questionCategoryId,
+    syllabusStructureId: course.currentPublishedSyllabusStructureId,
+    syllabusStructure: course.currentPublishedSyllabusStructure?.structureJson,
+  };
+}
+
+export async function listExamCourseObjectives(teacherId: string) {
+  const courses = await prisma.course.findMany({
+    where: {
+      teacherId,
+      status: { not: "ARCHIVED" },
+      currentPublishedSyllabusStructureId: { not: null },
+    },
+    select: {
+      id: true,
+      currentPublishedSyllabusStructure: { select: { structureJson: true } },
+    },
+  });
+  return courses.map((course) => {
+    const parsed = storedPublishableSyllabusStructureSchema.safeParse(
+      course.currentPublishedSyllabusStructure?.structureJson,
+    );
+    return {
+      courseId: course.id,
+      objectives: parsed.success
+        ? parsed.data.objectives.map(({ code, title }) => ({ code, title }))
+        : [],
+    };
+  });
 }
 
 async function recentUses(
@@ -62,11 +95,23 @@ export async function listEligibleExamQuestions(
     courseId: string;
     startsAt: Date;
     questionType?: string;
-    difficulty?: number;
+    objectiveCode?: string;
     conceptId?: string;
   },
 ) {
   const course = await ownedCourse(teacherId, input.courseId);
+  const syllabusStructureId = course.syllabusStructureId;
+  if (input.objectiveCode) {
+    const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+      course.syllabusStructure,
+    );
+    if (
+      !syllabusStructureId ||
+      !syllabus.success ||
+      !syllabus.data.objectives.some(({ code }) => code === input.objectiveCode)
+    )
+      throw new ResourceNotFoundError("课程目标不存在");
+  }
   const [questions, uses] = await Promise.all([
     prisma.question.findMany({
       where: {
@@ -77,7 +122,17 @@ export async function listEligibleExamQuestions(
         ...(input.questionType
           ? { type: input.questionType as "SINGLE_CHOICE" }
           : {}),
-        ...(input.difficulty ? { difficulty: input.difficulty } : {}),
+        ...(input.objectiveCode
+          ? {
+              courseObjectiveMappings: {
+                some: {
+                  courseId: input.courseId,
+                  syllabusStructureId: syllabusStructureId ?? undefined,
+                  objectiveCode: input.objectiveCode,
+                },
+              },
+            }
+          : {}),
         ...(input.conceptId
           ? {
               graphBindings: {
@@ -86,7 +141,18 @@ export async function listEligibleExamQuestions(
             }
           : {}),
       },
-      include: { options: true, examImages: true },
+      include: {
+        options: true,
+        examImages: true,
+        courseObjectiveMappings: {
+          where: {
+            courseId: input.courseId,
+            syllabusStructureId: course.syllabusStructureId ?? undefined,
+          },
+          select: { objectiveCode: true },
+          take: 1,
+        },
+      },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     }),
     recentUses(prisma, course.categoryId, input.startsAt),
@@ -102,7 +168,7 @@ export async function listEligibleExamQuestions(
       id: question.id,
       title: question.title,
       type: question.type,
-      difficulty: question.difficulty,
+      objectiveCode: question.courseObjectiveMappings[0]?.objectiveCode ?? null,
       blocked,
     };
   });
@@ -139,6 +205,21 @@ export async function createExamSessionInTransaction(
       throw new AssignmentOperationError("请求键已用于其他考试内容", 409);
     return existing;
   }
+  const currentCourse = await tx.course.findFirst({
+    where: {
+      id: course.id,
+      teacherId,
+      questionCategoryId: course.categoryId,
+      status: { not: "ARCHIVED" },
+    },
+    select: { currentPublishedSyllabusStructureId: true },
+  });
+  if (
+    !currentCourse ||
+    currentCourse.currentPublishedSyllabusStructureId !==
+      course.syllabusStructureId
+  )
+    throw new AssignmentOperationError("课程大纲版本已变化，请刷新后重试", 409);
   await tx.$queryRaw`SELECT id FROM "QuestionCourseCategory" WHERE id = ${course.categoryId} FOR UPDATE`;
   const classrooms = await tx.classroom.findMany({
     where: {
@@ -159,7 +240,18 @@ export async function createExamSessionInTransaction(
       deletedAt: null,
       isAssignmentOnly: false,
     },
-    include: { options: true, examImages: true },
+    include: {
+      options: true,
+      examImages: true,
+      courseObjectiveMappings: {
+        where: {
+          courseId: course.id,
+          syllabusStructureId: course.syllabusStructureId ?? undefined,
+        },
+        select: { objectiveCode: true },
+        take: 1,
+      },
+    },
   });
   if (questions.length !== input.questions.length)
     throw new AssignmentOperationError("部分题目不可用于本课程考试", 400);
@@ -200,6 +292,10 @@ export async function createExamSessionInTransaction(
           questionCategoryId: course.categoryId,
           contentHash: examQuestionHash(question),
           startsAt: input.startsAt,
+          objectiveCode: course.syllabusStructureId
+            ? (question.courseObjectiveMappings[0]?.objectiveCode ?? null)
+            : question.defaultObjectiveKind,
+          syllabusStructureId: course.syllabusStructureId,
         })),
       },
     },

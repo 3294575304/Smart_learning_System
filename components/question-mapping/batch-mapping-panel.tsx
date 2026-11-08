@@ -12,7 +12,6 @@ interface QuestionItem {
   id: string;
   title: string;
   type: string;
-  difficulty: number;
   isBound: boolean;
   bindingQuestionId: string;
 }
@@ -366,8 +365,7 @@ export function BatchMappingPanel({
                       />
                       <span className="text-sm">
                         <strong>{question.title}</strong> ·{" "}
-                        {QUESTION_TYPE_LABELS[question.type as QuestionType]} ·
-                        难度 {question.difficulty}
+                        {QUESTION_TYPE_LABELS[question.type as QuestionType]}
                       </span>
                     </label>
                   ))}

@@ -47,7 +47,7 @@ test("API generation schema maps safe defaults and rejects invalid limits", () =
     studentId: "student-1",
   });
   assert.equal(parsed.limit, 10);
-  assert.equal(parsed.recommendedDifficulty, 3);
+  assert.equal(parsed.recommendedDifficulty, undefined);
   assert.equal(
     recommendationGenerationApiSchema.safeParse({
       studentId: "student-1",

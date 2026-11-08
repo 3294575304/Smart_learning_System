@@ -24,7 +24,7 @@ interface ApiSuccess<T> {
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
-const port = 3107;
+const port = 13307;
 const baseUrl = `http://127.0.0.1:${port}`;
 const jobSecret = `notification-http-${randomBytes(24).toString("hex")}`;
 const serverOutput: string[] = [];

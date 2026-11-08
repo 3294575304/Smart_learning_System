@@ -168,7 +168,7 @@ test("only unexpired PENDING and STARTED recommendations block a new cycle", asy
   assert.equal(ids.has(completed.id), true);
 });
 
-test("answer streaks raise, lower, or preserve recommendation difficulty by business behavior", async (t) => {
+test("answer streaks preserve recommendation availability without difficulty filtering", async (t) => {
   for (const scenario of ["correct", "wrong", "normal"] as const) {
     await t.test(scenario, async () => {
       const factory = new RecommendationTestFactory(`difficulty_${scenario}`);
@@ -213,13 +213,8 @@ test("answer streaks raise, lower, or preserve recommendation difficulty by busi
           generationInput(student.id, classroom.id, count),
           { now },
         );
-        if (scenario === "correct") {
-          assert.ok(result.items.some((item) => item.difficulty === 4));
-        } else if (scenario === "wrong") {
-          assert.equal(result.items[0].difficulty, 2);
-        } else {
-          assert.equal(result.items[0].difficulty, 3);
-        }
+        assert.ok(result.items.length > 0);
+        assert.ok(result.items.every((item) => !item.reason.includes("难度")));
       } finally {
         await factory.cleanup();
       }

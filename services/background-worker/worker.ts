@@ -41,6 +41,14 @@ import {
   examPaperJobInputSchema,
 } from "@/services/exams/paper-ai";
 import { executeClaimedExamPaperJob } from "@/services/exams/paper-worker";
+import {
+  QUESTION_OBJECTIVE_JOB_TYPE,
+  questionObjectiveJobInputSchema,
+} from "@/services/question-objectives/schemas";
+import {
+  enqueueMissingQuestionObjectiveJobs,
+  executeClaimedQuestionObjectiveJob,
+} from "@/services/question-objectives/worker";
 import { SYLLABUS_PARSE_JOB_TYPE } from "@/services/syllabus-parsing/constants";
 import { executeClaimedSyllabusParseJob } from "@/services/syllabus-parsing/service";
 
@@ -53,6 +61,7 @@ const ACCEPTED_TYPES = [
   QUESTION_MAPPING_JOB_TYPE,
   AI_QUESTION_JOB_TYPE,
   EXAM_PAPER_JOB_TYPE,
+  QUESTION_OBJECTIVE_JOB_TYPE,
 ];
 
 function authorized(value: string | undefined, expected: string) {
@@ -96,6 +105,7 @@ export class PersistentLongTaskWorker {
           await recoverExpiredBackgroundJobs();
           await deleteExpiredQuestionSourceFiles();
           await finalizeExpiredExams();
+          await enqueueMissingQuestionObjectiveJobs();
           this.lastRecoveryAt = Date.now();
         }
         const job = await claimNextBackgroundJob({
@@ -246,6 +256,14 @@ export class PersistentLongTaskWorker {
         job.id,
         leaseId,
         examPaperJobInputSchema.parse(job.input),
+      );
+      return;
+    }
+    if (job.type === QUESTION_OBJECTIVE_JOB_TYPE) {
+      await executeClaimedQuestionObjectiveJob(
+        job.id,
+        leaseId,
+        questionObjectiveJobInputSchema.parse(job.input),
       );
       return;
     }

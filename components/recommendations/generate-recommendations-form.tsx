@@ -57,7 +57,6 @@ export function GenerateRecommendationsForm({
         requestId: generationRequest.current.id,
         studentId,
         classroomId,
-        recommendedDifficulty: 3,
         limit: 10,
       },
       { generate: generateRecommendations, refresh: () => router.refresh() },

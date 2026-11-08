@@ -42,13 +42,13 @@ test("analysis content renders all result sections and low-confidence guidance",
     "薄弱知识点",
     "主要错误模式",
     "学习建议",
-    "推荐练习难度",
     "分析置信度",
     "模型：model-v1",
     "本次分析置信度较低",
   ]) {
     assert.match(html, new RegExp(text, "u"));
   }
+  assert.doesNotMatch(html, /推荐练习难度/u);
   assert.match(html, /列表/u);
   assert.match(html, /循环结构/u);
   assert.doesNotMatch(html, /kp-mastered|kp-weak/u);

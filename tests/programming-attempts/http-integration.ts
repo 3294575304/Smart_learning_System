@@ -42,7 +42,7 @@ interface ExecutorSubmission {
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
 let archiveOnExecution: string | null = null;
-const applicationPort = 3116;
+const applicationPort = 13316;
 const executorPort = 3216;
 const baseUrl = `http://127.0.0.1:${applicationPort}`;
 const externalExecutorUrl =

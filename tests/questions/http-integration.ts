@@ -32,7 +32,7 @@ interface DeleteResponse {
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
-const port = 3102;
+const port = 13302;
 const baseUrl = `http://127.0.0.1:${port}`;
 const serverOutput: string[] = [];
 const sessionIds: string[] = [];
@@ -298,7 +298,7 @@ async function main(): Promise<void> {
       (
         await requestJson("/api/teacher/questions", teacherCookie, "POST", {
           ...questionInput(knowledgePoint.id, category.id),
-          difficulty: 9,
+          defaultObjectiveKind: "OTHER",
         })
       ).status,
       400,
@@ -389,7 +389,6 @@ async function main(): Promise<void> {
         title: `共享编程题-${randomBytes(3).toString("hex")}`,
         content: "实现两个整数相加。",
         type: QuestionType.PYTHON_PROGRAMMING,
-        difficulty: 2,
         status: "ACTIVE",
         explanation: "读取两个整数并输出其和。",
         gradingConfig: { mode: "ASYNC_PROGRAMMING" },

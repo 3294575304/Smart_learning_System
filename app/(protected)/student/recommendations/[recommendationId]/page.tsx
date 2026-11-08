@@ -5,7 +5,6 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import {
-  difficultyLabel,
   formatRecommendationTime,
   questionTypeLabel,
   RECOMMENDATION_STATUS_LABELS,
@@ -52,9 +51,6 @@ export default async function RecommendationDetailPage({ params }: Props) {
               <p className="mt-2 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full border px-2 py-1">
                   {questionTypeLabel(recommendation.type)}
-                </span>
-                <span className="rounded-full border px-2 py-1">
-                  难度：{difficultyLabel(recommendation.difficulty)}
                 </span>
               </p>
             </div>

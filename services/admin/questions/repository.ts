@@ -10,7 +10,7 @@ const adminQuestionSelect = Prisma.validator<Prisma.QuestionSelect>()({
   title: true,
   content: true,
   type: true,
-  difficulty: true,
+  defaultObjectiveKind: true,
   explanation: true,
   correctBoolean: true,
   referenceAnswer: true,

@@ -200,7 +200,6 @@ export async function listGraphConceptQuestions(
         title: true,
         content: true,
         type: true,
-        difficulty: true,
         status: true,
         graphBindings: {
           where: bindingScope,

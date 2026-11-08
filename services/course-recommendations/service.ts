@@ -47,6 +47,7 @@ import type {
   CourseTeachingProgressInput,
 } from "@/services/course-recommendations/schemas";
 import { RecommendationOperationError } from "@/services/recommendations/errors";
+import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 
 function ownedCourseWhere(teacherId: string, courseId: string) {
   return { id: courseId, teacherId };
@@ -154,6 +155,9 @@ export async function listStudentPracticeCourses(studentId: string) {
             select: {
               id: true,
               name: true,
+              currentPublishedSyllabusStructure: {
+                select: { structureJson: true },
+              },
               currentPublishedKnowledgeGraphVersion: {
                 select: {
                   versionNumber: true,
@@ -208,6 +212,18 @@ export async function listStudentPracticeCourses(studentId: string) {
           {
             courseId: classroom.course.id,
             courseName: classroom.course.name,
+            objectives: (() => {
+              const parsed = storedPublishableSyllabusStructureSchema.safeParse(
+                classroom.course.currentPublishedSyllabusStructure
+                  ?.structureJson,
+              );
+              return parsed.success
+                ? parsed.data.objectives.map(({ code, title }) => ({
+                    code,
+                    title,
+                  }))
+                : [];
+            })(),
             classroomId: classroom.id,
             classroomName: classroom.name,
             graphVersionNumber:
@@ -436,12 +452,12 @@ export async function updateRecommendationPolicy(
       const values = {
         weaknessWeight: input.weaknessWeight,
         prerequisiteWeight: input.prerequisiteWeight,
-        difficultyWeight: input.difficultyWeight,
+        difficultyWeight: 0,
         errorPatternWeight: input.errorPatternWeight,
         freshnessWeight: input.freshnessWeight,
         teacherPriorityWeight: input.teacherPriorityWeight,
         recentWindowDays: input.recentWindowDays,
-        difficultyTolerance: input.difficultyTolerance,
+        difficultyTolerance: 0,
         maxQuestionCount: input.maxQuestionCount,
       };
       const inputFingerprint = courseRecommendationFingerprint({
@@ -511,10 +527,45 @@ async function ensureDefaultPolicy(
     where: { id: courseId },
     select: { currentRecommendationPolicyRevisionId: true },
   });
-  if (course.currentRecommendationPolicyRevisionId)
-    return transaction.courseRecommendationPolicyRevision.findUniqueOrThrow({
-      where: { id: course.currentRecommendationPolicyRevisionId },
+  if (course.currentRecommendationPolicyRevisionId) {
+    const current =
+      await transaction.courseRecommendationPolicyRevision.findUniqueOrThrow({
+        where: { id: course.currentRecommendationPolicyRevisionId },
+      });
+    if (current.ruleVersion === COURSE_RECOMMENDATION_RULE_VERSION)
+      return current;
+    const values = {
+      weaknessWeight: current.weaknessWeight + current.difficultyWeight,
+      prerequisiteWeight: current.prerequisiteWeight,
+      difficultyWeight: 0,
+      errorPatternWeight: current.errorPatternWeight,
+      freshnessWeight: current.freshnessWeight,
+      teacherPriorityWeight: current.teacherPriorityWeight,
+      recentWindowDays: current.recentWindowDays,
+      difficultyTolerance: 0,
+      maxQuestionCount: current.maxQuestionCount,
+    };
+    const inputFingerprint = courseRecommendationFingerprint({
+      ruleVersion: COURSE_RECOMMENDATION_RULE_VERSION,
+      ...values,
     });
+    const upgraded =
+      await transaction.courseRecommendationPolicyRevision.create({
+        data: {
+          courseId,
+          createdById: teacherId,
+          revisionNumber: current.revisionNumber + 1,
+          ruleVersion: COURSE_RECOMMENDATION_RULE_VERSION,
+          inputFingerprint,
+          ...values,
+        },
+      });
+    await transaction.course.update({
+      where: { id: courseId },
+      data: { currentRecommendationPolicyRevisionId: upgraded.id },
+    });
+    return upgraded;
+  }
   const fingerprint = courseRecommendationFingerprint({
     ruleVersion: COURSE_RECOMMENDATION_RULE_VERSION,
     ...DEFAULT_COURSE_RECOMMENDATION_POLICY,
@@ -617,6 +668,8 @@ export async function createCourseRecommendations(
       id: true,
       teacherId: true,
       questionCategoryId: true,
+      currentPublishedSyllabusStructureId: true,
+      currentPublishedSyllabusStructure: { select: { structureJson: true } },
       currentPublishedKnowledgeGraphVersion: {
         select: { id: true, versionNumber: true },
       },
@@ -885,7 +938,8 @@ export async function createCourseRecommendations(
         conceptIds: [...requestedConceptIds].sort(),
         questionTypes: [...allowedTypes].sort(),
         count: targetCount,
-        difficulty: input.difficulty,
+        objectiveCode: input.objectiveCode ?? null,
+        syllabusStructureId: context.currentPublishedSyllabusStructureId,
         graphVersionId: graph.id,
         profileSnapshotId: profile?.id ?? null,
         masteryRevisionId: mastery?.id ?? null,
@@ -932,14 +986,23 @@ export async function createCourseRecommendations(
           ...activeRecommendations.map((item) => item.questionId),
         ]),
       ];
-      const minimumDifficulty = Math.max(
-        1,
-        input.difficulty - policy.difficultyTolerance,
-      );
-      const maximumDifficulty = Math.min(
-        5,
-        input.difficulty + policy.difficultyTolerance,
-      );
+      if (!context.currentPublishedSyllabusStructureId)
+        throw new RecommendationOperationError("请先发布课程教学大纲", 409);
+      if (input.objectiveCode) {
+        const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+          context.currentPublishedSyllabusStructure?.structureJson,
+        );
+        if (
+          !syllabus.success ||
+          !syllabus.data.objectives.some(
+            (item) => item.code === input.objectiveCode,
+          )
+        )
+          throw new RecommendationOperationError(
+            "课程目标不属于当前正式教学大纲",
+            400,
+          );
+      }
       const questions = await transaction.question.findMany({
         where: {
           ...courseQuestionSchoolWhere(courseId),
@@ -949,7 +1012,18 @@ export async function createCourseRecommendations(
           questionCategoryId: context.questionCategoryId,
           explanation: { not: "" },
           type: { in: allowedTypes },
-          difficulty: { gte: minimumDifficulty, lte: maximumDifficulty },
+          ...(input.objectiveCode
+            ? {
+                courseObjectiveMappings: {
+                  some: {
+                    courseId,
+                    syllabusStructureId:
+                      context.currentPublishedSyllabusStructureId,
+                    objectiveCode: input.objectiveCode,
+                  },
+                },
+              }
+            : {}),
           ...(favorite
             ? { id: favorite.questionId }
             : excludedQuestionIds.length
@@ -983,7 +1057,6 @@ export async function createCourseRecommendations(
           title: true,
           content: true,
           type: true,
-          difficulty: true,
           tags: true,
           graphBindings: {
             where: { courseId, conceptId: { in: requestedConceptIds } },
@@ -1051,8 +1124,10 @@ export async function createCourseRecommendations(
           evidenceState: item.evidenceState,
           masteryScore: item.masteryScore?.toNumber() ?? null,
         })),
-        requestedDifficulty: input.difficulty,
-        policy,
+        policy: {
+          ...policy,
+          weaknessWeight: policy.weaknessWeight + policy.difficultyWeight,
+        },
         limit: 1000,
       });
       const selectedQuestions = allowedTypes.flatMap((type) =>
@@ -1062,7 +1137,7 @@ export async function createCourseRecommendations(
       );
       if (!selectedQuestions.length)
         throw new RecommendationOperationError(
-          "当前知识点或章节暂无符合题型、难度和去重条件的已审核题目；请调整题型或难度后重试",
+          "当前知识点或章节暂无符合题型、课程目标和去重条件的已审核题目；请调整条件后重试",
           422,
         );
       if (
@@ -1086,7 +1161,7 @@ export async function createCourseRecommendations(
           422,
         );
       }
-      const cycleKey = `course-recommendation-v1:${inputFingerprint.slice(0, 32)}`;
+      const cycleKey = `course-recommendation-v2:${inputFingerprint.slice(0, 32)}`;
       const cycle = await transaction.courseRecommendationCycle.create({
         data: {
           studentId: actor.id,
@@ -1130,7 +1205,6 @@ export async function createCourseRecommendations(
                 ? "你主动收藏的题目，用于自主复习；本次作答不计入正式课程成绩。"
                 : item.reason,
               reasonCodes: item.reasonCodes,
-              targetDifficulty: input.difficulty,
               priority: item.score,
               rankingScore: item.score,
               expiresAt,
@@ -1201,7 +1275,6 @@ async function courseRecommendationCycleView(
               title: true,
               content: true,
               type: true,
-              difficulty: true,
             },
           },
         },
@@ -1289,7 +1362,6 @@ export async function getStudentPracticeSession(
               title: true,
               content: true,
               type: true,
-              difficulty: true,
               explanation: true,
               options: {
                 orderBy: [{ sortOrder: "asc" }, { id: "asc" }],

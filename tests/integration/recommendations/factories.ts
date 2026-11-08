@@ -53,6 +53,7 @@ export class RecommendationTestFactory {
   private readonly knowledgePointIds: string[] = [];
   private readonly assignmentIds: string[] = [];
   private questionCategoryPromise: Promise<{ id: string }> | null = null;
+  private schoolPromise: Promise<{ id: string }> | null = null;
 
   constructor(label: string) {
     this.prefix = testPrefix(label);
@@ -64,9 +65,11 @@ export class RecommendationTestFactory {
   }
 
   private async questionCategoryId(): Promise<string> {
+    const schoolId = (await this.school()).id;
     this.questionCategoryPromise ??=
       integrationPrisma.questionCourseCategory.create({
         data: {
+          schoolId,
           name: this.prefix,
           normalizedName: this.prefix,
         },
@@ -75,13 +78,23 @@ export class RecommendationTestFactory {
     return (await this.questionCategoryPromise).id;
   }
 
+  private async school(): Promise<{ id: string }> {
+    this.schoolPromise ??= integrationPrisma.school.create({
+      data: { key: this.prefix, name: this.prefix },
+      select: { id: true },
+    });
+    return this.schoolPromise;
+  }
+
   async user(
     role: Role,
     overrides: { status?: UserStatus; displayName?: string } = {},
   ): Promise<UserRecord> {
     const key = this.next(role.toLowerCase());
+    const schoolId = (await this.school()).id;
     const user = await integrationPrisma.user.create({
       data: {
+        schoolId,
         email: `${key}@example.test`,
         passwordHash: "integration-test-password-hash",
         role,
@@ -189,7 +202,6 @@ export class RecommendationTestFactory {
         title: overrides.title ?? key,
         content: `Content for ${key}`,
         type,
-        difficulty: overrides.difficulty ?? 3,
         visibility: overrides.visibility ?? QuestionVisibility.PRIVATE,
         status: overrides.status ?? QuestionStatus.ACTIVE,
         explanation: `Explanation for ${key}`,
@@ -251,7 +263,6 @@ export class RecommendationTestFactory {
         title: `${batch}_${String(index).padStart(4, "0")}`,
         content: `Bulk question ${index}`,
         type: QuestionType.FILL_BLANK,
-        difficulty: 3,
         visibility: QuestionVisibility.PRIVATE,
         status: QuestionStatus.ACTIVE,
         explanation: `Bulk explanation ${index}`,
@@ -321,7 +332,7 @@ export class RecommendationTestFactory {
             titleSnapshot: seed.question.title,
             contentSnapshot: seed.question.content,
             typeSnapshot: seed.question.type,
-            difficultySnapshot: seed.question.difficulty,
+            difficultySnapshot: null,
             explanationSnapshot: seed.question.explanation,
             correctBooleanSnapshot: seed.question.correctBoolean,
             referenceAnswerSnapshot: seed.question.referenceAnswer,
@@ -492,5 +503,10 @@ export class RecommendationTestFactory {
     await integrationPrisma.user.deleteMany({
       where: { id: { in: this.userIds } },
     });
+    if (this.schoolPromise) {
+      await integrationPrisma.school.delete({
+        where: { id: (await this.schoolPromise).id },
+      });
+    }
   }
 }

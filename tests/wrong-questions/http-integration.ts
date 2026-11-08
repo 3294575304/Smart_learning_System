@@ -49,7 +49,7 @@ interface MasteryResponse {
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
-const port = 3108;
+const port = 13308;
 const baseUrl = `http://127.0.0.1:${port}`;
 const serverOutput: string[] = [];
 const sessionIds: string[] = [];
@@ -343,7 +343,6 @@ async function main(): Promise<void> {
           title: `关键词 Alpha-${marker}`,
           content: `Alpha 题目内容 ${marker}`,
           type: QuestionType.FILL_BLANK,
-          difficulty: 2,
           visibility: QuestionVisibility.PRIVATE,
           status: QuestionStatus.ACTIVE,
           explanation: "Alpha 原题解析",
@@ -356,7 +355,6 @@ async function main(): Promise<void> {
           title: `关键词 Beta-${marker}`,
           content: `Beta 题目内容 ${marker}`,
           type: QuestionType.TRUE_FALSE,
-          difficulty: 2,
           visibility: QuestionVisibility.PRIVATE,
           status: QuestionStatus.ACTIVE,
           explanation: "Beta 原题解析",
@@ -369,7 +367,6 @@ async function main(): Promise<void> {
           title: `未发布秘密题-${marker}`,
           content: `SECRET-CONTENT-${marker}`,
           type: QuestionType.FILL_BLANK,
-          difficulty: 2,
           visibility: QuestionVisibility.PRIVATE,
           status: QuestionStatus.ACTIVE,
           explanation: `SECRET-EXPLANATION-${marker}`,
@@ -382,7 +379,6 @@ async function main(): Promise<void> {
           title: `推荐错题 Gamma-${marker}`,
           content: `Gamma 推荐题内容 ${marker}`,
           type: QuestionType.FILL_BLANK,
-          difficulty: 2,
           visibility: QuestionVisibility.PUBLIC,
           status: QuestionStatus.ACTIVE,
           explanation: "Gamma 推荐题解析",

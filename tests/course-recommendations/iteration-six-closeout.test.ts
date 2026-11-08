@@ -9,29 +9,26 @@ import { courseRecommendationPolicySchema } from "@/services/course-recommendati
 import { structureSelfReflection } from "@/services/self-reflections/ai";
 import { selfReflectionOutputSchema } from "@/services/self-reflections/schemas";
 
-test("课程自主练习支持 Python 题型且仍限制题量和难度", () => {
+test("课程自主练习支持 Python 题型且仍限制题量", () => {
   const parsed = courseRecommendationGenerationSchema.parse({
     classroomId: "classroom-1",
     conceptIds: ["concept-1"],
     questionTypes: [QuestionType.PYTHON_PROGRAMMING],
     count: 20,
-    difficulty: 5,
   });
   assert.deepEqual(parsed.questionTypes, [QuestionType.PYTHON_PROGRAMMING]);
   assert.equal(parsed.count, 20);
 });
 
-test("教师推荐策略要求六项权重合计 100%", () => {
+test("教师推荐策略要求五项权重合计 100%", () => {
   const base = {
     expectedRevision: 0,
-    weaknessWeight: 35,
+    weaknessWeight: 50,
     prerequisiteWeight: 20,
-    difficultyWeight: 15,
     errorPatternWeight: 10,
     freshnessWeight: 10,
     teacherPriorityWeight: 10,
     recentWindowDays: 14,
-    difficultyTolerance: 1,
     maxQuestionCount: 20,
   };
   assert.equal(courseRecommendationPolicySchema.safeParse(base).success, true);

@@ -10,7 +10,7 @@ const TEMPLATE = [
     title: "Python 中列表的下标从几开始？",
     content: "请填写题干。",
     type: "SINGLE_CHOICE",
-    difficulty: 1,
+    defaultObjectiveKind: "KNOWLEDGE",
     options: [
       { label: "A", content: "0", sortOrder: 1 },
       { label: "B", content: "1", sortOrder: 2 },

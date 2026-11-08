@@ -64,7 +64,6 @@ interface EditorQuestion {
   title: string;
   content?: string;
   type: QuestionType;
-  difficulty: number;
   questionCategoryId: string | null;
   questionCategory?: { name: string } | null;
   graphBindings?: Array<{ courseId: string; conceptId: string }>;
@@ -274,7 +273,6 @@ export function AssignmentForm({
             id: item.questionId,
             title: item.title,
             type: item.type,
-            difficulty: 1,
             questionCategoryId: null,
           }),
           points: item.points,
@@ -1401,8 +1399,7 @@ export function AssignmentForm({
                               </p>
                               <p className="mt-1 text-xs leading-5 text-slate-500">
                                 {question.questionCategory?.name ?? "课程题库"}{" "}
-                                · {QUESTION_TYPE_LABELS[question.type]} · 难度{" "}
-                                {question.difficulty}
+                                · {QUESTION_TYPE_LABELS[question.type]}
                               </p>
                             </div>
                             <button

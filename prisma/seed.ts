@@ -46,7 +46,6 @@ interface SeedQuestion {
   title: string;
   content: string;
   type: QuestionType;
-  difficulty: number;
   visibility: QuestionVisibility;
   explanation: string;
   tags?: string[];
@@ -162,7 +161,6 @@ async function upsertQuestion(seedQuestion: SeedQuestion) {
     title: seedQuestion.title,
     content: seedQuestion.content,
     type: seedQuestion.type,
-    difficulty: seedQuestion.difficulty,
     visibility: seedQuestion.visibility,
     status: QuestionStatus.ACTIVE,
     explanation: seedQuestion.explanation,
@@ -513,7 +511,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "OSI 与 TCP/IP 分层对应",
       content: "关于 TCP/IP 模型与 OSI 七层模型的对应关系，下列哪项最准确？",
       type: QuestionType.SINGLE_CHOICE,
-      difficulty: 1,
       visibility: QuestionVisibility.PRIVATE,
       explanation: "TCP/IP 的应用层通常吸收了 OSI 的应用层、表示层和会话层。",
       tags: ["分层模型", "基础概念"],
@@ -552,7 +549,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "HTTPS 安全特征",
       content: "关于 HTTP 与 HTTPS 的说法，哪些正确？",
       type: QuestionType.MULTIPLE_CHOICE,
-      difficulty: 2,
       visibility: QuestionVisibility.PRIVATE,
       explanation: "HTTPS 在 HTTP 之上引入 TLS，可提供加密、认证和完整性保护。",
       tags: ["HTTP", "HTTPS"],
@@ -591,7 +587,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "DNS、DHCP 与 ARP",
       content: "关于 DNS、DHCP 与 ARP 的说法，哪些正确？",
       type: QuestionType.MULTIPLE_CHOICE,
-      difficulty: 2,
       visibility: QuestionVisibility.PRIVATE,
       explanation:
         "DNS 负责域名解析，DHCP 负责自动分配网络配置，ARP 负责局域网内 IP 到 MAC 的映射。",
@@ -631,7 +626,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "TCP/IP 与 OSI 的层次关系",
       content: "TCP/IP 模型中通常把 OSI 的会话层、表示层和应用层合并为应用层。",
       type: QuestionType.TRUE_FALSE,
-      difficulty: 1,
       visibility: QuestionVisibility.PRIVATE,
       explanation:
         "TCP/IP 更强调实践中的分层实现，因此将上层协议整合成应用层。",
@@ -646,7 +640,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "ARP 的适用范围",
       content: "ARP 只能在局域网内解析主机的 MAC 地址，不能跨路由器使用。",
       type: QuestionType.TRUE_FALSE,
-      difficulty: 2,
       visibility: QuestionVisibility.PRIVATE,
       explanation: "ARP 依赖局域网广播，路由器不会直接转发 ARP 广播报文。",
       tags: ["ARP", "局域网"],
@@ -660,7 +653,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "HTTPS 默认端口",
       content: "HTTPS 默认使用的端口是 ____。",
       type: QuestionType.FILL_BLANK,
-      difficulty: 1,
       visibility: QuestionVisibility.PRIVATE,
       explanation: "HTTPS 的默认端口号是 443。",
       tags: ["HTTPS", "端口"],
@@ -674,7 +666,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "域名解析协议",
       content: "把域名解析为 IP 地址的协议是 ____。",
       type: QuestionType.FILL_BLANK,
-      difficulty: 1,
       visibility: QuestionVisibility.PRIVATE,
       explanation: "DNS 负责将域名映射到 IP 地址。",
       tags: ["DNS", "域名解析"],
@@ -689,7 +680,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       content:
         "请简述 OSI 七层模型与 TCP/IP 四层模型的关系，并说明为什么在实际网络讨论中更常直接说 TCP/IP 分层。",
       type: QuestionType.SHORT_ANSWER,
-      difficulty: 4,
       visibility: QuestionVisibility.PRIVATE,
       explanation:
         "OSI 提供概念框架，TCP/IP 则将上层功能压缩为实践中的应用层，更贴近真实协议栈。",
@@ -705,7 +695,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "TCP 与 UDP",
       content: "下列关于 TCP 与 UDP 的说法，哪一项正确？",
       type: QuestionType.SINGLE_CHOICE,
-      difficulty: 2,
       visibility: QuestionVisibility.PRIVATE,
       explanation: "TCP 面向连接并提供可靠传输，UDP 则更轻量但不保证可靠性。",
       tags: ["TCP", "UDP"],
@@ -744,7 +733,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "TCP 三次握手",
       content: "关于 TCP 三次握手，下列哪些说法正确？",
       type: QuestionType.MULTIPLE_CHOICE,
-      difficulty: 3,
       visibility: QuestionVisibility.PRIVATE,
       explanation:
         "三次握手用于确认双方收发能力，并协商初始序列号，从而建立可靠连接。",
@@ -784,7 +772,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "TCP 拥塞控制",
       content: "关于 TCP 拥塞控制，下列哪些说法正确？",
       type: QuestionType.MULTIPLE_CHOICE,
-      difficulty: 4,
       visibility: QuestionVisibility.PRIVATE,
       explanation:
         "慢开始阶段拥塞窗口通常指数增长，拥塞避免阶段则更接近线性增长，重复 ACK 可能触发快速重传。",
@@ -824,7 +811,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "最长前缀匹配",
       content: "路由器在转发数据包时通常使用最长前缀匹配来选择下一跳。",
       type: QuestionType.TRUE_FALSE,
-      difficulty: 2,
       visibility: QuestionVisibility.PRIVATE,
       explanation:
         "路由器会在路由表中选择与目的地址匹配度最高、前缀最长的条目。",
@@ -839,7 +825,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "TCP 确认位",
       content: "TCP 首部中用于确认对方数据已收到的控制位通常简称为 ____。",
       type: QuestionType.FILL_BLANK,
-      difficulty: 2,
       visibility: QuestionVisibility.PRIVATE,
       explanation: "ACK 标志位用于表示确认响应。",
       tags: ["TCP", "确认"],
@@ -853,7 +838,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: "子网前缀",
       content: "255.255.255.192 对应的前缀长度是 ____。",
       type: QuestionType.FILL_BLANK,
-      difficulty: 3,
       visibility: QuestionVisibility.PRIVATE,
       explanation: "255.255.255.192 对应 /26，单个子网可用主机数为 62。",
       tags: ["IP 地址", "子网划分"],
@@ -868,7 +852,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       content:
         "请说明 TCP 慢开始和拥塞避免的基本思想，并举例说明拥塞窗口如何变化。",
       type: QuestionType.SHORT_ANSWER,
-      difficulty: 5,
       visibility: QuestionVisibility.PRIVATE,
       explanation:
         "慢开始用于快速探测可用带宽，拥塞避免用于在接近阈值后平稳增加窗口并及时响应拥塞。",
@@ -890,7 +873,6 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
       title: seed.title,
       content: seed.content,
       type: seed.type,
-      difficulty: seed.difficulty,
       visibility: seed.visibility,
       explanation: seed.explanation,
       tags: seed.tags,
@@ -1017,7 +999,7 @@ async function seedUniversityDemo(schoolId: string): Promise<void> {
         titleSnapshot: item.question.title,
         contentSnapshot: item.question.content,
         typeSnapshot: item.question.type,
-        difficultySnapshot: item.question.difficulty,
+        difficultySnapshot: null,
         explanationSnapshot: item.question.explanation,
         correctBooleanSnapshot: item.question.correctBoolean,
         referenceAnswerSnapshot: item.question.referenceAnswer,
@@ -2751,7 +2733,6 @@ async function main(): Promise<void> {
     title: "基础加法",
     content: "2 + 3 的结果是多少？",
     type: QuestionType.SINGLE_CHOICE,
-    difficulty: 1,
     visibility: QuestionVisibility.PUBLIC,
     explanation: "将 2 与 3 相加得到 5。",
     tags: ["基础", "计算"],
@@ -2761,7 +2742,6 @@ async function main(): Promise<void> {
     title: "12 的因数",
     content: "下列哪些数是 12 的因数？",
     type: QuestionType.MULTIPLE_CHOICE,
-    difficulty: 3,
     // Intentionally retained as a historical teacher-created public question
     // so administrators can verify source labeling and revoke governance.
     visibility: QuestionVisibility.PUBLIC,
@@ -2774,7 +2754,6 @@ async function main(): Promise<void> {
     title: "三角形内角和",
     content: "平面三角形的内角和等于 180 度。",
     type: QuestionType.TRUE_FALSE,
-    difficulty: 1,
     visibility: QuestionVisibility.PRIVATE,
     explanation: "欧氏平面内任意三角形的内角和为 180 度。",
     tags: ["几何", "判断"],
@@ -2785,7 +2764,6 @@ async function main(): Promise<void> {
     title: "解一元一次方程",
     content: "解方程 3x = 12，x = ____。",
     type: QuestionType.FILL_BLANK,
-    difficulty: 3,
     visibility: QuestionVisibility.PRIVATE,
     explanation: "等式两边同时除以 3，得到 x = 4。",
     tags: ["方程", "填空"],
@@ -2797,7 +2775,6 @@ async function main(): Promise<void> {
     title: "说明勾股定理",
     content: "请用自己的语言说明勾股定理，并写出公式。",
     type: QuestionType.SHORT_ANSWER,
-    difficulty: 5,
     visibility: QuestionVisibility.PRIVATE,
     explanation: "直角三角形两条直角边平方和等于斜边平方。",
     tags: ["几何", "简答"],
@@ -2810,7 +2787,6 @@ async function main(): Promise<void> {
     title: "隔离测试私有题",
     content: "该题只应由李老师管理。",
     type: QuestionType.TRUE_FALSE,
-    difficulty: 1,
     visibility: QuestionVisibility.PRIVATE,
     explanation: "用于权限测试。",
     correctBoolean: true,
@@ -2888,7 +2864,7 @@ async function main(): Promise<void> {
       titleSnapshot: item.question.title,
       contentSnapshot: item.question.content,
       typeSnapshot: item.question.type,
-      difficultySnapshot: item.question.difficulty,
+      difficultySnapshot: null,
       explanationSnapshot: item.question.explanation,
       correctBooleanSnapshot: item.question.correctBoolean,
       referenceAnswerSnapshot: item.question.referenceAnswer,

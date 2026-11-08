@@ -36,7 +36,7 @@ interface GenerationResponse {
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
-const port = 3105;
+const port = 13305;
 const baseUrl = `http://127.0.0.1:${port}`;
 const serverOutput: string[] = [];
 const sessionIds: string[] = [];
@@ -380,7 +380,6 @@ async function main(): Promise<void> {
         title: "推荐练习提交测试题",
         content: "请选择正确选项",
         type: QuestionType.SINGLE_CHOICE,
-        difficulty: 3,
         visibility: QuestionVisibility.PRIVATE,
         status: QuestionStatus.ACTIVE,
         explanation: "A 是本题正确答案。",
@@ -796,11 +795,10 @@ async function main(): Promise<void> {
         await requestJson("/api/recommendations", outsiderCookie, "POST", {
           studentId: outsider.id,
           classroomId: otherClass.id,
-          recommendedDifficulty: 5,
           limit: 2,
         })
       ).status,
-      422,
+      200,
     );
 
     console.info(

@@ -662,7 +662,7 @@ export function QuestionFileImport({
               {
                 icon: ScanSearch,
                 title: "自动结构识别",
-                text: "识别题型、选项、答案与难度",
+                text: "识别题型、选项、答案与课程目标",
               },
               {
                 icon: Sparkles,
@@ -849,22 +849,22 @@ export function QuestionFileImport({
                         </select>
                       </label>
                       <label className="space-y-1 text-sm">
-                        <span className="font-medium">难度</span>
+                        <span className="font-medium">课程目标类型</span>
                         <select
                           className="w-full rounded-md border px-3 py-2"
                           onChange={(event) =>
                             updateQuestion(question.rowKey, (current) => ({
                               ...current,
-                              difficulty: Number(event.target.value),
+                              defaultObjectiveKind: (event.target.value ||
+                                null) as QuestionImportDraft["defaultObjectiveKind"],
                             }))
                           }
-                          value={question.difficulty}
+                          value={question.defaultObjectiveKind ?? ""}
                         >
-                          {[1, 2, 3, 4, 5].map((value) => (
-                            <option key={value} value={value}>
-                              {value}
-                            </option>
-                          ))}
+                          <option value="">AI 自动分类</option>
+                          <option value="KNOWLEDGE">1 · 知识</option>
+                          <option value="ABILITY">2 · 能力</option>
+                          <option value="LITERACY">3 · 素养</option>
                         </select>
                       </label>
                     </div>

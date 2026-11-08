@@ -21,7 +21,6 @@ export const editorAssistanceSchema = z.discriminatedUnion("action", [
         "请至少选择一个知识点",
       ),
       types: z.array(z.nativeEnum(QuestionType)).max(6),
-      difficulty: z.number().int().min(1).max(5).optional(),
       count: z.number().int().min(1).max(30),
       excludedIds: ids(200),
     })
@@ -42,7 +41,6 @@ export interface AssemblyProviderInput {
     key: number;
     title: string;
     type: string;
-    difficulty: number;
     concepts: string[];
     recent: boolean;
   }>;
@@ -68,7 +66,6 @@ export type AssignmentAssemblyReview = {
     id: string;
     title: string;
     type: QuestionType;
-    difficulty: number;
     conceptNames: string[];
     reason: string;
     lastUsedAt: string | null;

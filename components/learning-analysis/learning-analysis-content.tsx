@@ -181,13 +181,7 @@ export function LearningAnalysisContent({
         </section>
       </div>
 
-      <section className="grid gap-4 rounded-lg bg-sky-50/70 p-4 sm:grid-cols-2">
-        <div>
-          <h3 className="text-sm font-medium">推荐练习难度</h3>
-          <p className="mt-1 text-2xl font-semibold">
-            {analysis.recommendedDifficulty} / 5
-          </p>
-        </div>
+      <section className="rounded-lg bg-sky-50/70 p-4">
         <div>
           <h3 className="text-sm font-medium">分析置信度</h3>
           <div

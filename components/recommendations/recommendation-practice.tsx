@@ -16,10 +16,7 @@ import {
   type QuestionAnswerState,
 } from "@/components/assignments/question-answer-input";
 import { ProgrammingAttemptStatus } from "@/components/assignments/programming-attempt-status";
-import {
-  difficultyLabel,
-  questionTypeLabel,
-} from "@/components/recommendations/recommendation-presenters";
+import { questionTypeLabel } from "@/components/recommendations/recommendation-presenters";
 import {
   submitRecommendationPracticeRequest,
   submitRecommendationProgrammingRequest,
@@ -421,8 +418,7 @@ export function RecommendationPractice({
                   {recommendation.title}
                 </h2>
                 <p className="mt-2 text-sm text-gray-500">
-                  {questionTypeLabel(recommendation.type)} · 难度
-                  {difficultyLabel(recommendation.difficulty)}
+                  {questionTypeLabel(recommendation.type)}
                 </p>
               </div>
               {embedded ? (

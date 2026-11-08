@@ -15,7 +15,7 @@ function baseInput() {
     content: "2 + 3 等于多少？",
     type: QuestionType.SINGLE_CHOICE,
     questionCategoryId: "ccategory00000000000000001",
-    difficulty: 2,
+    defaultObjectiveKind: "KNOWLEDGE" as const,
     options: [
       { label: "A", content: "4", sortOrder: 1 },
       { label: "B", content: "5", sortOrder: 2 },
@@ -111,9 +111,12 @@ test("非选择题拒绝选项和错误的答案类型", () => {
   );
 });
 
-test("难度、知识点、标签和填空答案执行边界校验", () => {
+test("课程目标、知识点、标签和填空答案执行边界校验", () => {
   assert.equal(
-    questionUpsertSchema.safeParse({ ...baseInput(), difficulty: 6 }).success,
+    questionUpsertSchema.safeParse({
+      ...baseInput(),
+      defaultObjectiveKind: "INVALID",
+    }).success,
     false,
   );
   assert.equal(

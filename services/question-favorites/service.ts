@@ -43,7 +43,6 @@ const metadataSelect = Prisma.validator<Prisma.QuestionSelect>()({
   deletedAt: true,
   questionCategoryId: true,
   explanation: true,
-  difficulty: true,
   knowledgePointLinks: {
     select: { knowledgePoint: { select: { id: true, name: true } } },
   },
@@ -601,7 +600,6 @@ export async function practiceFavorite(
             .slice(0, 100),
           questionTypes: [record.question.type],
           count: 1,
-          difficulty: record.question.difficulty,
           mode: "PRACTICE",
         }),
         new Date(),
@@ -629,7 +627,7 @@ export async function practiceFavorite(
         status: "PENDING",
         source: "RULE",
         reason: "你主动收藏的题目，用于自主复习；本次作答不计入正式课程成绩。",
-        targetDifficulty: record.question.difficulty,
+        targetDifficulty: null,
         expiresAt: new Date(now.getTime() + 7 * 86400000),
       },
       select: { id: true },
@@ -668,7 +666,6 @@ export async function getFavoriteDetail(
     where: { id: questionId, ...schoolQuestionAccessWhere(actor.id) },
     select: {
       content: true,
-      difficulty: true,
       options: {
         orderBy: { sortOrder: "asc" },
         select: { id: true, label: true, content: true },

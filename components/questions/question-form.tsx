@@ -40,7 +40,7 @@ function emptyQuestion(categoryId: string): QuestionUpsertData {
     title: "",
     content: "",
     type: QuestionType.SINGLE_CHOICE,
-    difficulty: 3,
+    defaultObjectiveKind: null,
     questionCategoryId: categoryId,
     ...defaultAnswerDraft(QuestionType.SINGLE_CHOICE),
     explanation: "",
@@ -60,7 +60,12 @@ function initialQuestion(
     title: question.title,
     content: question.content,
     type: question.type,
-    difficulty: question.difficulty,
+    defaultObjectiveKind:
+      question.defaultObjectiveKind === "KNOWLEDGE" ||
+      question.defaultObjectiveKind === "ABILITY" ||
+      question.defaultObjectiveKind === "LITERACY"
+        ? question.defaultObjectiveKind
+        : null,
     questionCategoryId: question.questionCategoryId ?? "",
     revision: question.revision,
     options: question.options.map(({ label, content, sortOrder }) => ({
@@ -301,16 +306,17 @@ export function QuestionForm({
           </p>
         </label>
         <label className="space-y-2">
-          <span className="text-sm font-medium">难度（1–5）</span>
+          <span className="text-sm font-medium">默认课程目标类型</span>
           <select
             className="w-full rounded-md border px-3 py-2"
-            {...form.register("difficulty", { valueAsNumber: true })}
+            {...form.register("defaultObjectiveKind", {
+              setValueAs: (value: string) => value || null,
+            })}
           >
-            {[1, 2, 3, 4, 5].map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
+            <option value="">待分类</option>
+            <option value="KNOWLEDGE">1 · 知识</option>
+            <option value="ABILITY">2 · 能力</option>
+            <option value="LITERACY">3 · 素养</option>
           </select>
         </label>
       </div>

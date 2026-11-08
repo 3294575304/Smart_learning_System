@@ -2,7 +2,6 @@ import Link from "next/link";
 import React, { type ReactNode } from "react";
 
 import {
-  difficultyLabel,
   formatRecommendationTime,
   questionTypeLabel,
   RECOMMENDATION_STATUS_LABELS,
@@ -29,9 +28,6 @@ export function RecommendationCard({ action, item }: Props) {
           <p className="mt-2 flex flex-wrap gap-2 text-xs">
             <span className="rounded-full border px-2 py-1">
               {questionTypeLabel(item.type)}
-            </span>
-            <span className="rounded-full border px-2 py-1">
-              难度：{difficultyLabel(item.difficulty)}
             </span>
           </p>
         </div>

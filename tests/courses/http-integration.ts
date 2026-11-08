@@ -18,7 +18,7 @@ interface ApiSuccess<T> {
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
-const port = 3111;
+const port = 13311;
 const baseUrl = `http://127.0.0.1:${port}`;
 
 async function testPdf(title: string): Promise<Buffer> {
@@ -67,13 +67,13 @@ const createdStudentImportBatchIds: string[] = [];
 const createdImportUserIds: string[] = [];
 const uploadRoot = mkdtempSync(join(tmpdir(), "zhixue-http-syllabus-"));
 const workerSecret = randomBytes(32).toString("hex");
-const workerWakeUrl = "http://127.0.0.1:3112/wake";
+const workerWakeUrl = "http://127.0.0.1:13312/wake";
 const environment = {
   ...process.env,
   LOCAL_UPLOAD_ROOT: uploadRoot,
   AI_PROVIDER: "mock",
   BACKGROUND_JOB_WORKER_SECRET: workerSecret,
-  BACKGROUND_LONG_TASK_WORKER_WAKE_PORT: "3112",
+  BACKGROUND_LONG_TASK_WORKER_WAKE_PORT: "13312",
   BACKGROUND_LONG_TASK_WORKER_WAKE_URL: workerWakeUrl,
   BACKGROUND_LONG_TASK_WORKER_POLL_INTERVAL_MS: "100",
 };

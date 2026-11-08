@@ -14,7 +14,6 @@ test("中文题号编程文档保留全部题目和样例，不把题干中的�
         !row.issues.length,
     ),
   );
-  assert.equal(rows[0]?.difficulty, 3);
   assert.match(rows[0]?.content ?? "", /2024 2 29/);
   assert.doesNotMatch(rows[0]?.content ?? "", /B卷/);
   assert.match(rows[1]?.content ?? "", /100205/);

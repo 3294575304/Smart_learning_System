@@ -26,7 +26,7 @@ export function QuestionGovernanceList({
         <thead className="bg-gray-50 text-gray-600">
           <tr>
             <th className="px-4 py-3 font-medium">题目</th>
-            <th className="px-4 py-3 font-medium">题型/难度</th>
+            <th className="px-4 py-3 font-medium">题型/课程目标</th>
             <th className="px-4 py-3 font-medium">知识点</th>
             <th className="px-4 py-3 font-medium">来源</th>
             <th className="px-4 py-3 font-medium">状态</th>
@@ -48,7 +48,8 @@ export function QuestionGovernanceList({
                 </p>
               </td>
               <td className="px-4 py-3">
-                {QUESTION_TYPE_LABELS[question.type]} · {question.difficulty}
+                {QUESTION_TYPE_LABELS[question.type]} ·{" "}
+                {question.defaultObjectiveKind ?? "待分类"}
               </td>
               <td className="px-4 py-3">
                 {question.knowledgePoints.map((point) => point.name).join("、")}

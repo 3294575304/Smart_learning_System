@@ -21,7 +21,7 @@ export const reflectionPracticeRequestSchema = z
       .max(practiceTypes.length)
       .transform((types) => [...new Set(types)]),
     count: z.number().int().min(1).max(20),
-    difficulty: z.number().int().min(1).max(5),
+    difficulty: z.number().int().min(1).max(5).optional(),
   })
   .strict();
 

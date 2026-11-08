@@ -30,7 +30,7 @@ export const questionGenerationRequestSchema = z
       "EVALUATE",
       "CREATE",
     ]),
-    difficulty: z.number().int().min(1).max(5),
+    objectiveCode: z.string().trim().min(1).max(50).nullable().default(null),
     counts: z.record(
       z.nativeEnum(QuestionType),
       z.number().int().min(0).max(10),
@@ -69,7 +69,7 @@ export const generatedQuestionSchema = z.object({
     title: z.string(),
     content: z.string(),
     type: z.nativeEnum(QuestionType),
-    difficulty: z.number(),
+    objectiveCode: z.string().trim().min(1).max(50),
     options: z.array(
       z.object({
         label: z.string(),
@@ -98,7 +98,7 @@ export const questionReviewOutputSchema = z.object({
         factsSupported: z.boolean(),
         answerConsistent: z.boolean(),
         clear: z.boolean(),
-        difficultyAligned: z.boolean(),
+        objectiveAligned: z.boolean(),
         reason: z.string().max(300),
       }),
     )
@@ -146,7 +146,7 @@ export interface QuestionGenerationAIInput {
   type: QuestionType;
   count: number;
   sequence: number;
-  difficulty: number;
+  objectives: Array<{ code: string; title: string; description: string }>;
   bloomLevel: string;
   optionCount: number | null;
   evidence: Array<{ id: string; locator: string; text: string }>;
@@ -156,7 +156,7 @@ export interface QuestionGenerationAIInput {
 
 export interface QuestionGenerationReviewInput {
   type: QuestionType;
-  difficulty: number;
+  objectives: QuestionGenerationAIInput["objectives"];
   evidence: QuestionGenerationAIInput["evidence"];
   draftText: string;
   count: number;

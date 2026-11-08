@@ -17,7 +17,6 @@ function candidate(
     id,
     title: `题目 ${id}`,
     type: QuestionType.SINGLE_CHOICE,
-    difficulty: 2,
     status: QuestionStatus.ACTIVE,
     deletedAt: null,
     tags: ["algebra"],
@@ -37,7 +36,6 @@ function algorithmInput(
     recentCompletedQuestionIds: [],
     activeRecommendationQuestionIds: [],
     recentErrorTypes: ["CONCEPT"],
-    recommendedDifficulty: 2,
     consecutiveCorrect: 0,
     consecutiveWrong: 0,
     teacherScope: {
@@ -53,7 +51,7 @@ function algorithmInput(
   };
 }
 
-test("hard filters remove unavailable, recent, duplicate and difficulty-mismatched questions", () => {
+test("hard filters remove unavailable, recent and duplicate questions without difficulty filtering", () => {
   const valid = candidate("valid");
   const input = algorithmInput(
     [
@@ -63,7 +61,7 @@ test("hard filters remove unavailable, recent, duplicate and difficulty-mismatch
       candidate("deleted", { deletedAt: new Date() }),
       candidate("recent"),
       candidate("active-recommendation"),
-      candidate("too-hard", { difficulty: 4 }),
+      candidate("too-hard"),
       candidate("outside-scope"),
     ],
     {
@@ -89,14 +87,14 @@ test("hard filters remove unavailable, recent, duplicate and difficulty-mismatch
   const result = recommendQuestions(input);
   assert.deepEqual(
     result.items.map((item) => item.questionId),
-    ["valid"],
+    ["too-hard", "valid"],
   );
   assert.equal(result.metadata.excludedCounts.DUPLICATE_CANDIDATE, 1);
   assert.equal(result.metadata.excludedCounts.UNAVAILABLE, 2);
   assert.equal(result.metadata.excludedCounts.UNAUTHORIZED, 0);
   assert.equal(result.metadata.excludedCounts.RECENTLY_COMPLETED, 1);
   assert.equal(result.metadata.excludedCounts.ALREADY_RECOMMENDED, 1);
-  assert.equal(result.metadata.excludedCounts.DIFFICULTY_MISMATCH, 1);
+  assert.equal(result.metadata.excludedCounts.DIFFICULTY_MISMATCH, 0);
   assert.equal(result.metadata.excludedCounts.OUTSIDE_TEACHER_SCOPE, 1);
 });
 
@@ -170,41 +168,39 @@ test("teacher knowledge-point, type and tag scope is an intersection", () => {
   assert.equal(result.metadata.excludedCounts.OUTSIDE_TEACHER_SCOPE, 3);
 });
 
-test("a wrong streak reserves the first positions for foundation questions", () => {
+test("a wrong streak prioritizes weak knowledge evidence regardless of difficulty", () => {
   const result = recommendQuestions(
     algorithmInput(
       [
-        candidate("target", { difficulty: 3 }),
+        candidate("target"),
         candidate("foundation", {
-          difficulty: 2,
           knowledgePoints: [
             { id: "kp-strong", name: "整数运算", isActive: true },
           ],
         }),
       ],
       {
-        recommendedDifficulty: 3,
         consecutiveWrong: 4,
         limit: 2,
       },
     ),
   );
 
-  assert.equal(result.items[0].questionId, "foundation");
+  assert.equal(result.items[0].questionId, "target");
   assert.ok(
     result.items[0].reasonCodes.includes("FOUNDATION_AFTER_WRONG_STREAK"),
   );
 });
 
-test("a correct streak adds only a small advanced-question allocation", () => {
+test("a correct streak does not allocate questions by difficulty", () => {
   const candidates = [
     candidate("core-1"),
     candidate("core-2", { type: QuestionType.TRUE_FALSE }),
     candidate("core-3"),
     candidate("core-4", { type: QuestionType.FILL_BLANK }),
-    candidate("advanced-1", { difficulty: 3 }),
-    candidate("advanced-2", { difficulty: 3 }),
-    candidate("advanced-3", { difficulty: 3 }),
+    candidate("advanced-1"),
+    candidate("advanced-2"),
+    candidate("advanced-3"),
   ];
   const result = recommendQuestions(
     algorithmInput(candidates, {
@@ -213,10 +209,10 @@ test("a correct streak adds only a small advanced-question allocation", () => {
     }),
   );
 
-  assert.equal(result.items.filter((item) => item.difficulty === 3).length, 1);
+  assert.equal(result.items.length, 5);
   assert.ok(
-    result.items.some((item) =>
-      item.reasonCodes.includes("ADVANCED_AFTER_CORRECT_STREAK"),
+    result.items.every(
+      (item) => !item.reasonCodes.includes("ADVANCED_AFTER_CORRECT_STREAK"),
     ),
   );
 });

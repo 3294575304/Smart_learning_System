@@ -16,7 +16,6 @@ function item(questionId: string): RecommendationItem {
     questionId,
     title: "一元一次方程",
     type: QuestionType.FILL_BLANK,
-    difficulty: 2,
     score: 70,
     primaryKnowledgePointId: "kp-1",
     matchedKnowledgePoints: [

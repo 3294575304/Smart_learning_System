@@ -15,6 +15,7 @@ interface CourseOption {
   name: string;
   term: string;
   questionCategoryId: string;
+  objectives: Array<{ code: string; title: string }>;
   currentPublishedKnowledgeGraphVersion: {
     id: string;
     nodes: Array<{
@@ -117,7 +118,7 @@ function readableFailure(code: string): string {
   if (code === "REVIEW_REJECTED") return "AI 复核发现事实、答案或表述问题";
   const messages: Record<string, string> = {
     题目数量与请求不一致: "AI 返回的题目数量不符",
-    题型或难度与请求不一致: "题型或难度不符合设置",
+    题型与请求不一致: "题型不符合设置",
     选项数量与请求不一致: "选项数量不符合设置",
     编程判题配置缺失或多余: "编程题判题配置无效",
     "编程题测试用例超过 10 个": "编程题测试用例过多",
@@ -158,7 +159,7 @@ export function AIQuestionWorkspace({
   const [file, setFile] = useState<File | null>(null);
   const [bloomLevel, setBloomLevel] =
     useState<(typeof BLOOM)[number][0]>("REMEMBER");
-  const [difficulty, setDifficulty] = useState(3);
+  const [objectiveCode, setObjectiveCode] = useState("");
   const [counts, setCounts] = useState(initialCounts);
   const [singleChoiceOptions, setSingleChoiceOptions] = useState(4);
   const [multipleChoiceOptions, setMultipleChoiceOptions] = useState(4);
@@ -244,7 +245,7 @@ export function AIQuestionWorkspace({
         conceptIds,
         sourceQuestionId: mode === "ANALOGY" ? sourceQuestionId : null,
         bloomLevel,
-        difficulty,
+        objectiveCode: objectiveCode || null,
         counts,
         singleChoiceOptions,
         multipleChoiceOptions,
@@ -402,6 +403,7 @@ export function AIQuestionWorkspace({
                 value={courseId}
                 onChange={(event) => {
                   setCourseId(event.target.value);
+                  setObjectiveCode("");
                   setChapterCode("");
                   setConceptIds([]);
                   setSourceQuestionId("");
@@ -535,16 +537,24 @@ export function AIQuestionWorkspace({
               ))}
             </div>
           </fieldset>
-          <label className="mt-5 block max-w-xs space-y-1 text-sm">
-            难度
+          <label className="mt-5 block max-w-sm space-y-1 text-sm">
+            课程目标
             <select
               className="w-full rounded-lg border p-2"
-              value={difficulty}
-              onChange={(event) => setDifficulty(Number(event.target.value))}
+              value={objectiveCode}
+              onChange={(event) => setObjectiveCode(event.target.value)}
             >
-              {[1, 2, 3, 4, 5].map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              <option value="">AI 自动判断</option>
+              {(course?.objectives.length
+                ? course.objectives
+                : [
+                    { code: "KNOWLEDGE", title: "1 · 知识" },
+                    { code: "ABILITY", title: "2 · 能力" },
+                    { code: "LITERACY", title: "3 · 素养" },
+                  ]
+              ).map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.code} · {item.title}
                 </option>
               ))}
             </select>
@@ -730,6 +740,10 @@ export function AIQuestionWorkspace({
                         (node) => node.nodeType === "KNOWLEDGE_POINT",
                       ) ?? []
                   }
+                  objectives={
+                    options.courses.find((entry) => entry.id === batch.courseId)
+                      ?.objectives ?? []
+                  }
                   onChange={() => void loadBatch(batch.id)}
                   onError={setError}
                   selectedConceptId={
@@ -810,6 +824,7 @@ function CandidateReview({
   candidate,
   batchId,
   graphNodes,
+  objectives,
   onChange,
   onError,
   selectedConceptId,
@@ -824,6 +839,7 @@ function CandidateReview({
     code: string;
     name: string;
   }>;
+  objectives: Array<{ code: string; title: string }>;
   onChange: () => void;
   onError: (message: string) => void;
   selectedConceptId: string;
@@ -892,7 +908,7 @@ function CandidateReview({
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <span>第 {candidate.ordinal} 题</span>
         <span>{QUESTION_TYPE_LABELS[candidate.questionJson.type]}</span>
-        <span>难度 {candidate.questionJson.difficulty}</span>
+        <span>课程目标 {candidate.questionJson.objectiveCode ?? "待分类"}</span>
         <span>{candidate.status}</span>
       </div>
       {candidate.status === "CONFIRMED" ? (
@@ -907,6 +923,33 @@ function CandidateReview({
       )}
       {editing ? (
         <div className="mt-4 space-y-3 text-sm">
+          <label className="block">
+            主课程目标
+            <select
+              className="mt-1 block rounded border p-2"
+              value={question.objectiveCode ?? ""}
+              onChange={(event) =>
+                setQuestion({
+                  ...question,
+                  objectiveCode: event.target.value || null,
+                })
+              }
+            >
+              <option value="">请选择</option>
+              {(objectives.length
+                ? objectives
+                : [
+                    { code: "KNOWLEDGE", title: "1 · 知识" },
+                    { code: "ABILITY", title: "2 · 能力" },
+                    { code: "LITERACY", title: "3 · 素养" },
+                  ]
+              ).map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.code} · {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="block">
             标题
             <input

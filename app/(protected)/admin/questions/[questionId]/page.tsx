@@ -33,7 +33,8 @@ export default async function AdminQuestionDetailPage({ params }: PageProps) {
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">{question.title}</h1>
           <p className="mt-2 text-sm text-gray-500">
-            {QUESTION_TYPE_LABELS[question.type]} · 难度 {question.difficulty} ·{" "}
+            {QUESTION_TYPE_LABELS[question.type]} · 课程目标{" "}
+            {question.defaultObjectiveKind ?? "待分类"} ·{" "}
             {question.questionCategoryName ?? "待补课程分类"} ·{" "}
             {question.status === "ACTIVE"
               ? "正常"

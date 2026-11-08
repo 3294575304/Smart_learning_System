@@ -35,7 +35,7 @@ export const recommendationRequestSchema = z
     requestId: z.string().uuid().optional(),
     studentId: recommendationResourceIdSchema,
     classroomId: recommendationResourceIdSchema,
-    recommendedDifficulty: z.number().int().min(1).max(5),
+    recommendedDifficulty: z.number().int().min(1).max(5).optional(),
     count: z.number().int().min(1).max(50).default(10),
     teacherScope: teacherPracticeScopeSchema,
   })
@@ -50,7 +50,7 @@ export const recommendationGenerationApiSchema = z
     requestId: z.string().uuid().optional(),
     studentId: recommendationResourceIdSchema,
     classroomId: recommendationResourceIdSchema.optional(),
-    recommendedDifficulty: z.number().int().min(1).max(5).default(3),
+    recommendedDifficulty: z.number().int().min(1).max(5).optional(),
     limit: z.number().int().min(1).max(50).default(10),
   })
   .strict();

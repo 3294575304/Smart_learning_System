@@ -25,6 +25,7 @@ interface QuestionFiltersProps {
       name: string;
       chapterName?: string;
     }>;
+    objectives: Array<{ code: string; title: string }>;
   }>;
 }
 
@@ -55,7 +56,9 @@ export function QuestionFilters({
     params.set("pageSize", String(query.pageSize));
     if (keyword.trim()) params.set("keyword", keyword.trim());
     if (query.type) params.set("type", query.type);
-    if (query.difficulty) params.set("difficulty", String(query.difficulty));
+    if (query.defaultObjectiveKind)
+      params.set("defaultObjectiveKind", query.defaultObjectiveKind);
+    if (query.objectiveCode) params.set("objectiveCode", query.objectiveCode);
     if (query.courseId) params.set("courseId", query.courseId);
     if (query.categoryId) params.set("categoryId", query.categoryId);
     if (query.courseConceptId)
@@ -63,12 +66,15 @@ export function QuestionFilters({
     params.set(name, value);
     if (name === "courseId") {
       params.delete("courseConceptId");
+      params.delete("objectiveCode");
+      params.delete("defaultObjectiveKind");
       const course = courses.find((item) => item.id === value);
       if (course) params.set("categoryId", course.questionCategoryId);
     }
     if (name === "categoryId") {
       params.delete("courseId");
       params.delete("courseConceptId");
+      params.delete("objectiveCode");
     }
     params.delete("knowledgePointId");
     params.set("page", "1");
@@ -169,12 +175,20 @@ export function QuestionFilters({
         </label>
       </>
       <details
-        open={Boolean(query.courseConceptId || query.difficulty)}
+        open={Boolean(
+          query.courseConceptId ||
+          query.defaultObjectiveKind ||
+          query.objectiveCode,
+        )}
         className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 sm:col-span-2 lg:col-span-3"
       >
         <summary className="text-xs font-medium text-sky-700">
-          更多筛选 · 知识点与难度
-          {query.courseConceptId || query.difficulty ? "（已启用）" : ""}
+          更多筛选 · 知识点与课程目标
+          {query.courseConceptId ||
+          query.defaultObjectiveKind ||
+          query.objectiveCode
+            ? "（已启用）"
+            : ""}
         </summary>
         <div className="mt-3 grid max-w-2xl gap-3 sm:grid-cols-2">
           <label className="space-y-1">
@@ -206,19 +220,36 @@ export function QuestionFilters({
             </select>
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-medium">难度</span>
-            <select
-              className="w-full rounded-md border px-3 py-2"
-              value={query.difficulty ?? ""}
-              onChange={(event) => update("difficulty", event.target.value)}
-            >
-              <option value="">全部难度</option>
-              {[1, 2, 3, 4, 5].map((value) => (
-                <option key={value} value={value}>
-                  难度 {value}
-                </option>
-              ))}
-            </select>
+            <span className="text-xs font-medium">课程目标</span>
+            {selectedCourse?.objectives.length ? (
+              <select
+                className="w-full rounded-md border px-3 py-2"
+                value={query.objectiveCode ?? ""}
+                onChange={(event) =>
+                  update("objectiveCode", event.target.value)
+                }
+              >
+                <option value="">全部课程目标</option>
+                {selectedCourse.objectives.map((objective) => (
+                  <option key={objective.code} value={objective.code}>
+                    {objective.code} · {objective.title}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                className="w-full rounded-md border px-3 py-2"
+                value={query.defaultObjectiveKind ?? ""}
+                onChange={(event) =>
+                  update("defaultObjectiveKind", event.target.value)
+                }
+              >
+                <option value="">全部类型</option>
+                <option value="KNOWLEDGE">1 · 知识</option>
+                <option value="ABILITY">2 · 能力</option>
+                <option value="LITERACY">3 · 素养</option>
+              </select>
+            )}
           </label>
         </div>
       </details>
@@ -238,7 +269,7 @@ export function QuestionFilters({
           {pending
             ? "正在更新题目…"
             : courses.length === 0
-              ? "暂无可筛选课程，可先创建课程；题型与难度仍可筛选。"
+              ? "暂无可筛选课程，可先创建课程；题型与通用目标仍可筛选。"
               : query.courseId && !selectedCourse?.concepts.length
                 ? "该课程尚未发布正式知识图谱，暂不能按知识点筛选。"
                 : query.courseId

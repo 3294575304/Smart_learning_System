@@ -298,7 +298,6 @@ export async function getStudentCourseLearningCenter(
             id: true,
             title: true,
             type: true,
-            difficulty: true,
             graphBindings: {
               where: { courseId, conceptId: { in: conceptIds } },
               select: { conceptId: true, bindingType: true },
@@ -312,7 +311,6 @@ export async function getStudentCourseLearningCenter(
       id: string;
       title: string;
       type: (typeof boundQuestions)[number]["type"];
-      difficulty: number;
       bindingType: (typeof boundQuestions)[number]["graphBindings"][number]["bindingType"];
     }>
   >();
@@ -323,7 +321,6 @@ export async function getStudentCourseLearningCenter(
         id: question.id,
         title: question.title,
         type: question.type,
-        difficulty: question.difficulty,
         bindingType: binding.bindingType,
       });
       questionsByConceptId.set(binding.conceptId, related);

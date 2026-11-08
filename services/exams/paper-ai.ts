@@ -4,7 +4,7 @@ import { z } from "zod";
 import { questionAnswerSchema } from "@/services/questions/schemas";
 
 export const EXAM_PAPER_JOB_TYPE = "EXAM_PAPER_PARSE";
-export const EXAM_PAPER_PROMPT_VERSION = "exam-paper-parse-v1";
+export const EXAM_PAPER_PROMPT_VERSION = "exam-paper-parse-v2";
 
 export const examPaperJobInputSchema = z.object({
   draftId: z.string().cuid(),
@@ -15,7 +15,8 @@ export const examPaperAIQuestionSchema = z.object({
   title: z.string().trim().max(120),
   content: z.string().trim().max(5000),
   type: z.nativeEnum(QuestionType),
-  difficulty: z.number().int().min(1).max(5),
+  objectiveCodes: z.array(z.string().trim()).max(20).default([]),
+  reviewIssues: z.array(z.string().trim().min(1).max(200)).max(10).default([]),
   options: z
     .array(
       z.object({
@@ -58,4 +59,5 @@ export type ExamPaperAIInput = {
   text: string;
   chunkLabel: string;
   images: Array<{ id: string; dataUrl: string }>;
+  objectives: Array<{ code: string; title: string; description: string }>;
 };

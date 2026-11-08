@@ -12,6 +12,7 @@ interface ChapterOption {
 interface CourseOption {
   courseId: string;
   courseName: string;
+  objectives?: Array<{ code: string; title: string }>;
   classroomId: string;
   classroomName: string;
   graphVersionNumber: number | null;
@@ -29,7 +30,7 @@ export function CoursePracticeCenter({
   initialConceptId,
   initialChapterId: requestedChapterId,
   initialChapterIds = [],
-  initialDifficulty = 3,
+  initialObjectiveCode,
   initialTemplate = "CHOICE20",
   initialMode = "PRACTICE",
 }: {
@@ -39,7 +40,7 @@ export function CoursePracticeCenter({
   initialConceptId?: string;
   initialChapterId?: string;
   initialChapterIds?: string[];
-  initialDifficulty?: number;
+  initialObjectiveCode?: string;
   initialTemplate?: PracticeTemplate;
   initialMode?: "PRACTICE" | "TEST";
 }) {
@@ -88,7 +89,9 @@ export function CoursePracticeCenter({
   );
   const [mode, setMode] = useState<"PRACTICE" | "TEST">(initialMode);
   const [template, setTemplate] = useState<PracticeTemplate>(initialTemplate);
-  const [difficulty, setDifficulty] = useState(initialDifficulty);
+  const [objectiveCode, setObjectiveCode] = useState(
+    initialObjectiveCode ?? "",
+  );
   const [selectionNeedsReview, setSelectionNeedsReview] = useState(
     initialSelectionUnavailable,
   );
@@ -127,13 +130,14 @@ export function CoursePracticeCenter({
       setSelectedClassroomId(selected.classroomId);
       setFocusedConceptId(conceptId);
       setChapterIds(chapterSelection);
-      const requestedDifficulty = Number(url.searchParams.get("difficulty"));
-      setDifficulty(
-        Number.isInteger(requestedDifficulty) &&
-          requestedDifficulty >= 1 &&
-          requestedDifficulty <= 5
-          ? requestedDifficulty
-          : 3,
+      const requestedObjectiveCode =
+        url.searchParams.get("objectiveCode") ?? "";
+      setObjectiveCode(
+        selected.objectives?.some(
+          (item) => item.code === requestedObjectiveCode,
+        )
+          ? requestedObjectiveCode
+          : "",
       );
       const requestedTemplate = url.searchParams.get("template");
       setTemplate(
@@ -191,7 +195,7 @@ export function CoursePracticeCenter({
       effectiveTemplate,
       count,
       practiceCount,
-      difficulty,
+      objectiveCode,
     });
     if (generationRequest.current?.signature !== signature)
       generationRequest.current = { signature, id: crypto.randomUUID() };
@@ -214,7 +218,7 @@ export function CoursePracticeCenter({
             template: effectiveTemplate,
             count,
             ...(mode === "PRACTICE" ? { practiceCount } : {}),
-            difficulty,
+            ...(objectiveCode ? { objectiveCode } : {}),
           }),
         },
       );
@@ -285,6 +289,7 @@ export function CoursePracticeCenter({
             value={course.classroomId}
             onChange={(event) => {
               setSelectedClassroomId(event.target.value);
+              setObjectiveCode("");
               setSelectionNeedsReview(false);
               setFeedback(null);
               setChapterIds([]);
@@ -364,17 +369,19 @@ export function CoursePracticeCenter({
       ) : null}
 
       <label className="text-sm">
-        难度
-        <input
-          aria-label="目标难度"
-          className="mt-1 w-full"
-          min={1}
-          max={5}
-          type="range"
-          value={difficulty}
-          onChange={(event) => setDifficulty(Number(event.target.value))}
-        />
-        <span>{difficulty}</span>
+        课程目标
+        <select
+          className="mt-1 w-full rounded border p-2"
+          value={objectiveCode}
+          onChange={(event) => setObjectiveCode(event.target.value)}
+        >
+          <option value="">全部课程目标</option>
+          {course?.objectives?.map((objective) => (
+            <option key={objective.code} value={objective.code}>
+              {objective.code} · {objective.title}
+            </option>
+          ))}
+        </select>
       </label>
       <fieldset>
         <legend className="text-sm font-medium">生成类型</legend>
@@ -437,8 +444,11 @@ export function CoursePracticeCenter({
         {focusedConceptId
           ? `当前知识点 · ${course.concepts.find((item) => item.id === focusedConceptId)?.name ?? "知识点"}`
           : `${chapterIds.length || "全部"} 个大章节`}{" "}
-        ·{mode === "TEST" ? " 综合测试" : " 练习"} · {count} 题 · 难度{" "}
-        {difficulty}。 图谱版本 {course.graphVersionNumber ?? "未发布"}
+        ·{mode === "TEST" ? " 综合测试" : " 练习"} · {count} 题 ·{" "}
+        {objectiveCode
+          ? `课程目标 ${course.objectives?.find((item) => item.code === objectiveCode)?.title ?? objectiveCode}`
+          : "全部课程目标"}
+        。 图谱版本 {course.graphVersionNumber ?? "未发布"}
         。整组总分 100
         分，按实际题量均分，不计课程成绩；自主练习不受教师教学进度限制。
       </div>

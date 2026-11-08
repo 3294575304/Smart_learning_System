@@ -15,6 +15,7 @@ import type {
 } from "@/services/ai-question-generation/schemas";
 import { QuestionType } from "@prisma/client";
 import type { ExamPaperAIInput } from "@/services/exams/paper-ai";
+import type { QuestionObjectiveAIInput } from "@/services/question-objectives/schemas";
 import { parseQuestionImportText } from "@/services/question-import/parser";
 
 export type MockAIResponder = (
@@ -201,7 +202,7 @@ export class MockAIProvider implements AIProvider {
             title: `Mock ${input.type} 示例 ${number}`,
             content: `请分析 Python ${input.type} 示例 ${number} 的运行结果。`,
             type: input.type,
-            difficulty: input.difficulty,
+            objectiveCode: input.objectives[0]?.code ?? "KNOWLEDGE",
             options,
             answer,
             explanation:
@@ -267,7 +268,10 @@ export class MockAIProvider implements AIProvider {
             title: "扫描页待核对",
             content: "",
             type: "SHORT_ANSWER",
-            difficulty: 2,
+            objectiveCodes: input.objectives[0]
+              ? [input.objectives[0].code]
+              : [],
+            reviewIssues: [],
             options: [],
             answer: null,
             explanation: "",
@@ -287,7 +291,8 @@ export class MockAIProvider implements AIProvider {
         title: draft.title,
         content: draft.content,
         type: draft.type,
-        difficulty: draft.difficulty,
+        objectiveCodes: input.objectives[0] ? [input.objectives[0].code] : [],
+        reviewIssues: [],
         options: draft.options,
         answer: draft.answer,
         explanation: draft.explanation,
@@ -308,6 +313,29 @@ export class MockAIProvider implements AIProvider {
     };
   }
 
+  async classifyQuestionObjective(
+    input: QuestionObjectiveAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    if (options.signal.aborted)
+      throw new DOMException("AI request aborted", "AbortError");
+    const text = `${input.title} ${input.content}`;
+    const preferred = /伦理|责任|素养/u.test(text)
+      ? "LITERACY"
+      : /设计|分析|实现|应用/u.test(text)
+        ? "ABILITY"
+        : "KNOWLEDGE";
+    return {
+      objectiveCode:
+        input.objectives.find((objective) => objective.code === preferred)
+          ?.code ??
+        input.objectives[0]?.code ??
+        "",
+      confidence: 0.5,
+      reason: "模拟目标分类",
+    };
+  }
+
   async reviewGeneratedQuestions(
     input: QuestionGenerationReviewInput,
     options: AIProviderOptions,
@@ -320,7 +348,7 @@ export class MockAIProvider implements AIProvider {
         factsSupported: true,
         answerConsistent: true,
         clear: true,
-        difficultyAligned: true,
+        objectiveAligned: true,
         reason: "Mock 审查，仅用于本地开发和自动化测试",
       })),
     };
@@ -346,7 +374,6 @@ export class MockAIProvider implements AIProvider {
             conceptIds: matched.map((concept) => concept.id),
             questionTypes: [],
             count: 5,
-            difficulty: 2,
           }
         : null,
     };

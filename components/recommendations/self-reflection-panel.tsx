@@ -19,7 +19,6 @@ function isPracticeRequest(value: unknown): value is {
   conceptIds: string[];
   questionTypes: string[];
   count: number;
-  difficulty: number;
 } {
   if (!value || typeof value !== "object") return false;
   return (
@@ -188,7 +187,7 @@ export function SelfReflectionPanel({
             <p className="mt-2 text-xs text-gray-500">
               练习条件：
               {isPracticeRequest(record.practiceRequest)
-                ? `${record.practiceRequest.conceptIds.length} 个知识点 · ${record.practiceRequest.count} 题 · 难度 ${record.practiceRequest.difficulty}`
+                ? `${record.practiceRequest.conceptIds.length} 个知识点 · ${record.practiceRequest.count} 题`
                 : "未设置定向练习条件"}
             </p>
             {record.status !== "CONFIRMED" || historyOnly ? (

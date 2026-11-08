@@ -14,7 +14,6 @@ function question(
     id,
     title: "字符串不可变",
     type: "TRUE_FALSE",
-    difficulty: 2,
     graphBindingSets: [],
     ...overrides,
   };

@@ -79,7 +79,7 @@ interface MasteryResponse {
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
 const prisma = new PrismaClient();
-const port = 3111;
+const port = 13311;
 const baseUrl = `http://127.0.0.1:${port}`;
 const serverOutput: string[] = [];
 const sessionIds: string[] = [];
@@ -375,7 +375,6 @@ async function main(): Promise<void> {
             title: "Concept objective",
             content: "Python variables can be reassigned.",
             type: QuestionType.TRUE_FALSE,
-            difficulty: 2,
             visibility: QuestionVisibility.PRIVATE,
             status: QuestionStatus.ACTIVE,
             explanation: "They can.",
@@ -389,7 +388,6 @@ async function main(): Promise<void> {
             title: "Concept subjective",
             content: "Explain assignment.",
             type: QuestionType.SHORT_ANSWER,
-            difficulty: 3,
             visibility: QuestionVisibility.PRIVATE,
             status: QuestionStatus.ACTIVE,
             explanation: "Manual grading.",
@@ -403,7 +401,6 @@ async function main(): Promise<void> {
             title: "Unbound objective",
             content: "Python is dynamically typed.",
             type: QuestionType.TRUE_FALSE,
-            difficulty: 1,
             visibility: QuestionVisibility.PRIVATE,
             status: QuestionStatus.ACTIVE,
             explanation: "It is.",
@@ -486,7 +483,6 @@ async function main(): Promise<void> {
         conceptIds: [concepts[0]!.id],
         questionTypes: [QuestionType.TRUE_FALSE],
         count: 1,
-        difficulty: 2,
       },
       new Date("2026-08-12T03:00:00.000Z"),
     );

@@ -33,7 +33,6 @@ export interface RecommendationExplanationInput {
   items: Array<{
     questionId: string;
     title: string;
-    difficulty: number;
     ruleReason: string;
     reasonCodes: string[];
   }>;
@@ -130,7 +129,6 @@ export async function enhanceRecommendationReasons(
     items: items.map((item) => ({
       questionId: item.questionId,
       title: item.title,
-      difficulty: item.difficulty,
       ruleReason: item.reason,
       reasonCodes: item.reasonCodes,
     })),

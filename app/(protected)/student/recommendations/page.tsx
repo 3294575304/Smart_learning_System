@@ -26,7 +26,7 @@ interface Props {
     classroomId?: string | string[];
     conceptId?: string | string[];
     chapterId?: string | string[];
-    difficulty?: string | string[];
+    objectiveCode?: string | string[];
     template?: string | string[];
     mode?: string | string[];
     view?: string | string[];
@@ -55,11 +55,7 @@ export default async function StudentRecommendationsPage({
   const initialChapterIds = Array.isArray(query.chapterId)
     ? query.chapterId
     : [];
-  const rawDifficulty = Number(firstQueryValue(query.difficulty));
-  const initialDifficulty =
-    Number.isInteger(rawDifficulty) && rawDifficulty >= 1 && rawDifficulty <= 5
-      ? rawDifficulty
-      : 3;
+  const initialObjectiveCode = firstQueryValue(query.objectiveCode);
   const template = firstQueryValue(query.template);
   const initialTemplate =
     template === "TRUE_FALSE10" || template === "PYTHON5"
@@ -169,12 +165,12 @@ export default async function StudentRecommendationsPage({
                 </p>
               </header>
               <CoursePracticeCenter
-                key={`${initialClassroomId}:${initialCourseId}:${initialConceptId}:${JSON.stringify(initialChapterIds)}:${initialChapterId}:${initialMode}:${initialDifficulty}:${initialTemplate}`}
+                key={`${initialClassroomId}:${initialCourseId}:${initialConceptId}:${JSON.stringify(initialChapterIds)}:${initialChapterId}:${initialMode}:${initialObjectiveCode}:${initialTemplate}`}
                 courses={practiceCourses}
                 initialClassroomId={initialClassroomId}
                 initialChapterId={initialChapterId}
                 initialChapterIds={initialChapterIds}
-                initialDifficulty={initialDifficulty}
+                initialObjectiveCode={initialObjectiveCode}
                 initialTemplate={initialTemplate}
                 initialMode={initialMode}
                 initialConceptId={initialConceptId}

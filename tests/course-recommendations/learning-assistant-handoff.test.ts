@@ -14,7 +14,7 @@ const course = {
   })),
 };
 const topic = { kind: "COURSE" as const, id: "python" };
-test("前几章请求明确提示默认前三章并按章节顺序传递，基础练习使用难度2", () => {
+test("前几章请求明确提示默认前三章并按章节顺序传递", () => {
   const plan = suggestLearningPractice(
     course,
     topic,
@@ -23,7 +23,7 @@ test("前几章请求明确提示默认前三章并按章节顺序传递，基�
   assert.ok(plan);
   const url = new URL(plan.practiceUrl, "https://test.local");
   assert.deepEqual(url.searchParams.getAll("chapterId"), ["ch1", "ch2", "ch3"]);
-  assert.equal(url.searchParams.get("difficulty"), "2");
+  assert.equal(url.searchParams.has("difficulty"), false);
   assert.equal(plan.count, 20);
   assert.match(plan.note, /前 3 章/u);
   assert.equal(url.pathname, "/student/recommendations");

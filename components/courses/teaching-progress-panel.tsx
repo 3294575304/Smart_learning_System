@@ -86,7 +86,10 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
   const [note, setNote] = useState(data.revision?.note ?? "");
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [policyValues, setPolicyValues] = useState(policy);
+  const [policyValues, setPolicyValues] = useState({
+    ...policy,
+    weaknessWeight: policy.weaknessWeight + policy.difficultyWeight,
+  });
   async function save() {
     if (!data.graphVersion) return;
     setPending(true);
@@ -130,12 +133,10 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
             expectedRevision: policy.revisionNumber,
             weaknessWeight: policyValues.weaknessWeight,
             prerequisiteWeight: policyValues.prerequisiteWeight,
-            difficultyWeight: policyValues.difficultyWeight,
             errorPatternWeight: policyValues.errorPatternWeight,
             freshnessWeight: policyValues.freshnessWeight,
             teacherPriorityWeight: policyValues.teacherPriorityWeight,
             recentWindowDays: policyValues.recentWindowDays,
-            difficultyTolerance: policyValues.difficultyTolerance,
             maxQuestionCount: policyValues.maxQuestionCount,
           }),
         },
@@ -371,14 +372,13 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
           高级设置 · 课程推荐策略
         </summary>
         <p className="mt-1 text-sm text-gray-500">
-          六项权重合计必须为 100%，保存后生成不可变策略修订。
+          五项权重合计必须为 100%，保存后生成不可变策略修订。
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {(
             [
               ["weaknessWeight", "掌握缺口"],
               ["prerequisiteWeight", "先修缺口"],
-              ["difficultyWeight", "难度适配"],
               ["errorPatternWeight", "近期错误"],
               ["freshnessWeight", "题目新鲜度"],
               ["teacherPriorityWeight", "教师重点"],
@@ -406,7 +406,6 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
           当前合计：
           {policyValues.weaknessWeight +
             policyValues.prerequisiteWeight +
-            policyValues.difficultyWeight +
             policyValues.errorPatternWeight +
             policyValues.freshnessWeight +
             policyValues.teacherPriorityWeight}

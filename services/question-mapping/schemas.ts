@@ -12,7 +12,6 @@ export interface QuestionMappingAIInput {
     title: string;
     content: string;
     type: string;
-    difficulty: number;
     tags: string[];
   }>;
   concepts: Array<{

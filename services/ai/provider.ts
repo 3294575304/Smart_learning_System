@@ -10,6 +10,7 @@ import type {
   QuestionGenerationReviewInput,
 } from "@/services/ai-question-generation/schemas";
 import type { ExamPaperAIInput } from "@/services/exams/paper-ai";
+import type { QuestionObjectiveAIInput } from "@/services/question-objectives/schemas";
 
 import type { AssemblyProviderInput } from "@/services/assignments/editor-assistance-schemas";
 
@@ -128,6 +129,11 @@ export interface AIProvider {
 
   parseExamPaper?(
     input: ExamPaperAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  classifyQuestionObjective?(
+    input: QuestionObjectiveAIInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 }

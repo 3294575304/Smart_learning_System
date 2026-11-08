@@ -9,7 +9,6 @@ const base = {
       title: "布尔值",
       content: "空列表是假值。",
       type: "TRUE_FALSE",
-      difficulty: 1,
       options: [],
       answer: { kind: "BOOLEAN", value: true },
       explanation: "空列表转换为 False。",

@@ -369,8 +369,7 @@ function KnowledgeStatus({ data }: { data: StudentCourseLearningCenter }) {
                                     {question.title}
                                   </p>
                                   <p className="mt-1 text-[11px] text-slate-400">
-                                    {QUESTION_TYPE_LABELS[question.type]} · 难度{" "}
-                                    {question.difficulty}/5 ·{" "}
+                                    {QUESTION_TYPE_LABELS[question.type]} ·{" "}
                                     {question.bindingType === "PRIMARY"
                                       ? "主要考查"
                                       : "次要涉及"}

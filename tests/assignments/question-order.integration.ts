@@ -79,7 +79,6 @@ async function main() {
         content: "题序集成测试题干",
         explanation: "测试解析",
         type,
-        difficulty: 1,
         status: "ACTIVE",
         correctBoolean: type === "TRUE_FALSE" ? true : null,
         referenceAnswer: type === "SHORT_ANSWER" ? "参考答案" : null,

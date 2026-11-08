@@ -77,12 +77,14 @@ function QuestionEditor({
   row,
   sourceAssets,
   sourceFormat,
+  objectives,
   onChanged,
 }: {
   draftId: string;
   row: Row;
   sourceAssets: Asset[];
   sourceFormat: string;
+  objectives: Draft["objectives"];
   onChanged: () => Promise<void>;
 }) {
   const parsed = paperDraftQuestionSchema.safeParse(row.questionJson);
@@ -93,7 +95,7 @@ function QuestionEditor({
           title: "",
           content: "",
           type: QuestionType.SHORT_ANSWER,
-          difficulty: 2,
+          objectiveCodes: [],
           options: [],
           answer: null,
           explanation: "",
@@ -285,18 +287,35 @@ function QuestionEditor({
             )}
           </label>
           <label className="text-sm">
-            难度
+            课程目标
             <select
               className="mt-1 w-full rounded border p-2"
-              value={question.difficulty}
+              value={question.objectiveCodes[0] ?? ""}
               onChange={(event) =>
-                update({ difficulty: Number(event.target.value) })
+                update({
+                  objectiveCodes: event.target.value
+                    ? [event.target.value]
+                    : [],
+                })
               }
             >
-              {[1, 2, 3, 4, 5].map((value) => (
-                <option key={value}>{value}</option>
+              <option value="">待确认</option>
+              {objectives.map((objective) => (
+                <option key={objective.code} value={objective.code}>
+                  {objective.code} · {objective.title}
+                </option>
               ))}
             </select>
+            {question.objectiveCodes[0] && (
+              <span className="mt-1 block text-xs text-slate-500">
+                {
+                  objectives.find(
+                    (objective) =>
+                      objective.code === question.objectiveCodes[0],
+                  )?.description
+                }
+              </span>
+            )}
           </label>
         </div>
         <label className="block text-sm">
@@ -708,6 +727,30 @@ export function PaperDraftEditor({
       setBusy(false);
     }
   }
+  async function reviewAll() {
+    if (
+      !window.confirm(
+        "确认全部已保存的待审核题目？页面中尚未保存的修改不会纳入。系统会逐题检查答案、分值、图片和课程目标。",
+      )
+    )
+      return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api<{ reviewedCount: number }>(
+        `${base}/review-all`,
+        "POST",
+        { expectedRevision: draft.revision },
+      );
+      await refresh();
+      setMessage(`已确认 ${result.reviewedCount} 道题。`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "批量审核失败");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function publish() {
     if (
       !window.confirm(
@@ -861,7 +904,20 @@ export function PaperDraftEditor({
             </button>
           </section>
           <section className="space-y-3">
-            <h2 className="font-semibold">逐题审核</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-semibold">逐题审核</h2>
+              <button
+                className="rounded bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
+                disabled={
+                  busy ||
+                  !draft.questions.length ||
+                  reviewed === draft.questions.length
+                }
+                onClick={() => void reviewAll()}
+              >
+                一键全部审核并确认
+              </button>
+            </div>
             {draft.sourceText && (
               <details className="rounded-xl border bg-white p-4">
                 <summary className="cursor-pointer font-medium">
@@ -899,6 +955,7 @@ export function PaperDraftEditor({
                   row={row}
                   sourceAssets={draft.assets}
                   sourceFormat={draft.sourceFormat}
+                  objectives={draft.objectives}
                   onChanged={refresh}
                 />
               </div>

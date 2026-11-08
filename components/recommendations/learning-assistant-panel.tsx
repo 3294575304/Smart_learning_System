@@ -388,8 +388,7 @@ export function LearningAssistantPanel({
                             </p>
                             <p>
                               {turn.reply.practiceSuggestion.typeLabel} ·{" "}
-                              {turn.reply.practiceSuggestion.count} 题 · 难度{" "}
-                              {turn.reply.practiceSuggestion.difficulty}/5
+                              {turn.reply.practiceSuggestion.count} 题
                             </p>
                             <p>{turn.reply.practiceSuggestion.note}</p>
                           </div>

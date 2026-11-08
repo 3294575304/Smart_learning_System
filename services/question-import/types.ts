@@ -21,7 +21,7 @@ export interface QuestionImportDraft {
   title: string;
   content: string;
   type: QuestionType;
-  difficulty: number;
+  defaultObjectiveKind?: "KNOWLEDGE" | "ABILITY" | "LITERACY" | null;
   options: QuestionImportOption[];
   answer: QuestionAnswer | null;
   explanation: string;

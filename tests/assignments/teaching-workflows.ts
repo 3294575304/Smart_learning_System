@@ -1247,7 +1247,6 @@ async function main() {
         title,
         content: "这是题干",
         type,
-        difficulty: 2,
         status: "ACTIVE",
         explanation: "参考说明",
         ...(type === "TRUE_FALSE"
@@ -1318,7 +1317,6 @@ async function main() {
       classroomIds: [first.id, second.id],
       conceptIds: concepts.map((c) => c.id),
       types: ["TRUE_FALSE", "SHORT_ANSWER"],
-      difficulty: 2,
       count: 2,
       excludedIds: [],
     },
