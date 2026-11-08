@@ -14,6 +14,11 @@ import {
 } from "@/services/dashboard/student-task-overview";
 
 export const STUDENT_TASK_PRESENTATION = {
+  exam: {
+    label: "课程考试",
+    icon: ClipboardCheck,
+    color: "bg-amber-50 text-amber-800",
+  },
   assignment: {
     label: "课程作业",
     icon: ClipboardList,

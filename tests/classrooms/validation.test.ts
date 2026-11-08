@@ -6,7 +6,28 @@ import {
   createClassroomSchema,
   dissolveClassroomSchema,
   joinClassroomSchema,
+  deleteClassroomSchema,
 } from "@/services/classrooms/schemas";
+
+test("删除班级必须携带明确确认与当前核对令牌，原因允许留空", () => {
+  const input = {
+    action: "DELETE_CLASSROOM",
+    confirmed: true,
+    confirmedName: "测试班级",
+    token: "a".repeat(64),
+  };
+  assert.equal(deleteClassroomSchema.parse(input).reason, "");
+  for (const change of [
+    { confirmed: false },
+    { token: "invalid" },
+    { action: "DISSOLVE" },
+    { confirmedName: "" },
+  ])
+    assert.equal(
+      deleteClassroomSchema.safeParse({ ...input, ...change }).success,
+      false,
+    );
+});
 
 test("班级表单清理名称和空描述", () => {
   const parsed = createClassroomSchema.parse({

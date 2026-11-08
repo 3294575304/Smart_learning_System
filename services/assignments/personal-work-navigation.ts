@@ -21,6 +21,19 @@ export function personalWorkHref(
   return `/teacher/assignments/${assignmentId}/submissions/${submissionId}?${query}`;
 }
 
+/** Never replace a missing student submission with the class-wide assignment page. */
+export function studentAssignmentPersonalHref(
+  assignmentId: string,
+  studentId: string,
+  submissionId: string | null,
+  returnTo: string,
+) {
+  if (submissionId)
+    return personalWorkHref(assignmentId, submissionId, returnTo);
+  const query = new URLSearchParams({ studentId, returnTo });
+  return `/teacher/assignments/${assignmentId}/results?${query}`;
+}
+
 export function personalWorkReturn(
   value: string | undefined,
   assignmentId: string,

@@ -22,6 +22,8 @@ import {
 } from "@/services/classrooms/policy";
 import { notifyClassroomDissolved } from "@/services/notifications/events/classroom";
 
+import { runClassroomSerializable } from "./transactions";
+
 const INVITE_CODE_ATTEMPTS = 8;
 
 export interface TeacherClassroomListItem {
@@ -421,10 +423,15 @@ export async function updateClassroom(
   },
 ): Promise<TeacherClassroomDetail> {
   await requireTeacherClassroom(teacherId, classroomId);
-  await prisma.classroom.update({
-    where: { id: classroomId },
+  const updated = await prisma.classroom.updateMany({
+    where: {
+      id: classroomId,
+      teacherId,
+      status: { not: ClassroomStatus.ARCHIVED },
+    },
     data: input,
   });
+  if (!updated.count) throw new ResourceNotFoundError("班级不存在或已删除");
 
   return getTeacherClassroom(teacherId, classroomId);
 }
@@ -446,10 +453,14 @@ export async function regenerateClassroomJoinCode(
     }
 
     try {
-      await prisma.classroom.update({
-        where: { id: classroomId },
+      const updated = await prisma.classroom.updateMany({
+        where: { id: classroomId, teacherId, status: ClassroomStatus.ACTIVE },
         data: { joinCode, joinCodeExpiresAt: null },
       });
+      if (!updated.count)
+        throw new ClassroomOperationError(
+          "班级已结课、关闭或删除，无法更新邀请码",
+        );
       return { joinCode };
     } catch (error: unknown) {
       if (!isUniqueConstraintError(error)) {
@@ -591,57 +602,67 @@ export async function joinClassroom(
   studentId: string,
   joinCode: string,
 ): Promise<StudentClassroomListItem> {
-  const classroom = await prisma.classroom.findUnique({
-    where: { joinCode },
-    select: {
-      id: true,
-      status: true,
-      joinCodeExpiresAt: true,
-    },
-  });
+  const joinedId = await runClassroomSerializable(async (transaction) => {
+    let classroom = await transaction.classroom.findUnique({
+      where: { joinCode },
+      select: {
+        id: true,
+        status: true,
+        joinCodeExpiresAt: true,
+      },
+    });
 
-  if (!classroom) {
-    throw new ResourceNotFoundError("邀请码无效");
-  }
+    if (!classroom) {
+      throw new ResourceNotFoundError("邀请码无效");
+    }
 
-  assertClassroomCanAcceptStudents(classroom);
-  await assertSchoolMembership(classroom.id, studentId);
-  const existing = await prisma.classMembership.findUnique({
-    where: {
-      classroomId_studentId: { classroomId: classroom.id, studentId },
-    },
-    select: { id: true, status: true },
-  });
-  assertMembershipCanJoin(existing?.status ?? null);
+    await transaction.$queryRaw`SELECT id FROM "Classroom" WHERE id = ${classroom.id} FOR SHARE`;
+    classroom = await transaction.classroom.findUnique({
+      where: { joinCode },
+      select: { id: true, status: true, joinCodeExpiresAt: true },
+    });
+    if (!classroom) throw new ResourceNotFoundError("邀请码无效");
+    assertClassroomCanAcceptStudents(classroom);
+    await assertSchoolMembership(classroom.id, studentId, transaction);
+    const existing = await transaction.classMembership.findUnique({
+      where: {
+        classroomId_studentId: { classroomId: classroom.id, studentId },
+      },
+      select: { id: true, status: true },
+    });
+    assertMembershipCanJoin(existing?.status ?? null);
 
-  try {
-    if (existing?.status === MembershipStatus.LEFT) {
-      const reactivated = await prisma.classMembership.updateMany({
-        where: { id: existing.id, status: MembershipStatus.LEFT },
-        data: {
-          status: MembershipStatus.ACTIVE,
-          joinedAt: new Date(),
-          endedAt: null,
-        },
-      });
+    try {
+      if (existing?.status === MembershipStatus.LEFT) {
+        const reactivated = await transaction.classMembership.updateMany({
+          where: { id: existing.id, status: MembershipStatus.LEFT },
+          data: {
+            status: MembershipStatus.ACTIVE,
+            joinedAt: new Date(),
+            endedAt: null,
+          },
+        });
 
-      if (reactivated.count === 0) {
+        if (reactivated.count === 0) {
+          throw new ClassroomOperationError("你已经加入该班级");
+        }
+      } else {
+        await transaction.classMembership.create({
+          data: { classroomId: classroom.id, studentId },
+        });
+      }
+    } catch (error: unknown) {
+      if (isUniqueConstraintError(error)) {
         throw new ClassroomOperationError("你已经加入该班级");
       }
-    } else {
-      await prisma.classMembership.create({
-        data: { classroomId: classroom.id, studentId },
-      });
+      throw error;
     }
-  } catch (error: unknown) {
-    if (isUniqueConstraintError(error)) {
-      throw new ClassroomOperationError("你已经加入该班级");
-    }
-    throw error;
-  }
+
+    return classroom.id;
+  }, "班级状态已变化，请刷新后重新加入。");
 
   const joinedClassroom = (await listStudentClassrooms(studentId)).find(
-    (item) => item.id === classroom.id,
+    (item) => item.id === joinedId,
   );
   if (!joinedClassroom) {
     throw new ResourceNotFoundError("班级不存在");

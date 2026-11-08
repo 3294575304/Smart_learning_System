@@ -16,6 +16,8 @@ type Question = {
   points: number;
 };
 
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
 export function TypedScoreDialog({
   questions,
   target,
@@ -35,10 +37,7 @@ export function TypedScoreDialog({
     Object.fromEntries(
       groups.map(([type, items]) => [
         type,
-        String(
-          Math.round(items.reduce((sum, item) => sum + item.points, 0) * 100) /
-            100,
-        ),
+        String(round2(items.reduce((sum, item) => sum + item.points, 0))),
       ]),
     ),
   );
@@ -57,31 +56,70 @@ export function TypedScoreDialog({
   } catch (error) {
     message = error instanceof Error ? error.message : "请检查分值";
   }
-  const total =
-    Math.round(
-      Object.values(subtotals).reduce(
-        (sum, value) => sum + (Number(value) || 0),
-        0,
-      ) * 100,
-    ) / 100;
+  const total = round2(
+    Object.values(subtotals).reduce(
+      (sum, value) => sum + (Number(value) || 0),
+      0,
+    ),
+  );
+  const goalNumber = Number(goal);
+  const diff =
+    Number.isFinite(goalNumber) && goal.trim() !== ""
+      ? round2(goalNumber - total)
+      : null;
+
+  /** 把小计一次性平均分给所有题型（题型数等分，尾差给前几个题型）。 */
+  function fillEqualByType() {
+    const types = groups.map(([type]) => type);
+    const cents = Math.round(Number(goal) * 100);
+    if (!types.length || !Number.isFinite(cents) || cents <= 0) return;
+    const base = Math.floor(cents / types.length);
+    const remainder = cents % types.length;
+    setSubtotals(
+      Object.fromEntries(
+        types.map((type, index) => [
+          type,
+          String((base + (index < remainder ? 1 : 0)) / 100),
+        ]),
+      ),
+    );
+  }
+
+  function perQuestionLabel(items: Question[]) {
+    if (!points) return "待配分";
+    const values = items.map((item) => points![questions.indexOf(item)]);
+    const min = round2(Math.min(...values));
+    const max = round2(Math.max(...values));
+    return min === max ? `每题 ${min} 分` : `${min}–${max} 分/题`;
+  }
+
   return (
-    <EditorDialog open title="按题型配分" onClose={onClose}>
+    <EditorDialog open title="自定义各题型分值" onClose={onClose}>
       <div className="mt-4 space-y-4 text-sm">
         <p className="text-slate-600">
-          填写每种题型的小计。同题型未锁定题目均分，尾差按题序分配。
+          先定目标总分，再为每个题型分配小计。同题型未锁定题目按题数均分，尾差按题序分配。
         </p>
-        <label className="flex items-center gap-2">
-          目标总分
-          <input
-            type="number"
-            min="0.01"
-            max="10000"
-            step="0.01"
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-            className="h-10 w-24 rounded-lg border px-2"
-          />
-        </label>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex items-center gap-2">
+            目标总分
+            <input
+              type="number"
+              min="0.01"
+              max="10000"
+              step="0.01"
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              className="h-10 w-24 rounded-lg border px-2"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={fillEqualByType}
+            className="h-10 rounded-lg border px-3 text-xs font-medium text-sky-800 transition hover:bg-sky-50 active:scale-[0.98]"
+          >
+            按题型平均分配
+          </button>
+        </div>
         <ul className="divide-y rounded-lg border">
           {groups.map(([type, items]) => (
             <li
@@ -89,12 +127,14 @@ export function TypedScoreDialog({
               className="flex flex-wrap items-center justify-between gap-2 p-3"
             >
               <div>
-                <p className="font-medium">{QUESTION_TYPE_LABELS[type]}</p>
+                <p className="font-medium">
+                  {QUESTION_TYPE_LABELS[type]}{" "}
+                  <span className="text-xs font-normal text-slate-500">
+                    {items.length} 题
+                  </span>
+                </p>
                 <p className="text-xs text-slate-600">
-                  {items.length} 题
-                  {points
-                    ? ` · 单题 ${[...new Set(items.map((q) => points?.[questions.indexOf(q)]))].join("／")} 分`
-                    : ""}
+                  {perQuestionLabel(items)}
                 </p>
               </div>
               <label className="flex items-center gap-2 text-xs">
@@ -115,6 +155,20 @@ export function TypedScoreDialog({
             </li>
           ))}
         </ul>
+        <p
+          aria-live="polite"
+          className={message ? "text-rose-800" : "text-emerald-800"}
+        >
+          已分配 {total} / {Number.isFinite(goalNumber) ? goalNumber : "—"} 分
+          {diff === null
+            ? ""
+            : diff === 0
+              ? " · 已平衡"
+              : diff > 0
+                ? ` · 还差 ${diff} 分`
+                : ` · 超出 ${Math.abs(diff)} 分`}
+          。{message}
+        </p>
         <details className="rounded-lg border p-3">
           <summary className="cursor-pointer font-medium">
             锁定单题分值（已锁定{" "}
@@ -145,12 +199,6 @@ export function TypedScoreDialog({
             ))}
           </div>
         </details>
-        <p
-          aria-live="polite"
-          className={message ? "text-rose-800" : "text-emerald-800"}
-        >
-          已分配 {total} / {goal || "—"} 分。{message}
-        </p>
         <div className="flex justify-end gap-2">
           <button
             type="button"

@@ -8,9 +8,10 @@ import type { StudentTaskOverview } from "../../services/dashboard/student-task-
 import { StudentAssignmentRings } from "../../components/dashboard/student-assignment-rings";
 const overview: StudentTaskOverview = {
   total: 0,
-  counts: { assignment: 0, attendance: 0, survey: 0 },
+  counts: { exam: 0, assignment: 0, attendance: 0, survey: 0 },
   items: [],
   scheduledSurveys: [],
+  scheduledExams: [],
   nextChangeAt: null,
 };
 function item(
@@ -73,7 +74,7 @@ test("同名课程分别展示，结课记录不混入当前汇总，待办分�
       overview: {
         ...overview,
         total: 4,
-        counts: { assignment: 2, attendance: 1, survey: 1 },
+        counts: { exam: 0, assignment: 2, attendance: 1, survey: 1 },
       },
     }),
   );

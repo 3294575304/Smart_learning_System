@@ -3,10 +3,25 @@ import { Role } from "@prisma/client";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { listTeacherExams } from "@/services/exams/service";
 import { CancelExamButton } from "@/components/exams/cancel-button";
+import { notFound } from "next/navigation";
+import { teacherExamListSchema } from "@/services/exams/schemas";
+import { ResourceNotFoundError } from "@/services/auth/policy";
 
-export default async function TeacherExamsPage() {
+export default async function TeacherExamsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ courseId?: string; classroomId?: string }>;
+}) {
   const teacher = await requirePageRole(Role.TEACHER);
-  const exams = await listTeacherExams(teacher.id);
+  const scope = teacherExamListSchema.safeParse(await searchParams);
+  if (!scope.success) notFound();
+  let exams;
+  try {
+    exams = await listTeacherExams(teacher.id, scope.data);
+  } catch (error) {
+    if (error instanceof ResourceNotFoundError) notFound();
+    throw error;
+  }
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between">
@@ -15,6 +30,17 @@ export default async function TeacherExamsPage() {
             ← 作业管理
           </Link>
           <h1 className="text-2xl font-semibold">考试管理</h1>
+          {scope.data.courseId || scope.data.classroomId ? (
+            <p className="mt-1 text-sm text-slate-600">
+              当前{scope.data.classroomId ? "教学班" : "课程"}考试
+              <Link
+                className="ms-3 text-sky-700 underline"
+                href="/teacher/exams"
+              >
+                查看全部考试
+              </Link>
+            </p>
+          ) : null}
         </div>
         <div className="flex gap-2">
           <Link

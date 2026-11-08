@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ClipboardList,
   FileChartColumn,
+  FilePenLine,
   Megaphone,
   MessageSquareText,
   NotebookPen,
@@ -14,6 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { ScrollableActionGrid } from "@/components/ui/scrollable-action-grid";
 import { withClassroomQuery } from "@/lib/course-classroom";
 
 const WORKSPACE_GROUPS = [
@@ -62,16 +64,22 @@ const WORKSPACE_GROUPS = [
         icon: NotebookPen,
       },
       {
-        title: "随机选人",
-        description: "从当前班级的在读学生中随机抽取",
-        path: "random-picker",
-        icon: Shuffle,
-      },
-      {
         title: "课程通知",
         description: "发布通知给本班学生，查看历史与已读",
         path: "announcements",
         icon: Megaphone,
+      },
+      {
+        title: "考试管理",
+        description: "组卷、安排考试与查看监考",
+        path: "/teacher/exams",
+        icon: FilePenLine,
+      },
+      {
+        title: "随机选人",
+        description: "从当前班级的在读学生中随机抽取",
+        path: "random-picker",
+        icon: Shuffle,
       },
     ],
   },
@@ -195,7 +203,10 @@ export function CourseWorkspaceNavigation({
           aria-labelledby={`course-workspace-tab-${group.title}`}
           hidden={activeGroup !== group.title}
         >
-          <div className="grid gap-2 sm:grid-cols-2">
+          <ScrollableActionGrid
+            label={`${group.title}入口列表`}
+            count={group.items.length}
+          >
             {group.items.map(({ title, description, path, icon: Icon }) => (
               <Link
                 key={path}
@@ -209,12 +220,14 @@ export function CourseWorkspaceNavigation({
                       ? `/teacher/courses/${courseId}/classrooms`
                       : withClassroomQuery(
                           path.startsWith("/")
-                            ? path
+                            ? path === "/teacher/exams"
+                              ? `${path}?courseId=${encodeURIComponent(courseId)}`
+                              : path
                             : `/teacher/courses/${courseId}/${path}`,
                           classroomId,
                         )
                 }
-                className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 active:bg-sky-200"
               >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 transition-colors group-hover:border-sky-100 group-hover:text-blue-600">
                   <Icon aria-hidden="true" className="size-5" />
@@ -223,7 +236,10 @@ export function CourseWorkspaceNavigation({
                   <h3 className="text-sm font-medium text-slate-900">
                     {title}
                   </h3>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                  <p
+                    title={description}
+                    className="mt-1 truncate text-xs leading-5 text-slate-500"
+                  >
                     {group.title === "课堂活动" && !classroomId
                       ? "请先创建课程班级"
                       : description}
@@ -235,7 +251,7 @@ export function CourseWorkspaceNavigation({
                 />
               </Link>
             ))}
-          </div>
+          </ScrollableActionGrid>
         </section>
       ))}
     </nav>

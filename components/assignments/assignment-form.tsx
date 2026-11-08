@@ -25,6 +25,7 @@ import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-worksp
 import { toast } from "@/components/ui/toast";
 import {
   distributeAssignmentPoints,
+  distributePointsEquallyByType,
   selectAssignmentQuestions,
 } from "@/services/assignments/editor-helpers";
 import type { AssignmentUpsertData } from "@/services/assignments/schemas";
@@ -445,6 +446,29 @@ export function AssignmentForm({
       );
     }
   }
+  /** 按题型均分：每个题型拿到相同小计，题型内部再按题数均分。 */
+  function organizePointsByType() {
+    try {
+      const points = distributePointsEquallyByType(selected, targetPoints);
+      setDefaultHundredPoints(false);
+      setTypedScore({
+        target: targetPoints,
+        signature: selectedSignature,
+        lockedIds: [],
+      });
+      setSelected((items) =>
+        items.map((item, index) => ({ ...item, points: points[index] })),
+      );
+      const typeCount = new Set(selected.map((item) => item.type)).size;
+      setOrderFeedback(
+        `已把${targetPoints}分平均分给${typeCount}个题型，题型内按题数均分；换题后需重新配分。`,
+      );
+    } catch (error) {
+      setOrderFeedback(
+        error instanceof Error ? error.message : "请检查目标总分",
+      );
+    }
+  }
   function courseLabelFor(classroomId: string) {
     const id = classrooms.find((item) => item.id === classroomId)?.courseId;
     const value =
@@ -718,6 +742,32 @@ export function AssignmentForm({
     typedScore !== null &&
     (typedScore.signature !== selectedSignature ||
       typedScore.target !== totalPoints);
+  /** 依据当前每题分值反推配分方式，避免多处状态各自维护导致显示漂移。 */
+  function describeScoreMode(): string {
+    if (assignmentType === "task")
+      return task.points === 100 ? "百分制" : "自定义总分";
+    if (!selected.length)
+      return defaultHundredPoints ? "默认百分制" : "自定义总分";
+    const round2 = (value: number) => Math.round(value * 100) / 100;
+    const values = selected.map((item) => round2(item.points));
+    const allSame = values.every((value) => value === values[0]);
+    if (allSame) {
+      if (
+        defaultHundredPoints &&
+        values[0] === round2(targetPoints / selected.length)
+      )
+        return "默认百分制 · 全卷均分";
+      return `全卷均分 · 每题 ${values[0]} 分`;
+    }
+    const byType = new Map<string, Set<number>>();
+    for (const item of selected) {
+      const set = byType.get(item.type) ?? new Set<number>();
+      set.add(round2(item.points));
+      byType.set(item.type, set);
+    }
+    const typeUniform = [...byType.values()].every((set) => set.size === 1);
+    return typeUniform ? `按题型均分 · ${byType.size} 个题型` : "自定义配分";
+  }
   const assemblyCourseId =
     classrooms.find((item) => item.id === effectiveClassroomIds[0])?.courseId ??
     "";
@@ -779,142 +829,833 @@ export function AssignmentForm({
       onSubmit={form.handleSubmit((v) => persist(v, false))}
     >
       <fieldset disabled={busy} className="min-w-0 space-y-6">
-        <div className="grid items-stretch gap-4 lg:grid-cols-2">
-          <section
-            aria-labelledby="assignment-basic-heading"
-            className="min-w-0 space-y-4 rounded-xl border bg-white p-4 sm:p-5"
-          >
-            <h2 id="assignment-basic-heading" className="font-semibold">
-              基本信息
-            </h2>
-            <label className="block space-y-1 text-sm">
-              <span className="font-medium">作业类别（必选）</span>
-              <select
-                className="w-full rounded-lg border px-3"
-                defaultValue=""
-                aria-label="作业类别"
-                {...form.register("category")}
-              >
-                <option value="" disabled>
-                  请选择作业类别
-                </option>
-                {Object.entries(ASSIGNMENT_CATEGORY_LABELS).map(
-                  ([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-6 rounded-xl border bg-white p-5">
+            <section
+              aria-labelledby="assignment-basic-heading"
+              className="min-w-0 space-y-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h2 id="assignment-basic-heading" className="font-semibold">
+                  基本信息
+                </h2>
+                <details className="relative text-xs text-slate-500">
+                  <summary className="w-fit cursor-pointer rounded px-1 py-0.5 text-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600">
+                    计分说明
+                  </summary>
+                  <p className="absolute right-0 z-30 mt-2 w-72 max-w-[70vw] rounded-lg border bg-white p-3 leading-5 shadow-lg">
+                    计入总评前需确认正式考核方案与内部权重，并在成绩台账中同步；作业发布不会自动替代其他平时成绩构成。
+                  </p>
+                </details>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                <label className="block space-y-1 text-sm">
+                  <span className="font-medium">作业名称</span>
+                  <input
+                    className="w-full rounded-lg border px-3"
+                    {...form.register("title")}
+                  />
+                  <span className="text-xs text-red-600">
+                    {form.formState.errors.title?.message}
+                  </span>
+                </label>
+                <label className="block space-y-1 text-sm">
+                  <span className="font-medium">作业类别（必选）</span>
+                  <select
+                    className="w-full rounded-lg border px-3"
+                    defaultValue=""
+                    aria-label="作业类别"
+                    {...form.register("category")}
+                  >
+                    <option value="" disabled>
+                      请选择作业类别
                     </option>
-                  ),
-                )}
-              </select>
-              <span className="text-xs text-red-600">
-                {form.formState.errors.category?.message}
-              </span>
-              <p className="text-xs leading-5 text-slate-500">
-                练习对应平时表现，课程作业与实验对应各自项目；须由正式考核方案确认计分规则后，在台账中同步。发布后类别冻结。
+                    {Object.entries(ASSIGNMENT_CATEGORY_LABELS).map(
+                      ([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                  <span className="text-xs text-red-600">
+                    {form.formState.errors.category?.message}
+                  </span>
+                </label>
+              </div>
+              <p className="text-xs text-slate-500">
+                练习对应平时表现，作业与实验对应各自成绩项目；发布后类别不可修改。
               </p>
-            </label>
-            <label className="block space-y-1 text-sm">
-              <span className="font-medium">作业名称</span>
-              <input
-                className="w-full rounded-lg border px-3"
-                {...form.register("title")}
-              />
-              <span className="text-xs text-red-600">
-                {form.formState.errors.title?.message}
-              </span>
-            </label>
-            {mode === "create" && lastPublishedByClassroom && (
-              <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
-                <p className="font-medium text-slate-700">上次布置的作业</p>
-                {selectedClassroomIds.length ? (
-                  <ul className="max-h-40 space-y-2 overflow-y-auto">
-                    {selectedClassroomIds.map((id) => {
-                      const classroom = classrooms.find(
-                        (item) => item.id === id,
-                      );
-                      const previous = lastPublishedByClassroom[id];
-                      return (
+              {mode === "create" &&
+                lastPublishedByClassroom &&
+                selectedClassroomIds.length > 0 && (
+                  <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
+                    <p className="font-medium text-slate-700">上次布置的作业</p>
+                    {selectedClassroomIds.length ? (
+                      <ul className="max-h-40 space-y-2 overflow-y-auto">
+                        {selectedClassroomIds.map((id) => {
+                          const classroom = classrooms.find(
+                            (item) => item.id === id,
+                          );
+                          const previous = lastPublishedByClassroom[id];
+                          return (
+                            <li
+                              key={id}
+                              className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1"
+                            >
+                              <div className="min-w-0 [overflow-wrap:anywhere]">
+                                <p className="text-xs text-slate-600">
+                                  {classroom?.name}
+                                </p>
+                                {previous ? (
+                                  <p className="mt-0.5">
+                                    <span className="font-medium">
+                                      {previous.title}
+                                    </span>{" "}
+                                    <span className="text-xs text-slate-600">
+                                      ·{" "}
+                                      {
+                                        ASSIGNMENT_CATEGORY_LABELS[
+                                          previous.category
+                                        ]
+                                      }{" "}
+                                      ·{" "}
+                                      <time dateTime={previous.publishedAt}>
+                                        {new Date(
+                                          previous.publishedAt,
+                                        ).toLocaleDateString("zh-CN", {
+                                          timeZone: "Asia/Shanghai",
+                                        })}
+                                      </time>
+                                    </span>
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-slate-600">
+                                    暂无已开放作业
+                                  </p>
+                                )}
+                              </div>
+                              {previous && titleIsEmpty && (
+                                <button
+                                  type="button"
+                                  aria-label={`用作命名参考：${previous.title} · ${classroom?.name}`}
+                                  onClick={() => {
+                                    if (form.getValues("title").trim()) return;
+                                    form.setValue("title", previous.title, {
+                                      shouldDirty: true,
+                                      shouldValidate: true,
+                                    });
+                                    form.setFocus("title", {
+                                      shouldSelect: true,
+                                    });
+                                  }}
+                                  className="min-h-8 rounded-md border bg-white px-2 text-xs text-sky-800 hover:bg-sky-50"
+                                >
+                                  用作命名参考
+                                </button>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-slate-600">
+                        选择教学班后查看。
+                      </p>
+                    )}
+                  </div>
+                )}
+              <label className="block space-y-1 text-sm">
+                <span className="font-medium">作业说明</span>
+                <textarea
+                  className="min-h-24 w-full rounded-lg border p-3"
+                  {...form.register("description")}
+                />
+              </label>
+              <label className="flex items-start gap-2 text-sm leading-6">
+                <input
+                  className="mt-1"
+                  type="checkbox"
+                  {...form.register("allowResubmission")}
+                />
+                允许学生在截止时间前重复提交（每次结果独立保留）
+              </label>
+            </section>
+            <div
+              className="space-y-4 border-t pt-5"
+              role="group"
+              aria-labelledby="assignment-content-heading"
+            >
+              <h2 id="assignment-content-heading" className="font-semibold">
+                作业内容
+              </h2>
+              <fieldset className="border-b pb-4">
+                <legend className="sr-only">作业形式</legend>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+                  <span className="font-medium">作业形式</span>
+                  {[
+                    ["bank", "从题库选择题目"],
+                    ["task", "直接布置任务"],
+                  ].map(([value, label]) => (
+                    <label
+                      key={value}
+                      className="flex cursor-pointer items-center gap-2"
+                    >
+                      <input
+                        type="radio"
+                        name="assignmentType"
+                        checked={assignmentType === value}
+                        onChange={() => setAssignmentType(value)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-muted-foreground mt-2 text-xs">
+                  直接任务可提交文字、截图或 PDF，由教师单独评分。
+                </p>
+              </fieldset>
+              {assignmentType === "task" ? (
+                <section className="space-y-4">
+                  <h2 className="font-semibold">任务要求与评分</h2>
+                  <label className="block text-sm">
+                    任务内容
+                    <textarea
+                      className="mt-2 min-h-40 w-full rounded-lg border p-3"
+                      maxLength={10000}
+                      value={task.prompt}
+                      onChange={(event) =>
+                        setTask({ ...task, prompt: event.target.value })
+                      }
+                      placeholder="例如：完成实验，说明分析过程，并提交结果截图。"
+                    />
+                  </label>
+                  <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
+                    <label className="block text-sm">
+                      评分参考（仅教师可见）
+                      <textarea
+                        className="mt-2 min-h-24 w-full rounded-lg border p-3"
+                        maxLength={10000}
+                        value={task.referenceAnswer}
+                        onChange={(event) =>
+                          setTask({
+                            ...task,
+                            referenceAnswer: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="block text-sm">
+                      总分
+                      <input
+                        className="mt-2 w-full rounded-lg border p-3"
+                        type="number"
+                        min="0.01"
+                        max="10000"
+                        step="0.01"
+                        value={task.points}
+                        onChange={(event) =>
+                          setTask({
+                            ...task,
+                            points: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                    <label className="block text-sm font-medium">
+                      教师任务附件（发给学生的材料）
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.docx,.png,.jpg,.jpeg,.txt,.py"
+                        className="mt-2 block w-full text-xs"
+                        onChange={(event) => {
+                          void uploadResourceFiles(event.target.files);
+                          event.target.value = "";
+                        }}
+                        disabled={busy || resourceFiles.length >= 5}
+                      />
+                    </label>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      支持PDF、Word(docx)、图片、UTF-8文本及Python文件，最多5个，每个5MB。发布后学生可下载，附件内容随作业冻结。
+                    </p>
+                    {uploading ? (
+                      <p role="status" className="mt-2 text-xs text-sky-700">
+                        正在上传：{uploading}
+                      </p>
+                    ) : null}
+                    <ul className="mt-2 space-y-2">
+                      {resourceFiles.map((file) => (
                         <li
-                          key={id}
-                          className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1"
+                          key={file.id}
+                          className="flex min-w-0 items-center gap-2 rounded-md bg-white px-2 py-2 text-xs"
                         >
-                          <div className="min-w-0 [overflow-wrap:anywhere]">
-                            <p className="text-xs text-slate-600">
-                              {classroom?.name}
-                            </p>
-                            {previous ? (
-                              <p className="mt-0.5">
-                                <span className="font-medium">
-                                  {previous.title}
-                                </span>{" "}
-                                <span className="text-xs text-slate-600">
-                                  ·{" "}
-                                  {
-                                    ASSIGNMENT_CATEGORY_LABELS[
-                                      previous.category
-                                    ]
-                                  }{" "}
-                                  ·{" "}
-                                  <time dateTime={previous.publishedAt}>
-                                    {new Date(
-                                      previous.publishedAt,
-                                    ).toLocaleDateString("zh-CN", {
-                                      timeZone: "Asia/Shanghai",
-                                    })}
-                                  </time>
-                                </span>
-                              </p>
-                            ) : (
-                              <p className="text-xs text-slate-600">
-                                暂无已开放作业
-                              </p>
-                            )}
-                          </div>
-                          {previous && titleIsEmpty && (
+                          <a
+                            className="min-w-0 flex-1 truncate text-sky-700 underline"
+                            href={`/api/teacher/course-files/${file.id}/download`}
+                            title={file.name}
+                          >
+                            {file.name}
+                          </a>
+                          <span className="shrink-0 text-slate-500">
+                            {Math.ceil(file.sizeBytes / 1024)}KB
+                          </span>
+                          <button
+                            type="button"
+                            className="shrink-0 text-red-600"
+                            onClick={() =>
+                              setResourceFiles((items) =>
+                                items.filter((item) => item.id !== file.id),
+                              )
+                            }
+                          >
+                            移除
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={allowAttachments}
+                      onChange={(e) => setAllowAttachments(e.target.checked)}
+                    />
+                    允许学生上传作答附件：截图与 PDF（每题最多 5 个，每个 5 MB）
+                  </label>
+                  <p className="text-xs text-slate-500">
+                    学生可填写文字答案并附材料；提交后进入人工批改，成绩发布后学生可见。
+                  </p>
+                </section>
+              ) : (
+                <div className="grid items-start gap-5 xl:grid-cols-2">
+                  <section className="min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h2 className="font-semibold">从题库选择题目</h2>
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                        筛选结果 {available.length} 道
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg bg-sky-50 p-3">
+                      <label className="text-xs text-slate-600">
+                        新增题量
+                        <input
+                          aria-label="一键出题数量"
+                          className="mt-1 block w-20 rounded-md border bg-white px-2 py-2"
+                          type="number"
+                          min="1"
+                          max="200"
+                          value={pickCount}
+                          onChange={(event) =>
+                            setPickCount(Number(event.target.value))
+                          }
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-700 px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:bg-sky-800"
+                        onClick={autoPickQuestions}
+                      >
+                        <Plus aria-hidden="true" className="size-4" />
+                        一键添加题目
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAssemblyOpen(true)}
+                        disabled={
+                          !effectiveClassroomIds.length ||
+                          !currentAssemblyChapters.length ||
+                          selected.length >= 200
+                        }
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-3 text-sm font-medium text-sky-800 hover:bg-sky-50 disabled:opacity-50"
+                      >
+                        <Sparkles aria-hidden="true" className="size-4" />
+                        智能组卷
+                      </button>
+                      <p className="w-full text-xs leading-5 text-slate-500">
+                        {currentAssemblyChapters.length
+                          ? "智能组卷支持多选章节和知识点，并在确认前显示历史用题。"
+                          : "选择已发布正式知识图谱的课程后可使用智能组卷。"}
+                      </p>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 [&>input]:min-w-0 [&>select]:min-w-0">
+                      <select
+                        aria-label="按课程选题"
+                        className="rounded-lg border p-2.5 text-sm"
+                        value={filterCourse}
+                        onChange={(e) => {
+                          setFilterCourse(e.target.value);
+                          setFilterChapter("");
+                          setFilterConcept("");
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">全部课程题目</option>
+                        {courses.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                            {item.term ? ` · ${item.term}` : ""}
+                            {item.courseNo ? ` · ${item.courseNo}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        aria-label="按章节选题"
+                        disabled={!course?.chapters.length}
+                        className="rounded-lg border p-2.5 text-sm"
+                        value={filterChapter}
+                        onChange={(e) => {
+                          setFilterChapter(e.target.value);
+                          setFilterConcept("");
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">全部章节</option>
+                        {course?.chapters.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        aria-label="按知识点选题"
+                        className="rounded-lg border p-2.5 text-sm"
+                        value={filterConcept}
+                        disabled={!chapter}
+                        onChange={(event) => {
+                          setFilterConcept(event.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">
+                          {chapter ? "本章全部知识点" : "请先选择章节"}
+                        </option>
+                        {conceptOptions.map((node) => (
+                          <option
+                            key={node.code ?? node.conceptId}
+                            value={node.code ?? node.conceptId}
+                          >
+                            {node.code} · {node.name ?? "知识点"}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="rounded-lg border p-2.5 text-sm"
+                        onClick={() => {
+                          setFilterCourse("");
+                          setFilterChapter("");
+                          setFilterConcept("");
+                          setKeyword("");
+                          setFilterType("");
+                          setPage(1);
+                        }}
+                      >
+                        重置筛选
+                      </button>
+                      <input
+                        aria-label="搜索题目"
+                        placeholder="搜索标题或题干"
+                        className="rounded-lg border p-2.5 text-sm"
+                        value={keyword}
+                        onChange={(e) => {
+                          setKeyword(e.target.value);
+                          setPage(1);
+                        }}
+                      />
+                      <select
+                        aria-label="按题型选题"
+                        className="rounded-lg border p-2.5 text-sm"
+                        value={filterType}
+                        onChange={(e) => {
+                          setFilterType(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">全部题型</option>
+                        {Object.entries(QUESTION_TYPE_LABELS).map(
+                          ([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
+                    <p className="mt-3 text-xs text-slate-500">
+                      课程与章节依据教师已确认的知识点关联筛选。未关联题目可在“全部课程题目”中查看。
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      当前筛选 {available.length} 道 · 已选 {selected.length}{" "}
+                      道。课程列表仅显示有正式图谱且有可选关联题目的课程。
+                    </p>
+                    <div className="mt-4 max-h-[40rem] space-y-2 overflow-y-auto pr-1">
+                      {available.length === 0 ? (
+                        <p className="text-sm text-gray-500">
+                          没有符合条件的题目，请调整筛选。
+                        </p>
+                      ) : (
+                        available
+                          .slice((page - 1) * 12, page * 12)
+                          .map((question) => {
+                            const added = selected.some(
+                              (item) => item.id === question.id,
+                            );
+                            return (
+                              <div
+                                className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${added ? "border-sky-200 bg-sky-50/50" : "hover:border-sky-200"}`}
+                                key={question.id}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm leading-6 font-medium break-words">
+                                    {question.title}
+                                  </p>
+                                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                                    {question.questionCategory?.name ??
+                                      "课程题库"}{" "}
+                                    · {QUESTION_TYPE_LABELS[question.type]}
+                                  </p>
+                                </div>
+                                <button
+                                  className="inline-flex h-9 w-16 shrink-0 items-center justify-center rounded-md border bg-white text-sm whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:text-slate-400"
+                                  disabled={added}
+                                  onClick={() => addQuestion(question)}
+                                  type="button"
+                                >
+                                  {added ? "已添加" : "添加"}
+                                </button>
+                              </div>
+                            );
+                          })
+                      )}
+                    </div>
+                    <div className="mt-4 flex items-center justify-between text-xs">
+                      <span>
+                        {available.length} 道可选 · 已选 {selected.length} 道
+                      </span>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          disabled={page <= 1}
+                          onClick={() => setPage(page - 1)}
+                        >
+                          上一页
+                        </button>
+                        <span>
+                          {page} /{" "}
+                          {Math.max(1, Math.ceil(available.length / 12))}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={page * 12 >= available.length}
+                          onClick={() => setPage(page + 1)}
+                        >
+                          下一页
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h2 className="font-semibold">已选作业题目</h2>
+                      <span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-medium text-sky-800">
+                        {selected.length} 道题 · 总分{" "}
+                        {Math.round(
+                          selected.reduce((sum, item) => sum + item.points, 0) *
+                            100,
+                        ) / 100}
+                      </span>
+                    </div>
+                    <div className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-sky-600"
+                            checked={autoOrganize}
+                            onChange={(event) => {
+                              if (event.target.checked) organizeQuestions();
+                              else {
+                                setAutoOrganize(false);
+                                setOrderFeedback(
+                                  "已切换为手动排序，保存和发布均采用当前题序。",
+                                );
+                              }
+                            }}
+                          />
+                          自动按题型排列
+                        </label>
+                        <button
+                          type="button"
+                          disabled={selected.length < 2}
+                          onClick={organizeQuestions}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-medium whitespace-nowrap text-sky-800 transition hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none disabled:opacity-50"
+                        >
+                          <ListOrdered aria-hidden="true" className="size-4" />
+                          一键整理题序
+                        </button>
+                      </div>
+                      <p className="text-xs leading-5 text-slate-500">
+                        {ASSIGNMENT_QUESTION_ORDER_LABEL}
+                        。同类题保持原顺序，上移、下移可切换为手动排序。
+                      </p>
+                      <div className="space-y-3 border-t pt-3">
+                        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-sky-600"
+                            checked={defaultHundredPoints}
+                            onChange={(event) => {
+                              setDefaultHundredPoints(event.target.checked);
+                              if (event.target.checked) setTypedScore(null);
+                              setOrderFeedback(
+                                event.target.checked
+                                  ? "已恢复默认百分制，当前题目自动均分至100分。"
+                                  : "已切换为自定义总分，保留当前分值。",
+                              );
+                            }}
+                          />
+                          总分固定 100 分，增减题目自动均分
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="flex items-center gap-1 text-xs text-slate-600">
+                            目标总分
+                            <input
+                              aria-label="整理分值目标总分"
+                              className="w-20 rounded-md border bg-white px-2 py-2"
+                              type="number"
+                              min="0.01"
+                              max="10000"
+                              step="0.01"
+                              value={targetPoints}
+                              onChange={(event) =>
+                                setTargetPoints(Number(event.target.value))
+                              }
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            disabled={!selected.length}
+                            onClick={organizePoints}
+                            className="shrink-0 rounded-lg border bg-white px-3 py-2 text-xs whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+                          >
+                            全卷均分
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!selected.length}
+                            onClick={organizePointsByType}
+                            className="shrink-0 rounded-lg border bg-white px-3 py-2 text-xs whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+                          >
+                            按题型均分
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!selected.length}
+                            onClick={() => setScoreDialogOpen(true)}
+                            className="shrink-0 rounded-lg border bg-white px-3 py-2 text-xs text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+                          >
+                            自定义配分
+                          </button>
+                        </div>
+                        <p className="text-xs leading-5 text-slate-500">
+                          全卷均分＝所有题同分；按题型均分＝各题型小计相同、题型内再均分；自定义配分＝逐题型设置小计。
+                        </p>
+                        {typedScore ? (
+                          <p
+                            role="status"
+                            className={
+                              scoreNeedsReview
+                                ? "text-xs text-amber-800"
+                                : "text-xs text-emerald-800"
+                            }
+                          >
+                            题型配分目标 {typedScore.target} 分 ·{" "}
+                            {scoreNeedsReview
+                              ? "题目或分值已变化，请重新配分后发布。"
+                              : "各题型小计已应用。"}
+                          </p>
+                        ) : null}
+                        {scoreNeedsReview ? (
+                          <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              aria-label={`用作命名参考：${previous.title} · ${classroom?.name}`}
-                              onClick={() => {
-                                if (form.getValues("title").trim()) return;
-                                form.setValue("title", previous.title, {
-                                  shouldDirty: true,
-                                  shouldValidate: true,
-                                });
-                                form.setFocus("title", { shouldSelect: true });
-                              }}
-                              className="min-h-8 rounded-md border bg-white px-2 text-xs text-sky-800 hover:bg-sky-50"
+                              onClick={organizePointsByType}
+                              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
                             >
-                              用作命名参考
+                              按题型重新均分
                             </button>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-slate-600">选择教学班后查看。</p>
-                )}
-              </div>
-            )}
-            <label className="block space-y-1 text-sm">
-              <span className="font-medium">作业说明</span>
-              <textarea
-                className="min-h-32 w-full rounded-lg border p-3"
-                {...form.register("description")}
-              />
-            </label>
-            <label className="flex items-start gap-2 text-sm leading-6">
-              <input
-                className="mt-1"
-                type="checkbox"
-                {...form.register("allowResubmission")}
-              />
-              允许学生在截止时间前重复提交（每次结果独立保留）
-            </label>
-          </section>
+                            <button
+                              type="button"
+                              onClick={() => setScoreDialogOpen(true)}
+                              className="rounded-md border bg-white px-3 py-1.5 text-xs text-sky-800 hover:bg-sky-50"
+                            >
+                              打开自定义配分
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                        <span className="text-xs text-slate-500">
+                          清空仅移除本次选题，保留题库原题
+                        </span>
+                        <button
+                          type="button"
+                          disabled={selected.length === 0}
+                          onClick={() => setConfirmClear(true)}
+                          aria-expanded={confirmClear && selected.length > 0}
+                          aria-controls="assignment-clear-confirmation"
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs whitespace-nowrap text-red-600 hover:bg-red-50 disabled:opacity-40"
+                        >
+                          <Trash2 aria-hidden="true" className="size-4" />
+                          一键清空题目
+                        </button>
+                      </div>
+                      {confirmClear && selected.length > 0 ? (
+                        <div
+                          id="assignment-clear-confirmation"
+                          role="group"
+                          aria-label="确认清空作业题目"
+                          className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-3"
+                        >
+                          <p className="text-sm font-medium text-red-800">
+                            确认清空当前作业的 {selected.length} 道题目？
+                          </p>
+                          <p className="text-xs leading-5 text-red-700">
+                            不会删除题库原题。保存草稿后才会更新作业。
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setConfirmClear(false)}
+                              className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                            >
+                              取消清空
+                            </button>
+                            <button
+                              type="button"
+                              onClick={clearQuestions}
+                              className="rounded-md bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700"
+                            >
+                              确认清空 {selected.length} 道题目
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                      {orderFeedback ? (
+                        <p
+                          role="status"
+                          className="rounded-md bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-800"
+                        >
+                          {orderFeedback}
+                        </p>
+                      ) : null}
+                    </div>
+                    {selected.length === 0 ? (
+                      <p className="mt-4 rounded-md border border-dashed p-8 text-center text-sm text-gray-500">
+                        尚未选择题目。草稿可以保存，但发布前至少需要一道题。
+                      </p>
+                    ) : (
+                      <div className="mt-4 max-h-[52rem] space-y-3 overflow-y-auto pr-1">
+                        {selected.map((question, index) => (
+                          <div
+                            className="rounded-lg border p-3 sm:p-4"
+                            key={question.id}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm leading-6 font-medium break-words">
+                                  {index + 1}. {question.title}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {QUESTION_TYPE_LABELS[question.type]}
+                                </p>
+                              </div>
+                              <button
+                                className="shrink-0 rounded-md px-2 py-1 text-sm whitespace-nowrap text-red-600 hover:bg-red-50"
+                                aria-label={`移除第 ${index + 1} 题`}
+                                onClick={() => {
+                                  setOrderFeedback(null);
+                                  setSelected((items) =>
+                                    items.filter(
+                                      (item) => item.id !== question.id,
+                                    ),
+                                  );
+                                }}
+                                type="button"
+                              >
+                                移除
+                              </button>
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-sm">
+                              <button
+                                className="inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1.5 whitespace-nowrap hover:bg-slate-50 disabled:opacity-40"
+                                aria-label={`上移第 ${index + 1} 题`}
+                                disabled={index === 0}
+                                onClick={() => moveQuestion(index, -1)}
+                                type="button"
+                              >
+                                <ArrowUp
+                                  aria-hidden="true"
+                                  className="size-3.5"
+                                />
+                                上移
+                              </button>
+                              <button
+                                className="inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1.5 whitespace-nowrap hover:bg-slate-50 disabled:opacity-40"
+                                aria-label={`下移第 ${index + 1} 题`}
+                                disabled={index === selected.length - 1}
+                                onClick={() => moveQuestion(index, 1)}
+                                type="button"
+                              >
+                                <ArrowDown
+                                  aria-hidden="true"
+                                  className="size-3.5"
+                                />
+                                下移
+                              </button>
+                              <label className="ml-auto flex items-center gap-2 whitespace-nowrap">
+                                分值
+                                <input
+                                  aria-label={`第 ${index + 1} 题分值`}
+                                  className="w-20 rounded border px-2 py-1.5"
+                                  min="0.01"
+                                  onChange={(event) => {
+                                    setDefaultHundredPoints(false);
+                                    setSelected((items) =>
+                                      items.map((item) =>
+                                        item.id === question.id
+                                          ? {
+                                              ...item,
+                                              points: Number(
+                                                event.target.value,
+                                              ),
+                                            }
+                                          : item,
+                                      ),
+                                    );
+                                  }}
+                                  step="0.01"
+                                  type="number"
+                                  value={question.points}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </div>
+              )}
+            </div>
+          </div>
           <section
             aria-labelledby="assignment-publish-heading"
-            className="min-w-0 space-y-4 rounded-xl border bg-white p-4 sm:p-5"
+            className="min-w-0 space-y-3 rounded-xl border border-sky-200 bg-white p-5 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-176px)] xl:overflow-y-auto"
           >
             <h2 id="assignment-publish-heading" className="font-semibold">
               发布设置
@@ -1046,7 +1787,7 @@ export function AssignmentForm({
             <p className="text-xs text-red-600">
               {form.formState.errors.classroomId?.message}
             </p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3">
               <label className="min-w-0 space-y-1 text-sm">
                 <span className="font-medium">发布时间</span>
                 <input
@@ -1072,637 +1813,6 @@ export function AssignmentForm({
             </div>
           </section>
         </div>
-        <div
-          className="space-y-4"
-          role="group"
-          aria-labelledby="assignment-content-heading"
-        >
-          <h2 id="assignment-content-heading" className="font-semibold">
-            作业内容
-          </h2>
-          <fieldset className="bg-card rounded-xl border p-5">
-            <legend className="sr-only">作业形式</legend>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-              <span className="font-medium">作业形式</span>
-              {[
-                ["bank", "从题库选择题目"],
-                ["task", "直接布置任务"],
-              ].map(([value, label]) => (
-                <label
-                  key={value}
-                  className="flex cursor-pointer items-center gap-2"
-                >
-                  <input
-                    type="radio"
-                    name="assignmentType"
-                    checked={assignmentType === value}
-                    onChange={() => setAssignmentType(value)}
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-            <p className="text-muted-foreground mt-2 text-xs">
-              直接任务可提交文字、截图或 PDF，由教师单独评分。
-            </p>
-          </fieldset>
-          {assignmentType === "task" ? (
-            <section className="space-y-4 rounded-xl border bg-white p-5">
-              <h2 className="font-semibold">任务要求与评分</h2>
-              <label className="block text-sm">
-                任务内容
-                <textarea
-                  className="mt-2 min-h-40 w-full rounded-lg border p-3"
-                  maxLength={10000}
-                  value={task.prompt}
-                  onChange={(event) =>
-                    setTask({ ...task, prompt: event.target.value })
-                  }
-                  placeholder="例如：完成实验，说明分析过程，并提交结果截图。"
-                />
-              </label>
-              <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
-                <label className="block text-sm">
-                  评分参考（仅教师可见）
-                  <textarea
-                    className="mt-2 min-h-24 w-full rounded-lg border p-3"
-                    maxLength={10000}
-                    value={task.referenceAnswer}
-                    onChange={(event) =>
-                      setTask({ ...task, referenceAnswer: event.target.value })
-                    }
-                  />
-                </label>
-                <label className="block text-sm">
-                  总分
-                  <input
-                    className="mt-2 w-full rounded-lg border p-3"
-                    type="number"
-                    min="0.01"
-                    max="10000"
-                    step="0.01"
-                    value={task.points}
-                    onChange={(event) =>
-                      setTask({ ...task, points: Number(event.target.value) })
-                    }
-                  />
-                </label>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                <label className="block text-sm font-medium">
-                  教师任务附件（发给学生的材料）
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.docx,.png,.jpg,.jpeg,.txt,.py"
-                    className="mt-2 block w-full text-xs"
-                    onChange={(event) => {
-                      void uploadResourceFiles(event.target.files);
-                      event.target.value = "";
-                    }}
-                    disabled={busy || resourceFiles.length >= 5}
-                  />
-                </label>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  支持PDF、Word(docx)、图片、UTF-8文本及Python文件，最多5个，每个5MB。发布后学生可下载，附件内容随作业冻结。
-                </p>
-                {uploading ? (
-                  <p role="status" className="mt-2 text-xs text-sky-700">
-                    正在上传：{uploading}
-                  </p>
-                ) : null}
-                <ul className="mt-2 space-y-2">
-                  {resourceFiles.map((file) => (
-                    <li
-                      key={file.id}
-                      className="flex min-w-0 items-center gap-2 rounded-md bg-white px-2 py-2 text-xs"
-                    >
-                      <a
-                        className="min-w-0 flex-1 truncate text-sky-700 underline"
-                        href={`/api/teacher/course-files/${file.id}/download`}
-                        title={file.name}
-                      >
-                        {file.name}
-                      </a>
-                      <span className="shrink-0 text-slate-500">
-                        {Math.ceil(file.sizeBytes / 1024)}KB
-                      </span>
-                      <button
-                        type="button"
-                        className="shrink-0 text-red-600"
-                        onClick={() =>
-                          setResourceFiles((items) =>
-                            items.filter((item) => item.id !== file.id),
-                          )
-                        }
-                      >
-                        移除
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={allowAttachments}
-                  onChange={(e) => setAllowAttachments(e.target.checked)}
-                />
-                允许学生上传作答附件：截图与 PDF（每题最多 5 个，每个 5 MB）
-              </label>
-              <p className="text-xs text-slate-500">
-                学生可填写文字答案并附材料；提交后进入人工批改，成绩发布后学生可见。
-              </p>
-            </section>
-          ) : (
-            <div className="grid items-start gap-6 xl:grid-cols-2">
-              <section className="min-w-0 rounded-xl border bg-white p-4 sm:p-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="font-semibold">从题库选择题目</h2>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
-                    筛选结果 {available.length} 道
-                  </span>
-                </div>
-                <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg bg-sky-50 p-3">
-                  <label className="text-xs text-slate-600">
-                    新增题量
-                    <input
-                      aria-label="一键出题数量"
-                      className="mt-1 block w-20 rounded-md border bg-white px-2 py-2"
-                      type="number"
-                      min="1"
-                      max="200"
-                      value={pickCount}
-                      onChange={(event) =>
-                        setPickCount(Number(event.target.value))
-                      }
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-700 px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:bg-sky-800"
-                    onClick={autoPickQuestions}
-                  >
-                    <Plus aria-hidden="true" className="size-4" />
-                    一键添加题目
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssemblyOpen(true)}
-                    disabled={
-                      !effectiveClassroomIds.length ||
-                      !currentAssemblyChapters.length ||
-                      selected.length >= 200
-                    }
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-3 text-sm font-medium text-sky-800 hover:bg-sky-50 disabled:opacity-50"
-                  >
-                    <Sparkles aria-hidden="true" className="size-4" />
-                    智能组卷
-                  </button>
-                  <p className="w-full text-xs leading-5 text-slate-500">
-                    {currentAssemblyChapters.length
-                      ? "智能组卷支持多选章节和知识点，并在确认前显示历史用题。"
-                      : "选择已发布正式知识图谱的课程后可使用智能组卷。"}
-                  </p>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 [&>input]:min-w-0 [&>select]:min-w-0">
-                  <select
-                    aria-label="按课程选题"
-                    className="rounded-lg border p-2.5 text-sm"
-                    value={filterCourse}
-                    onChange={(e) => {
-                      setFilterCourse(e.target.value);
-                      setFilterChapter("");
-                      setFilterConcept("");
-                      setPage(1);
-                    }}
-                  >
-                    <option value="">全部课程题目</option>
-                    {courses.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                        {item.term ? ` · ${item.term}` : ""}
-                        {item.courseNo ? ` · ${item.courseNo}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="按章节选题"
-                    disabled={!course?.chapters.length}
-                    className="rounded-lg border p-2.5 text-sm"
-                    value={filterChapter}
-                    onChange={(e) => {
-                      setFilterChapter(e.target.value);
-                      setFilterConcept("");
-                      setPage(1);
-                    }}
-                  >
-                    <option value="">全部章节</option>
-                    {course?.chapters.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="按知识点选题"
-                    className="rounded-lg border p-2.5 text-sm"
-                    value={filterConcept}
-                    disabled={!chapter}
-                    onChange={(event) => {
-                      setFilterConcept(event.target.value);
-                      setPage(1);
-                    }}
-                  >
-                    <option value="">
-                      {chapter ? "本章全部知识点" : "请先选择章节"}
-                    </option>
-                    {conceptOptions.map((node) => (
-                      <option
-                        key={node.code ?? node.conceptId}
-                        value={node.code ?? node.conceptId}
-                      >
-                        {node.code} · {node.name ?? "知识点"}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="rounded-lg border p-2.5 text-sm"
-                    onClick={() => {
-                      setFilterCourse("");
-                      setFilterChapter("");
-                      setFilterConcept("");
-                      setKeyword("");
-                      setFilterType("");
-                      setPage(1);
-                    }}
-                  >
-                    重置筛选
-                  </button>
-                  <input
-                    aria-label="搜索题目"
-                    placeholder="搜索标题或题干"
-                    className="rounded-lg border p-2.5 text-sm"
-                    value={keyword}
-                    onChange={(e) => {
-                      setKeyword(e.target.value);
-                      setPage(1);
-                    }}
-                  />
-                  <select
-                    aria-label="按题型选题"
-                    className="rounded-lg border p-2.5 text-sm"
-                    value={filterType}
-                    onChange={(e) => {
-                      setFilterType(e.target.value);
-                      setPage(1);
-                    }}
-                  >
-                    <option value="">全部题型</option>
-                    {Object.entries(QUESTION_TYPE_LABELS).map(
-                      ([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  课程与章节依据教师已确认的知识点关联筛选。未关联题目可在“全部课程题目”中查看。
-                </p>
-                <p className="mt-2 text-xs text-slate-500">
-                  当前筛选 {available.length} 道 · 已选 {selected.length}{" "}
-                  道。课程列表仅显示有正式图谱且有可选关联题目的课程。
-                </p>
-                <div className="mt-4 max-h-[40rem] space-y-2 overflow-y-auto pr-1">
-                  {available.length === 0 ? (
-                    <p className="text-sm text-gray-500">
-                      没有符合条件的题目，请调整筛选。
-                    </p>
-                  ) : (
-                    available
-                      .slice((page - 1) * 12, page * 12)
-                      .map((question) => {
-                        const added = selected.some(
-                          (item) => item.id === question.id,
-                        );
-                        return (
-                          <div
-                            className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${added ? "border-sky-200 bg-sky-50/50" : "hover:border-sky-200"}`}
-                            key={question.id}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm leading-6 font-medium break-words">
-                                {question.title}
-                              </p>
-                              <p className="mt-1 text-xs leading-5 text-slate-500">
-                                {question.questionCategory?.name ?? "课程题库"}{" "}
-                                · {QUESTION_TYPE_LABELS[question.type]}
-                              </p>
-                            </div>
-                            <button
-                              className="inline-flex h-9 w-16 shrink-0 items-center justify-center rounded-md border bg-white text-sm whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:text-slate-400"
-                              disabled={added}
-                              onClick={() => addQuestion(question)}
-                              type="button"
-                            >
-                              {added ? "已添加" : "添加"}
-                            </button>
-                          </div>
-                        );
-                      })
-                  )}
-                </div>
-                <div className="mt-4 flex items-center justify-between text-xs">
-                  <span>
-                    {available.length} 道可选 · 已选 {selected.length} 道
-                  </span>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      disabled={page <= 1}
-                      onClick={() => setPage(page - 1)}
-                    >
-                      上一页
-                    </button>
-                    <span>
-                      {page} / {Math.max(1, Math.ceil(available.length / 12))}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={page * 12 >= available.length}
-                      onClick={() => setPage(page + 1)}
-                    >
-                      下一页
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="min-w-0 rounded-xl border bg-white p-4 sm:p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="font-semibold">已选作业题目</h2>
-                  <span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-medium text-sky-800">
-                    {selected.length} 道题 · 总分{" "}
-                    {Math.round(
-                      selected.reduce((sum, item) => sum + item.points, 0) *
-                        100,
-                    ) / 100}
-                  </span>
-                </div>
-                <div className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-sky-600"
-                        checked={autoOrganize}
-                        onChange={(event) => {
-                          if (event.target.checked) organizeQuestions();
-                          else {
-                            setAutoOrganize(false);
-                            setOrderFeedback(
-                              "已切换为手动排序，保存和发布均采用当前题序。",
-                            );
-                          }
-                        }}
-                      />
-                      自动按题型排列
-                    </label>
-                    <button
-                      type="button"
-                      disabled={selected.length < 2}
-                      onClick={organizeQuestions}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-medium whitespace-nowrap text-sky-800 transition hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none disabled:opacity-50"
-                    >
-                      <ListOrdered aria-hidden="true" className="size-4" />
-                      一键整理题序
-                    </button>
-                  </div>
-                  <p className="text-xs leading-5 text-slate-500">
-                    {ASSIGNMENT_QUESTION_ORDER_LABEL}
-                    。同类题保持原顺序，上移、下移可切换为手动排序。
-                  </p>
-                  <div className="space-y-3 border-t pt-3">
-                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-sky-600"
-                        checked={defaultHundredPoints}
-                        onChange={(event) => {
-                          setDefaultHundredPoints(event.target.checked);
-                          if (event.target.checked) setTypedScore(null);
-                          setOrderFeedback(
-                            event.target.checked
-                              ? "已恢复默认百分制，当前题目自动均分至100分。"
-                              : "已切换为自定义总分，保留当前分值。",
-                          );
-                        }}
-                      />
-                      总分固定 100 分，增减题目自动均分
-                    </label>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex items-center gap-1 text-xs text-slate-600">
-                        目标总分
-                        <input
-                          aria-label="整理分值目标总分"
-                          className="w-20 rounded-md border bg-white px-2 py-2"
-                          type="number"
-                          min="0.01"
-                          max="10000"
-                          step="0.01"
-                          value={targetPoints}
-                          onChange={(event) =>
-                            setTargetPoints(Number(event.target.value))
-                          }
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        disabled={!selected.length}
-                        onClick={organizePoints}
-                        className="shrink-0 rounded-lg border bg-white px-3 py-2 text-xs whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:opacity-50"
-                      >
-                        全卷均分
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!selected.length}
-                        onClick={() => setScoreDialogOpen(true)}
-                        className="shrink-0 rounded-lg border bg-white px-3 py-2 text-xs text-sky-700 hover:bg-sky-50 disabled:opacity-50"
-                      >
-                        按题型配分
-                      </button>
-                    </div>
-                    {typedScore ? (
-                      <p
-                        role="status"
-                        className={
-                          scoreNeedsReview
-                            ? "text-xs text-amber-800"
-                            : "text-xs text-emerald-800"
-                        }
-                      >
-                        题型配分目标 {typedScore.target} 分 ·{" "}
-                        {scoreNeedsReview
-                          ? "题目或分值已变化，请重新配分后发布。"
-                          : "各题型小计已应用。"}
-                      </p>
-                    ) : (
-                      <p className="text-xs leading-5 text-slate-500">
-                        可选择全卷均分，也可分别设置各题型小计。
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-                    <span className="text-xs text-slate-500">
-                      清空仅移除本次选题，保留题库原题
-                    </span>
-                    <button
-                      type="button"
-                      disabled={selected.length === 0}
-                      onClick={() => setConfirmClear(true)}
-                      aria-expanded={confirmClear && selected.length > 0}
-                      aria-controls="assignment-clear-confirmation"
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs whitespace-nowrap text-red-600 hover:bg-red-50 disabled:opacity-40"
-                    >
-                      <Trash2 aria-hidden="true" className="size-4" />
-                      一键清空题目
-                    </button>
-                  </div>
-                  {confirmClear && selected.length > 0 ? (
-                    <div
-                      id="assignment-clear-confirmation"
-                      role="group"
-                      aria-label="确认清空作业题目"
-                      className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-3"
-                    >
-                      <p className="text-sm font-medium text-red-800">
-                        确认清空当前作业的 {selected.length} 道题目？
-                      </p>
-                      <p className="text-xs leading-5 text-red-700">
-                        不会删除题库原题。保存草稿后才会更新作业。
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setConfirmClear(false)}
-                          className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
-                        >
-                          取消清空
-                        </button>
-                        <button
-                          type="button"
-                          onClick={clearQuestions}
-                          className="rounded-md bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700"
-                        >
-                          确认清空 {selected.length} 道题目
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                  {orderFeedback ? (
-                    <p
-                      role="status"
-                      className="rounded-md bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-800"
-                    >
-                      {orderFeedback}
-                    </p>
-                  ) : null}
-                </div>
-                {selected.length === 0 ? (
-                  <p className="mt-4 rounded-md border border-dashed p-8 text-center text-sm text-gray-500">
-                    尚未选择题目。草稿可以保存，但发布前至少需要一道题。
-                  </p>
-                ) : (
-                  <div className="mt-4 max-h-[52rem] space-y-3 overflow-y-auto pr-1">
-                    {selected.map((question, index) => (
-                      <div
-                        className="rounded-lg border p-3 sm:p-4"
-                        key={question.id}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm leading-6 font-medium break-words">
-                              {index + 1}. {question.title}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {QUESTION_TYPE_LABELS[question.type]}
-                            </p>
-                          </div>
-                          <button
-                            className="shrink-0 rounded-md px-2 py-1 text-sm whitespace-nowrap text-red-600 hover:bg-red-50"
-                            aria-label={`移除第 ${index + 1} 题`}
-                            onClick={() => {
-                              setOrderFeedback(null);
-                              setSelected((items) =>
-                                items.filter((item) => item.id !== question.id),
-                              );
-                            }}
-                            type="button"
-                          >
-                            移除
-                          </button>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-sm">
-                          <button
-                            className="inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1.5 whitespace-nowrap hover:bg-slate-50 disabled:opacity-40"
-                            aria-label={`上移第 ${index + 1} 题`}
-                            disabled={index === 0}
-                            onClick={() => moveQuestion(index, -1)}
-                            type="button"
-                          >
-                            <ArrowUp aria-hidden="true" className="size-3.5" />
-                            上移
-                          </button>
-                          <button
-                            className="inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1.5 whitespace-nowrap hover:bg-slate-50 disabled:opacity-40"
-                            aria-label={`下移第 ${index + 1} 题`}
-                            disabled={index === selected.length - 1}
-                            onClick={() => moveQuestion(index, 1)}
-                            type="button"
-                          >
-                            <ArrowDown
-                              aria-hidden="true"
-                              className="size-3.5"
-                            />
-                            下移
-                          </button>
-                          <label className="ml-auto flex items-center gap-2 whitespace-nowrap">
-                            分值
-                            <input
-                              aria-label={`第 ${index + 1} 题分值`}
-                              className="w-20 rounded border px-2 py-1.5"
-                              min="0.01"
-                              onChange={(event) => {
-                                setDefaultHundredPoints(false);
-                                setSelected((items) =>
-                                  items.map((item) =>
-                                    item.id === question.id
-                                      ? {
-                                          ...item,
-                                          points: Number(event.target.value),
-                                        }
-                                      : item,
-                                  ),
-                                );
-                              }}
-                              step="0.01"
-                              type="number"
-                              value={question.points}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            </div>
-          )}
-        </div>
         {serverError ? (
           <div
             role="alert"
@@ -1725,20 +1835,13 @@ export function AssignmentForm({
             ) : null}
           </div>
         ) : null}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4">
+        <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white/95 px-5 py-3 shadow-[0_-4px_16px_rgba(15,23,42,0.06)] backdrop-blur-sm">
           <p className="text-sm text-slate-600">
             {assignmentType === "task" ? "直接任务" : `${selected.length}道题`}{" "}
             · 总分{" "}
             <strong>{Number.isFinite(totalPoints) ? totalPoints : "—"}</strong>{" "}
-            ·{" "}
-            {assignmentType === "task"
-              ? task.points === 100
-                ? "百分制"
-                : "自定义总分"
-              : defaultHundredPoints
-                ? "默认百分制"
-                : "自定义总分"}{" "}
-            · 已选 {effectiveClassroomIds.filter(Boolean).length} 个班级
+            · {describeScoreMode()} · 已选{" "}
+            {effectiveClassroomIds.filter(Boolean).length} 个班级
           </p>
           <div className="flex flex-wrap gap-3">
             <button

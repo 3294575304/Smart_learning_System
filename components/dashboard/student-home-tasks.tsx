@@ -14,6 +14,7 @@ const taskColors = {
   assignment: "#0369a1",
   attendance: "#047857",
   survey: "#6d28d9",
+  exam: "#b45309",
 };
 
 function PendingTaskDistribution({
@@ -26,13 +27,16 @@ function PendingTaskDistribution({
   const attendanceEnd = total
     ? ((counts.assignment + counts.attendance) / total) * 100
     : 0;
+  const surveyEnd = total
+    ? ((counts.assignment + counts.attendance + counts.survey) / total) * 100
+    : 0;
   const background = total
-    ? `conic-gradient(${taskColors.assignment} 0 ${assignmentEnd}%, ${taskColors.attendance} ${assignmentEnd}% ${attendanceEnd}%, ${taskColors.survey} ${attendanceEnd}% 100%)`
+    ? `conic-gradient(${taskColors.assignment} 0 ${assignmentEnd}%, ${taskColors.attendance} ${assignmentEnd}% ${attendanceEnd}%, ${taskColors.survey} ${attendanceEnd}% ${surveyEnd}%, ${taskColors.exam} ${surveyEnd}% 100%)`
     : "#e2e8f0";
   return (
     <div
       role="img"
-      aria-label={`待办分布：共 ${total} 项，作业 ${counts.assignment}、签到 ${counts.attendance}、问卷 ${counts.survey}`}
+      aria-label={`待办分布：共 ${total} 项，作业 ${counts.assignment}、签到 ${counts.attendance}、问卷 ${counts.survey}、考试 ${counts.exam}`}
       className="grid size-[4.25rem] shrink-0 place-items-center rounded-full"
       style={{ background }}
     >
@@ -103,7 +107,7 @@ export function StudentHomeTasks({
               className="size-5 shrink-0 text-emerald-700"
             />
             <p className="text-sm font-medium text-slate-800">
-              暂无待办，当前没有要交的作业、签到或问卷
+              暂无待办，当前没有需要处理的考试、作业、签到或问卷
             </p>
             <StudentPageLink
               href="/student/courses"
@@ -134,6 +138,7 @@ export function StudentHomeTasks({
                   count: overview.counts.attendance,
                 },
                 { id: "survey", label: "问卷", count: overview.counts.survey },
+                { id: "exam", label: "考试", count: overview.counts.exam },
               ] as const
             ).map((filter) => (
               <button
@@ -164,7 +169,12 @@ export function StudentHomeTasks({
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {kind === "all"
           ? "全部待办"
-          : { assignment: "作业", attendance: "签到", survey: "问卷" }[kind]}
+          : {
+              assignment: "作业",
+              attendance: "签到",
+              survey: "问卷",
+              exam: "考试",
+            }[kind]}
         ，共 {items.length} 项，显示 {Math.min(items.length, 5)} 项。
       </div>
       {(scope || overview.total > 0) && (
@@ -192,6 +202,25 @@ export function StudentHomeTasks({
               {scope ? "课程记录" : "全部任务"}中查看。
             </p>
           )}
+        </div>
+      )}
+      {overview.scheduledExams.length > 0 && (
+        <div className="mt-4 border-t pt-3">
+          <h3 className="text-sm font-medium">
+            近期考试 · {overview.scheduledExams.length} 场
+          </h3>
+          {overview.scheduledExams.slice(0, 2).map((exam) => (
+            <a
+              key={exam.id}
+              href={exam.href}
+              className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 focus-visible:outline-2"
+            >
+              <span>
+                {exam.title} · {exam.classroomName}
+              </span>
+              <span>{studentTaskDate(exam.opensAt)} 开考</span>
+            </a>
+          ))}
         </div>
       )}
       {overview.scheduledSurveys.length > 0 && (

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import {
   distributeAssignmentPoints,
   distributePointsByType,
+  distributePointsEquallyByType,
   selectAssignmentQuestions,
 } from "@/services/assignments/editor-helpers";
 import { latestEffectiveSubmissions } from "@/services/assignments/latest-submissions";
@@ -122,6 +123,34 @@ test("publication and todos only consume latest effective attempts, preserving h
     ),
     { pendingReviewCount: 1, publishableCount: 0 },
   );
+});
+
+test("equal-by-type split gives every type the same subtotal, then equal within type", () => {
+  const questions = [
+    { id: "a", type: "choice", points: 10 },
+    { id: "b", type: "choice", points: 10 },
+    { id: "c", type: "choice", points: 10 },
+    { id: "d", type: "written", points: 7 },
+  ] as const;
+  const points = distributePointsEquallyByType(questions, 100);
+  assert.deepEqual(points, [16.67, 16.67, 16.66, 50]);
+  assert.equal(
+    points.reduce((sum, value) => sum + Math.round(value * 100), 0),
+    10000,
+  );
+  assert.deepEqual(
+    distributePointsEquallyByType(
+      [
+        { id: "a", type: "choice", points: 10 },
+        { id: "b", type: "choice", points: 10 },
+      ],
+      100,
+    ),
+    [50, 50],
+  );
+  assert.deepEqual(distributePointsEquallyByType([], 100), []);
+  assert.throws(() => distributePointsEquallyByType(questions, 0));
+  assert.throws(() => distributePointsEquallyByType(questions, 100.001));
 });
 
 test("typed subtotals allocate exact cents and preserve locked items", () => {

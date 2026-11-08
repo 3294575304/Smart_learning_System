@@ -43,7 +43,7 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   RECOMMENDATION_READY: "推荐更新",
   SYSTEM_ANNOUNCEMENT: "系统公告",
   COURSE_SURVEY_PUBLISHED: "课程问卷",
-  CLASSROOM_DISSOLVED: "班级解散",
+  CLASSROOM_DISSOLVED: "班级变更",
   COURSE_ANNOUNCEMENT: "课程通知",
 };
 

@@ -1,6 +1,11 @@
 import { ExamType, QuestionType } from "@prisma/client";
 import { z } from "zod";
 
+export const teacherExamListSchema = z.object({
+  courseId: z.string().cuid().optional(),
+  classroomId: z.string().cuid().optional(),
+});
+
 export const examCreateSchema = z
   .object({
     requestId: z.string().uuid(),

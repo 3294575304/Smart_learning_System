@@ -19,6 +19,7 @@ const groups: Array<{
   kind: StudentTaskKind;
   href: string;
 }> = [
+  { kind: "exam", href: "/student/exams" },
   {
     kind: "assignment",
     href: "/student/assignments?status=ALL",
@@ -41,7 +42,7 @@ export default async function StudentTasksPage() {
       <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
       <PageHeader
         title="学习任务"
-        description="集中处理各门课程的全部待办，也可查看作业、签到和问卷记录。"
+        description="集中处理各门课程的全部待办，也可查看考试、作业、签到和问卷记录。"
       />
       <div className="@container">
         <div className="grid items-start gap-4 @min-[52rem]:grid-cols-[minmax(0,1fr)_18rem]">
@@ -64,7 +65,7 @@ export default async function StudentTasksPage() {
                 </div>
                 {overview.total > 1 && (
                   <p className="text-xs leading-5 text-slate-600">
-                    签到优先，其余按截止时间排序
+                    正在进行的考试优先，其次签到，再按截止时间排序
                   </p>
                 )}
               </header>
@@ -82,12 +83,50 @@ export default async function StudentTasksPage() {
                   <div>
                     <p className="font-semibold text-slate-900">暂无待办</p>
                     <p className="mt-0.5 text-sm leading-5 text-slate-600">
-                      可以继续查看作业、出勤和问卷记录。
+                      可以查看考试安排、作业、出勤和问卷记录。
                     </p>
                   </div>
                 </div>
               )}
             </section>
+            {overview.scheduledExams.length > 0 && (
+              <section
+                aria-labelledby="scheduled-exams-heading"
+                className="rounded-2xl border bg-white p-5"
+              >
+                <h2
+                  id="scheduled-exams-heading"
+                  className="font-semibold text-slate-950"
+                >
+                  近期考试
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  未开考的考试不计入待办。
+                </p>
+                <ul className="mt-3 divide-y">
+                  {overview.scheduledExams.map((exam) => (
+                    <li
+                      key={exam.id}
+                      className="flex flex-wrap items-center justify-between gap-3 py-3"
+                    >
+                      <div>
+                        <h3 className="font-medium">{exam.title}</h3>
+                        <p className="text-sm text-slate-600">
+                          {studentTaskContext(exam)} ·{" "}
+                          {studentTaskDate(exam.opensAt)} 开考
+                        </p>
+                      </div>
+                      <Link
+                        href={exam.href}
+                        className="rounded-lg bg-sky-50 px-4 py-2 text-sm font-medium text-sky-800 focus-visible:outline-2"
+                      >
+                        查看安排
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             {overview.scheduledSurveys.length > 0 && (
               <section
                 aria-labelledby="scheduled-surveys-heading"

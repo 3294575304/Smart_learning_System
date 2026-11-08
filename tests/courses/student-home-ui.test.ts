@@ -10,9 +10,10 @@ Object.assign(globalThis, { React });
 function overview(count = 0): StudentTaskOverview {
   return {
     total: count,
-    counts: { assignment: count, attendance: 0, survey: 0 },
+    counts: { exam: 0, assignment: count, attendance: 0, survey: 0 },
     nextChangeAt: null,
     scheduledSurveys: [],
+    scheduledExams: [],
     items: Array.from({ length: count }, (_, i) => ({
       id: `a${i}`,
       kind: "assignment",
@@ -37,7 +38,10 @@ test("首页合并待办，优先任务只出现一次，保留两个学习入�
   for (const label of ["自主练习", "我的题库", "查看全部任务", "优先处理"])
     assert.ok(html.includes(label));
   assert.equal((html.match(/>任务 0</gu) ?? []).length, 1);
-  assert.match(html, /aria-label="待办分布：共 1 项，作业 1、签到 0、问卷 0"/u);
+  assert.match(
+    html,
+    /aria-label="待办分布：共 1 项，作业 1、签到 0、问卷 0、考试 0"/u,
+  );
   assert.doesNotMatch(
     html,
     /待办事项分布|当前优先任务|常用入口|练习中心|复习中心/u,

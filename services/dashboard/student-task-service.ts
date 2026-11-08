@@ -1,3 +1,4 @@
+import { getStudentExamTasks } from "./student-exam-tasks";
 import "server-only";
 
 import { getStudentClassroomContext } from "@/services/courses/student-access";
@@ -31,7 +32,7 @@ export async function getStudentTaskOverview(
         now,
       );
   }
-  const [assignments, home] = await Promise.all([
+  const [assignments, home, exams] = await Promise.all([
     listStudentPendingAssignments(
       studentId,
       now,
@@ -39,6 +40,7 @@ export async function getStudentTaskOverview(
       scope?.classroomId,
     ),
     getStudentHomeTasks(studentId, now, scope),
+    getStudentExamTasks(studentId, now, scope),
   ]);
   const pending = pendingStudentAssignments(assignments, now);
   // Load display context in one batch, with current membership and class state.
@@ -72,6 +74,8 @@ export async function getStudentTaskOverview(
     {
       assignments,
       contexts,
+      exams: exams.items,
+      scheduledExams: exams.scheduled,
       attendance: home.attendance,
       surveys: [...home.surveys, ...home.scheduledSurveys],
     },

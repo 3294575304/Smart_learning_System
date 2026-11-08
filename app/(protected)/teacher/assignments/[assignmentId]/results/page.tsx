@@ -102,9 +102,12 @@ export default async function AssignmentResultsPage({
           </TeacherBackLink>
           <h1 className="text-2xl font-semibold">个人作答详情</h1>
           <div className="rounded-xl border border-dashed bg-white p-8 text-center">
-            <p>
-              {personal.detail.student.displayName}
-              尚未提交该作业，暂无个人作答。
+            <p className="font-medium">
+              {personal.detail.student.displayName} · 学号：
+              {personal.detail.student.studentNo ?? "未设置"}
+            </p>
+            <p className="mt-2 text-slate-600">
+              尚未提交该作业，暂无个人作答；成绩与答题统计暂不计算。
             </p>
             <p className="mt-2 text-sm text-slate-500">
               {personal.assignment.title} · {personal.assignment.classroom.name}

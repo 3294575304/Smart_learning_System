@@ -4,6 +4,7 @@ import { answerOutcome } from "../../services/assignments/personal-work-presenta
 import {
   personalWorkQuerySchema,
   personalWorkReturn,
+  studentAssignmentPersonalHref,
 } from "../../services/assignments/personal-work-navigation";
 import type { TeacherSubmissionAnswerView } from "../../services/assignments/types";
 const id = "cl00000000000000000000001",
@@ -29,6 +30,26 @@ const answer: TeacherSubmissionAnswerView = {
   explanation: "解析",
   programmingAttempt: null,
 };
+test("学生明细入口直达指定提交；未提交保留学生身份和原查询返回地址", () => {
+  const back = `/teacher/assignments/students/${student}?classroomId=${room}&section=ALL&page=2`;
+  const submitted = new URL(
+    studentAssignmentPersonalHref(id, student, "submission-a", back),
+    "http://localhost",
+  );
+  assert.equal(
+    submitted.pathname,
+    `/teacher/assignments/${id}/submissions/submission-a`,
+  );
+  assert.equal(submitted.searchParams.get("returnTo"), back);
+  const missing = new URL(
+    studentAssignmentPersonalHref(id, student, null, back),
+    "http://localhost",
+  );
+  assert.equal(missing.pathname, `/teacher/assignments/${id}/results`);
+  assert.equal(missing.searchParams.get("studentId"), student);
+  assert.equal(missing.searchParams.get("returnTo"), back);
+  assert.equal(missing.searchParams.has("submissionId"), false);
+});
 test("correct, partial, zero, unknown and judge failure have distinct outcomes", () => {
   assert.equal(answerOutcome(answer), "CORRECT");
   assert.equal(

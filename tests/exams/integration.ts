@@ -1,3 +1,5 @@
+import { getStudentExamTasks } from "@/services/dashboard/student-exam-tasks";
+import { getStudentTaskOverview } from "@/services/dashboard/student-task-service";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createCanvas } from "@napi-rs/canvas";
@@ -28,6 +30,7 @@ import {
   cancelExamSession,
   createExamSession,
   listEligibleExamQuestions,
+  listTeacherExams,
   recordExamSwitch,
 } from "@/services/exams/service";
 import { examCreateSchema } from "@/services/exams/schemas";
@@ -143,6 +146,106 @@ async function main() {
   });
   assert.equal(pendingObjectiveUse.objectiveCode, null);
   assert.equal(pendingObjectiveUse.syllabusStructureId, publishedSyllabus.id);
+  const beforeExam = await getStudentExamTasks(
+    student.id,
+    new Date(exam.startsAt.getTime() - 1),
+  );
+  assert.equal(beforeExam.items.length, 0);
+  assert.equal(beforeExam.scheduled.length, 1);
+  assert.ok(beforeExam.scheduled[0].href.startsWith("/student/exams#exam-"));
+  const duringExam = await getStudentTaskOverview(student.id, exam.startsAt, {
+    courseId: course.id,
+    classroomId: first.id,
+  });
+  assert.equal(duringExam.counts.exam, 1);
+  assert.equal(duringExam.counts.assignment, 0);
+  assert.equal(duringExam.items[0].kind, "exam");
+  assert.ok(!JSON.stringify(duringExam).includes(content));
+  assert.equal(
+    (await getStudentExamTasks(other.id, exam.startsAt)).items.length,
+    0,
+  );
+  assert.equal(
+    (await getStudentExamTasks(student.id, exam.endsAt)).items.length,
+    0,
+  );
+  const ownAssignment = exam.assignments.find(
+    (a) => a.classroomId === first.id,
+  );
+  assert.ok(ownAssignment);
+  const submittedFixture = await prisma.submission.create({
+    data: {
+      assignmentId: ownAssignment.id,
+      studentId: student.id,
+      status: "SUBMITTED",
+      idempotencyKey: randomUUID(),
+    },
+  });
+  assert.equal(
+    (await getStudentExamTasks(student.id, exam.startsAt)).items.length,
+    0,
+  );
+  await prisma.submission.delete({ where: { id: submittedFixture.id } });
+  await prisma.examSession.update({
+    where: { id: exam.id },
+    data: { cancelledAt: new Date() },
+  });
+  assert.equal(
+    (await getStudentExamTasks(student.id, exam.startsAt)).items.length,
+    0,
+  );
+  await prisma.examSession.update({
+    where: { id: exam.id },
+    data: { cancelledAt: null },
+  });
+  await prisma.classroom.update({
+    where: { id: first.id },
+    data: { status: "COMPLETED" },
+  });
+  assert.equal(
+    (await getStudentExamTasks(student.id, exam.startsAt)).items.length,
+    0,
+  );
+  await prisma.classroom.update({
+    where: { id: first.id },
+    data: { status: "ACTIVE" },
+  });
+  console.log(
+    "Exam task boundaries, ownership, submission, cancellation and classroom state passed",
+  );
+
+  const scopedExams = await listTeacherExams(teacher.id, {
+    courseId: course.id,
+    classroomId: first.id,
+  });
+  assert.equal(scopedExams.length, 1);
+  assert.equal(scopedExams[0].id, exam.id);
+  assert.equal(scopedExams[0].assignments.length, 1);
+  assert.equal(scopedExams[0].assignments[0].classroom.name, first.name);
+  await assert.rejects(listTeacherExams(other.id, { courseId: course.id }));
+  await assert.rejects(listTeacherExams(other.id, { classroomId: first.id }));
+  await assert.rejects(listTeacherExams(teacher.id, { courseId: "invalid" }));
+  const emptyCourse = await prisma.course.create({
+    data: {
+      teacherId: teacher.id,
+      templateId: template.id,
+      name: "无考试课程",
+      questionCategoryId: category.id,
+      courseNo: `EMPTY-${randomUUID().slice(0, 6)}`,
+      term: "2026",
+      status: "ACTIVE",
+    },
+  });
+  assert.equal(
+    (await listTeacherExams(teacher.id, { courseId: emptyCourse.id })).length,
+    0,
+  );
+  await assert.rejects(
+    listTeacherExams(teacher.id, {
+      courseId: emptyCourse.id,
+      classroomId: first.id,
+    }),
+  );
   assert.equal((await createExamSession(teacher.id, input)).id, exam.id);
   await assert.rejects(
     createExamSession(teacher.id, { ...input, title: "其他试卷" }),

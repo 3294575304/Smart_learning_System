@@ -63,6 +63,34 @@ export function groupQuestionsByType<T extends { type: string }>(
   return groups;
 }
 
+/**
+ * 把目标总分平均分配给每个题型（题型数等分），题型内部再按题数均分。
+ * 与「全卷均分」的区别：不看题目数量，每个题型拿到相同的小计。
+ */
+export function distributePointsEquallyByType<T extends string>(
+  questions: readonly { id: string; type: T; points: number }[],
+  target: number,
+): number[] {
+  const groups = groupQuestionsByType(questions);
+  const types = [...groups.keys()];
+  if (!types.length) return [];
+  const targetCents = Math.round(target * 100);
+  if (
+    !Number.isFinite(target) ||
+    target <= 0 ||
+    target > 10_000 ||
+    Math.abs(targetCents / 100 - target) > 1e-8
+  )
+    throw new Error("目标总分须在 0.01 至 10000 之间，并精确到 0.01 分");
+  const base = Math.floor(targetCents / types.length);
+  const remainder = targetCents % types.length;
+  const subtotals: Partial<Record<T, number>> = {};
+  types.forEach((type, index) => {
+    subtotals[type] = (base + (index < remainder ? 1 : 0)) / 100;
+  });
+  return distributePointsByType(questions, target, subtotals, []);
+}
+
 export function distributePointsByType<T extends string>(
   questions: readonly { id: string; type: T; points: number }[],
   target: number,

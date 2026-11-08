@@ -1,5 +1,5 @@
 import { AssignmentStateRefresh } from "@/components/assignments/state-refresh";
-import { personalWorkHref } from "@/services/assignments/personal-work-navigation";
+import { studentAssignmentPersonalHref } from "@/services/assignments/personal-work-navigation";
 import { Role } from "@prisma/client";
 import { z } from "zod";
 import { notFound } from "next/navigation";
@@ -186,15 +186,12 @@ export default async function StudentAssignmentsPage({
                   <td className="px-4 py-4">
                     <a
                       className="text-sky-700 hover:underline"
-                      href={
-                        item.submissionId
-                          ? personalWorkHref(
-                              item.id,
-                              item.submissionId,
-                              pageHref(query.page),
-                            )
-                          : `/teacher/assignments/${item.id}`
-                      }
+                      href={studentAssignmentPersonalHref(
+                        item.id,
+                        id.data,
+                        item.submissionId,
+                        pageHref(query.page),
+                      )}
                     >
                       {item.submissionId ? "查看作答" : "查看作业"}
                     </a>

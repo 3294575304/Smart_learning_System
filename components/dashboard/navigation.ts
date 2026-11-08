@@ -108,9 +108,9 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
             "/student/assignments",
             "/student/attendance",
             "/student/surveys",
+            "/student/exams",
           ],
         },
-        { href: "/student/exams", label: "我的考试", icon: ClipboardCheck },
       ],
     },
     {
@@ -213,6 +213,7 @@ const STUDENT_SEGMENT_LABELS: Readonly<Record<string, string>> = {
   attendance: "签到与出勤",
   surveys: "课程问卷",
   tasks: "学习任务",
+  exams: "我的考试",
   "learning-center": "课程学习中心",
   profile: "我的课程画像",
 };

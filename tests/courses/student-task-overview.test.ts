@@ -177,8 +177,9 @@ test("全部数量在首页截取前统计，空数据不产生任务或虚假�
   assert.deepEqual(summarizeStudentTasks(empty(), now), {
     items: [],
     total: 0,
-    counts: { assignment: 0, attendance: 0, survey: 0 },
+    counts: { exam: 0, assignment: 0, attendance: 0, survey: 0 },
     scheduledSurveys: [],
+    scheduledExams: [],
     nextChangeAt: null,
   });
 });

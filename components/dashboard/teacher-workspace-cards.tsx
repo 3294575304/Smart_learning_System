@@ -8,12 +8,14 @@ import {
   BookOpenCheck,
   CheckCircle2,
   ClipboardList,
+  FilePenLine,
   GitBranch,
   Megaphone,
   School,
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { ScrollableActionGrid } from "@/components/ui/scrollable-action-grid";
 import { TeacherAssignmentProgress } from "@/components/dashboard/teacher-assignment-progress";
 import { TeacherCardClassroomFilter } from "@/components/dashboard/teacher-card-classroom-filter";
 import { filterDashboardClassroomItems } from "@/services/dashboard/teacher-dashboard-view";
@@ -101,6 +103,13 @@ export function TeacherWorkspaceCards({
       accent: "bg-violet-50 text-violet-700 ring-violet-100",
     },
     {
+      label: "考试管理",
+      description: "组卷、安排考试与查看监考",
+      href: `/teacher/exams?courseId=${workspace.course.id}`,
+      icon: FilePenLine,
+      accent: "bg-indigo-50 text-indigo-700 ring-indigo-100",
+    },
+    {
       label: "课程题库",
       description: "查看当前课程题目",
       href: `/teacher/questions?courseId=${workspace.course.id}`,
@@ -167,33 +176,37 @@ export function TeacherWorkspaceCards({
           >
             快捷入口
           </h2>
-          {/* 固定两列：5 项排 2/2/1，后续加入「考试管理」自然成为 3×2，不再出现 4+1 破格。 */}
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {quickLinks.map(
-              ({ label, description, href, icon: Icon, accent }) => (
-                <Link
-                  key={label}
-                  href={href}
-                  className={`${styles.shortcut} group flex min-w-0 items-center gap-3 border p-3`}
-                >
-                  <span
-                    className={`rounded-xl p-2.5 ring-1 ring-inset ${accent}`}
+          <div className="mt-3">
+            <ScrollableActionGrid
+              label="快捷入口列表"
+              count={quickLinks.length}
+            >
+              {quickLinks.map(
+                ({ label, description, href, icon: Icon, accent }) => (
+                  <Link
+                    key={label}
+                    href={href}
+                    className={`${styles.shortcut} group flex min-w-0 items-center gap-3 border p-3 focus-visible:outline-2 focus-visible:outline-sky-600 active:bg-teal-50`}
                   >
-                    <Icon aria-hidden="true" className="size-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="mt-1 hidden truncate text-[11px] leading-4 text-slate-500 sm:block">
-                      {description}
-                    </p>
-                  </div>
-                  <ArrowRight
-                    aria-hidden="true"
-                    className="hidden size-3 shrink-0 text-slate-300 group-hover:text-teal-600 sm:block"
-                  />
-                </Link>
-              ),
-            )}
+                    <span
+                      className={`rounded-xl p-2.5 ring-1 ring-inset ${accent}`}
+                    >
+                      <Icon aria-hidden="true" className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="mt-1 hidden truncate text-[11px] leading-4 text-slate-500 sm:block">
+                        {description}
+                      </p>
+                    </div>
+                    <ArrowRight
+                      aria-hidden="true"
+                      className="hidden size-3 shrink-0 text-slate-300 group-hover:text-teal-600 sm:block"
+                    />
+                  </Link>
+                ),
+              )}
+            </ScrollableActionGrid>
           </div>
         </section>
         <section
