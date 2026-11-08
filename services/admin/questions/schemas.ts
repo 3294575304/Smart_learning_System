@@ -1,6 +1,8 @@
 import { QuestionStatus, QuestionType } from "@prisma/client";
 import { z } from "zod";
 
+import { questionCourseCategoryIdSchema } from "@/services/question-course-categories/schemas";
+
 const optionalQueryValue = (value: unknown) =>
   value === "" ? undefined : value;
 
@@ -20,7 +22,7 @@ export const adminQuestionListQuerySchema = z
     ),
     categoryId: z.preprocess(
       optionalQueryValue,
-      z.string().cuid("课程分类 ID 格式无效").optional(),
+      questionCourseCategoryIdSchema.optional(),
     ),
     knowledgePointId: z.preprocess(
       optionalQueryValue,

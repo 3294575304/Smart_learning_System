@@ -1,6 +1,8 @@
 import { QuestionType } from "@prisma/client";
 import { z } from "zod";
 
+import { questionCourseCategoryIdSchema } from "@/services/question-course-categories/schemas";
+
 import { programmingConfigRevisionInputSchema } from "@/services/programming-questions/schemas";
 import { questionAnswerSchema } from "@/services/questions/schemas";
 
@@ -32,7 +34,7 @@ export const questionImportCommitSchema = z
       fileName: z.string().trim().min(1).max(255),
       checksum: z.string().regex(/^[a-f0-9]{64}$/u),
     }),
-    categoryId: z.string().cuid("请选择有效课程分类"),
+    categoryId: questionCourseCategoryIdSchema,
     knowledgePointIds: z.array(z.string().cuid()).max(10).default([]),
     questions: z.array(questionImportCommitItemSchema).min(1).max(500),
   })

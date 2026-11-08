@@ -97,6 +97,7 @@ async function main() {
     ]);
     const category = await prisma.questionCourseCategory.create({
       data: {
+        id: `qc_${randomUUID().replaceAll("-", "").slice(0, 24)}`,
         name: "考试 HTTP 分类",
         normalizedName: `exam-http-${randomUUID()}`,
       },

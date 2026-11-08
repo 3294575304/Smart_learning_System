@@ -1,6 +1,8 @@
 import { QuestionType } from "@prisma/client";
 import { z } from "zod";
 
+import { questionCourseCategoryIdSchema } from "@/services/question-course-categories/schemas";
+
 const optionSchema = z.object({
   label: z
     .string()
@@ -71,7 +73,7 @@ export const questionUpsertSchema = z
       .min(1, "题干不能为空")
       .max(5000, "题干不能超过 5000 个字符"),
     type: z.nativeEnum(QuestionType),
-    questionCategoryId: z.string().cuid("课程分类 ID 格式无效"),
+    questionCategoryId: questionCourseCategoryIdSchema,
     revision: z.number().int().min(1).optional(),
     defaultObjectiveKind: z
       .enum(["KNOWLEDGE", "ABILITY", "LITERACY"])
@@ -262,7 +264,7 @@ export const questionIdSchema = z.string().cuid("题目 ID 格式无效");
 export const questionListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
-  categoryId: z.string().cuid("课程分类 ID 格式无效").optional(),
+  categoryId: questionCourseCategoryIdSchema.optional(),
   keyword: z
     .string()
     .trim()

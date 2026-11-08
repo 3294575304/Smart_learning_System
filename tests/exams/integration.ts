@@ -51,7 +51,11 @@ async function main() {
   });
   const template = await prisma.courseTemplate.findFirstOrThrow();
   const category = await prisma.questionCourseCategory.create({
-    data: { name: "考试集成分类", normalizedName: `exam-${randomUUID()}` },
+    data: {
+      id: `qc_${randomUUID().replaceAll("-", "").slice(0, 24)}`,
+      name: "考试集成分类",
+      normalizedName: `exam-${randomUUID()}`,
+    },
   });
   const course = await prisma.course.create({
     data: {

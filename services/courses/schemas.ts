@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { questionCourseCategoryIdSchema } from "@/services/question-course-categories/schemas";
+
 const templateCodeSchema = z
   .string()
   .trim()
@@ -54,14 +56,24 @@ const courseDescriptionSchema = z
   .max(1000, "课程描述不能超过 1000 个字符")
   .transform((value) => value || null);
 
-export const courseTemplateIdSchema = z.string().cuid("课程模板 ID 格式无效");
+const cuidSchema = z.string().cuid();
+
+export const courseTemplateIdSchema = z
+  .string()
+  .refine(
+    (id) =>
+      id.startsWith("ct_")
+        ? /^ct_[0-9a-f]{24}$/u.test(id)
+        : cuidSchema.safeParse(id).success,
+    "课程模板 ID 格式无效",
+  );
 
 export const courseIdSchema = z.string().cuid("课程 ID 格式无效");
 export const classroomIdSchema = z.string().cuid("班级 ID 格式无效");
 export const courseClassroomQuerySchema = z.object({
   classroomId: classroomIdSchema.optional(),
 });
-export const questionCategoryIdSchema = z.string().cuid("课程分类 ID 格式无效");
+export const questionCategoryIdSchema = questionCourseCategoryIdSchema;
 
 export const createCourseTemplateSchema = z
   .object({

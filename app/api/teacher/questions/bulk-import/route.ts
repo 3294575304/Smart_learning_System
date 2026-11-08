@@ -4,6 +4,7 @@ import { z } from "zod";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { questionApiError } from "@/lib/question-api";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
+import { questionCourseCategoryIdSchema } from "@/services/question-course-categories/schemas";
 import { questionUpsertSchema } from "@/services/questions/schemas";
 import {
   createQuestionsInBulk,
@@ -11,7 +12,7 @@ import {
 } from "@/services/questions/service";
 
 const payloadSchema = z.object({
-  questionCategoryId: z.string().cuid(),
+  questionCategoryId: questionCourseCategoryIdSchema,
   knowledgePointIds: z.array(z.string().cuid()).min(1).max(10),
   questions: z.array(z.unknown()).min(1).max(100),
 });

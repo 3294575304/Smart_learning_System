@@ -14,7 +14,7 @@ import {
 import { questionUpsertSchema } from "@/services/questions/schemas";
 
 const courseId = "ccourse000000000000000001";
-const categoryId = "ccategory00000000000000001";
+const categoryId = `qc_${"b".repeat(24)}`;
 
 function request(mode: "RANGE" | "ANALOGY" | "FILE" = "RANGE") {
   return {

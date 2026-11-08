@@ -2,12 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { QuestionType } from "@prisma/client";
 
+import { adminQuestionListQuerySchema } from "@/services/admin/questions/schemas";
+import {
+  courseTemplateIdSchema,
+  createCourseSchema,
+} from "@/services/courses/schemas";
+import { questionCourseCategoryIdSchema } from "@/services/question-course-categories/schemas";
+import { questionImportCommitSchema } from "@/services/question-import/schemas";
 import {
   questionListQuerySchema,
   questionUpsertSchema,
 } from "@/services/questions/schemas";
 
 const knowledgePointId = "cmath00000000000000000001";
+const migratedCategoryId = `qc_${"a".repeat(24)}`;
 
 function baseInput() {
   return {
@@ -155,4 +163,60 @@ test("题库查询支持关键词并限制搜索长度", () => {
     questionListQuerySchema.safeParse({ keyword: "题".repeat(121) }).success,
     false,
   );
+});
+
+test("迁移生成的课程分类 ID 可用于题库、课程、导入及管理入口", () => {
+  assert.equal(
+    questionCourseCategoryIdSchema.safeParse(migratedCategoryId).success,
+    true,
+  );
+  assert.equal(
+    questionUpsertSchema.safeParse({
+      ...baseInput(),
+      questionCategoryId: migratedCategoryId,
+    }).success,
+    true,
+  );
+  assert.equal(
+    questionListQuerySchema.safeParse({ categoryId: migratedCategoryId })
+      .success,
+    true,
+  );
+  assert.equal(
+    adminQuestionListQuerySchema.safeParse({ categoryId: migratedCategoryId })
+      .success,
+    true,
+  );
+  assert.equal(
+    createCourseSchema.safeParse({
+      templateId: `ct_${"b".repeat(24)}`,
+      questionCategoryId: migratedCategoryId,
+      courseNo: "PYTHON-2026",
+      term: "2026",
+      name: "Python 程序设计",
+      description: "",
+    }).success,
+    true,
+  );
+  assert.equal(
+    courseTemplateIdSchema.safeParse(`ct_${"b".repeat(24)}`).success,
+    true,
+  );
+  assert.equal(courseTemplateIdSchema.safeParse("ct_invalid").success, false);
+  assert.equal(
+    questionImportCommitSchema.safeParse({
+      source: { fileName: "questions.csv", checksum: "a".repeat(64) },
+      categoryId: migratedCategoryId,
+      questions: [{ ...baseInput(), rowKey: "1" }],
+    }).success,
+    true,
+  );
+  for (const id of [
+    "qc_abc",
+    `qc_${"g".repeat(24)}`,
+    "",
+    "qc_" + "a".repeat(25),
+  ]) {
+    assert.equal(questionCourseCategoryIdSchema.safeParse(id).success, false);
+  }
 });
