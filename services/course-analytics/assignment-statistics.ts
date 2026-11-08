@@ -34,6 +34,17 @@ export interface CourseAssignmentStatisticsInput {
     score: number | null;
     maxScore: number | null;
   }>;
+  examScores?: Array<{
+    id: string;
+    assignmentId: string | null;
+    classroomId: string;
+    studentId: string;
+    score: number | null;
+    maxScore: number;
+    status: string;
+    title: string;
+    date: Date;
+  }>;
 }
 
 export type AssignmentScoreBandKey =
@@ -48,6 +59,7 @@ export interface AssignmentScoreBand {
 
 export interface CourseAssignmentStatistics {
   assignmentCount: number;
+  gradebookExamCount: number;
   studentCount: number;
   eligibleSubmissionCount: number;
   completedSubmissionCount: number;
@@ -143,6 +155,11 @@ export function calculateCourseAssignmentStatistics(
   let totalScore = 0;
   let totalMaxScore = 0;
   const scorePercentagesByStudent = new Map<string, number[]>();
+  const examKeys = new Set(
+    (input.examScores ?? [])
+      .filter((item) => item.assignmentId)
+      .map((item) => `${item.assignmentId}:${item.studentId}`),
+  );
 
   for (const assignment of assignments) {
     const assignmentStudents =
@@ -163,6 +180,7 @@ export function calculateCourseAssignmentStatistics(
       const studentId = submission.studentId;
       completedSubmissionCount += 1;
       if (
+        examKeys.has(`${assignment.id}:${studentId}`) ||
         !FINAL_SCORE_STATUSES.has(submission.status) ||
         submission.score === null ||
         submission.maxScore === null ||
@@ -178,6 +196,24 @@ export function calculateCourseAssignmentStatistics(
       studentScores.push((submission.score / submission.maxScore) * 100);
       scorePercentagesByStudent.set(studentId, studentScores);
     }
+  }
+
+  for (const exam of input.examScores ?? []) {
+    if (
+      !input.activeStudentIdsByClassroom
+        .get(exam.classroomId)
+        ?.has(exam.studentId) ||
+      exam.status !== "SCORED" ||
+      exam.score === null ||
+      exam.maxScore <= 0
+    )
+      continue;
+    finalizedSubmissionCount += 1;
+    totalScore += exam.score;
+    totalMaxScore += exam.maxScore;
+    const scores = scorePercentagesByStudent.get(exam.studentId) ?? [];
+    scores.push((exam.score / exam.maxScore) * 100);
+    scorePercentagesByStudent.set(exam.studentId, scores);
   }
 
   const scoreCounts = new Map<AssignmentScoreBandKey, number>(
@@ -220,6 +256,11 @@ export function calculateCourseAssignmentStatistics(
 
   return {
     assignmentCount: assignments.length,
+    gradebookExamCount: new Set(
+      (input.examScores ?? [])
+        .filter((item) => !item.assignmentId)
+        .map((item) => item.id),
+    ).size,
     studentCount: activeStudentIds.size,
     eligibleSubmissionCount,
     completedSubmissionCount,
@@ -251,6 +292,7 @@ export function calculateCourseAssignmentScoreTrend(input: {
   }>;
   activeStudentIdsByClassroom: Map<string, Set<string>>;
   submissions: CourseAssignmentStatisticsInput["submissions"];
+  examScores?: CourseAssignmentStatisticsInput["examScores"];
   limit?: number;
   now?: Date;
 }): CourseAssignmentScoreTrendPoint[] {
@@ -264,6 +306,11 @@ export function calculateCourseAssignmentScoreTrend(input: {
   const latestSubmissionByAssignment = latestEffectiveSubmissions(
     input.submissions,
   );
+  const examKeys = new Set(
+    (input.examScores ?? [])
+      .filter((item) => item.assignmentId)
+      .map((item) => `${item.assignmentId}:${item.studentId}`),
+  );
 
   const scoredAssignments = [...assignmentsById.values()]
     .flatMap((assignment) => {
@@ -275,6 +322,7 @@ export function calculateCourseAssignmentScoreTrend(input: {
       for (const submission of latestByStudent?.values() ?? []) {
         if (!eligibleStudents?.has(submission.studentId)) continue;
         if (
+          examKeys.has(`${assignment.id}:${submission.studentId}`) ||
           !FINAL_SCORE_STATUSES.has(submission.status) ||
           submission.score === null ||
           submission.maxScore === null ||
@@ -287,6 +335,18 @@ export function calculateCourseAssignmentScoreTrend(input: {
             0,
             Math.min(100, (submission.score / submission.maxScore) * 100),
           ),
+        );
+      }
+      for (const exam of input.examScores ?? []) {
+        if (
+          exam.assignmentId !== assignment.id ||
+          exam.status !== "SCORED" ||
+          exam.score === null ||
+          !eligibleStudents?.has(exam.studentId)
+        )
+          continue;
+        normalizedScores.push(
+          Math.max(0, Math.min(100, (exam.score / exam.maxScore) * 100)),
         );
       }
       if (normalizedScores.length === 0) return [];
@@ -311,6 +371,46 @@ export function calculateCourseAssignmentScoreTrend(input: {
         },
       ];
     })
+    .concat(
+      [
+        ...new Map(
+          (input.examScores ?? [])
+            .filter((exam) => !exam.assignmentId)
+            .map((exam) => [exam.id, exam]),
+        ).values(),
+      ].flatMap((item) => {
+        const scores = (input.examScores ?? []).filter(
+          (exam) =>
+            exam.id === item.id &&
+            exam.status === "SCORED" &&
+            exam.score !== null &&
+            input.activeStudentIdsByClassroom
+              .get(exam.classroomId)
+              ?.has(exam.studentId),
+        );
+        if (!scores.length) return [];
+        return [
+          {
+            assignmentId: `grade:${item.id}`,
+            title: item.title,
+            date: item.date,
+            averageScore: Number(
+              (
+                scores.reduce(
+                  (sum, exam) =>
+                    sum + ((exam.score ?? 0) / exam.maxScore) * 100,
+                  0,
+                ) / scores.length
+              ).toFixed(1),
+            ),
+            finalizedStudentCount: scores.length,
+            eligibleStudentCount:
+              input.activeStudentIdsByClassroom.get(item.classroomId)?.size ??
+              0,
+          },
+        ];
+      }),
+    )
     .sort((left, right) => {
       const dateDifference = right.date.getTime() - left.date.getTime();
       return (

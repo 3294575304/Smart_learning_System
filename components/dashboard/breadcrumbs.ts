@@ -17,6 +17,7 @@ export function buildBreadcrumbs(
     studentId?: string | null;
     view?: string | null;
     studentQueryHref?: string;
+    source?: string | null;
   },
 ): BreadcrumbItem[] {
   const segments = pathname.split("/").filter(Boolean);
@@ -62,19 +63,25 @@ export function buildBreadcrumbs(
         segments[1] === "assignments" &&
         segments[2] === "students";
       const targetHref =
-        isTeacherStudentRoot && index === 2
-          ? (context?.studentQueryHref ?? "/teacher/assignments?view=STUDENTS")
-          : isStudentVirtualRoot
-            ? segment === "submissions"
-              ? pathname.endsWith("/result")
-                ? "/student/assignments?view=records"
-                : "/student/assignments"
-              : segment === "question-favorites"
-                ? "/student/wrong-questions?view=favorites"
-                : "/student/recommendations"
-            : isStudentCourse
-              ? `${href}/learning-center`
-              : href;
+        context?.source === "exam" &&
+        segments[0] === "teacher" &&
+        segments[1] === "assignments" &&
+        index === 1
+          ? "/teacher/exams"
+          : isTeacherStudentRoot && index === 2
+            ? (context?.studentQueryHref ??
+              "/teacher/assignments?view=STUDENTS")
+            : isStudentVirtualRoot
+              ? segment === "submissions"
+                ? pathname.endsWith("/result")
+                  ? "/student/assignments?view=records"
+                  : "/student/assignments"
+                : segment === "question-favorites"
+                  ? "/student/wrong-questions?view=favorites"
+                  : "/student/recommendations"
+              : isStudentCourse
+                ? `${href}/learning-center`
+                : href;
       return {
         href: targetHref,
         label:
@@ -87,27 +94,37 @@ export function buildBreadcrumbs(
           getStudentPageLabel(
             isStudentVirtualRoot ? targetHref.split("?")[0] : href,
           ) ??
-          (isTeacherStudentRoot && index === 2
-            ? "学生作业查询"
-            : isTeacherStudentRoot && index === 3
-              ? "学生作业明细"
-              : segments[0] === "teacher" &&
-                  segments[1] === "assignments" &&
-                  segment === "results" &&
-                  context?.studentId
-                ? "个人作答"
-                : isTeacherCourseDetail
-                  ? "课程管理详情"
-                  : isStudentCourse
-                    ? "课程学习中心"
-                    : isTeacherAssignment
-                      ? "作业详情"
-                      : isResourceDetail
-                        ? `${labels[segments[index - 1]] ?? "资源"}详情`
-                        : (labels[segment] ??
-                          (index > 0 && labels[segments[index - 1]]
-                            ? `${labels[segments[index - 1]]}详情`
-                            : "详情"))),
+          (context?.source === "exam" &&
+          segments[0] === "teacher" &&
+          segments[1] === "assignments" &&
+          index === 1
+            ? "考试管理"
+            : context?.source === "exam" &&
+                segments[0] === "teacher" &&
+                segments[1] === "assignments" &&
+                index === 2
+              ? "考试详情"
+              : isTeacherStudentRoot && index === 2
+                ? "学生作业查询"
+                : isTeacherStudentRoot && index === 3
+                  ? "学生作业明细"
+                  : segments[0] === "teacher" &&
+                      segments[1] === "assignments" &&
+                      segment === "results" &&
+                      context?.studentId
+                    ? "个人作答"
+                    : isTeacherCourseDetail
+                      ? "课程管理详情"
+                      : isStudentCourse
+                        ? "课程学习中心"
+                        : isTeacherAssignment
+                          ? "作业详情"
+                          : isResourceDetail
+                            ? `${labels[segments[index - 1]] ?? "资源"}详情`
+                            : (labels[segment] ??
+                              (index > 0 && labels[segments[index - 1]]
+                                ? `${labels[segments[index - 1]]}详情`
+                                : "详情"))),
         linkable:
           hasChildPage &&
           targetHref !== pathname &&

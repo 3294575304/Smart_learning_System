@@ -71,6 +71,22 @@ test("作业提交页可通过动态面包屑返回真实作业详情", () => {
   });
 });
 
+test("从考试管理进入试卷时，导航返回考试管理", () => {
+  const breadcrumbs = buildBreadcrumbs(
+    "/teacher/assignments/assignment-123",
+    undefined,
+    { source: "exam" },
+  );
+  assert.deepEqual(breadcrumbs.slice(1), [
+    { href: "/teacher/exams", label: "考试管理", linkable: true },
+    {
+      href: "/teacher/assignments/assignment-123",
+      label: "考试详情",
+      linkable: false,
+    },
+  ]);
+});
+
 test("课程各功能页的所有上级面包屑指向真实管理入口", () => {
   for (const section of [
     "teaching-progress",

@@ -100,6 +100,8 @@ test("真实零分保留，未公布独立计数，待确认出勤不当作正�
     {
       id: "published",
       title: "已公布零分",
+      kind: "ASSIGNMENT",
+      href: "/student/submissions/published/result",
       percentage: 0,
       submittedAt: new Date("2026-10-29T00:00:00Z"),
     },

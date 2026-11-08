@@ -131,7 +131,7 @@ export function AssignmentScoreTrendChart({
   return (
     <div className="mt-4">
       <svg
-        aria-label={`近几次作业百分制平均分折线图。${chartDescription}`}
+        aria-label={`近几次作业与考试百分制平均分折线图。${chartDescription}`}
         className="block h-auto w-full"
         role="img"
         viewBox={`0 0 ${width} ${height}`}
@@ -233,13 +233,14 @@ function ScoreDistribution({
         学生分数段分布
       </h3>
       <p className="mt-2 text-xs leading-5 text-slate-500">
-        按每名学生已评分作业的平均得分率归档；未评分学生单列，占比以全部有效学生为准。
+        按每名学生已评分作业与考试的平均得分率归档；未评分学生单列，占比以全部有效学生为准。
       </p>
       {statistics.studentCount === 0 ? (
         <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
           当前筛选范围暂无有效学生。
         </p>
-      ) : statistics.assignmentCount === 0 ? (
+      ) : statistics.assignmentCount === 0 &&
+        statistics.gradebookExamCount === 0 ? (
         <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
           暂无已发布作业，暂时无法统计分数段。
         </p>
@@ -280,10 +281,12 @@ function ScoreDistribution({
 
 function RecentAssignmentsPanel({
   assignments,
+  gradebookExams,
   allAssignmentsHref,
   statistics,
 }: {
   assignments: TeacherResultOverviewItem[];
+  gradebookExams: TeacherCourseAnalytics["recentGradebookExams"];
   allAssignmentsHref: string;
   statistics: TeacherCourseAnalytics["assignmentStatistics"];
 }) {
@@ -298,7 +301,7 @@ function RecentAssignmentsPanel({
             className="text-xl font-semibold text-slate-900"
             id="recent-assignments-heading"
           >
-            最近作业
+            最近作业与考试
           </h2>
         </div>
         <Link
@@ -309,75 +312,104 @@ function RecentAssignmentsPanel({
         </Link>
       </div>
       <div className="mt-3 divide-y divide-slate-100">
-        {assignments.length > 0 ? (
-          assignments.slice(0, 5).map((assignment) => {
-            const statusLabel =
-              assignmentStatusLabel[assignment.status] ?? assignment.status;
-            const statusColor =
-              assignmentStatusColor[assignment.status] ??
-              "bg-slate-100 text-slate-600";
-            const classAndDeadline = `${assignment.classroom.name} · 截止 ${displayDate(assignment.dueAt)}`;
-            const summary = `${classAndDeadline} · 提交 ${assignment.submittedCount}/${assignment.studentCount} 人 · 得分率 ${displayRate(assignment.averagePercentage)} · 已评 ${assignment.scoredStudentCount} 人 · 待批 ${assignment.pendingReviewCount}`;
+        {assignments.length > 0 || gradebookExams.length > 0 ? (
+          <>
+            {assignments.slice(0, 5).map((assignment) => {
+              const statusLabel =
+                assignmentStatusLabel[assignment.status] ?? assignment.status;
+              const statusColor =
+                assignmentStatusColor[assignment.status] ??
+                "bg-slate-100 text-slate-600";
+              const classAndDeadline = `${assignment.classroom.name} · 截止 ${displayDate(assignment.dueAt)}`;
+              const summary = `${classAndDeadline} · 提交 ${assignment.submittedCount}/${assignment.studentCount} 人 · 得分率 ${displayRate(assignment.averagePercentage)} · 已评 ${assignment.scoredStudentCount} 人 · 待批 ${assignment.pendingReviewCount}`;
 
-            return (
-              <Link
-                aria-label={`查看${assignment.title}成绩详情；${summary}；${statusLabel}`}
-                className="block px-2 py-2 hover:bg-sky-50/50"
-                href={`/teacher/assignments/${assignment.id}/results`}
-                key={assignment.id}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="min-w-0 flex-1 truncate text-[13px] leading-5 font-medium text-slate-900"
-                    title={assignment.title}
-                  >
-                    {assignment.title}
-                  </span>
-                  <span
-                    className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] leading-4 ${statusColor}`}
-                  >
-                    {statusLabel}
-                  </span>
-                  <ArrowRight
-                    aria-hidden="true"
-                    className="size-3.5 shrink-0 text-slate-400"
-                  />
-                </span>
-                <span
-                  className="mt-0.5 block truncate text-xs leading-4 text-slate-500"
-                  title={classAndDeadline}
+              return (
+                <Link
+                  aria-label={`查看${assignment.title}成绩详情；${summary}；${statusLabel}`}
+                  className="block px-2 py-2 hover:bg-sky-50/50"
+                  href={
+                    assignment.gradebookId && assignment.courseId
+                      ? `/teacher/courses/${assignment.courseId}/gradebook/${assignment.gradebookId}`
+                      : `/teacher/assignments/${assignment.id}/results`
+                  }
+                  key={assignment.id}
                 >
-                  {classAndDeadline}
-                </span>
-                <span className="mt-1 flex flex-wrap items-center gap-x-3 text-xs leading-4 text-slate-600">
-                  <span>
-                    提交{" "}
-                    <strong className="font-semibold text-sky-700 tabular-nums">
-                      {assignment.submittedCount}/{assignment.studentCount} 人
-                    </strong>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="min-w-0 flex-1 truncate text-[13px] leading-5 font-medium text-slate-900"
+                      title={assignment.title}
+                    >
+                      {assignment.title}
+                    </span>
+                    {assignment.examType ? (
+                      <span className="text-xs text-violet-700">
+                        {assignment.examType === "MIDTERM"
+                          ? "期中考试"
+                          : "期末考试"}
+                        {assignment.gradebookId ? " · 成绩台账" : " · 在线考试"}
+                      </span>
+                    ) : null}
+                    {assignment.specialGradeCount ? (
+                      <span className="text-xs text-amber-700">
+                        特殊状态 {assignment.specialGradeCount} 人
+                      </span>
+                    ) : null}
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] leading-4 ${statusColor}`}
+                    >
+                      {statusLabel}
+                    </span>
+                    <ArrowRight
+                      aria-hidden="true"
+                      className="size-3.5 shrink-0 text-slate-400"
+                    />
                   </span>
-                  <span>
-                    得分率{" "}
-                    <strong className="font-semibold text-violet-700 tabular-nums">
-                      {displayRate(assignment.averagePercentage)}
-                    </strong>
+                  <span
+                    className="mt-0.5 block truncate text-xs leading-4 text-slate-500"
+                    title={classAndDeadline}
+                  >
+                    {classAndDeadline}
                   </span>
-                  <span>
-                    已评{" "}
-                    <strong className="font-semibold text-emerald-700 tabular-nums">
-                      {assignment.scoredStudentCount} 人
-                    </strong>
+                  <span className="mt-1 flex flex-wrap items-center gap-x-3 text-xs leading-4 text-slate-600">
+                    <span>
+                      提交{" "}
+                      <strong className="font-semibold text-sky-700 tabular-nums">
+                        {assignment.submittedCount}/{assignment.studentCount} 人
+                      </strong>
+                    </span>
+                    <span>
+                      得分率{" "}
+                      <strong className="font-semibold text-violet-700 tabular-nums">
+                        {displayRate(assignment.averagePercentage)}
+                      </strong>
+                    </span>
+                    <span>
+                      已评{" "}
+                      <strong className="font-semibold text-emerald-700 tabular-nums">
+                        {assignment.scoredStudentCount} 人
+                      </strong>
+                    </span>
+                    <span>
+                      待批{" "}
+                      <strong className="font-semibold text-orange-700 tabular-nums">
+                        {assignment.pendingReviewCount}
+                      </strong>
+                    </span>
                   </span>
-                  <span>
-                    待批{" "}
-                    <strong className="font-semibold text-orange-700 tabular-nums">
-                      {assignment.pendingReviewCount}
-                    </strong>
-                  </span>
-                </span>
+                </Link>
+              );
+            })}
+            {gradebookExams.map((exam) => (
+              <Link
+                className="block px-2 py-3 text-sm hover:bg-sky-50/50"
+                href={`/teacher/courses/${exam.courseId}/gradebook/${exam.gradebookId}`}
+                key={exam.id}
+              >
+                {exam.type === "MIDTERM" ? "期中考试" : "期末考试"} ·{" "}
+                {exam.title} · 台账已发布
               </Link>
-            );
-          })
+            ))}
+          </>
         ) : (
           <p className="px-2 py-4 text-center text-xs text-slate-500">
             暂无已发布作业
@@ -543,17 +575,19 @@ export function TeacherCourseAnalyticsView({
                 className="text-xl font-semibold text-slate-900"
                 id="course-assignment-statistics-heading"
               >
-                作业统计
+                作业与考试统计
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                统计已发布和已结束的教师作业；自主练习不计入。
+                统计正式作业、已结束在线考试和已发布台账考试；自主练习不计入。
               </p>
             </div>
             <p className="mt-4 text-sm text-slate-500">
-              {statistics.assignmentCount} 项作业 · {statistics.studentCount}{" "}
-              名有效学生 · {REPORTING_SECTION_LABELS[data.reportingSection]}范围
+              {statistics.assignmentCount} 项在线任务 ·{" "}
+              {statistics.studentCount} 名有效学生 ·{" "}
+              {REPORTING_SECTION_LABELS[data.reportingSection]}范围
             </p>
-            {statistics.assignmentCount === 0 ? (
+            {statistics.assignmentCount === 0 &&
+            statistics.gradebookExamCount === 0 ? (
               <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
                 <p className="font-medium text-slate-800">
                   暂无已发布或已结束作业
@@ -566,13 +600,13 @@ export function TeacherCourseAnalyticsView({
               <>
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
                   <article className="rounded-xl bg-sky-50/70 p-4 sm:p-5">
-                    <p className="text-sm text-slate-500">作业完成率</p>
+                    <p className="text-sm text-slate-500">在线任务提交率</p>
                     <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
                       {displayRate(statistics.completionRate)}
                     </p>
                     <p className="mt-2 text-sm text-slate-600">
                       已完成 {statistics.completedSubmissionCount} /{" "}
-                      {statistics.eligibleSubmissionCount} 个学生·作业组合
+                      {statistics.eligibleSubmissionCount} 个学生·在线任务组合
                     </p>
                     <p className="mt-2 text-xs text-slate-600">
                       未交 {statistics.unsubmittedCount} · 逾期未交{" "}
@@ -582,12 +616,12 @@ export function TeacherCourseAnalyticsView({
                     </p>
                   </article>
                   <article className="rounded-xl bg-emerald-50/70 p-4 sm:p-5">
-                    <p className="text-sm text-slate-500">作业得分率</p>
+                    <p className="text-sm text-slate-500">作业与考试得分率</p>
                     <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
                       {displayRate(statistics.scoreRate)}
                     </p>
                     <p className="mt-2 text-sm text-slate-600">
-                      最终评分 {statistics.finalizedSubmissionCount} 份 ·{" "}
+                      最终评分 {statistics.finalizedSubmissionCount} 项 ·{" "}
                       {statistics.scoredStudentCount} 名学生已有最终成绩
                     </p>
                   </article>
@@ -607,7 +641,7 @@ export function TeacherCourseAnalyticsView({
                           className="font-semibold text-slate-900"
                           id="score-trend-heading"
                         >
-                          近几次作业平均分
+                          近几次作业与考试平均分
                         </h3>
                         <p className="mt-1 text-xs leading-5 text-slate-500">
                           已统一换算为满分 100
@@ -615,7 +649,7 @@ export function TeacherCourseAnalyticsView({
                         </p>
                       </div>
                       <p className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-medium text-sky-700">
-                        最近 {scoreTrend.length} 次有最终评分的作业
+                        最近 {scoreTrend.length} 次有最终评分的作业或考试
                       </p>
                     </div>
                     {scoreTrend.length > 0 ? (
@@ -647,6 +681,7 @@ export function TeacherCourseAnalyticsView({
           <RecentAssignmentsPanel
             allAssignmentsHref={`/teacher/assignments?${assignmentParams.toString()}`}
             assignments={recentAssignments}
+            gradebookExams={data.recentGradebookExams}
             statistics={statistics}
           />
         </div>

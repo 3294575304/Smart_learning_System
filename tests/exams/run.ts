@@ -28,6 +28,9 @@ async function main() {
     DATABASE_URL: isolatedDatabaseUrl(base, schema),
     AI_PROVIDER: "mock",
     HTTP_INTEGRATION_SCHEMA: schema,
+    SEED_SUPER_ADMIN_PASSWORD:
+      process.env.SEED_SUPER_ADMIN_PASSWORD ??
+      `Test-${randomBytes(24).toString("base64url")}-Aa1!`,
   };
   try {
     run(

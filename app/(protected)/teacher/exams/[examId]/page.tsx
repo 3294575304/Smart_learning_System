@@ -17,6 +17,14 @@ export default async function ExamMonitorPage({
         ← 考试管理
       </Link>
       <h1 className="text-2xl font-semibold">{exam.title} · 监考</h1>
+      {exam.endsAt <= new Date() && !exam.cancelledAt && (
+        <Link
+          className="text-sky-700 underline"
+          href={`/teacher/exams/${exam.id}/analysis`}
+        >
+          查看考试分析
+        </Link>
+      )}
       <p>
         {exam.startsAt.toLocaleString("zh-CN")} 至{" "}
         {exam.endsAt.toLocaleString("zh-CN")} · 允许切屏 {exam.allowedSwitches}{" "}

@@ -65,7 +65,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
   const query: TeacherResultsOverviewQuery = { ...parsedQuery, classroomId };
   const [recentResults, analytics] = await Promise.all([
     selectedCourse
-      ? listTeacherResultsOverview(teacher.id, query, now)
+      ? listTeacherResultsOverview(teacher.id, query, now, true)
       : Promise.resolve(null),
     selectedCourse
       ? getTeacherCourseAnalytics(teacher.id, selectedCourse.id, classroomId, {
@@ -78,7 +78,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
   return (
     <section className="space-y-6">
       <PageHeader
-        description="选择课程和班级查看学习证据、作业表现与近期作业。"
+        description="选择课程和班级查看学习证据、作业与考试表现。"
         title="学情分析"
       />
       <section
@@ -95,7 +95,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
           <p className="mt-1 text-sm leading-6 text-slate-600">
             {selectedCourse
               ? `${selectedCourse.name} · ${selectedCourse.courseNo} · ${selectedCourse.term}${classroomId && selectedClassroom ? ` · ${selectedClassroom.name}` : " · 当前范围的全部班级"}`
-              : "选择课程和班级查看学习证据、作业表现与近期作业。"}
+              : "选择课程和班级查看学习证据、作业与考试表现。"}
             {selectedClassroom && !selectedClassroom.courseId
               ? " 当前班级未关联课程。"
               : ""}
@@ -117,8 +117,8 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
           scopeChanged={rawQuery.scopeChanged === "1"}
         />
         <p className="text-xs leading-5 text-slate-500">
-          作业统计范围：{REPORTING_SECTION_LABELS[query.section]}
-          。按现有有效成员关系实时统计，未冻结历史名单；入班前已截止的作业也计入应交。已退出、移除成员的作答单独保留，不计入应交和缺交。章节掌握度仍展示当前有效授课班级的学情。
+          在线任务统计范围：{REPORTING_SECTION_LABELS[query.section]}
+          。作业与已结束考试按现有有效成员关系实时统计，未冻结历史名单；入班前已截止的任务也计入应交。已退出、移除成员的作答单独保留，不计入应交和缺交。仅台账录入的考试参与成绩分析，不计提交率。章节掌握度仍展示当前有效授课班级的学情。
         </p>
         {selectedCourse ? (
           <Link

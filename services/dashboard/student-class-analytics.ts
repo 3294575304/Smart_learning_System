@@ -6,6 +6,7 @@ import { listStudentCourseEvaluationContexts } from "@/services/gradebook/servic
 import { assignmentReportingWhere } from "@/services/assignments/reporting";
 import { latestEffectiveSubmissions } from "@/services/assignments/latest-submissions";
 import { hundredPointScore } from "@/services/assignments/presentation";
+import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
 export const studentClassAnalyticsQuery = z
   .object({
     courseId: z.string().cuid().optional(),
@@ -36,19 +37,23 @@ export async function getStudentClassAnalytics(
       (!query.classroomId || x.classroom.id === query.classroomId),
   );
   const ids = visible.map((x) => x.classroom.id);
-  const [assignments, attendance] = ids.length
+  const [assignments, attendance, publishedExamScores] = ids.length
     ? await Promise.all([
         prisma.assignment.findMany({
           where: {
-            examSessionId: null,
             classroomId: { in: ids },
             ...assignmentReportingWhere("ALL", now),
+            OR: [
+              { examSessionId: null },
+              { examSession: { cancelledAt: null, endsAt: { lte: now } } },
+            ],
           },
           select: {
             id: true,
             classroomId: true,
             title: true,
             dueAt: true,
+            examSession: { select: { type: true } },
             submissions: {
               where: { studentId },
               select: {
@@ -77,24 +82,38 @@ export async function getStudentClassAnalytics(
             session: { select: { classroomId: true } },
           },
         }),
+        listPublishedExamScores(ids, studentId, now),
       ])
-    : [[], []];
+    : [[], [], []];
   const classes = visible.map((context) => {
     const work = assignments.filter(
       (x) => x.classroomId === context.classroom.id,
     );
+    const gradeScores = publishedExamScores.filter(
+      (item) => item.classroomId === context.classroom.id,
+    );
+    const gradeByAssignment = new Map(
+      gradeScores
+        .filter((item) => item.assignmentId)
+        .map((item) => [item.assignmentId, item]),
+    );
     const rows = work.map((assignment) => {
       const submission = latestEffectiveSubmissions(assignment.submissions)[0];
+      const publishedGrade = gradeByAssignment.get(assignment.id);
       return {
         assignment,
         submission,
-        percentage:
-          submission?.status === "PUBLISHED"
+        percentage: publishedGrade
+          ? publishedGrade.status === "SCORED"
+            ? hundredPointScore(publishedGrade.score, publishedGrade.maxScore)
+            : null
+          : submission?.status === "PUBLISHED"
             ? hundredPointScore(
                 submission.score?.toNumber() ?? null,
                 submission.maxScore?.toNumber() ?? null,
               )
             : null,
+        grade: publishedGrade ?? null,
       };
     });
     for (const row of rows)
@@ -104,9 +123,31 @@ export async function getStudentClassAnalytics(
       )
         row.percentage = null;
     const submitted = rows.filter((x) => x.submission).length;
-    const graded = rows.filter(
-      (x) => x.percentage !== null && x.percentage >= 0 && x.percentage <= 100,
+    const gradeOnly = gradeScores.filter(
+      (item) =>
+        !item.assignmentId ||
+        !rows.some(
+          (row) => row.assignment.id === item.assignmentId && row.submission,
+        ),
     );
+    const gradeOnlyScored = gradeOnly.flatMap((item) => {
+      const percentage =
+        item.status === "SCORED"
+          ? hundredPointScore(item.score, item.maxScore)
+          : null;
+      return percentage === null ? [] : [{ item, percentage }];
+    });
+    const graded = rows.filter(
+      (x) =>
+        x.submission &&
+        x.percentage !== null &&
+        x.percentage >= 0 &&
+        x.percentage <= 100,
+    );
+    const scores = [
+      ...graded.map((item) => item.percentage ?? 0),
+      ...gradeOnlyScored.map((item) => item.percentage),
+    ];
     const records = attendance.filter(
       (x) => x.session.classroomId === context.classroom.id,
     );
@@ -121,16 +162,15 @@ export async function getStudentClassAnalytics(
       completion: work.length
         ? Math.round((submitted / work.length) * 100)
         : null,
-      average: graded.length
+      average: scores.length
         ? Math.round(
-            (graded.reduce((n, x) => n + (x.percentage ?? 0), 0) /
-              graded.length) *
-              100,
+            (scores.reduce((n, value) => n + value, 0) / scores.length) * 100,
           ) / 100
         : null,
-      gradedCount: graded.length,
-      publishedCount: rows.filter((x) => x.submission?.status === "PUBLISHED")
-        .length,
+      gradedCount: scores.length,
+      publishedCount: rows.filter(
+        (x) => x.submission && (x.submission.status === "PUBLISHED" || x.grade),
+      ).length,
       scoreHistory: graded
         .filter((x) => x.submission)
         .sort(
@@ -149,12 +189,31 @@ export async function getStudentClassAnalytics(
                   title: x.assignment.title,
                   percentage: x.percentage,
                   submittedAt: x.submission.submittedAt,
+                  kind: x.assignment.examSession?.type ?? "ASSIGNMENT",
+                  href: x.grade
+                    ? `/student/results?view=course&courseId=${x.grade.courseId}&classroomId=${x.grade.classroomId}`
+                    : `/student/submissions/${x.submission.id}/result`,
                 },
               ]
             : [],
-        ),
+        )
+        .concat(
+          gradeOnlyScored.map(({ item, percentage }) => ({
+            id: `grade:${item.id}`,
+            title: item.title,
+            percentage,
+            submittedAt: item.publishedAt,
+            kind: item.type,
+            href: `/student/results?view=course&courseId=${item.courseId}&classroomId=${item.classroomId}`,
+          })),
+        )
+        .sort(
+          (a, b) =>
+            (a.submittedAt?.getTime() ?? 0) - (b.submittedAt?.getTime() ?? 0),
+        )
+        .slice(-8),
       awaitingRelease: rows.filter(
-        (x) => x.submission && x.submission.status !== "PUBLISHED",
+        (x) => x.submission && x.submission.status !== "PUBLISHED" && !x.grade,
       ).length,
       attendance: {
         present: records.filter((x) => x.currentStatus === "PRESENT").length,
@@ -183,11 +242,38 @@ export async function getStudentClassAnalytics(
                   title: x.assignment.title,
                   submittedAt: x.submission.submittedAt,
                   percentage: x.percentage,
-                  status: x.submission.status,
+                  status: x.grade
+                    ? ("PUBLISHED" as const)
+                    : x.submission.status,
+                  kind: x.assignment.examSession?.type ?? "ASSIGNMENT",
+                  href: x.grade
+                    ? `/student/results?view=course&courseId=${x.grade.courseId}&classroomId=${x.grade.classroomId}`
+                    : `/student/submissions/${x.submission.id}/result`,
+                  gradeStatus: x.grade?.status ?? null,
                 },
               ]
             : [],
-        ),
+        )
+        .concat(
+          gradeOnly.map((item) => ({
+            id: `grade:${item.id}`,
+            title: item.title,
+            submittedAt: item.publishedAt,
+            percentage:
+              item.status === "SCORED"
+                ? hundredPointScore(item.score, item.maxScore)
+                : null,
+            status: "PUBLISHED" as const,
+            kind: item.type,
+            href: `/student/results?view=course&courseId=${item.courseId}&classroomId=${item.classroomId}`,
+            gradeStatus: item.status,
+          })),
+        )
+        .sort(
+          (a, b) =>
+            (b.submittedAt?.getTime() ?? 0) - (a.submittedAt?.getTime() ?? 0),
+        )
+        .slice(0, 8),
     };
   });
   return { contexts, classes, query, updatedAt: now };

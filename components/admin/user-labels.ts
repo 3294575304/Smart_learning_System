@@ -13,6 +13,8 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
 };
 
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  EXAM_ANALYSIS_GENERATED: "生成考试分析",
+  EXAM_ANALYSIS_DOWNLOADED: "下载考试分析",
   EXAM_PUBLISHED: "发布考试",
   EXAM_CANCELLED: "取消考试",
   EXAM_DRAFT_CREATED: "上传考试试卷",

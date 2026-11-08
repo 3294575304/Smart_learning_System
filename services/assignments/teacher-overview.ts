@@ -12,6 +12,7 @@ export async function getTeacherAssignmentOverview(
   const record = await prisma.assignment.findFirst({
     where: { id: assignmentId, teacherId, deletedAt: null },
     select: {
+      examSessionId: true,
       questions: {
         orderBy: { sortOrder: "asc" },
         select: {
@@ -42,6 +43,7 @@ export async function getTeacherAssignmentOverview(
   const assignment = await getTeacherAssignment(teacherId, assignmentId);
   return {
     assignment,
+    examSessionId: record.examSessionId,
     questions: record.questions.map((question) => ({
       id: question.id,
       title: question.titleSnapshot,

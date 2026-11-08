@@ -135,6 +135,14 @@ export default async function StudentExamsPage() {
                     </div>
                   </details>
                   <div className="mt-4">
+                    {now >= exam.endsAt && (
+                      <Link
+                        className={`${button} mr-2`}
+                        href={`/student/exams/${exam.id}/report?classroomId=${assignment.classroomId}`}
+                      >
+                        查看考试报告
+                      </Link>
+                    )}
                     <Link className={button} href={href}>
                       {submitted || !writable || now >= exam.endsAt
                         ? "查看考试记录"

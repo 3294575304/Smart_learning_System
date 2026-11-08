@@ -67,6 +67,8 @@ test("analysis preserves a real zero grade and separates hidden grades from the 
     {
       id: "published",
       title: "已公布零分",
+      kind: "ASSIGNMENT",
+      href: "/student/submissions/published/result",
       percentage: 0,
       submittedAt: new Date("2026-10-28T00:00:00Z"),
     },
@@ -75,6 +77,9 @@ test("analysis preserves a real zero grade and separates hidden grades from the 
     {
       id: "hidden",
       title: "尚未公布作业",
+      kind: "ASSIGNMENT",
+      href: "/student/submissions/hidden/result",
+      gradeStatus: null,
       status: "GRADED",
       percentage: null,
       submittedAt: new Date("2026-10-29T00:00:00Z"),

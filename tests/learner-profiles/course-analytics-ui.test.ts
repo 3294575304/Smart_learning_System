@@ -93,7 +93,7 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
   );
   assert.match(resultsPage, /getTeacherReportingScope/u);
   assert.match(filters, /reportingClassroomMatches/u);
-  assert.match(resultsPage, /选择课程和班级查看学习证据、作业表现与近期作业/u);
+  assert.match(resultsPage, /选择课程和班级查看学习证据、作业与考试表现/u);
   assert.match(service, /where: \{ id: courseId, teacherId \}/u);
   assert.match(
     service,
@@ -115,7 +115,7 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
   assert.match(resultsPage, /page: 1,[\s\S]*?pageSize: 5/u);
   assert.match(
     resultsPage,
-    /selectedCourse\s*\? listTeacherResultsOverview\(teacher\.id, query, now\)/u,
+    /selectedCourse\s*\? listTeacherResultsOverview\(teacher\.id, query, now, true\)/u,
   );
   assert.match(
     resultsPage,
@@ -133,16 +133,16 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
   );
   assert.match(
     view,
-    /href=\{`\/teacher\/assignments\/\$\{assignment\.id\}\/results`\}/u,
+    /`\/teacher\/assignments\/\$\{assignment\.id\}\/results`/u,
   );
   assert.match(view, /暂无已发布作业/u);
   assert.match(view, /暂无已发布或已结束作业/u);
   assert.match(view, /当前筛选范围没有有效学生/u);
   assert.match(view, /暂无作业最终评分/u);
   assert.match(view, /aria-labelledby="course-assignment-statistics-heading"/u);
-  assert.match(view, /作业统计/u);
-  assert.match(view, /作业完成率/u);
-  assert.match(view, /作业得分率/u);
+  assert.match(view, /作业与考试统计/u);
+  assert.match(view, /在线任务提交率/u);
+  assert.match(view, /作业与考试得分率/u);
   assert.match(view, /学生分数段分布/u);
   assert.match(view, /未评分/u);
   assert.match(view, /本阶段教学待办/u);

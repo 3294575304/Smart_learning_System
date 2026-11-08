@@ -66,6 +66,7 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
     studentId: searchParams.get("studentId"),
     view: searchParams.get("view"),
     studentQueryHref,
+    source: searchParams.get("source"),
   }).map((crumb) =>
     classroomId &&
     crumb.href.startsWith("/student/courses/") &&
@@ -152,6 +153,7 @@ function ContextPageTitle({
       {buildBreadcrumbs(pathname, undefined, {
         studentId: query.get("studentId"),
         view: query.get("view"),
+        source: query.get("source"),
       }).at(-1)?.label ?? getDashboardPageTitle(pathname, groups)}
     </p>
   );

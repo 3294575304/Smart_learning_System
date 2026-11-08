@@ -14,6 +14,7 @@ import {
 
 import { prisma } from "@/lib/prisma";
 import { withClassroomQuery } from "@/lib/course-classroom";
+import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
 import { getTeacherCourseClassroom } from "@/services/courses/classroom-context";
 import { calculateAttendanceRate } from "@/services/attendance/calculation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -253,6 +254,7 @@ export async function getTeacherCourseAnalytics(
       },
       select: {
         id: true,
+        status: true,
         memberships: {
           where: { status: MembershipStatus.ACTIVE },
           select: { studentId: true },
@@ -262,10 +264,13 @@ export async function getTeacherCourseAnalytics(
     prisma.assignment.findMany({
       where: {
         teacherId,
-        examSessionId: null,
         classroom: { courseId },
         ...classroomScope,
         ...assignmentReportingWhere(section, now),
+        OR: [
+          { examSessionId: null },
+          { examSession: { cancelledAt: null, endsAt: { lte: now } } },
+        ],
       },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       select: {
@@ -277,6 +282,7 @@ export async function getTeacherCourseAnalytics(
         publishedAt: true,
         dueAt: true,
         createdAt: true,
+        examSession: { select: { type: true } },
       },
     }),
   ]);
@@ -287,6 +293,39 @@ export async function getTeacherCourseAnalytics(
       new Set(classroom.memberships.map((membership) => membership.studentId)),
     ]),
   );
+  const reportableAssignmentIds = new Set(
+    reportingAssignments.map((item) => item.id),
+  );
+  const reportingClassroomStatusById = new Map(
+    reportingClassrooms.map((item) => [item.id, item.status]),
+  );
+  const publishedExamScores = await listPublishedExamScores(
+    reportingClassrooms.map((item) => item.id),
+    undefined,
+    now,
+  );
+  const examScores = publishedExamScores
+    .filter(
+      (item) =>
+        activeStudentIdsByClassroom
+          .get(item.classroomId)
+          ?.has(item.studentId) &&
+        (item.assignmentId
+          ? reportableAssignmentIds.has(item.assignmentId)
+          : section !== "HISTORY" ||
+            reportingClassroomStatusById.get(item.classroomId) !== "ACTIVE"),
+    )
+    .map((item) => ({
+      id: item.id,
+      assignmentId: item.assignmentId,
+      classroomId: item.classroomId,
+      studentId: item.studentId,
+      score: item.score,
+      maxScore: item.maxScore,
+      status: item.status,
+      title: `${item.type === "MIDTERM" ? "期中" : "期末"} · ${item.title}`,
+      date: item.publishedAt,
+    }));
   const assignmentIds = reportingAssignments.map((assignment) => assignment.id);
   const assignmentSubmissions =
     assignmentIds.length > 0
@@ -507,13 +546,20 @@ export async function getTeacherCourseAnalytics(
       assignments: reportingAssignments,
       activeStudentIdsByClassroom,
       submissions: normalizedAssignmentSubmissions,
+      examScores,
     },
     now,
   );
   const assignmentScoreTrend = calculateCourseAssignmentScoreTrend({
-    assignments: reportingAssignments,
+    assignments: reportingAssignments.map((assignment) => ({
+      ...assignment,
+      title: assignment.examSession
+        ? `${assignment.examSession.type === "MIDTERM" ? "期中" : "期末"} · ${assignment.title}`
+        : assignment.title,
+    })),
     activeStudentIdsByClassroom,
     submissions: normalizedAssignmentSubmissions,
+    examScores,
     now,
   });
   const latestByAssignment = latestEffectiveSubmissions(assignmentSubmissions);
@@ -659,6 +705,27 @@ export async function getTeacherCourseAnalytics(
     },
     assignmentStatistics,
     assignmentScoreTrend,
+    recentGradebookExams: [
+      ...new Map(
+        publishedExamScores
+          .filter(
+            (item) =>
+              !item.assignmentId &&
+              examScores.some((score) => score.id === item.id),
+          )
+          .map((item) => [item.id, item]),
+      ).values(),
+    ]
+      .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
+      .slice(0, 5)
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        type: item.type,
+        publishedAt: item.publishedAt,
+        gradebookId: item.gradebookId,
+        courseId: item.courseId,
+      })),
     reportingSection: section,
     reportingClassroomStatus,
     classrooms: course.classrooms.map((classroom) => ({

@@ -62,6 +62,7 @@ interface ImportExecutionContext {
   adminId: string;
   teacherId: string;
   teacherTwoId: string;
+  schoolId: string;
   courseId: string;
   classroomId: string;
   courseNo: string;
@@ -109,7 +110,7 @@ async function createImportContext(): Promise<ImportExecutionContext> {
     }),
     prisma.user.findUniqueOrThrow({
       where: { email: "teacher@example.com" },
-      select: { id: true },
+      select: { id: true, schoolId: true },
     }),
     prisma.user.findUniqueOrThrow({
       where: { email: "teacher2@example.com" },
@@ -120,6 +121,7 @@ async function createImportContext(): Promise<ImportExecutionContext> {
       select: { id: true },
     }),
   ]);
+  assert.ok(teacher.schoolId);
   const courseNo = `SIE-${suffix}`;
   const course = await prisma.course.create({
     data: {
@@ -161,6 +163,7 @@ async function createImportContext(): Promise<ImportExecutionContext> {
     adminId: admin.id,
     teacherId: teacher.id,
     teacherTwoId: teacherTwo.id,
+    schoolId: teacher.schoolId,
     courseId: course.id,
     classroomId: classroom.id,
     courseNo,
@@ -217,6 +220,7 @@ async function createUserWithProfile(
       email: input.email ?? null,
       passwordHash: input.passwordHash ?? "student-import-execution-test",
       role: input.role,
+      schoolId: context.schoolId,
       mustChangePassword: input.mustChangePassword ?? false,
       profile: {
         create: {

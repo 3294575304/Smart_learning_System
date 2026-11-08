@@ -33,10 +33,8 @@ export default async function TeacherAssignmentPage({
   const id = assignmentIdSchema.safeParse((await params).assignmentId);
   if (!id.success) notFound();
   try {
-    const { assignment, questions } = await getTeacherAssignmentOverview(
-      teacher.id,
-      id.data,
-    );
+    const { assignment, examSessionId, questions } =
+      await getTeacherAssignmentOverview(teacher.id, id.data);
     const [makeup, copyTargets] = await Promise.all([
       getAssignmentMakeupManagement(teacher.id, id.data),
       canCopyHistoricalAssignment(assignment)
@@ -52,14 +50,16 @@ export default async function TeacherAssignmentPage({
       <section className="space-y-5">
         <TeacherBackLink
           href={
-            assignment.classroom.status === "ACTIVE" &&
-            !["ARCHIVED", "REVOKED"].includes(assignment.status) &&
-            assignment.status !== "CLOSED"
-              ? "/teacher/assignments"
-              : "/teacher/assignments?section=HISTORY"
+            examSessionId
+              ? "/teacher/exams"
+              : assignment.classroom.status === "ACTIVE" &&
+                  !["ARCHIVED", "REVOKED"].includes(assignment.status) &&
+                  assignment.status !== "CLOSED"
+                ? "/teacher/assignments"
+                : "/teacher/assignments?section=HISTORY"
           }
         >
-          返回作业管理
+          {examSessionId ? "返回考试管理" : "返回作业管理"}
         </TeacherBackLink>
         <header className="rounded-xl border bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">

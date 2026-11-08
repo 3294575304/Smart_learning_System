@@ -29,6 +29,20 @@ const panel =
   "min-w-0 rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/30";
 const panelAction =
   "inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-sky-50 px-3 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
+const specialGradeLabels: Record<string, string> = {
+  ABSENT: "缺考",
+  DEFERRED: "缓考",
+  LEAVE: "请假",
+  EXEMPT: "免修",
+  CHEATING: "作弊",
+  OTHER: "特殊状态",
+  NOT_ENTERED: "未录入",
+};
+function recordLabel(kind: string, href: string) {
+  if (kind === "ASSIGNMENT") return "作业";
+  const exam = kind === "MIDTERM" ? "期中考试" : "期末考试";
+  return `${exam} · ${href.startsWith("/student/results") ? "成绩台账" : "在线考试"}`;
+}
 function PanelTitle({
   icon,
   title,
@@ -73,7 +87,7 @@ export function ScoreChart({
           等待第一份已公布成绩
         </p>
         <p className="mt-1 text-xs leading-5 text-slate-500">
-          成绩公布后，我可以在这里查看每次作业的得分。
+          成绩公布后，我可以在这里查看每次作业与考试的得分。
         </p>
       </div>
     );
@@ -84,7 +98,7 @@ export function ScoreChart({
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-5">
         <p className="text-xs font-medium text-slate-600">最近一次已公布成绩</p>
         <p className="mt-2 text-sm font-medium [overflow-wrap:anywhere] break-words text-slate-900">
-          {only.title}
+          {recordLabel(only.kind, only.href)} · {only.title}
         </p>
         <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-1.5">
           <p className="text-3xl font-semibold tracking-tight text-slate-900 tabular-nums">
@@ -102,7 +116,7 @@ export function ScoreChart({
         </p>
         <Link
           className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-sky-50 px-3 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
-          href={`/student/submissions/${encodeURIComponent(only.id)}/result`}
+          href={only.href}
         >
           查看成绩与教师反馈
           <ArrowUpRight aria-hidden="true" className="size-3.5" />
@@ -125,7 +139,7 @@ export function ScoreChart({
     <figure className="mt-4 min-w-0">
       <div
         role="region"
-        aria-label="作业成绩图和作业名称，可横向滚动"
+        aria-label="作业与考试成绩图，可横向滚动"
         tabIndex={0}
         className="overflow-x-auto rounded-lg focus-visible:outline-2 focus-visible:outline-sky-700"
       >
@@ -136,9 +150,9 @@ export function ScoreChart({
             viewBox={`0 0 ${width} 176`}
             className="block w-full"
             role="img"
-            aria-label={`我的作业成绩，最近 ${points.length} 项已公布成绩，按百分制展示`}
+            aria-label={`我的作业与考试成绩，最近 ${points.length} 项已公布成绩，按百分制展示`}
           >
-            <title>我的作业成绩变化</title>
+            <title>我的作业与考试成绩变化</title>
             <desc>
               {points.map((p) => `${p.title}：${p.percentage}分`).join("；")}
             </desc>
@@ -216,7 +230,7 @@ export function ScoreChart({
             {points.map((point) => (
               <li key={point.id} className="min-w-0 px-1" title={point.title}>
                 <span className="line-clamp-2 [overflow-wrap:anywhere]">
-                  {point.title}
+                  {recordLabel(point.kind, point.href)} · {point.title}
                 </span>
               </li>
             ))}
@@ -225,7 +239,7 @@ export function ScoreChart({
       </div>
       <details className="mt-2 text-sm text-slate-700">
         <summary className="w-fit cursor-pointer rounded py-2 font-medium text-sky-800 focus-visible:outline-2 focus-visible:outline-sky-700">
-          查看完整作业名和得分
+          查看完整任务名和得分
         </summary>
         <ol className="divide-y divide-slate-100">
           {points.map((point) => (
@@ -234,7 +248,7 @@ export function ScoreChart({
               className="flex items-baseline justify-between gap-3 py-2.5"
             >
               <span className="min-w-0 [overflow-wrap:anywhere]">
-                {point.title}
+                {recordLabel(point.kind, point.href)} · {point.title}
               </span>
               <span className="shrink-0 font-medium tabular-nums">
                 {point.percentage} 分
@@ -251,7 +265,7 @@ export function ScoreChart({
         <span>
           {points.length === 1
             ? "仅有 1 项已公布成绩"
-            : "按提交时间排列，每项作业取最新有效提交"}
+            : "按时间排列，在线任务取最新有效提交；台账成绩取已发布快照"}
         </span>
       </figcaption>
     </figure>
@@ -320,14 +334,14 @@ export function StudentAnalysisWorkspace({
           : "结合已公布作业反馈，先复习反复出错的内容。";
   const metrics = [
     {
-      label: "我的作业提交率",
+      label: "我的在线任务提交率",
       value: s.completion === null ? "—" : `${s.completion}%`,
       detail: `已提交 ${s.submitted} / ${s.total} 项`,
       icon: CheckCheck,
       tint: "bg-sky-50 text-sky-600",
     },
     {
-      label: "我的作业均分",
+      label: "我的作业与考试均分",
       value: s.average ?? "—",
       detail: s.gradedCount
         ? `来自 ${s.gradedCount} 项百分制成绩`
@@ -336,7 +350,7 @@ export function StudentAnalysisWorkspace({
       tint: "bg-indigo-50 text-indigo-600",
     },
     {
-      label: "未提交作业",
+      label: "未提交在线任务",
       value: s.unsubmitted,
       detail: s.overdue
         ? `${s.overdue} 项已截止`
@@ -427,8 +441,8 @@ export function StudentAnalysisWorkspace({
         <section className={`${panel} p-5 sm:p-6 lg:col-span-8`}>
           <PanelTitle
             icon={<ChartNoAxesCombined className="size-4" />}
-            title="我的作业成绩"
-            description="最近 8 项已公布作业，按百分制展示"
+            title="我的作业与考试成绩"
+            description="最近 8 项已公布作业与考试，按百分制展示"
             action={
               <Link href={assignments} className={panelAction}>
                 作业记录
@@ -441,8 +455,8 @@ export function StudentAnalysisWorkspace({
         <section className={`${panel} p-5 sm:p-6 lg:col-span-4`}>
           <PanelTitle
             icon={<Layers3 className="size-4" />}
-            title="我的作业进度"
-            description="当前教学班已开放的正式作业"
+            title="我的在线任务进度"
+            description="当前教学班的正式作业与已结束考试"
           />
           <div className="mt-6 flex flex-wrap items-center justify-center gap-5">
             <div
@@ -450,8 +464,8 @@ export function StudentAnalysisWorkspace({
               role="img"
               aria-label={
                 s.total
-                  ? `${s.total}项作业，已公布${s.publishedCount}项，待公布${s.awaitingRelease}项，未提交${s.unsubmitted}项`
-                  : "当前教学班暂无作业"
+                  ? `${s.total}项在线任务，已公布${s.publishedCount}项，待公布${s.awaitingRelease}项，未提交${s.unsubmitted}项`
+                  : "当前教学班暂无在线任务"
               }
               style={{
                 background: s.total
@@ -510,7 +524,7 @@ export function StudentAnalysisWorkspace({
           <div className="p-5 sm:px-6">
             <PanelTitle
               icon={<ClipboardList className="size-4" />}
-              title="我的提交记录"
+              title="我的作业与考试记录"
               description="当前教学班最近 8 项有效提交"
               action={
                 <Link href={assignments} className={panelAction}>
@@ -523,7 +537,7 @@ export function StudentAnalysisWorkspace({
           {s.recent.length ? (
             <>
               <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-3 border-y border-slate-100 bg-slate-50/70 px-5 py-2 text-xs text-slate-500 sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:px-6">
-                <span>作业名称</span>
+                <span>任务名称</span>
                 <span className="hidden sm:block">提交时间</span>
                 <span className="text-right">成绩 / 状态</span>
               </div>
@@ -531,12 +545,12 @@ export function StudentAnalysisWorkspace({
                 {s.recent.map((row) => (
                   <li key={row.id}>
                     <Link
-                      href={`/student/submissions/${row.id}/result`}
+                      href={row.href}
                       className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3 px-5 py-4 transition hover:bg-sky-50/50 sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:px-6"
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium text-slate-700">
-                          {row.title}
+                          {recordLabel(row.kind, row.href)} · {row.title}
                         </span>
                         <span className="mt-1 block text-xs text-slate-500 sm:hidden">
                           {row.submittedAt?.toLocaleDateString("zh-CN") ??
@@ -553,6 +567,10 @@ export function StudentAnalysisWorkspace({
                         {row.status !== "PUBLISHED" ? (
                           <span className="inline-block rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">
                             待公布
+                          </span>
+                        ) : row.gradeStatus && row.gradeStatus !== "SCORED" ? (
+                          <span className="text-xs text-slate-600">
+                            {specialGradeLabels[row.gradeStatus] ?? "特殊状态"}
                           </span>
                         ) : row.percentage === null ? (
                           <span className="text-xs text-slate-500">
@@ -692,7 +710,7 @@ export function StudentAnalysisWorkspace({
       <footer className="flex flex-wrap items-start justify-between gap-2 px-1 text-[11px] leading-5 text-slate-500">
         <p className="inline-flex max-w-3xl items-start gap-1.5">
           <Info className="mt-1 size-3 shrink-0" aria-hidden="true" />
-          均分取我在当前教学班各项作业最新有效、已公布的百分制成绩。自主练习和未评分作业不计入。
+          均分取当前教学班已公布的作业与考试百分制成绩；同步到已发布台账的考试只计一次。仅台账录入的考试不计入提交率，自主练习和未评分项不计入均分。
         </p>
         <span className="inline-flex items-center gap-1">
           <Clock3 className="size-3" aria-hidden="true" />

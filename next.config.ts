@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@napi-rs/canvas"],
   distDir: process.env.NEXT_DIST_DIR?.trim() || ".next",
   outputFileTracingIncludes: {
     "/super-admin/development-logs": ["./CHANGELOG.md"],

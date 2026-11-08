@@ -224,6 +224,9 @@ test("university demo seed is repeatable and complete", async () => {
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
     DATABASE_URL: isolatedDatabaseUrl(baseUrl, schema),
+    SEED_SUPER_ADMIN_PASSWORD:
+      process.env.SEED_SUPER_ADMIN_PASSWORD ??
+      `Test-${randomBytes(24).toString("base64url")}-Aa1!`,
   };
   const prismaCli = resolve("node_modules/prisma/build/index.js");
   const client = new PrismaClient({

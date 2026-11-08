@@ -9,6 +9,10 @@ export interface TeacherResultOverviewItem {
   totalPoints: number;
   id: string;
   title: string;
+  examType?: "MIDTERM" | "FINAL" | null;
+  gradebookId?: string | null;
+  courseId?: string | null;
+  specialGradeCount?: number;
   status: AssignmentStatus;
   classroom: { id: string; name: string };
   dueAt: Date | null;

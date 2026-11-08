@@ -17,7 +17,7 @@ export function schoolIdentityLayout(
       : aspect > 5
         ? 38
         : 44;
-  const gap = aspect > 8 ? 12 : 14;
+  const gap = aspect >= 8 ? 12 : 14;
   const nameWidth = Math.min(
     Math.max(1, available - logoSize - gap),
     aspect * 30,

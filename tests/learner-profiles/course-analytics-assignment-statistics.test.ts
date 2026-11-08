@@ -7,6 +7,109 @@ import {
   type CourseAssignmentStatisticsInput,
 } from "@/services/course-analytics/assignment-statistics";
 
+test("published gradebook exam replaces an online exam score once", () => {
+  const assignments = [
+    {
+      id: "exam",
+      classroomId: "room",
+      status: "PUBLISHED" as const,
+      publishedAt: new Date("2026-01-01"),
+      dueAt: new Date("2026-01-02"),
+      title: "期中考试",
+      createdAt: new Date("2026-01-01"),
+    },
+  ];
+  const activeStudentIdsByClassroom = new Map([["room", new Set(["student"])]]);
+  const submissions = [
+    submission({
+      id: "attempt",
+      assignmentId: "exam",
+      studentId: "student",
+      attemptNumber: 1,
+      status: "PUBLISHED",
+      score: 40,
+      maxScore: 100,
+    }),
+  ];
+  const examScores = [
+    {
+      id: "item",
+      assignmentId: "exam",
+      classroomId: "room",
+      studentId: "student",
+      score: 80,
+      maxScore: 100,
+      status: "SCORED",
+      title: "期中考试",
+      date: new Date("2026-01-03"),
+    },
+  ];
+  const input = {
+    assignments,
+    activeStudentIdsByClassroom,
+    submissions,
+    examScores,
+  };
+  const result = calculateCourseAssignmentStatistics(
+    input,
+    new Date("2026-01-04"),
+  );
+  assert.equal(result.completedSubmissionCount, 1);
+  assert.equal(result.finalizedSubmissionCount, 1);
+  assert.equal(result.scoreRate, 80);
+  assert.equal(
+    calculateCourseAssignmentScoreTrend({
+      ...input,
+      now: new Date("2026-01-04"),
+    })[0]?.averageScore,
+    80,
+  );
+});
+
+test("gradebook-only exam adds scores but no submission, and special status is not zero", () => {
+  const input: CourseAssignmentStatisticsInput = {
+    assignments: [],
+    submissions: [],
+    activeStudentIdsByClassroom: new Map([["room", new Set(["s1", "s2"])]]),
+    examScores: [
+      {
+        id: "item",
+        assignmentId: null,
+        classroomId: "room",
+        studentId: "s1",
+        score: 75,
+        maxScore: 100,
+        status: "SCORED",
+        title: "期末",
+        date: new Date("2026-01-03"),
+      },
+      {
+        id: "item",
+        assignmentId: null,
+        classroomId: "room",
+        studentId: "s2",
+        score: null,
+        maxScore: 100,
+        status: "ABSENT",
+        title: "期末",
+        date: new Date("2026-01-03"),
+      },
+    ],
+  };
+  const result = calculateCourseAssignmentStatistics(input);
+  assert.equal(result.gradebookExamCount, 1);
+  assert.equal(result.eligibleSubmissionCount, 0);
+  assert.equal(result.completedSubmissionCount, 0);
+  assert.equal(result.scoreRate, 75);
+  assert.equal(result.scoredStudentCount, 1);
+  assert.equal(result.unscoredStudentCount, 1);
+  assert.equal(
+    calculateCourseAssignmentScoreTrend({ ...input, assignments: [] })[0]
+      ?.averageScore,
+    75,
+  );
+});
+
 function submission(
   values: Partial<CourseAssignmentStatisticsInput["submissions"][number]> &
     Pick<

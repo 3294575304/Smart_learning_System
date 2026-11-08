@@ -26,9 +26,6 @@ export default async function TeacherExamsPage({
     <section className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <Link className="text-sm text-sky-700" href="/teacher/assignments">
-            ← 作业管理
-          </Link>
           <h1 className="text-2xl font-semibold">考试管理</h1>
           {scope.data.courseId || scope.data.classroomId ? (
             <p className="mt-1 text-sm text-slate-600">
@@ -79,11 +76,19 @@ export default async function TeacherExamsPage({
                     查看监考状态
                   </Link>
                 )}
+                {!exam.cancelledAt && exam.endsAt <= new Date() && (
+                  <Link
+                    className="text-sky-700 underline"
+                    href={`/teacher/exams/${exam.id}/analysis`}
+                  >
+                    查看考试分析
+                  </Link>
+                )}
                 {exam.assignments.map((assignment) => (
                   <Link
                     className="text-sky-700 underline"
                     key={assignment.id}
-                    href={`/teacher/assignments/${assignment.id}`}
+                    href={`/teacher/assignments/${assignment.id}?source=exam`}
                   >
                     {assignment.classroom.name}：查看试卷、批改与成绩
                   </Link>

@@ -3,6 +3,7 @@ import { getStudentTaskOverview } from "@/services/dashboard/student-task-servic
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createCanvas } from "@napi-rs/canvas";
+import { strFromU8, unzipSync } from "fflate";
 import { Prisma, Role } from "@prisma/client";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
@@ -25,6 +26,14 @@ import { publishPaperDraft } from "@/services/exams/paper-publish";
 import { executeClaimedExamPaperJob } from "@/services/exams/paper-worker";
 import { EXAM_PAPER_JOB_TYPE } from "@/services/exams/paper-ai";
 import { readAssignmentQuestionImage } from "@/services/exams/paper-images";
+import {
+  generateTeacherExamAnalysis,
+  getTeacherExamAnalysis,
+  getTeacherExamAnalysisVersion,
+} from "@/services/exams/analysis";
+import { getStudentExamReport } from "@/services/exams/student-report";
+import { buildExamAnalysisXlsx } from "@/services/exams/analysis-xlsx";
+import { buildExamCommentaryPdf } from "@/services/exams/analysis-pdf";
 import { paperDraftQuestionSchema } from "@/services/exams/paper-schemas";
 import {
   cancelExamSession,
@@ -861,6 +870,134 @@ async function main() {
     (await getPaperDraft(teacher.id, removable.id)).questions.length,
     0,
   );
+  await prisma.examSession.update({
+    where: { id: scanExam.id },
+    data: { endsAt: new Date(Date.now() - 1000) },
+  });
+  const analysisQuestion = await prisma.assignmentQuestion.findFirstOrThrow({
+    where: { assignmentId: scanExam.assignments[0].id },
+  });
+  const analysisSubmission = await prisma.submission.create({
+    data: {
+      assignmentId: scanExam.assignments[0].id,
+      studentId: student.id,
+      idempotencyKey: randomUUID(),
+      status: "PUBLISHED",
+      startedAt: new Date(Date.now() - 60_000),
+      submittedAt: new Date(),
+      gradedAt: new Date(),
+      publishedAt: new Date(),
+      score: 80,
+      maxScore: 100,
+      percentage: 80,
+      answers: {
+        create: {
+          assignmentQuestionId: analysisQuestion.id,
+          score: 80,
+          maxScore: 100,
+          isCorrect: false,
+          gradingStatus: "GRADED",
+          responseTimeMs: 12000,
+        },
+      },
+    },
+  });
+  await assert.rejects(getTeacherExamAnalysis(other.id, scanExam.id));
+  const preview = await getTeacherExamAnalysis(teacher.id, scanExam.id);
+  assert.equal(preview.current.snapshot.overview.expected, 1);
+  assert.equal(preview.current.snapshot.overview.participated, 1);
+  assert.equal(preview.current.snapshot.overview.average, 80);
+  assert.equal(preview.current.snapshot.questions[0].averageTimeMs, 12000);
+  const version = await generateTeacherExamAnalysis(
+    teacher.id,
+    scanExam.id,
+    { pass: 60, excellent: 85 },
+    context,
+  );
+  assert.equal(version.revision, 1);
+  assert.equal(
+    (
+      await generateTeacherExamAnalysis(
+        teacher.id,
+        scanExam.id,
+        { pass: 60, excellent: 85 },
+        context,
+      )
+    ).id,
+    version.id,
+  );
+  await assert.rejects(getTeacherExamAnalysisVersion(other.id, scanExam.id, 1));
+  const report = await getStudentExamReport(student.id, scanExam.id, first.id);
+  assert.equal(report.percentage, 80);
+  assert.equal(report.classAverage, null);
+  assert.equal(report.rankBand, null);
+  await assert.rejects(
+    getStudentExamReport(outsider.id, scanExam.id, first.id),
+  );
+  const savedAnalysis = await getTeacherExamAnalysisVersion(
+    teacher.id,
+    scanExam.id,
+    1,
+  );
+  const workbook = unzipSync(buildExamAnalysisXlsx(savedAnalysis.snapshot));
+  assert.match(strFromU8(workbook["xl/worksheets/sheet1.xml"]), /80/u);
+  assert.match(strFromU8(workbook["xl/worksheets/sheet2.xml"]), /考试一班/u);
+  assert.match(strFromU8(workbook["xl/worksheets/sheet3.xml"]), /12000/u);
+  const pdf = await PDFDocument.load(
+    await buildExamCommentaryPdf(savedAnalysis.snapshot, teacher.id),
+  );
+  assert.equal(pdf.getPageCount(), 2);
+  await prisma.submission.update({
+    where: { id: analysisSubmission.id },
+    data: { score: 90, percentage: 90 },
+  });
+  assert.equal(
+    (await getTeacherExamAnalysis(teacher.id, scanExam.id)).stale,
+    true,
+  );
+  assert.equal(
+    (
+      await generateTeacherExamAnalysis(
+        teacher.id,
+        scanExam.id,
+        { pass: 60, excellent: 85 },
+        context,
+      )
+    ).revision,
+    2,
+  );
+  if (republished?.status === "fulfilled") {
+    await prisma.examSession.update({
+      where: { id: republished.value.id },
+      data: { endsAt: new Date(Date.now() - 1000) },
+    });
+    const classAssignment = republished.value.assignments.find(
+      (item) => item.classroomId === first.id,
+    );
+    assert.ok(classAssignment);
+    await prisma.submission.create({
+      data: {
+        assignmentId: classAssignment.id,
+        studentId: student.id,
+        idempotencyKey: randomUUID(),
+        status: "PUBLISHED",
+        startedAt: new Date(Date.now() - 60_000),
+        submittedAt: new Date(),
+        gradedAt: new Date(),
+        publishedAt: new Date(),
+        score: 75,
+        maxScore: 100,
+        percentage: 75,
+      },
+    });
+    const partial = await getTeacherExamAnalysis(
+      teacher.id,
+      republished.value.id,
+    );
+    assert.equal(partial.current.snapshot.overview.totalClassrooms, 2);
+    assert.equal(partial.current.snapshot.overview.publishedClassrooms, 1);
+    assert.equal(partial.current.snapshot.overview.average, 75);
+  }
   console.log("Exam integration passed");
 }
 main()

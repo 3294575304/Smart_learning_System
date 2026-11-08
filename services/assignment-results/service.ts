@@ -16,6 +16,7 @@ import {
   latestEffectiveSubmissions,
 } from "@/services/assignments/reporting";
 import { hundredPointScore } from "@/services/assignments/presentation";
+import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
 import type {
   AssignmentResultsQuery,
   TeacherResultsOverviewQuery,
@@ -56,11 +57,19 @@ export async function listTeacherResultsOverview(
   teacherId: string,
   query: TeacherResultsOverviewQuery,
   now = new Date(),
+  includeExams = false,
 ): Promise<TeacherResultsOverview> {
   await getTeacherReportingScope(teacherId, query, now);
   const where: Prisma.AssignmentWhereInput = {
     teacherId,
-    examSessionId: null,
+    ...(includeExams
+      ? {
+          OR: [
+            { examSessionId: null },
+            { examSession: { cancelledAt: null, endsAt: { lte: now } } },
+          ],
+        }
+      : { examSessionId: null }),
     ...assignmentReportingWhere(query.section, now),
     ...(query.classroomId ? { classroomId: query.classroomId } : {}),
     ...(query.courseId ? { classroom: { courseId: query.courseId } } : {}),
@@ -75,6 +84,7 @@ export async function listTeacherResultsOverview(
       select: {
         id: true,
         title: true,
+        examSession: { select: { type: true } },
         status: true,
         dueAt: true,
         totalPoints: true,
@@ -114,6 +124,13 @@ export async function listTeacherResultsOverview(
       },
     }),
   ]);
+  const publishedExamScores = includeExams
+    ? await listPublishedExamScores(
+        [...new Set(assignments.map((item) => item.classroom.id))],
+        undefined,
+        now,
+      )
+    : [];
 
   return {
     items: assignments.map((assignment) => {
@@ -135,19 +152,50 @@ export async function listTeacherResultsOverview(
           submission.status === SubmissionStatus.GRADED ||
           submission.status === SubmissionStatus.PUBLISHED,
       );
-      const scores = finalized.flatMap((submission) =>
-        submission.score === null ? [] : [submission.score.toNumber()],
+      const publishedGrades = assignment.examSession
+        ? publishedExamScores.filter(
+            (item) =>
+              item.assignmentId === assignment.id &&
+              activeStudentIds.has(item.studentId),
+          )
+        : [];
+      const overriddenStudents = new Set(
+        publishedGrades.map((item) => item.studentId),
       );
-      const percentages = finalized.flatMap(
-        (submission) =>
-          hundredPointScore(
-            submission.score?.toNumber() ?? null,
-            submission.maxScore?.toNumber() ?? null,
-          ) ?? [],
+      const effectiveFinalized = finalized.filter(
+        (item) => !overriddenStudents.has(item.studentId),
       );
+      const scores = [
+        ...effectiveFinalized.flatMap((submission) =>
+          submission.score === null ? [] : [submission.score.toNumber()],
+        ),
+        ...publishedGrades.flatMap((item) =>
+          item.status === "SCORED" && item.score !== null ? [item.score] : [],
+        ),
+      ];
+      const percentages = [
+        ...effectiveFinalized.flatMap(
+          (submission) =>
+            hundredPointScore(
+              submission.score?.toNumber() ?? null,
+              submission.maxScore?.toNumber() ?? null,
+            ) ?? [],
+        ),
+        ...publishedGrades.flatMap((item) =>
+          item.status === "SCORED"
+            ? (hundredPointScore(item.score, item.maxScore) ?? [])
+            : [],
+        ),
+      ];
       return {
         id: assignment.id,
         title: assignment.title,
+        examType: assignment.examSession?.type ?? null,
+        gradebookId: publishedGrades[0]?.gradebookId ?? null,
+        courseId: publishedGrades[0]?.courseId ?? null,
+        specialGradeCount: publishedGrades.filter(
+          (item) => item.status !== "SCORED" && item.status !== "NOT_ENTERED",
+        ).length,
         status: assignment.status,
         classroom: {
           id: assignment.classroom.id,
