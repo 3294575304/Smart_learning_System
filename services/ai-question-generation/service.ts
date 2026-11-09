@@ -437,6 +437,7 @@ export async function listQuestionGenerationBatches(teacherId: string) {
     take: 30,
     select: {
       id: true,
+      courseId: true,
       mode: true,
       status: true,
       requestedCount: true,

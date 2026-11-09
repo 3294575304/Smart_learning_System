@@ -46,5 +46,30 @@ export const examQuestionQuerySchema = z.object({
   objectiveCode: z.string().trim().min(1).max(50).optional(),
   conceptId: z.string().cuid().optional(),
 });
+export const examAutoAssembleSchema = z
+  .object({
+    courseId: z.string().cuid(),
+    startsAt: z.coerce.date(),
+    conceptIds: z
+      .array(z.string().cuid())
+      .min(1)
+      .max(20)
+      .refine((ids) => new Set(ids).size === ids.length),
+    counts: z.record(
+      z.nativeEnum(QuestionType),
+      z.number().int().min(0).max(200),
+    ),
+    excludeQuestionIds: z.array(z.string().cuid()).max(200),
+  })
+  .refine(
+    (value) => {
+      const total = Object.values(value.counts).reduce(
+        (sum, count) => sum + count,
+        0,
+      );
+      return total >= 1 && total <= 200;
+    },
+    { path: ["counts"], message: "请选择 1–200 道题" },
+  );
 export const examSwitchSchema = z.object({ eventKey: z.string().uuid() });
 export type ExamCreateInput = z.output<typeof examCreateSchema>;

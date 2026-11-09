@@ -516,7 +516,10 @@ export async function executeClaimedAIQuestionGenerationJob(
                     : null,
               evidence: source.evidence,
               sourceQuestion: source.sourceQuestion,
-              concepts: source.concepts,
+              concepts:
+                source.request.balancedConcepts && source.concepts.length
+                  ? [source.concepts[(ordinal - 1) % source.concepts.length]]
+                  : source.concepts,
             };
             const raw = await provider.generateQuestions(aiInput, {
               signal: AbortSignal.timeout(60_000),
@@ -569,6 +572,12 @@ export async function executeClaimedAIQuestionGenerationJob(
                 )
               )
                 throw new Error("主知识点不在正式图谱范围内");
+              if (
+                source.request.balancedConcepts &&
+                aiInput.concepts.length === 1 &&
+                item.primaryConceptId !== aiInput.concepts[0].id
+              )
+                throw new Error("主知识点不符合本题分配的知识点");
               if (
                 source.concepts.length === 0 &&
                 item.primaryConceptId !== null

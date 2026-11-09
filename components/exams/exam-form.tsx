@@ -1,9 +1,16 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { QuestionType } from "@prisma/client";
+import { QuestionType } from "@prisma/client";
 import { selectAssignmentQuestions } from "@/services/assignments/editor-helpers";
+import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
+import { ExamAIGeneration } from "@/components/exams/exam-ai-generation";
+import { toggleChapterConcepts } from "@/services/exams/concept-selection";
+import {
+  DEFAULT_EXAM_TYPE_WEIGHTS,
+  distributeExamPoints,
+} from "@/services/exams/auto-assembly-scoring";
 
 type Q = {
   id: string;
@@ -12,11 +19,21 @@ type Q = {
   objectiveCode: string | null;
   blocked: boolean;
 };
-type Selected = { questionId: string; title: string; points: number };
+type Selected = {
+  questionId: string;
+  title: string;
+  type: QuestionType;
+  points: number;
+};
+const emptyCounts = () =>
+  Object.fromEntries(
+    Object.values(QuestionType).map((type) => [type, 0]),
+  ) as Record<QuestionType, number>;
 export function ExamForm({
   courses,
   classrooms,
   conceptGroups,
+  assemblyChapters,
   courseObjectives,
 }: {
   courses: { id: string; name: string; term: string }[];
@@ -29,6 +46,14 @@ export function ExamForm({
       nodes: { conceptId: string; name?: string }[];
     }[];
   }[];
+  assemblyChapters: Record<
+    string,
+    Array<{
+      id: string;
+      name: string;
+      nodes: Array<{ conceptId: string; code: string; name: string }>;
+    }>
+  >;
   courseObjectives: Array<{
     courseId: string;
     objectives: Array<{ code: string; title: string }>;
@@ -37,6 +62,8 @@ export function ExamForm({
   const router = useRouter();
   const requestIdRef = useRef<string | null>(null);
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
+  const currentCourseRef = useRef(courseId);
+  currentCourseRef.current = courseId;
   const [classroomIds, setClassroomIds] = useState<string[]>([]);
   const [type, setType] = useState("MIDTERM");
   const [title, setTitle] = useState("");
@@ -49,8 +76,216 @@ export function ExamForm({
   const [count, setCount] = useState(10);
   const [questions, setQuestions] = useState<Q[]>([]);
   const [selected, setSelected] = useState<Selected[]>([]);
+  const [conceptIds, setConceptIds] = useState<string[]>([]);
+  const [conceptSelectionMessage, setConceptSelectionMessage] = useState("");
+  const [autoCounts, setAutoCounts] =
+    useState<Record<QuestionType, number>>(emptyCounts);
+  const [weights, setWeights] = useState(DEFAULT_EXAM_TYPE_WEIGHTS);
+  const [autoMode, setAutoMode] = useState(false);
+  const [scoresEdited, setScoresEdited] = useState(false);
+  const [shortages, setShortages] = useState<
+    Array<{ type: QuestionType; requested: number; found: number }>
+  >([]);
+  const [assembling, setAssembling] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const publishedRef = useRef(false);
+  const chapters = assemblyChapters[courseId] ?? [];
+  const graphNodes = chapters.flatMap((chapter) =>
+    chapter.nodes.map((node) => ({ ...node, id: node.conceptId })),
+  );
+  const totalPoints =
+    Math.round(selected.reduce((sum, item) => sum + item.points, 0) * 100) /
+    100;
+
+  useEffect(() => {
+    const raw = window.sessionStorage.getItem("exam-auto-draft");
+    if (!raw) {
+      setHydrated(true);
+      return;
+    }
+    try {
+      const draft = JSON.parse(raw) as {
+        courseId: string;
+        conceptIds: string[];
+        selected: Selected[];
+        counts: Record<QuestionType, number>;
+        weights: Record<QuestionType, number>;
+        autoMode: boolean;
+        scoresEdited: boolean;
+        classroomIds: string[];
+        type: string;
+        title: string;
+        startsAt: string;
+        endsAt: string;
+        allowedSwitches: number;
+      };
+      if (!courses.some((item) => item.id === draft.courseId)) {
+        setHydrated(true);
+        return;
+      }
+      setCourseId(draft.courseId);
+      const allowed = new Set(
+        (assemblyChapters[draft.courseId] ?? []).flatMap((chapter) =>
+          chapter.nodes.map((node) => node.conceptId),
+        ),
+      );
+      setConceptIds(draft.conceptIds.filter((id) => allowed.has(id)));
+      setSelected(
+        draft.selected.filter(
+          (item) =>
+            item.questionId && Object.values(QuestionType).includes(item.type),
+        ),
+      );
+      setAutoCounts(draft.counts);
+      setWeights(draft.weights);
+      setAutoMode(draft.autoMode);
+      setScoresEdited(Boolean(draft.scoresEdited));
+      setClassroomIds(
+        draft.classroomIds.filter((id) =>
+          classrooms.some(
+            (item) => item.id === id && item.courseId === draft.courseId,
+          ),
+        ),
+      );
+      setType(draft.type);
+      setTitle(draft.title);
+      setStartsAt(draft.startsAt);
+      setEndsAt(draft.endsAt);
+      setAllowedSwitches(draft.allowedSwitches);
+    } catch {
+      window.sessionStorage.removeItem("exam-auto-draft");
+    }
+    setHydrated(true);
+  }, [courses, classrooms, assemblyChapters]);
+  useEffect(() => {
+    if (!hydrated || publishedRef.current) return;
+    window.sessionStorage.setItem(
+      "exam-auto-draft",
+      JSON.stringify({
+        courseId,
+        conceptIds,
+        selected,
+        counts: autoCounts,
+        weights,
+        autoMode,
+        scoresEdited,
+        classroomIds,
+        type,
+        title,
+        startsAt,
+        endsAt,
+        allowedSwitches,
+      }),
+    );
+  }, [
+    hydrated,
+    courseId,
+    conceptIds,
+    selected,
+    autoCounts,
+    weights,
+    autoMode,
+    scoresEdited,
+    classroomIds,
+    type,
+    title,
+    startsAt,
+    endsAt,
+    allowedSwitches,
+  ]);
+
+  function rescore(items: Selected[]) {
+    return distributeExamPoints(items, weights);
+  }
+  function addConfirmed(item: {
+    id: string;
+    title: string;
+    type: QuestionType;
+  }) {
+    if (
+      selected.length >= 200 &&
+      !selected.some((row) => row.questionId === item.id)
+    ) {
+      setError("单场考试最多 200 道题，请先移除部分题目");
+      return;
+    }
+    setAutoMode(true);
+    setSelected((old) =>
+      old.some((row) => row.questionId === item.id)
+        ? old
+        : old.length >= 200
+          ? old
+          : scoresEdited
+            ? [
+                ...old,
+                {
+                  questionId: item.id,
+                  title: item.title,
+                  type: item.type,
+                  points: 0,
+                },
+              ]
+            : rescore([
+                ...old,
+                {
+                  questionId: item.id,
+                  title: item.title,
+                  type: item.type,
+                  points: 0,
+                },
+              ]),
+    );
+  }
+  async function assembleFromBank() {
+    if (!startsAt || !conceptIds.length) {
+      setError("请先设置开考时间并勾选知识点");
+      return;
+    }
+    setAssembling(true);
+    setError("");
+    const requestedCourseId = courseId;
+    try {
+      const response = await fetch("/api/teacher/exams/auto-assemble", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId,
+          startsAt: new Date(startsAt).toISOString(),
+          conceptIds,
+          counts: autoCounts,
+          excludeQuestionIds: selected.map((item) => item.questionId),
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok || !body.success)
+        throw new Error(body.error ?? "组卷失败");
+      if (currentCourseRef.current !== requestedCourseId) return;
+      const data = body.data as {
+        questions: Array<{ id: string; title: string; type: QuestionType }>;
+        shortages: typeof shortages;
+      };
+      setShortages(data.shortages);
+      setAutoMode(true);
+      setSelected((old) => {
+        const next = [
+          ...old,
+          ...data.questions.map((item) => ({
+            questionId: item.id,
+            title: item.title,
+            type: item.type,
+            points: 0,
+          })),
+        ];
+        return scoresEdited ? next : rescore(next);
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "组卷失败");
+    } finally {
+      setAssembling(false);
+    }
+  }
   async function load() {
     if (!startsAt) {
       setError("请先设置开考时间");
@@ -80,7 +315,7 @@ export function ExamForm({
   function add(item: Q) {
     setSelected((old) => [
       ...old,
-      { questionId: item.id, title: item.title, points: 10 },
+      { questionId: item.id, title: item.title, type: item.type, points: 10 },
     ]);
   }
   function randomPick() {
@@ -100,6 +335,7 @@ export function ExamForm({
       ...pool.map((item) => ({
         questionId: item.id,
         title: item.title,
+        type: item.type,
         points: 10,
       })),
     ]);
@@ -114,6 +350,13 @@ export function ExamForm({
     });
   }
   async function publish() {
+    if (
+      autoMode &&
+      (totalPoints !== 100 || selected.some((item) => item.points <= 0))
+    ) {
+      setError("自动组卷总分须为 100 分，且每题分值大于零；请重新配分");
+      return;
+    }
     if (!window.confirm("发布后试卷和考试规则将冻结。确认发布？")) return;
     setBusy(true);
     setError("");
@@ -139,6 +382,8 @@ export function ExamForm({
       const body = await response.json();
       if (!response.ok || !body.success)
         throw new Error(body.error ?? "发布失败");
+      publishedRef.current = true;
+      window.sessionStorage.removeItem("exam-auto-draft");
       router.push("/teacher/exams");
       router.refresh();
     } catch (reason) {
@@ -155,12 +400,20 @@ export function ExamForm({
           <select
             className="mt-1 w-full rounded border p-2"
             value={courseId}
+            disabled={assembling || busy}
             onChange={(e) => {
               setCourseId(e.target.value);
               setClassroomIds([]);
               setQuestions([]);
               setSelected([]);
               setObjectiveCode("");
+              setConceptId("");
+              setConceptIds([]);
+              setConceptSelectionMessage("");
+              setAutoCounts(emptyCounts());
+              setShortages([]);
+              setAutoMode(false);
+              setScoresEdited(false);
             }}
           >
             {courses.map((item) => (
@@ -251,6 +504,198 @@ export function ExamForm({
           </Link>
           ，审核后直接发布。
         </p>
+        <div className="space-y-4 rounded-lg border border-sky-200 bg-sky-50/40 p-4">
+          <h3 className="font-medium">按知识点自动组卷</h3>
+          <p className="text-xs text-slate-600">
+            可从已审核题库选题，也可生成 AI 候选题；两种方式能加入同一试卷。
+          </p>
+          <fieldset>
+            <legend className="text-sm font-medium">
+              知识点（可多选，最多 20 个，已选 {conceptIds.length} 个）
+            </legend>
+            {chapters.length ? (
+              <div className="mt-2 max-h-52 space-y-3 overflow-y-auto rounded border bg-white p-3">
+                {chapters.map((chapter) => {
+                  const chapterIds = [
+                    ...new Set(chapter.nodes.map((node) => node.conceptId)),
+                  ];
+                  const selectedCount = chapterIds.filter((id) =>
+                    conceptIds.includes(id),
+                  ).length;
+                  return (
+                    <div key={chapter.id}>
+                      <label className="inline-flex items-center gap-2 text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          aria-label={`选择整章：${chapter.name}`}
+                          checked={
+                            chapterIds.length > 0 &&
+                            selectedCount === chapterIds.length
+                          }
+                          disabled={chapterIds.length === 0}
+                          ref={(element) => {
+                            if (element)
+                              element.indeterminate =
+                                selectedCount > 0 &&
+                                selectedCount < chapterIds.length;
+                          }}
+                          onChange={() => {
+                            const result = toggleChapterConcepts(
+                              conceptIds,
+                              chapterIds,
+                              20,
+                            );
+                            if (result.exceeded) {
+                              setConceptSelectionMessage(
+                                `最多选择 20 个知识点；整章「${chapter.name}」将超过上限，请先取消其他知识点。`,
+                              );
+                              return;
+                            }
+                            setConceptIds(result.ids);
+                            setConceptSelectionMessage("");
+                          }}
+                        />
+                        {chapter.name}（{selectedCount}/{chapterIds.length}）
+                      </label>
+                      <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                        {chapter.nodes.map((node) => (
+                          <label
+                            key={node.conceptId}
+                            className="flex gap-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={conceptIds.includes(node.conceptId)}
+                              disabled={
+                                conceptIds.length >= 20 &&
+                                !conceptIds.includes(node.conceptId)
+                              }
+                              onChange={(event) => {
+                                setConceptIds((old) =>
+                                  event.target.checked
+                                    ? [...new Set([...old, node.conceptId])]
+                                    : old.filter((id) => id !== node.conceptId),
+                                );
+                                setConceptSelectionMessage("");
+                              }}
+                            />
+                            {node.code} · {node.name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">
+                当前课程暂无正式知识图谱知识点。
+              </p>
+            )}
+            {conceptSelectionMessage ? (
+              <p role="alert" className="mt-2 text-sm text-amber-700">
+                {conceptSelectionMessage}
+              </p>
+            ) : null}
+          </fieldset>
+          <div>
+            <p className="text-sm font-medium">各题型数量与配分权重</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {Object.values(QuestionType).map((questionType) => (
+                <div
+                  key={questionType}
+                  className="rounded border bg-white p-2 text-sm"
+                >
+                  <span className="block font-medium">
+                    {QUESTION_TYPE_LABELS[questionType]}
+                  </span>
+                  <div className="mt-1 flex gap-2">
+                    <label>
+                      题数
+                      <input
+                        aria-label={`${QUESTION_TYPE_LABELS[questionType]}题数`}
+                        className="ml-1 w-16 rounded border p-1"
+                        type="number"
+                        min="0"
+                        max="200"
+                        value={autoCounts[questionType]}
+                        onChange={(event) =>
+                          setAutoCounts((old) => ({
+                            ...old,
+                            [questionType]: Math.max(
+                              0,
+                              Math.min(
+                                200,
+                                Math.trunc(Number(event.target.value) || 0),
+                              ),
+                            ),
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      权重
+                      <input
+                        aria-label={`${QUESTION_TYPE_LABELS[questionType]}权重`}
+                        className="ml-1 w-16 rounded border p-1"
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={weights[questionType]}
+                        onChange={(event) =>
+                          setWeights((old) => ({
+                            ...old,
+                            [questionType]: Math.max(
+                              1,
+                              Math.min(
+                                100,
+                                Math.trunc(Number(event.target.value) || 1),
+                              ),
+                            ),
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="rounded bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
+            disabled={assembling}
+            onClick={() => void assembleFromBank()}
+          >
+            {assembling ? "正在组卷…" : "从题库自动组卷"}
+          </button>
+          {shortages.length ? (
+            <p role="status" className="text-sm text-amber-800">
+              题库数量不足：
+              {shortages
+                .map(
+                  (item) =>
+                    `${QUESTION_TYPE_LABELS[item.type]}缺 ${item.requested - item.found} 道`,
+                )
+                .join("；")}
+              。请调整条件或使用 AI 生成。
+            </p>
+          ) : null}
+          <ExamAIGeneration
+            key={courseId}
+            courseId={courseId}
+            conceptIds={conceptIds}
+            counts={autoCounts}
+            graphNodes={graphNodes}
+            objectives={
+              courseObjectives.find((item) => item.courseId === courseId)
+                ?.objectives ?? []
+            }
+            onConfirmed={(item) => {
+              if (currentCourseRef.current === courseId) addConfirmed(item);
+            }}
+          />
+        </div>
         <div className="flex flex-wrap gap-2">
           <select
             className="rounded border p-2"
@@ -258,15 +703,10 @@ export function ExamForm({
             onChange={(e) => setQuestionType(e.target.value)}
           >
             <option value="">全部题型</option>
-            {[
-              "SINGLE_CHOICE",
-              "MULTIPLE_CHOICE",
-              "TRUE_FALSE",
-              "FILL_BLANK",
-              "SHORT_ANSWER",
-              "PYTHON_PROGRAMMING",
-            ].map((item) => (
-              <option key={item}>{item}</option>
+            {Object.entries(QUESTION_TYPE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
             ))}
           </select>
           <select
@@ -348,7 +788,35 @@ export function ExamForm({
         </ul>
       </section>
       <section className="rounded-xl border bg-white p-5">
-        <h2 className="font-semibold">题序 · {selected.length} 题</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">
+            题序 · {selected.length} 题 · 总分 {totalPoints} 分
+          </h2>
+          {autoMode && selected.length ? (
+            <button
+              type="button"
+              className="rounded border px-3 py-1 text-sm"
+              onClick={() => {
+                try {
+                  setSelected((old) => rescore(old));
+                  setScoresEdited(false);
+                  setError("");
+                } catch {
+                  setError("请将已选题型的权重设为正数");
+                }
+              }}
+            >
+              重新配分至 100 分
+            </button>
+          ) : null}
+        </div>
+        {autoMode &&
+        selected.length &&
+        (totalPoints !== 100 || selected.some((item) => item.points <= 0)) ? (
+          <p role="status" className="mt-2 text-sm text-amber-700">
+            自动组卷总分应为 100 分且每题大于零，请重新配分或调整单题分值。
+          </p>
+        ) : null}
         <ol>
           {selected.map((item, index) => (
             <li
@@ -365,15 +833,16 @@ export function ExamForm({
                 min="0.01"
                 step="0.01"
                 value={item.points}
-                onChange={(e) =>
+                onChange={(e) => {
+                  setScoresEdited(true);
                   setSelected((old) =>
                     old.map((row, i) =>
                       i === index
                         ? { ...row, points: Number(e.target.value) }
                         : row,
                     ),
-                  )
-                }
+                  );
+                }}
               />
               <button onClick={() => move(index, -1)}>上移</button>
               <button onClick={() => move(index, 1)}>下移</button>
@@ -404,7 +873,9 @@ export function ExamForm({
           !title ||
           !startsAt ||
           !endsAt ||
-          !selected.length
+          !selected.length ||
+          (autoMode &&
+            (totalPoints !== 100 || selected.some((item) => item.points <= 0)))
         }
         onClick={publish}
       >

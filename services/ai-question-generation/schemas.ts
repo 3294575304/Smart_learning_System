@@ -21,6 +21,7 @@ export const questionGenerationRequestSchema = z
     mode: z.enum(["RANGE", "ANALOGY", "FILE"]),
     chapterCode: z.string().trim().max(100).nullable().default(null),
     conceptIds: z.array(z.string().cuid()).max(20).default([]),
+    balancedConcepts: z.boolean().optional(),
     sourceQuestionId: z.string().cuid().nullable().default(null),
     bloomLevel: z.enum([
       "REMEMBER",
