@@ -37,7 +37,8 @@ test("Windows wrappers keep native stderr from terminating services", async () =
   for (const wrapper of wrappers) {
     assert.match(wrapper, /\$ErrorActionPreference = "Continue"/u);
   }
-  assert.match(wrappers[0], /"::1"/u);
+  assert.match(wrappers[0], /"127\.0\.0\.1"/u);
+  assert.match(wrappers[0], /\$config\.appPort/u);
   assert.doesNotMatch(wrappers[0], /while \(\$true\)/u);
   assert.match(wrappers[0], /\$processExitCode = \$LASTEXITCODE/u);
   assert.match(wrappers[1], /\$processExitCode = \$LASTEXITCODE/u);
@@ -62,6 +63,11 @@ test("Windows production build is isolated from the Next.js development output",
   assert.match(installer, /nextBuildDirectory = "\.data\/next-production"/u);
   assert.match(installer, /routesManifest\.dataRoutes/u);
   assert.match(installer, /originalTypeFiles/u);
+  assert.match(installer, /Test-LocalAppPort/u);
+  assert.match(
+    installer,
+    /APPLICATION_INTERNAL_URL = "http:\/\/127\.0\.0\.1:\$appPort"/u,
+  );
 });
 
 test("public-run polling shows a connection interruption instead of stale running text", async () => {

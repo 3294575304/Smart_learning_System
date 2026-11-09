@@ -104,7 +104,7 @@ export function TeacherWorkspaceCards({
     },
     {
       label: "考试管理",
-      description: "组卷、安排考试与查看监考",
+      description: "组卷、安排考试与查看详情",
       href: `/teacher/exams?courseId=${workspace.course.id}`,
       icon: FilePenLine,
       accent: "bg-indigo-50 text-indigo-700 ring-indigo-100",

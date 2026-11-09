@@ -3,18 +3,24 @@ import Link from "next/link";
 export function TeacherAssignmentNav({
   assignmentId,
   active,
+  examSessionId,
 }: {
   assignmentId: string;
   active: "content" | "submissions" | "results";
+  examSessionId?: string | null;
 }) {
   return (
     <nav
-      aria-label="当前作业导航"
+      aria-label={examSessionId ? "当前考试导航" : "当前作业导航"}
       className="flex flex-wrap gap-1 rounded-xl border bg-white p-1.5"
     >
       {(
         [
-          ["content", "作业内容", `/teacher/assignments/${assignmentId}`],
+          [
+            "content",
+            examSessionId ? "查看试卷" : "作业内容",
+            `/teacher/assignments/${assignmentId}`,
+          ],
           [
             "submissions",
             "提交与批改",
@@ -29,7 +35,9 @@ export function TeacherAssignmentNav({
       ).map(([key, label, href]) => (
         <Link
           key={key}
-          href={href}
+          href={
+            examSessionId ? `${href}?source=exam&examId=${examSessionId}` : href
+          }
           aria-current={key === active ? "page" : undefined}
           className={`rounded-lg px-4 py-2 text-sm font-medium ${key === active ? "bg-sky-50 text-sky-800" : "text-slate-600 hover:bg-slate-50"}`}
         >

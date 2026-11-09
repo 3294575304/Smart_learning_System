@@ -21,6 +21,7 @@ import {
   getTeacherAssignmentStudentAnswer,
 } from "@/services/assignment-results/service";
 import { assignmentIdSchema } from "@/services/assignments/schemas";
+import { getTeacherExamIdForAssignment } from "@/services/exams/service";
 
 interface ResultsPageProps {
   params: Promise<{ assignmentId: string }>;
@@ -121,6 +122,10 @@ export default async function AssignmentResultsPage({
       parsedId.data,
       parsedQuery.data,
     );
+    const examSessionId = await getTeacherExamIdForAssignment(
+      teacher.id,
+      parsedId.data,
+    );
     if (
       results.students.totalPages > 0 &&
       results.students.page > results.students.totalPages
@@ -136,8 +141,10 @@ export default async function AssignmentResultsPage({
       <section className="space-y-6">
         <AssignmentStateRefresh renderedAt={Date.now()} />
         <header>
-          <TeacherBackLink href="/teacher/assignments">
-            返回作业管理
+          <TeacherBackLink
+            href={examSessionId ? "/teacher/exams" : "/teacher/assignments"}
+          >
+            {examSessionId ? "返回考试管理" : "返回作业管理"}
           </TeacherBackLink>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -160,7 +167,11 @@ export default async function AssignmentResultsPage({
             </div>
           </div>
         </header>
-        <TeacherAssignmentNav assignmentId={parsedId.data} active="results" />
+        <TeacherAssignmentNav
+          assignmentId={parsedId.data}
+          active="results"
+          examSessionId={examSessionId}
+        />
         <p className="text-xs leading-5 text-slate-500">
           统计统一按百分制展示（原始得分÷原始满分×100）；题目分值及历史成绩保持原记录。原始满分为
           {results.assignment.totalPoints}分。

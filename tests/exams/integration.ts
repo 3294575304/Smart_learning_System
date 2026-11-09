@@ -3,7 +3,6 @@ import { getStudentTaskOverview } from "@/services/dashboard/student-task-servic
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createCanvas } from "@napi-rs/canvas";
-import { strFromU8, unzipSync } from "fflate";
 import { Prisma, Role } from "@prisma/client";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
@@ -26,14 +25,8 @@ import { publishPaperDraft } from "@/services/exams/paper-publish";
 import { executeClaimedExamPaperJob } from "@/services/exams/paper-worker";
 import { EXAM_PAPER_JOB_TYPE } from "@/services/exams/paper-ai";
 import { readAssignmentQuestionImage } from "@/services/exams/paper-images";
-import {
-  generateTeacherExamAnalysis,
-  getTeacherExamAnalysis,
-  getTeacherExamAnalysisVersion,
-} from "@/services/exams/analysis";
+import { getTeacherExamDetails } from "@/services/exams/analysis";
 import { getStudentExamReport } from "@/services/exams/student-report";
-import { buildExamAnalysisXlsx } from "@/services/exams/analysis-xlsx";
-import { buildExamCommentaryPdf } from "@/services/exams/analysis-pdf";
 import { paperDraftQuestionSchema } from "@/services/exams/paper-schemas";
 import {
   cancelExamSession,
@@ -149,6 +142,9 @@ async function main() {
   });
   await assert.rejects(createExamSession(other.id, input));
   const exam = await createExamSession(teacher.id, input);
+  const upcomingDetails = await getTeacherExamDetails(teacher.id, exam.id);
+  assert.equal(upcomingDetails.analysis, null);
+  assert.equal(upcomingDetails.exam.assignments.length, 2);
   assert.equal(exam.assignments.length, 2);
   const pendingObjectiveUse = await prisma.examQuestionUse.findFirstOrThrow({
     where: { examSessionId: exam.id, questionId: question.id },
@@ -276,6 +272,10 @@ async function main() {
     }),
   );
   await cancelExamSession(teacher.id, exam.id);
+  assert.equal(
+    (await getTeacherExamDetails(teacher.id, exam.id)).analysis,
+    null,
+  );
   assert.equal(
     (
       await listEligibleExamQuestions(teacher.id, {
@@ -874,6 +874,10 @@ async function main() {
     where: { id: scanExam.id },
     data: { endsAt: new Date(Date.now() - 1000) },
   });
+  assert.equal(
+    (await getTeacherExamDetails(teacher.id, scanExam.id)).analysis,
+    null,
+  );
   const analysisQuestion = await prisma.assignmentQuestion.findFirstOrThrow({
     where: { assignmentId: scanExam.assignments[0].id },
   });
@@ -902,31 +906,11 @@ async function main() {
       },
     },
   });
-  await assert.rejects(getTeacherExamAnalysis(other.id, scanExam.id));
-  const preview = await getTeacherExamAnalysis(teacher.id, scanExam.id);
-  assert.equal(preview.current.snapshot.overview.expected, 1);
-  assert.equal(preview.current.snapshot.overview.participated, 1);
-  assert.equal(preview.current.snapshot.overview.average, 80);
-  assert.equal(preview.current.snapshot.questions[0].averageTimeMs, 12000);
-  const version = await generateTeacherExamAnalysis(
-    teacher.id,
-    scanExam.id,
-    { pass: 60, excellent: 85 },
-    context,
-  );
-  assert.equal(version.revision, 1);
-  assert.equal(
-    (
-      await generateTeacherExamAnalysis(
-        teacher.id,
-        scanExam.id,
-        { pass: 60, excellent: 85 },
-        context,
-      )
-    ).id,
-    version.id,
-  );
-  await assert.rejects(getTeacherExamAnalysisVersion(other.id, scanExam.id, 1));
+  await assert.rejects(getTeacherExamDetails(other.id, scanExam.id));
+  const preview = await getTeacherExamDetails(teacher.id, scanExam.id);
+  assert.equal(preview.analysis?.overview.expected, 1);
+  assert.equal(preview.analysis?.overview.participated, 1);
+  assert.equal(preview.analysis?.questions[0].averageTimeMs, 12000);
   const report = await getStudentExamReport(student.id, scanExam.id, first.id);
   assert.equal(report.percentage, 80);
   assert.equal(report.classAverage, null);
@@ -934,37 +918,14 @@ async function main() {
   await assert.rejects(
     getStudentExamReport(outsider.id, scanExam.id, first.id),
   );
-  const savedAnalysis = await getTeacherExamAnalysisVersion(
-    teacher.id,
-    scanExam.id,
-    1,
-  );
-  const workbook = unzipSync(buildExamAnalysisXlsx(savedAnalysis.snapshot));
-  assert.match(strFromU8(workbook["xl/worksheets/sheet1.xml"]), /80/u);
-  assert.match(strFromU8(workbook["xl/worksheets/sheet2.xml"]), /考试一班/u);
-  assert.match(strFromU8(workbook["xl/worksheets/sheet3.xml"]), /12000/u);
-  const pdf = await PDFDocument.load(
-    await buildExamCommentaryPdf(savedAnalysis.snapshot, teacher.id),
-  );
-  assert.equal(pdf.getPageCount(), 2);
   await prisma.submission.update({
     where: { id: analysisSubmission.id },
     data: { score: 90, percentage: 90 },
   });
   assert.equal(
-    (await getTeacherExamAnalysis(teacher.id, scanExam.id)).stale,
-    true,
-  );
-  assert.equal(
-    (
-      await generateTeacherExamAnalysis(
-        teacher.id,
-        scanExam.id,
-        { pass: 60, excellent: 85 },
-        context,
-      )
-    ).revision,
-    2,
+    (await getTeacherExamDetails(teacher.id, scanExam.id)).analysis?.overview
+      .average,
+    90,
   );
   if (republished?.status === "fulfilled") {
     await prisma.examSession.update({
@@ -990,13 +951,13 @@ async function main() {
         percentage: 75,
       },
     });
-    const partial = await getTeacherExamAnalysis(
+    const partial = await getTeacherExamDetails(
       teacher.id,
       republished.value.id,
     );
-    assert.equal(partial.current.snapshot.overview.totalClassrooms, 2);
-    assert.equal(partial.current.snapshot.overview.publishedClassrooms, 1);
-    assert.equal(partial.current.snapshot.overview.average, 75);
+    assert.equal(partial.analysis?.overview.totalClassrooms, 2);
+    assert.equal(partial.analysis?.overview.publishedClassrooms, 1);
+    assert.equal(partial.analysis?.overview.average, 75);
   }
   console.log("Exam integration passed");
 }

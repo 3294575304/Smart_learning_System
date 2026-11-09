@@ -1,15 +1,10 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
-import { AuditAction, AuditTargetType, Prisma } from "@prisma/client";
-import { z } from "zod";
+import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { writeTeachingAuditLog } from "@/services/audit/repository";
-import type { AuditRequestContext } from "@/services/audit/types";
 import { latestEffectiveSubmissions } from "@/services/assignments/reporting";
-import { AssignmentOperationError } from "@/services/assignments/errors";
 import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
 import {
   kr20,
@@ -19,13 +14,7 @@ import {
   type ScoreStats,
 } from "./analysis-statistics";
 
-export const examAnalysisThresholdsSchema = z
-  .object({
-    pass: z.coerce.number().min(1).max(99).default(60),
-    excellent: z.coerce.number().min(1).max(100).default(85),
-  })
-  .refine((value) => value.excellent > value.pass, "优秀线必须高于及格线");
-export type ExamThresholds = z.infer<typeof examAnalysisThresholdsSchema>;
+type ExamThresholds = { pass: number; excellent: number };
 
 export interface ExamAnalysisSnapshot {
   examId: string;
@@ -100,7 +89,9 @@ const examSelect = Prisma.validator<Prisma.ExamSessionSelect>()({
   courseId: true,
   type: true,
   title: true,
+  startsAt: true,
   endsAt: true,
+  allowedSwitches: true,
   cancelledAt: true,
   questionUses: {
     select: {
@@ -154,9 +145,6 @@ const examSelect = Prisma.validator<Prisma.ExamSessionSelect>()({
 });
 type ExamRecord = Prisma.ExamSessionGetPayload<{ select: typeof examSelect }>;
 
-function hash(value: unknown) {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
 function ratio(score: number, max: number) {
   return max > 0 ? Math.max(0, Math.min(100, (score / max) * 100)) : null;
 }
@@ -607,162 +595,16 @@ async function calculate(exam: ExamRecord, thresholds: ExamThresholds) {
     objectives,
     unmappedQuestions,
   };
-  const fingerprint = hash({
-    examId: exam.id,
-    memberships: exam.assignments.map((item) => [
-      item.id,
-      item.classroom.memberships.map((m) => m.studentId).sort(),
-    ]),
-    submissions: submissions.map((item) => [
-      item.id,
-      item.status,
-      item.score?.toString(),
-      item.updatedAt.toISOString(),
-    ]),
-    ledger: ledger
-      .filter(
-        (item) =>
-          item.assignmentId && assignmentIds.includes(item.assignmentId),
-      )
-      .map((item) => [
-        item.id,
-        item.studentId,
-        item.status,
-        item.score,
-        item.publicationId,
-        item.publicationVersion,
-      ]),
-    answers: answers.map((item) => [
-      item.submissionId,
-      item.assignmentQuestionId,
-      item.score?.toString(),
-      item.isCorrect,
-      item.responseTimeMs,
-      item.selectedOptions.map((o) => o.assignmentQuestionOptionId).sort(),
-    ]),
-    thresholds,
-  });
-  return { snapshot, fingerprint };
+  return snapshot;
 }
 
-export async function getTeacherExamAnalysis(
-  teacherId: string,
-  examId: string,
-  revision?: number,
-) {
-  const exam = await loadOwnedExam(teacherId, examId);
-  const saved = await prisma.examAnalysis.findFirst({
-    where: { examSessionId: examId, ...(revision ? { revision } : {}) },
-    orderBy: { revision: "desc" },
-  });
-  if (revision && !saved) throw new ResourceNotFoundError("考试分析版本不存在");
-  const versions = await prisma.examAnalysis.findMany({
-    where: { examSessionId: examId },
-    orderBy: { revision: "desc" },
-    take: 20,
-    select: { revision: true, createdAt: true },
-  });
-  const previous = await prisma.examSession.findFirst({
-    where: {
-      teacherId,
-      courseId: exam.courseId,
-      type: exam.type,
-      cancelledAt: null,
-      endsAt: { lt: exam.endsAt },
-      analyses: { some: {} },
-    },
-    orderBy: { endsAt: "desc" },
-    select: {
-      analyses: {
-        orderBy: { revision: "desc" },
-        take: 1,
-        select: { snapshot: true },
-      },
-    },
-  });
-  const thresholds = saved
-    ? examAnalysisThresholdsSchema.parse(saved.thresholds)
-    : { pass: 60, excellent: 85 };
-  const current = await calculate(exam, thresholds);
-  return {
-    exam,
-    current,
-    saved: saved
-      ? {
-          id: saved.id,
-          revision: saved.revision,
-          fingerprint: saved.inputFingerprint,
-          snapshot: saved.snapshot as unknown as ExamAnalysisSnapshot,
-          createdAt: saved.createdAt,
-        }
-      : null,
-    stale: saved ? saved.inputFingerprint !== current.fingerprint : false,
-    previous: previous?.analyses[0]?.snapshot as unknown as
-      ExamAnalysisSnapshot | undefined,
-    versions,
-  };
-}
-
-export async function generateTeacherExamAnalysis(
-  teacherId: string,
-  examId: string,
-  rawThresholds: unknown,
-  context: AuditRequestContext,
-) {
-  const thresholds = examAnalysisThresholdsSchema.parse(rawThresholds);
+export async function getTeacherExamDetails(teacherId: string, examId: string) {
   const exam = await loadOwnedExam(teacherId, examId);
   if (exam.cancelledAt || exam.endsAt > new Date())
-    throw new AssignmentOperationError("考试尚未结束或已取消", 409);
-  const { snapshot, fingerprint } = await calculate(exam, thresholds);
-  if (!snapshot.overview.publishedClassrooms)
-    throw new AssignmentOperationError("尚无已公布成绩的班级", 409);
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "ExamSession" WHERE id = ${examId} FOR UPDATE`;
-    const last = await tx.examAnalysis.findFirst({
-      where: { examSessionId: examId },
-      orderBy: { revision: "desc" },
-    });
-    if (
-      last?.inputFingerprint === fingerprint &&
-      JSON.stringify(last.thresholds) === JSON.stringify(thresholds)
-    )
-      return last;
-    const created = await tx.examAnalysis.create({
-      data: {
-        examSessionId: examId,
-        revision: (last?.revision ?? 0) + 1,
-        inputFingerprint: fingerprint,
-        thresholds,
-        snapshot: snapshot as unknown as Prisma.InputJsonValue,
-        generatedById: teacherId,
-      },
-    });
-    await writeTeachingAuditLog(tx, {
-      actorId: teacherId,
-      action: AuditAction.EXAM_ANALYSIS_GENERATED,
-      targetType: AuditTargetType.EXAM_SESSION,
-      targetId: examId,
-      summary: "生成考试分析版本",
-      beforeData: null,
-      afterData: { revision: created.revision, fingerprint },
-      context,
-    });
-    return created;
-  });
-}
-
-export async function getTeacherExamAnalysisVersion(
-  teacherId: string,
-  examId: string,
-  revision: number,
-) {
-  await loadOwnedExam(teacherId, examId);
-  const record = await prisma.examAnalysis.findUnique({
-    where: { examSessionId_revision: { examSessionId: examId, revision } },
-  });
-  if (!record) throw new ResourceNotFoundError("考试分析版本不存在");
+    return { exam, analysis: null };
+  const analysis = await calculate(exam, { pass: 60, excellent: 85 });
   return {
-    ...record,
-    snapshot: record.snapshot as unknown as ExamAnalysisSnapshot,
+    exam,
+    analysis: analysis.overview.publishedClassrooms ? analysis : null,
   };
 }

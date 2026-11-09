@@ -17,9 +17,9 @@ $arguments = @(
   (Join-Path $config.repoRoot "node_modules/next/dist/bin/next"),
   "start",
   "-H",
-  "::1",
+  "127.0.0.1",
   "-p",
-  "3000"
+  [string]$config.appPort
 )
 
 Push-Location $config.repoRoot

@@ -17,6 +17,8 @@ import { TeacherAssignmentNav } from "@/components/assignments/teacher-assignmen
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { assignmentIdSchema } from "@/services/assignments/schemas";
+import { getTeacherExamDetails } from "@/services/exams/analysis";
+import { ExamWorkspaceSummary } from "@/components/exams/exam-workspace-summary";
 import { getTeacherAssignmentOverview } from "@/services/assignments/teacher-overview";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import {
@@ -35,6 +37,9 @@ export default async function TeacherAssignmentPage({
   try {
     const { assignment, examSessionId, questions } =
       await getTeacherAssignmentOverview(teacher.id, id.data);
+    const examDetails = examSessionId
+      ? await getTeacherExamDetails(teacher.id, examSessionId)
+      : null;
     const [makeup, copyTargets] = await Promise.all([
       getAssignmentMakeupManagement(teacher.id, id.data),
       canCopyHistoricalAssignment(assignment)
@@ -135,11 +140,21 @@ export default async function TeacherAssignmentPage({
             <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
               作业已撤销。原题、作答和评分仅供查看，本次作业不计入应交统计。
             </p>
-          ) : (
+          ) : !examDetails?.exam.cancelledAt ? (
             <AssignmentMakeupControls data={makeup} />
-          )}
+          ) : null}
         </header>
-        <TeacherAssignmentNav assignmentId={assignment.id} active="content" />
+        <TeacherAssignmentNav
+          assignmentId={assignment.id}
+          active="content"
+          examSessionId={examSessionId}
+        />
+        {examDetails && (
+          <ExamWorkspaceSummary
+            details={examDetails}
+            assignmentId={assignment.id}
+          />
+        )}
         <p className="text-xs leading-5 text-slate-500">
           {assignment.status === "DRAFT"
             ? assignment.classroom.status === "ACTIVE"

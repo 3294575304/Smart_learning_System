@@ -71,7 +71,7 @@ test("作业提交页可通过动态面包屑返回真实作业详情", () => {
   });
 });
 
-test("从考试管理进入试卷时，导航返回考试管理", () => {
+test("从考试管理进入试卷时，导航返回考试列表", () => {
   const breadcrumbs = buildBreadcrumbs(
     "/teacher/assignments/assignment-123",
     undefined,
@@ -81,7 +81,7 @@ test("从考试管理进入试卷时，导航返回考试管理", () => {
     { href: "/teacher/exams", label: "考试管理", linkable: true },
     {
       href: "/teacher/assignments/assignment-123",
-      label: "考试详情",
+      label: "试卷",
       linkable: false,
     },
   ]);

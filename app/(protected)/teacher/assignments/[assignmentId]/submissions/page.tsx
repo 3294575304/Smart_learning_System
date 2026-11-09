@@ -11,6 +11,7 @@ import { notFound, redirect } from "next/navigation";
 import { PageIndex } from "@/components/dashboard/page-index";
 import { PublishResultsButton } from "@/components/assignment-results/publish-results-button";
 import { requirePageRole } from "@/services/auth/page-authorization";
+import { getTeacherExamIdForAssignment } from "@/services/exams/service";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { listTeacherAssignmentSubmissions } from "@/services/assignments/manual-grading";
 import {
@@ -88,13 +89,19 @@ export default async function TeacherSubmissionsPage({
       teacher.id,
       assignmentId.data,
     );
+    const examSessionId = await getTeacherExamIdForAssignment(
+      teacher.id,
+      assignmentId.data,
+    );
     return (
       <section className="space-y-6">
         <AssignmentStateRefresh renderedAt={Date.now()} />
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <TeacherBackLink href="/teacher/assignments">
-              返回作业管理
+            <TeacherBackLink
+              href={examSessionId ? "/teacher/exams" : "/teacher/assignments"}
+            >
+              {examSessionId ? "返回考试管理" : "返回作业管理"}
             </TeacherBackLink>
             <h1 className="mt-3 text-2xl font-semibold">批改提交</h1>
             <p className="text-muted-foreground mt-2 text-sm">
@@ -115,6 +122,7 @@ export default async function TeacherSubmissionsPage({
         <TeacherAssignmentNav
           assignmentId={assignmentId.data}
           active="submissions"
+          examSessionId={examSessionId}
         />
         {result.totalSubmitted > 0 ? (
           <nav

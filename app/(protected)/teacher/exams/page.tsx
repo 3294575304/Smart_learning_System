@@ -67,35 +67,22 @@ export default async function TeacherExamsPage({
                 {exam.endsAt.toLocaleString("zh-CN")} · 允许切屏{" "}
                 {exam.allowedSwitches} 次
               </p>
-              <div className="mt-2 flex flex-wrap gap-3">
-                {!exam.cancelledAt && (
-                  <Link
-                    className="text-sky-700 underline"
-                    href={`/teacher/exams/${exam.id}`}
-                  >
-                    查看监考状态
-                  </Link>
-                )}
-                {!exam.cancelledAt && exam.endsAt <= new Date() && (
-                  <Link
-                    className="text-sky-700 underline"
-                    href={`/teacher/exams/${exam.id}/analysis`}
-                  >
-                    查看考试分析
-                  </Link>
-                )}
-                {exam.assignments.map((assignment) => (
-                  <Link
-                    className="text-sky-700 underline"
-                    key={assignment.id}
-                    href={`/teacher/assignments/${assignment.id}?source=exam`}
-                  >
-                    {assignment.classroom.name}：查看试卷、批改与成绩
-                  </Link>
-                ))}
-                {!exam.cancelledAt && exam.startsAt > new Date() && (
-                  <CancelExamButton examId={exam.id} />
-                )}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  {!exam.cancelledAt && exam.startsAt > new Date() && (
+                    <CancelExamButton examId={exam.id} />
+                  )}
+                </div>
+                <Link
+                  className="rounded-lg border border-sky-700 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
+                  href={
+                    exam.assignments[0]
+                      ? `/teacher/assignments/${exam.assignments[0].id}?source=exam&examId=${exam.id}`
+                      : `/teacher/exams/${exam.id}`
+                  }
+                >
+                  查看详情
+                </Link>
               </div>
             </li>
           ))}

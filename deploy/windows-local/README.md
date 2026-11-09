@@ -5,13 +5,13 @@
 拓扑：
 
 ```text
-浏览器 -> localhost:3000 Next.js (::1) -> PostgreSQL 127.0.0.1:5432
+浏览器 -> 127.0.0.1:<应用端口> Next.js -> PostgreSQL 127.0.0.1:5432
                                   -> 本机判题 worker
                                   -> SSH 127.0.0.1:18788
                                   -> 远程 gVisor 127.0.0.1:8788
 ```
 
-安装脚本默认先把生产应用构建到独立的 `.data/next-production`，再构建 worker、注册无触发器的手动任务并启动。该目录不与日常 `npm run dev` 使用的 `.next` 共用，避免开发服务器覆盖生产 manifest。数据库 migration 需先完成：
+安装脚本默认先把生产应用构建到独立的 `.data/next-production`，再构建 worker、注册无触发器的手动任务并启动。该目录不与日常 `npm run dev` 使用的 `.next` 共用，避免开发服务器覆盖生产 manifest。应用优先使用 3000 端口；若端口被占用或被 Windows 保留，则从 3100–3199 中选取可绑定端口。成功后脚本输出 `APPLICATION_URL`，运行时端口保存在私有的 `service-config.json`。数据库 migration 需先完成：
 
 ```powershell
 npx prisma migrate deploy
@@ -37,6 +37,7 @@ powershell -ExecutionPolicy Bypass -File deploy/windows-local/install-local-depl
 
 ```powershell
 Get-ScheduledTask -TaskName 'Zhixue-*' | Select-Object TaskName,State
-Invoke-WebRequest http://localhost:3000/login -UseBasicParsing
-Get-NetTCPConnection -State Listen | Where-Object LocalPort -in 3000,5432,18788
+$config = Get-Content .data/local-deployment/service-config.json -Raw | ConvertFrom-Json
+Invoke-WebRequest "http://127.0.0.1:$($config.appPort)/login" -UseBasicParsing
+Get-NetTCPConnection -State Listen | Where-Object LocalPort -in $config.appPort,5432,18788
 ```

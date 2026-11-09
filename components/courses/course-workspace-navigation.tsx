@@ -71,7 +71,7 @@ const WORKSPACE_GROUPS = [
       },
       {
         title: "考试管理",
-        description: "组卷、安排考试与查看监考",
+        description: "组卷、安排考试与查看详情",
         path: "/teacher/exams",
         icon: FilePenLine,
       },

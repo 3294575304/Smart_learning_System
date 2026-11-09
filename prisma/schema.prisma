@@ -664,7 +664,6 @@ enum RecommendationStatus {
 
 model User {
   examSessions         ExamSession[]           @relation("ExamTeacher")
-  generatedExamAnalyses ExamAnalysis[] @relation("ExamAnalysisGenerator")
   examPaperDrafts      ExamPaperDraft[]        @relation("ExamDraftTeacher")
   makeupGrantsReceived AssignmentMakeupGrant[] @relation("MakeupStudent")
   makeupGrantsIssued   AssignmentMakeupGrant[] @relation("MakeupTeacher")
@@ -2851,7 +2850,6 @@ model ExamSession {
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
   assignments        Assignment[]
-  analyses           ExamAnalysis[]
   questionUses       ExamQuestionUse[]
   switchEvents       ExamSwitchEvent[]
   paperDraft         ExamPaperDraft?
@@ -2861,24 +2859,6 @@ model ExamSession {
 
   @@index([teacherId, startsAt])
   @@index([questionCategoryId, startsAt])
-}
-
-model ExamAnalysis {
-  id               String   @id @default(cuid())
-  examSessionId    String
-  revision         Int
-  inputFingerprint String   @db.Char(64)
-  thresholds       Json
-  snapshot         Json
-  generatedById    String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
-  generatedBy User @relation("ExamAnalysisGenerator", fields: [generatedById], references: [id], onDelete: Restrict)
-
-  @@unique([examSessionId, revision])
-  @@index([examSessionId, createdAt])
 }
 
 model ExamPaperDraft {

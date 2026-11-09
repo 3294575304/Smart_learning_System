@@ -37,7 +37,22 @@ function Wait-LocalPort {
     }
     Start-Sleep -Milliseconds 500
   }
-  throw "Port $Port did not become ready within $TimeoutSeconds seconds. Check service logs in .data/local-deployment/logs and retry start-all.ps1."
+  throw "Port $Port did not become ready within $TimeoutSeconds seconds. Check service logs in .data/local-deployment/logs and retry install-local-deployment.ps1."
+}
+
+function Test-LocalAppPort {
+  param([Parameter(Mandatory = $true)][int]$Port)
+  $listener = [System.Net.Sockets.TcpListener]::new(
+    [System.Net.IPAddress]::Parse("127.0.0.1"), $Port
+  )
+  try {
+    $listener.Start()
+    return $true
+  } catch [System.Net.Sockets.SocketException] {
+    return $false
+  } finally {
+    $listener.Stop()
+  }
 }
 
 foreach ($path in @($RepoRoot, $SshKeyPath, $KnownHostsPath)) {
@@ -75,11 +90,11 @@ if (-not $SkipBuild) {
     # PowerShell 5 turns a build tool's stderr output into a terminating
     # NativeCommandError. Relax the preference and check $LASTEXITCODE.
     $ErrorActionPreference = "Continue"
-    & $npmExecutable run build
+    & $npmExecutable run build 2>&1 | ForEach-Object { Write-Output ([string]$_) }
     $nextBuildExitCode = $LASTEXITCODE
-    & $npmExecutable run build:programming-judge-worker
+    & $npmExecutable run build:programming-judge-worker 2>&1 | ForEach-Object { Write-Output ([string]$_) }
     $judgeWorkerBuildExitCode = $LASTEXITCODE
-    & $npmExecutable run build:background-worker
+    & $npmExecutable run build:background-worker 2>&1 | ForEach-Object { Write-Output ([string]$_) }
     $backgroundWorkerBuildExitCode = $LASTEXITCODE
     $ErrorActionPreference = "Stop"
     if ($nextBuildExitCode -ne 0) {
@@ -155,9 +170,54 @@ if ($executorApiKey.Length -lt 32) {
   throw "Unable to retrieve the remote executor credential"
 }
 
+$taskDefinitions = @(
+  @{ Name = "Zhixue-SSH-Tunnel"; Script = "run-tunnel.ps1" },
+  @{ Name = "Zhixue-Next"; Script = "run-next.ps1" },
+  @{ Name = "Zhixue-Judge-Worker"; Script = "run-worker.ps1" },
+  @{ Name = "Zhixue-Background-Worker"; Script = "run-background-worker.ps1" }
+)
+foreach ($definition in $taskDefinitions) {
+  Stop-ScheduledTask -TaskName $definition.Name -ErrorAction SilentlyContinue
+}
+Start-Sleep -Seconds 1
+$deploymentProcesses = Get-CimInstance Win32_Process | Where-Object {
+  ($_.Name -eq "node.exe" -and (
+    $_.CommandLine -like "*$RepoRoot\node_modules\next\dist\bin\next start -H 127.0.0.1 -p *" -or
+    $_.CommandLine -like "*$RepoRoot\node_modules\next\dist\bin\next start -H ::1 -p 3000*" -or
+    $_.CommandLine -like "*$RepoRoot\.data\programming-judge-worker-build\main.js*" -or
+    $_.CommandLine -like "*$RepoRoot\.data\background-worker-build\main.js*"
+  )) -or
+  ($_.Name -eq "ssh.exe" -and
+    $_.CommandLine -like "*-L 18788:127.0.0.1:8788*" -and
+    $_.CommandLine -like "*root@$SandboxHost*")
+}
+foreach ($process in $deploymentProcesses) {
+  Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+}
+
+$preferredAppPort = 3000
+if (Test-Path -LiteralPath $configPath) {
+  try {
+    $previousConfig = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ([int]$previousConfig.appPort -ge 1 -and [int]$previousConfig.appPort -le 65535) {
+      $preferredAppPort = [int]$previousConfig.appPort
+    }
+  } catch {
+    $preferredAppPort = 3000
+  }
+}
+$appPort = @($preferredAppPort, 3000) + @(3100..3199) |
+  Select-Object -Unique |
+  Where-Object { Test-LocalAppPort -Port $_ } |
+  Select-Object -First 1
+if ($null -eq $appPort) {
+  throw "No available local application port (3000 or 3100-3199)."
+}
+
 $config = [ordered]@{
   repoRoot = $RepoRoot
   logRoot = $logRoot
+  appPort = $appPort
   nodeExecutable = $nodeExecutable
   sshExecutable = $sshExecutable
   sshKeyPath = $SshKeyPath
@@ -167,7 +227,7 @@ $config = [ordered]@{
     NODE_ENV = "production"
     NEXT_DIST_DIR = $nextBuildDirectory
     BACKGROUND_JOB_WORKER_SECRET = $workerSecret
-    APPLICATION_INTERNAL_URL = "http://[::1]:3000"
+    APPLICATION_INTERNAL_URL = "http://127.0.0.1:$appPort"
     SANDBOX_EXECUTOR_URL = "http://127.0.0.1:18788"
     SANDBOX_EXECUTOR_API_KEY = $executorApiKey
     PROGRAMMING_JUDGE_WORKER_ID = "windows-local-$($env:COMPUTERNAME.ToLowerInvariant())"
@@ -203,31 +263,6 @@ if (Get-LocalUser -Name "codexsandboxoffline" -ErrorAction SilentlyContinue) {
 & icacls.exe $configPath /inheritance:r /grant:r "${currentUser}:(F)" "*S-1-5-18:(F)" | Out-Null
 if ($LASTEXITCODE -ne 0) {
   throw "Unable to restrict the runtime configuration ACL"
-}
-
-$taskDefinitions = @(
-  @{ Name = "Zhixue-SSH-Tunnel"; Script = "run-tunnel.ps1" },
-  @{ Name = "Zhixue-Next"; Script = "run-next.ps1" },
-  @{ Name = "Zhixue-Judge-Worker"; Script = "run-worker.ps1" },
-  @{ Name = "Zhixue-Background-Worker"; Script = "run-background-worker.ps1" }
-)
-foreach ($definition in $taskDefinitions) {
-  Stop-ScheduledTask -TaskName $definition.Name -ErrorAction SilentlyContinue
-}
-Start-Sleep -Seconds 1
-$deploymentProcesses = Get-CimInstance Win32_Process | Where-Object {
-  ($_.Name -eq "node.exe" -and (
-    $_.CommandLine -like "*$RepoRoot\node_modules\next\dist\bin\next start -H 127.0.0.1 -p 3000*" -or
-    $_.CommandLine -like "*$RepoRoot\node_modules\next\dist\bin\next start -H ::1 -p 3000*" -or
-    $_.CommandLine -like "*$RepoRoot\.data\programming-judge-worker-build\main.js*" -or
-    $_.CommandLine -like "*$RepoRoot\.data\background-worker-build\main.js*"
-  )) -or
-  ($_.Name -eq "ssh.exe" -and
-    $_.CommandLine -like "*-L 18788:127.0.0.1:8788*" -and
-    $_.CommandLine -like "*root@$SandboxHost*")
-}
-foreach ($process in $deploymentProcesses) {
-  Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
 }
 foreach ($logName in @(
   "next.stdout.log",
@@ -267,7 +302,7 @@ foreach ($definition in $taskDefinitions) {
 Start-ScheduledTask -TaskName "Zhixue-SSH-Tunnel"
 Wait-LocalPort -Port 18788 -TimeoutSeconds 60
 Start-ScheduledTask -TaskName "Zhixue-Next"
-Wait-LocalPort -Port 3000 -TimeoutSeconds 60
+Wait-LocalPort -Port $appPort -TimeoutSeconds 60
 Start-ScheduledTask -TaskName "Zhixue-Judge-Worker"
 Start-ScheduledTask -TaskName "Zhixue-Background-Worker"
 Wait-LocalPort -Port 18789 -TimeoutSeconds 45
@@ -280,7 +315,7 @@ if ($health.status -ne "ok") {
   throw "Remote executor health check failed"
 }
 
-$appResponse = Invoke-WebRequest -Uri "http://localhost:3000/login" -UseBasicParsing -TimeoutSec 15
+$appResponse = Invoke-WebRequest -Uri "http://127.0.0.1:$appPort/login" -UseBasicParsing -TimeoutSec 15
 if ($appResponse.StatusCode -ne 200) {
   throw "Next.js health check failed"
 }
@@ -288,3 +323,4 @@ if ($appResponse.StatusCode -ne 200) {
 Get-ScheduledTask -TaskName ($taskDefinitions.Name) |
   Select-Object TaskName, State
 Write-Output "LOCAL_DEPLOYMENT_READY=1"
+Write-Output "APPLICATION_URL=http://127.0.0.1:$appPort"

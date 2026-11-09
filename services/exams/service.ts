@@ -414,61 +414,15 @@ export async function listTeacherExams(
   });
 }
 
-export async function getTeacherExamMonitor(teacherId: string, examId: string) {
-  const exam = await prisma.examSession.findFirst({
-    where: { id: examId, teacherId },
-    include: {
-      assignments: {
-        include: {
-          classroom: {
-            select: {
-              name: true,
-              _count: {
-                select: { memberships: { where: { status: "ACTIVE" } } },
-              },
-            },
-          },
-          submissions: {
-            select: {
-              id: true,
-              status: true,
-              submittedAt: true,
-              student: {
-                select: {
-                  profile: { select: { displayName: true, studentNo: true } },
-                },
-              },
-            },
-          },
-        },
-      },
-      switchEvents: { select: { submissionId: true } },
-    },
+export async function getTeacherExamIdForAssignment(
+  teacherId: string,
+  assignmentId: string,
+) {
+  const assignment = await prisma.assignment.findFirst({
+    where: { id: assignmentId, teacherId },
+    select: { examSessionId: true },
   });
-  if (!exam) throw new ResourceNotFoundError("考试不存在");
-  const switchCounts = new Map<string, number>();
-  exam.switchEvents.forEach((event) =>
-    switchCounts.set(
-      event.submissionId,
-      (switchCounts.get(event.submissionId) ?? 0) + 1,
-    ),
-  );
-  return {
-    ...exam,
-    assignments: exam.assignments.map((assignment) => ({
-      id: assignment.id,
-      classroomName: assignment.classroom.name,
-      expectedCount: assignment.classroom._count.memberships,
-      submissions: assignment.submissions.map((submission) => ({
-        id: submission.id,
-        status: submission.status,
-        submittedAt: submission.submittedAt,
-        studentName: submission.student.profile?.displayName ?? "未命名学生",
-        studentNo: submission.student.profile?.studentNo ?? "",
-        switchCount: switchCounts.get(submission.id) ?? 0,
-      })),
-    })),
-  };
+  return assignment?.examSessionId ?? null;
 }
 
 export async function cancelExamSession(

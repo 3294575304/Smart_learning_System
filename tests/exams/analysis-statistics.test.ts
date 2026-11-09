@@ -5,8 +5,6 @@ import {
   percent,
   scoreStats,
 } from "@/services/exams/analysis-statistics";
-import { buildExamAnalysisXlsx } from "@/services/exams/analysis-xlsx";
-import type { ExamAnalysisSnapshot } from "@/services/exams/analysis";
 
 test("exam score metrics distinguish no scores from zero scores", () => {
   assert.equal(percent(0, 0), null);
@@ -40,34 +38,4 @@ test("KR-20 requires complete binary data and enough objective items", () => {
     typeof kr20([[...Array(10).fill(1)], [...Array(10).fill(0)]]),
     "number",
   );
-});
-
-test("exam export has three readable worksheets without student identities", () => {
-  const empty = scoreStats([], { pass: 60, excellent: 85 });
-  const snapshot: ExamAnalysisSnapshot = {
-    examId: "exam",
-    title: "期中考试",
-    courseId: "course",
-    type: "MIDTERM",
-    thresholds: { pass: 60, excellent: 85 },
-    overview: {
-      ...empty,
-      expected: 0,
-      participated: 0,
-      participationRate: null,
-      special: 0,
-      unscored: 0,
-      publishedClassrooms: 0,
-      totalClassrooms: 1,
-      kr20: null,
-    },
-    classrooms: [],
-    questions: [],
-    concepts: [],
-    objectives: [],
-    unmappedQuestions: 0,
-  };
-  const buffer = buildExamAnalysisXlsx(snapshot);
-  assert.equal(buffer.readUInt32LE(0), 0x04034b50);
-  assert.ok(buffer.includes(Buffer.from("xl/worksheets/sheet3.xml")));
 });

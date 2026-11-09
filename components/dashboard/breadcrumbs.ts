@@ -103,7 +103,7 @@ export function buildBreadcrumbs(
                 segments[0] === "teacher" &&
                 segments[1] === "assignments" &&
                 index === 2
-              ? "考试详情"
+              ? "试卷"
               : isTeacherStudentRoot && index === 2
                 ? "学生作业查询"
                 : isTeacherStudentRoot && index === 3
