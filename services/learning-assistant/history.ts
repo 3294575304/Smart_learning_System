@@ -14,7 +14,26 @@ import {
   type LearningConversationSummary,
   type LearningAssistantReply,
   type LearningAssistantRequest,
+  type SavedLearningTurn,
 } from "./schemas";
+
+const STREAM_LEASE_MS = 60_000;
+
+function readTurns(value: Prisma.JsonValue) {
+  const cutoff = Date.now() - STREAM_LEASE_MS;
+  return savedLearningTurnsSchema
+    .parse(value)
+    .map((turn): SavedLearningTurn =>
+      turn.reply.deliveryStatus === "PENDING" &&
+      Date.parse(turn.createdAt) <= cutoff
+        ? { ...turn, reply: { ...turn.reply, deliveryStatus: "ABORTED" } }
+        : turn,
+    );
+}
+
+function writeTurns(turns: SavedLearningTurn[]): Prisma.InputJsonValue {
+  return savedLearningTurnsSchema.parse(turns);
+}
 
 export async function assertHistoryCourse(studentId: string, courseId: string) {
   const course = await prisma.course.findFirst({
@@ -95,7 +114,7 @@ export async function getLearningConversation(
   if (!record) throw new ResourceNotFoundError("对话不存在");
   return {
     ...summary(record),
-    turns: savedLearningTurnsSchema.parse(record.turns),
+    turns: readTurns(record.turns),
   };
 }
 export async function deleteLearningConversation(
@@ -136,8 +155,13 @@ export async function loadConversationForQuestion(
       record.topicId !== request.topic.id)
   )
     throw new RecommendationOperationError("对话主题不一致，请新建对话", 409);
-  const turns = record ? savedLearningTurnsSchema.parse(record.turns) : [];
+  const turns = record ? readTurns(record.turns) : [];
   const repeated = turns.find((turn) => turn.requestId === requestId);
+  if (
+    repeated?.reply.deliveryStatus === "PENDING" ||
+    (!repeated && turns.some((turn) => turn.reply.deliveryStatus === "PENDING"))
+  )
+    throw new RecommendationOperationError("这段对话仍在回答，请稍后重试", 409);
   if (!repeated && turns.length >= 40)
     throw new RecommendationOperationError(
       "本次对话已达到 40 轮，请新建对话继续学习",
@@ -183,9 +207,7 @@ export async function saveConversationTurn(input: {
           topicName,
           title: question.slice(0, 120),
           firstRequestId: requestId,
-          turns: JSON.parse(
-            JSON.stringify(savedLearningTurnsSchema.parse([turn])),
-          ) as Prisma.InputJsonValue,
+          turns: writeTurns([turn]),
           revision: 1,
         },
       });
@@ -207,10 +229,7 @@ export async function saveConversationTurn(input: {
       throw new RecommendationOperationError("对话状态已更新，请重试", 409);
     }
   }
-  const turns = savedLearningTurnsSchema.parse([
-    ...savedLearningTurnsSchema.parse(record.turns),
-    turn,
-  ]);
+  const turns = [...readTurns(record.turns), turn];
   const changed = await prisma.studentLearningConversation.updateMany({
     where: {
       id: record.id,
@@ -220,7 +239,7 @@ export async function saveConversationTurn(input: {
       revision: record.revision,
     },
     data: {
-      turns: JSON.parse(JSON.stringify(turns)) as Prisma.InputJsonValue,
+      turns: writeTurns(turns),
       revision: { increment: 1 },
     },
   });
@@ -239,4 +258,36 @@ export async function saveConversationTurn(input: {
     );
   }
   return { id: record.id, reply };
+}
+
+export async function replaceStreamingLearningReply(
+  studentId: string,
+  courseId: string,
+  conversationId: string,
+  requestId: string,
+  reply: LearningAssistantReply,
+) {
+  const record = await prisma.studentLearningConversation.findFirst({
+    where: { id: conversationId, studentId, courseId, deletedAt: null },
+    select: { turns: true, revision: true, updatedAt: true },
+  });
+  if (!record) throw new ResourceNotFoundError("对话不存在");
+  const turns = readTurns(record.turns);
+  const index = turns.findIndex((turn) => turn.requestId === requestId);
+  if (turns[index]?.reply.deliveryStatus !== "PENDING")
+    throw new RecommendationOperationError("这轮回答已结束，请重新提问", 409);
+  turns[index] = { ...turns[index], reply };
+  const changed = await prisma.studentLearningConversation.updateMany({
+    where: {
+      id: conversationId,
+      studentId,
+      courseId,
+      deletedAt: null,
+      revision: record.revision,
+      updatedAt: record.updatedAt,
+    },
+    data: { turns: writeTurns(turns) },
+  });
+  if (!changed.count)
+    throw new RecommendationOperationError("对话已变更，请重新提交", 409);
 }

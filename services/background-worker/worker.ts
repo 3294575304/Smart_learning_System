@@ -4,6 +4,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { BackgroundJob } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { pruneAIProviderAttemptLogs } from "@/services/ai/governance";
 import { finalizeExpiredExams } from "@/services/exams/expiry";
 import {
   claimNextBackgroundJob,
@@ -27,6 +28,7 @@ import {
   executeClaimedKnowledgeGraphJob,
 } from "@/services/knowledge-graph/service";
 import { QUALITY_REPORT_JOB_TYPE } from "@/services/quality-reports/constants";
+import { deliverQualityReportNotifications } from "@/services/quality-reports/notifications";
 import { executeClaimedQualityReportJob } from "@/services/quality-reports/service";
 import { QUESTION_MAPPING_JOB_TYPE } from "@/services/question-mapping/schemas";
 import { executeClaimedQuestionMappingJob } from "@/services/question-mapping/service";
@@ -70,6 +72,14 @@ function authorized(value: string | undefined, expected: string) {
   return supplied.length === target.length && timingSafeEqual(supplied, target);
 }
 
+async function sweepQualityReportNotifications() {
+  await deliverQualityReportNotifications().catch(() => {
+    console.error(
+      JSON.stringify({ event: "quality_report_notification_sweep_failed" }),
+    );
+  });
+}
+
 export class PersistentLongTaskWorker {
   private stopping = false;
   private wakeResolver: (() => void) | null = null;
@@ -103,6 +113,12 @@ export class PersistentLongTaskWorker {
           this.config.recoveryIntervalMs
         ) {
           await recoverExpiredBackgroundJobs();
+          await sweepQualityReportNotifications();
+          await pruneAIProviderAttemptLogs().catch(() => {
+            console.error(
+              JSON.stringify({ event: "ai_provider_log_prune_failed" }),
+            );
+          });
           await deleteExpiredQuestionSourceFiles();
           await finalizeExpiredExams();
           await enqueueMissingQuestionObjectiveJobs();
@@ -114,8 +130,11 @@ export class PersistentLongTaskWorker {
           acceptedTypes: ACCEPTED_TYPES,
           leaseDurationMs: this.config.leaseDurationMs,
         });
-        if (job?.currentLeaseId) await this.process(job);
-        else await this.waitForWork();
+        if (job?.currentLeaseId) {
+          await this.process(job);
+          if (job.type === QUALITY_REPORT_JOB_TYPE)
+            await sweepQualityReportNotifications();
+        } else await this.waitForWork();
       } catch (error) {
         console.error(
           JSON.stringify({

@@ -28,6 +28,7 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   COURSE_SURVEY_PUBLISHED: "课程问卷",
   CLASSROOM_DISSOLVED: "班级变更",
   COURSE_ANNOUNCEMENT: "课程通知",
+  QUALITY_REPORT_RESULT: "教学质量报告",
 };
 
 const PRIORITY_LABELS: Record<NotificationPriority, string> = {

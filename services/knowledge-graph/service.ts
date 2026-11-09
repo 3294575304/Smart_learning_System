@@ -81,6 +81,7 @@ export async function generateTeacherKnowledgeGraph(
   courseId: string,
   context: AuditRequestContext,
   dependencies: {
+    jobId?: string;
     provider?: AIProvider;
     logger?: Pick<Console, "error">;
     failSuccessWriteForTest?: boolean;
@@ -180,7 +181,13 @@ export async function generateTeacherKnowledgeGraph(
       );
     const ai = await runOptionalKnowledgeGraphAiEnhancement(
       base,
-      () => dependencies.provider ?? createAIProvider(),
+      () =>
+        dependencies.provider ??
+        createAIProvider({
+          capability: "graph_enhance",
+          actorId: teacherId,
+          requestId: dependencies.jobId,
+        }),
     );
     const structure = mergeRelated(base, ai.inference);
     const saved = await prisma.$transaction(async (tx) => {
@@ -348,6 +355,7 @@ export async function executeClaimedKnowledgeGraphJob(
       input.teacherId,
       input.courseId,
       context,
+      { jobId },
     );
     await completeBackgroundJob(jobId, {
       leaseId,
@@ -484,7 +492,7 @@ export async function executeClaimedKnowledgeGraphAiEnhancementJob(
       input.courseId,
       input.draftId,
       context,
-      { attemptId: leaseId },
+      { attemptId: leaseId, jobId },
     );
     await completeBackgroundJob(jobId, {
       leaseId,
@@ -525,6 +533,7 @@ export async function executeTeacherKnowledgeGraphAiEnhancement(
     provider?: AIProvider;
     logger?: Pick<Console, "error">;
     attemptId?: string;
+    jobId?: string;
   } = {},
 ) {
   const logger = dependencies.logger ?? console;
@@ -563,7 +572,13 @@ export async function executeTeacherKnowledgeGraphAiEnhancement(
     const base = parseGraph(draft.deterministicStructureJson);
     const ai = await runOptionalKnowledgeGraphAiEnhancement(
       base,
-      () => dependencies.provider ?? createAIProvider(),
+      () =>
+        dependencies.provider ??
+        createAIProvider({
+          capability: "graph_enhance",
+          actorId: teacherId,
+          requestId: dependencies.jobId,
+        }),
     );
     const structure = mergeRelated(base, ai.inference);
     const saved = await prisma.$transaction(async (tx) => {
@@ -915,6 +930,7 @@ export function knowledgeGraphGenerationErrorMessage(code: string | null) {
     case "PROVIDER_MODEL_NOT_FOUND":
       return "AI 模型不存在或接口地址不正确。";
     case "PROVIDER_RATE_LIMITED":
+    case "PROVIDER_LOCAL_QUOTA_EXCEEDED":
       return "AI 服务请求过于频繁。";
     case "PROVIDER_TIMEOUT":
       return "AI 服务响应超时，请稍后重试。";

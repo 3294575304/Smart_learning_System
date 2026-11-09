@@ -49,6 +49,7 @@ const testDirectories = [
 // These service tests import the server-only marker through their production modules.
 // React UI tests must keep the default export condition.
 const serverOnlyTests = new Set([
+  "ai-analysis/governance.test.ts",
   "assessment-schemes/service.test.ts",
   "classrooms/dissolution-service.test.ts",
   "course-files/service.test.ts",
@@ -58,6 +59,8 @@ const serverOnlyTests = new Set([
   "courses/syllabus-parsing.test.ts",
   "courses/syllabus-review.test.ts",
   "courses/syllabus-service.test.ts",
+  "course-recommendations/learning-assistant-stream.test.ts",
+  "quality-reports/evaluation-workflow.test.ts",
 ]);
 
 function run(args: string[], env: NodeJS.ProcessEnv): void {

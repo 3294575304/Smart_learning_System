@@ -17,6 +17,7 @@ interface GradebookOption {
   }>;
 }
 interface ReportItem {
+  classroom: { id: string | null; name: string } | null;
   templateName: string;
   id: string;
   versionNumber: number;
@@ -380,13 +381,20 @@ function ReviewEditor({
 export function QualityReportWorkspace({
   courseId,
   classroomId,
+  initialGradebookId,
+  focusedReportId,
 }: {
   courseId: string;
   classroomId?: string;
+  initialGradebookId?: string;
+  focusedReportId?: string;
 }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [reportFilter, setReportFilter] = useState("ALL");
+  const [reportClassroomId, setReportClassroomId] = useState(
+    classroomId ?? "ALL",
+  );
   const [sourceType, setSourceType] = useState<"PLATFORM" | "UPLOAD">(
     "PLATFORM",
   );
@@ -416,7 +424,9 @@ export function QualityReportWorkspace({
     setWorkspace(payload.data);
     setRefreshError(null);
     const defaultGradebook = payload.data.gradebooks.find(
-      (item) => item.currentPublication,
+      (item) =>
+        item.currentPublication &&
+        (!initialGradebookId || item.id === initialGradebookId),
     );
     setGradebookId((current) => current || defaultGradebook?.id || "");
     setUploadClassroomId(
@@ -442,7 +452,7 @@ export function QualityReportWorkspace({
           scoringCriteria: payload.data!.metadataDefaults.scoringCriteria,
         },
     );
-  }, [courseId, classroomId]);
+  }, [courseId, classroomId, initialGradebookId]);
   useEffect(() => {
     void load().catch((reason: unknown) =>
       setError(reason instanceof Error ? reason.message : "报告工作区加载失败"),
@@ -507,6 +517,7 @@ export function QualityReportWorkspace({
               ...templateSelection,
               sourceType,
               gradebookId,
+              expectedPublicationId: selected?.currentPublication?.id,
               outcomeAttainmentRunId: outcome?.id,
               courseNature: values.get("courseNature"),
               credits: values.get("credits"),
@@ -550,6 +561,12 @@ export function QualityReportWorkspace({
           ? "报告生成任务已提交；如当前成绩尚无达成度版本，系统会先自动完成确定性计算。"
           : "报告生成任务已提交；系统将按正式目标—考核方式占比在报告快照内计算达成度，上传成绩不会写入正式成绩台账。",
       );
+      setReportClassroomId(
+        sourceType === "PLATFORM"
+          ? (workspace?.gradebooks.find((item) => item.id === gradebookId)
+              ?.classroom.id ?? "ALL")
+          : uploadClassroomId || "UNASSOCIATED",
+      );
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "报告生成请求失败");
@@ -559,14 +576,32 @@ export function QualityReportWorkspace({
   }
   const filteredReports = (workspace?.reports ?? []).filter(
     (report) =>
-      reportFilter === "ALL" ||
-      (reportFilter === "REVIEW"
-        ? report.status === "SUCCEEDED" &&
-          report.reviewStatus === "PENDING_REVIEW"
-        : reportFilter === "DONE"
-          ? report.reviewStatus === "APPROVED"
-          : report.status === "FAILED"),
+      (reportClassroomId === "ALL" ||
+        (reportClassroomId === "UNASSOCIATED"
+          ? !report.classroom?.id
+          : report.classroom?.id === reportClassroomId)) &&
+      (reportFilter === "ALL" ||
+        (reportFilter === "REVIEW"
+          ? report.status === "SUCCEEDED" &&
+            report.reviewStatus === "PENDING_REVIEW"
+          : reportFilter === "DONE"
+            ? report.reviewStatus === "APPROVED"
+            : report.status === "FAILED")),
   );
+  const focusedReport = filteredReports.find(
+    (report) => report.id === focusedReportId,
+  );
+  const orderedReports = focusedReport
+    ? [
+        focusedReport,
+        ...filteredReports.filter((report) => report.id !== focusedReport.id),
+      ]
+    : filteredReports;
+  const hasFocusedReport = !!focusedReport;
+  useEffect(() => {
+    if (!hasFocusedReport || !focusedReportId) return;
+    document.getElementById(`quality-report-${focusedReportId}`)?.focus();
+  }, [hasFocusedReport, focusedReportId]);
   if (!workspace && !error)
     return (
       <div className="rounded-xl border bg-white p-6">正在加载报告工作区…</div>
@@ -640,7 +675,16 @@ export function QualityReportWorkspace({
                 key={value}
                 disabled={busy || templateBusy}
                 aria-pressed={sourceType === value}
-                onClick={() => setSourceType(value)}
+                onClick={() => {
+                  setSourceType(value);
+                  setReportClassroomId(
+                    value === "PLATFORM"
+                      ? (workspace.gradebooks.find(
+                          (item) => item.id === gradebookId,
+                        )?.classroom.id ?? "ALL")
+                      : uploadClassroomId || "UNASSOCIATED",
+                  );
+                }}
                 type="button"
               >
                 {value === "PLATFORM" ? "平台正式数据" : "上传成绩文件"}
@@ -660,6 +704,11 @@ export function QualityReportWorkspace({
                     (item) => item.id === gradebookId,
                   )?.classroom.name;
                   setGradebookId(event.target.value);
+                  setReportClassroomId(
+                    workspace.gradebooks.find(
+                      (item) => item.id === event.target.value,
+                    )?.classroom.id ?? "ALL",
+                  );
                   setMetadata((current) =>
                     current &&
                     next &&
@@ -694,16 +743,17 @@ export function QualityReportWorkspace({
                   type="file"
                 />
                 <span className="mt-1 block text-xs text-amber-700">
-                  只进入本次报告快照，不覆盖或补录正式成绩；课程目标达成度使用当前正式考核方案的目标占比计算。
+                  按正式考核方案识别成绩列与权重；关联教学班后逐行核对名单，外班记录将阻止生成。课程目标达成度按有效分项逐人计算。
                 </span>
               </label>
               <label className="block text-sm">
-                关联班级（用于问卷与班级信息）
+                关联教学班（核对名单并关联问卷）
                 <select
                   className="mt-1 w-full rounded-md border px-3 py-2"
                   onChange={(event) => {
                     const value = event.target.value;
                     setUploadClassroomId(value);
+                    setReportClassroomId(value || "UNASSOCIATED");
                     const classroom = classroomOptions.find(
                       (item) => item.id === value,
                     );
@@ -919,6 +969,27 @@ export function QualityReportWorkspace({
               查看进度、审核文字或下载已完成的报告。
             </p>
           </div>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            记录班级
+            <select
+              className="h-10 max-w-64 rounded-lg border bg-white px-3"
+              value={reportClassroomId}
+              onChange={(event) => {
+                setReportClassroomId(event.target.value);
+                setShowHistory(false);
+              }}
+            >
+              <option value="ALL">
+                {classroomId ? "当前班级全部记录" : "全部教学班"}
+              </option>
+              <option value="UNASSOCIATED">独立上传（未关联班级）</option>
+              {classroomOptions.map((classroom) => (
+                <option key={classroom.id} value={classroom.id}>
+                  {classroom.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
             {[
               ["ALL", "全部"],
@@ -941,6 +1012,12 @@ export function QualityReportWorkspace({
             ))}
           </div>
         </div>
+        {focusedReportId &&
+        !workspace.reports.some((report) => report.id === focusedReportId) ? (
+          <p role="status" className="mt-3 text-sm text-slate-600">
+            该报告不在当前课程或班级的生成记录中。
+          </p>
+        ) : null}
         {refreshError && (
           <p
             role="alert"
@@ -970,12 +1047,14 @@ export function QualityReportWorkspace({
           </p>
         ) : (
           <div className="mt-4 space-y-3">
-            {filteredReports
+            {orderedReports
               .slice(0, showHistory ? undefined : 3)
               .map((report) => (
                 <div
                   className="rounded-xl border border-slate-200 p-4 transition hover:border-sky-200"
+                  id={`quality-report-${report.id}`}
                   key={report.id}
+                  tabIndex={-1}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -984,6 +1063,11 @@ export function QualityReportWorkspace({
                         {report.sourceType === "PLATFORM"
                           ? "平台数据"
                           : "上传数据"}
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-sky-800">
+                        {report.classroom?.id
+                          ? report.classroom.name
+                          : "独立上传 · 未关联教学班"}
                       </p>
                       <p className="mt-1 text-xs break-words text-slate-500">
                         模板：{report.templateName}
@@ -1063,6 +1147,7 @@ export function QualityReportWorkspace({
                   report.reviewStatus === "PENDING_REVIEW" ? (
                     <details
                       id={`quality-report-review-${report.id}`}
+                      open={report.id === focusedReportId || undefined}
                       className="mt-4 rounded-xl border border-sky-100 bg-sky-50/30 p-3"
                     >
                       <summary className="w-fit cursor-pointer rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">

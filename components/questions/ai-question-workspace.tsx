@@ -39,7 +39,7 @@ interface BatchSummary {
   createdAt: Date | string;
   course: { name: string };
 }
-interface Candidate {
+export interface Candidate {
   id: string;
   ordinal: number;
   status: string;
@@ -56,7 +56,7 @@ interface Candidate {
   }>;
   confirmedQuestionId: string | null;
 }
-interface BatchDetail {
+export interface BatchDetail {
   id: string;
   courseId: string;
   mode: string;
@@ -106,7 +106,7 @@ function readableAnswer(question: QuestionUpsertData): string {
   }
 }
 
-function readableFailure(code: string): string {
+export function readableFailure(code: string): string {
   if (code.startsWith("SCHEMA:")) {
     const detail = code.split(":").slice(2).join(":");
     return detail && detail !== "custom"
@@ -126,6 +126,7 @@ function readableFailure(code: string): string {
     生成题与现有题重复: "题干与本批或题库已有题目重复",
     题干包含来源提示: "题干包含不适合学生阅读的来源提示",
     主知识点不在正式图谱范围内: "主知识点不属于本次正式图谱范围",
+    主知识点不符合本题分配的知识点: "主知识点与本题分配的知识点不一致",
   };
   return messages[code] ?? "生成结果未通过校验，请重试";
 }
@@ -139,6 +140,7 @@ function initialCounts(): Record<QuestionType, number> {
 export function AIQuestionWorkspace({
   options,
   initialBatches,
+  initialCourseId,
 }: {
   options: {
     courses: CourseOption[];
@@ -150,8 +152,11 @@ export function AIQuestionWorkspace({
     }>;
   };
   initialBatches: BatchSummary[];
+  initialCourseId?: string;
 }) {
-  const [courseId, setCourseId] = useState(options.courses[0]?.id ?? "");
+  const [courseId, setCourseId] = useState(
+    initialCourseId ?? options.courses[0]?.id ?? "",
+  );
   const [mode, setMode] = useState<"RANGE" | "ANALOGY" | "FILE">("RANGE");
   const [chapterCode, setChapterCode] = useState("");
   const [conceptIds, setConceptIds] = useState<string[]>([]);
@@ -820,7 +825,7 @@ export function AIQuestionWorkspace({
   );
 }
 
-function CandidateReview({
+export function CandidateReview({
   candidate,
   batchId,
   graphNodes,
@@ -830,6 +835,7 @@ function CandidateReview({
   selectedConceptId,
   onConceptChange,
   onEditingChange,
+  onConfirmed,
 }: {
   candidate: Candidate;
   batchId: string;
@@ -845,6 +851,7 @@ function CandidateReview({
   selectedConceptId: string;
   onConceptChange: (value: string) => void;
   onEditingChange: (editing: boolean) => void;
+  onConfirmed?: (questionId: string, title: string, type: QuestionType) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [question, setQuestion] = useState<QuestionUpsertData>(
@@ -873,6 +880,15 @@ function CandidateReview({
     if (!result.success) {
       onError(result.error);
       return false;
+    }
+    if (path === "/confirm" && onConfirmed) {
+      const confirmed = result.data as { questionId?: string };
+      if (confirmed.questionId)
+        onConfirmed(
+          confirmed.questionId,
+          candidate.questionJson.title,
+          candidate.questionJson.type,
+        );
     }
     onChange();
     return true;

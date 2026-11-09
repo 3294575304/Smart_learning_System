@@ -13,6 +13,7 @@ import type { ExamPaperAIInput } from "@/services/exams/paper-ai";
 import type { QuestionObjectiveAIInput } from "@/services/question-objectives/schemas";
 
 import type { AssemblyProviderInput } from "@/services/assignments/editor-assistance-schemas";
+import type { CourseRecommendationFocusInput } from "@/services/course-recommendations/reason-focus";
 
 export interface AIProviderOptions {
   signal: AbortSignal;
@@ -41,6 +42,7 @@ export type AIProviderErrorCode =
   | "PROVIDER_FORBIDDEN"
   | "PROVIDER_MODEL_NOT_FOUND"
   | "PROVIDER_RATE_LIMITED"
+  | "PROVIDER_LOCAL_QUOTA_EXCEEDED"
   | "PROVIDER_TIMEOUT"
   | "PROVIDER_HTTP_ERROR"
   | "PROVIDER_EMPTY_RESPONSE"
@@ -101,6 +103,11 @@ export interface AIProvider {
     input: LearningAssistantInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
+  readonly supportsCourseLearningStream?: boolean;
+  streamCourseLearningQuestion?(
+    input: LearningAssistantInput,
+    options: AIProviderOptions & { onText: (text: string) => Promise<void> },
+  ): Promise<void>;
 
   structureSelfReflection?(
     input: SelfReflectionAIInput,
@@ -114,6 +121,21 @@ export interface AIProvider {
 
   assembleAssignment?(
     input: AssemblyProviderInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  classifyTeacherEvaluationIntent?(
+    terms: readonly string[],
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  classifyTeacherAssistantTopic?(
+    terms: readonly string[],
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  chooseCourseRecommendationReasonFocus?(
+    input: CourseRecommendationFocusInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 

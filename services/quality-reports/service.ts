@@ -360,6 +360,15 @@ export async function getTeacherQualityReportPlatformSource(
   });
   if (!gradebook?.currentPublication)
     throw new ResourceNotFoundError("已发布成绩台账不存在。");
+  if (
+    input.expectedPublicationId &&
+    gradebook.currentPublication.id !== input.expectedPublicationId
+  )
+    throw new QualityReportOperationError(
+      "正式成绩版本已更新，请刷新后重新选择。",
+      409,
+      "GRADEBOOK_PUBLICATION_CHANGED",
+    );
   const attainment = input.outcomeAttainmentRunId
     ? await prisma.courseOutcomeAttainmentRun.findFirst({
         where: {
@@ -537,7 +546,6 @@ async function uploadSource(
       "SOURCE_SIZE_INVALID",
     );
   const data = Buffer.from(await file.arrayBuffer());
-  const parsed = parseUploadedGradeWorkbook(extension, data);
   let classroom = {
     id: null as string | null,
     name: metadata.majorClass || "上传成绩班级",
@@ -550,6 +558,69 @@ async function uploadSource(
     if (!owned) throw new ResourceNotFoundError("班级不存在。");
     classroom = owned;
   }
+  const formalComponents =
+    course.currentPublishedAssessmentScheme?.components.map((component) => ({
+      code: component.code,
+      name: component.name,
+      weight: Number(component.weight) / 100,
+      sortOrder: component.sortOrder,
+    })) ?? [];
+  if (!formalComponents.length)
+    throw new QualityReportOperationError(
+      "请先发布正式考核方案，再按该方案上传成绩文件。",
+      409,
+      "ASSESSMENT_SCHEME_REQUIRED",
+    );
+  const roster = classroom.id
+    ? await prisma.classMembership.findMany({
+        where: { classroomId: classroom.id },
+        select: {
+          studentId: true,
+          student: {
+            select: {
+              profile: { select: { studentNo: true, displayName: true } },
+            },
+          },
+        },
+      })
+    : null;
+  const pending = classroom.id
+    ? await prisma.studentIdentityClassroomAssignment.findMany({
+        where: {
+          classroomId: classroom.id,
+          withdrawnAt: null,
+          studentIdentity: { status: "PENDING", userId: null },
+        },
+        select: {
+          studentIdentity: { select: { studentNo: true, name: true } },
+        },
+      })
+    : [];
+  const parsed = parseUploadedGradeWorkbook(extension, data, {
+    components: formalComponents,
+    classroomName: classroom.id ? classroom.name : undefined,
+    roster:
+      roster === null
+        ? undefined
+        : [
+            ...roster.flatMap((member) =>
+              member.student.profile?.studentNo
+                ? [
+                    {
+                      studentNo: member.student.profile.studentNo,
+                      displayName: member.student.profile.displayName ?? "",
+                      studentId: member.studentId,
+                    },
+                  ]
+                : [],
+            ),
+            ...pending.map(({ studentIdentity }) => ({
+              studentNo: studentIdentity.studentNo,
+              displayName: studentIdentity.name,
+              studentId: null,
+            })),
+          ],
+  });
   const survey = await latestSurveySnapshot(courseId, classroom.id);
   const syllabusStructure = parsedSyllabus(
     course.currentPublishedSyllabusStructure,
@@ -575,11 +646,6 @@ async function uploadSource(
         studentScores: [],
       }))
     : syllabusOnlyOutcomes(syllabusStructure);
-  const formalComponents =
-    course.currentPublishedAssessmentScheme?.components.map((component) => ({
-      ...component,
-      weight: Number(component.weight) / 100,
-    })) ?? [];
   const componentCodeMap = matchFormalComponentsToReportComponents(
     parsed.components,
     formalComponents,
@@ -676,6 +742,7 @@ async function queueReport(
             status: QualityReportStatus.QUEUED,
             errorCode: null,
             completedAt: null,
+            notificationPending: false,
           },
           include: { backgroundJob: true },
         });
@@ -816,10 +883,19 @@ export async function queuePlatformQualityReport(
       classroom: { teacherId },
       currentPublicationId: { not: null },
     },
-    select: { id: true },
+    select: { id: true, currentPublicationId: true },
   });
   if (!ownedGradebook)
     throw new ResourceNotFoundError("已发布成绩台账不存在。");
+  if (
+    parsedInput.expectedPublicationId &&
+    ownedGradebook.currentPublicationId !== parsedInput.expectedPublicationId
+  )
+    throw new QualityReportOperationError(
+      "正式成绩版本已更新，请刷新后重新选择。",
+      409,
+      "GRADEBOOK_PUBLICATION_CHANGED",
+    );
   const outcomeAttainmentRunId =
     parsedInput.outcomeAttainmentRunId ??
     (
@@ -835,6 +911,7 @@ export async function queuePlatformQualityReport(
     {
       ...(await getTeacherQualityReportPlatformSource(teacherId, courseId, {
         ...parsedInput,
+        expectedPublicationId: ownedGradebook.currentPublicationId ?? undefined,
         outcomeAttainmentRunId,
       })),
       ...(reportTemplate ? { reportTemplate } : {}),
@@ -926,6 +1003,8 @@ export async function executeClaimedQualityReportJob(
       source,
       statistics,
       deterministicNarrative,
+      backgroundJobId,
+      report.requestedById,
     );
     const narrative = narrativeExecution.output;
     const qualityAudit = auditQualityReportDraft(
@@ -986,6 +1065,7 @@ export async function executeClaimedQualityReportJob(
             workbookSizeBytes: workbook.length,
             workbookChecksumSha256: sha256(workbook),
             completedAt: new Date(),
+            notificationPending: true,
           },
         });
         await writeGovernanceAuditLog(transaction, {
@@ -1031,6 +1111,7 @@ export async function executeClaimedQualityReportJob(
               : QualityReportStatus.FAILED,
             errorCode: "QUALITY_REPORT_GENERATION_FAILED",
             completedAt: willRetry ? null : new Date(),
+            notificationPending: !willRetry,
           },
         }),
     );
@@ -1224,6 +1305,7 @@ export async function getTeacherQualityReports(
         id: true,
         versionNumber: true,
         sourceType: true,
+        classroom: { select: { id: true, name: true } },
         status: true,
         reviewStatus: true,
         aiStatus: true,
@@ -1242,7 +1324,7 @@ export async function getTeacherQualityReports(
       where: {
         courseId,
         teacherId,
-        ...(classroomId ? { id: classroomId } : { status: "ACTIVE" }),
+        ...(classroomId ? { id: classroomId } : {}),
       },
       select: { id: true, name: true },
       orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -1257,6 +1339,7 @@ export async function getTeacherQualityReports(
         qualityReportSourceSnapshotSchema.safeParse(sourceSnapshotJson);
       return {
         ...report,
+        classroom: source.success ? source.data.classroom : report.classroom,
         templateName: source.success
           ? (source.data.reportTemplate?.name ?? "系统默认 · 2024 版")
           : "系统默认 · 2024 版",

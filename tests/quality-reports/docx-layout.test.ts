@@ -67,7 +67,7 @@ test("真实 DOCX 保留模板字体与私有字段边界，图表比例和坐�
       threshold: 0.68,
       attainmentIndex: 0.4667,
       participantCount: 3,
-      studentScores: [0.2, 0.4, 0.8],
+      studentScores: [20, 40, 80],
       componentAllocations: [{ componentCode: "final", allocationRate: 1 / 3 }],
     })),
     attendance: { sessionCount: 0, presentRate: null },

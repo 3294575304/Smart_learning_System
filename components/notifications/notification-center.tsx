@@ -45,6 +45,7 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   COURSE_SURVEY_PUBLISHED: "课程问卷",
   CLASSROOM_DISSOLVED: "班级变更",
   COURSE_ANNOUNCEMENT: "课程通知",
+  QUALITY_REPORT_RESULT: "教学质量报告",
 };
 
 const PRIORITY_LABELS: Record<NotificationPriority, string> = {
@@ -82,6 +83,11 @@ const TYPE_STYLES: Record<
     pill: "bg-emerald-50 text-emerald-700 ring-emerald-200/70",
   },
   LEARNING_ANALYSIS_READY: {
+    icon: BarChart3,
+    accent: "bg-indigo-50 text-indigo-600 ring-indigo-100",
+    pill: "bg-indigo-50 text-indigo-700 ring-indigo-200/70",
+  },
+  QUALITY_REPORT_RESULT: {
     icon: BarChart3,
     accent: "bg-indigo-50 text-indigo-600 ring-indigo-100",
     pill: "bg-indigo-50 text-indigo-700 ring-indigo-200/70",

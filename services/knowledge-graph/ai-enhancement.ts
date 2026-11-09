@@ -112,6 +112,7 @@ function aiWarningMessage(code: string) {
     PROVIDER_UNAUTHORIZED: "AI 服务鉴权失败。",
     PROVIDER_FORBIDDEN: "AI 服务拒绝了当前请求。",
     PROVIDER_MODEL_NOT_FOUND: "AI 模型不存在或接口地址不正确。",
+    PROVIDER_LOCAL_QUOTA_EXCEEDED: "AI 请求额度已用完。",
     PROVIDER_RATE_LIMITED: "AI 服务请求过于频繁。",
     PROVIDER_TIMEOUT: "AI 服务响应超时。",
     PROVIDER_HTTP_ERROR: "AI 服务返回了 HTTP 错误。",

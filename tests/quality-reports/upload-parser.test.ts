@@ -65,6 +65,103 @@ test("生成的成绩计算工作簿保留文本学号、分项工作表和总�
 import { parseSpreadsheetWorkbook } from "@/services/student-imports/spreadsheet-parser";
 import { gradeExportFormatSchema } from "@/services/gradebook/schemas";
 
+test("上传使用正式自定义项目和权重，表头冲突与重复列在解析时拦截", () => {
+  const components = [
+    { code: "project", name: "项目展示", weight: 0.3 },
+    { code: "exam", name: "期末考试", weight: 0.7 },
+  ];
+  const csv = "学号,姓名,项目展示(30%),期末考试(70%)\n001,测试甲,100,0\n";
+  const result = parseUploadedGradeWorkbook("csv", Buffer.from(csv), {
+    components,
+  });
+  assert.equal(result.students[0]?.totalScore, 30);
+  assert.equal(result.students[0]?.studentNo, "001");
+  assert.deepEqual(result.components, components);
+  assert.throws(
+    () =>
+      parseUploadedGradeWorkbook(
+        "csv",
+        Buffer.from(csv.replace("30%", "20%")),
+        { components },
+      ),
+    /权重与正式方案不一致/u,
+  );
+  assert.throws(
+    () =>
+      parseUploadedGradeWorkbook(
+        "csv",
+        Buffer.from("学号,姓名,项目展示,项目展示,期末考试\n001,甲,10,20,30"),
+        { components },
+      ),
+    /重复成绩列/u,
+  );
+});
+
+test("关联教学班逐行核对文本学号和姓名，拒绝外班学生与错误姓名", () => {
+  const components = [{ code: "exam", name: "期末考试", weight: 1 }];
+  const csv =
+    "学号,姓名,班级,期末考试\n001,测试甲,行政一班,80\n002,测试乙,行政二班,90\n";
+  const roster = [
+    { studentNo: "001", displayName: "测试甲", studentId: "student-a" },
+  ];
+  assert.throws(
+    () =>
+      parseUploadedGradeWorkbook("csv", Buffer.from(csv), {
+        components,
+        roster,
+      }),
+    /所选班级名单不符/u,
+  );
+  assert.throws(
+    () => parseUploadedGradeWorkbook("csv", Buffer.from(csv), { components }),
+    /多个班级/u,
+  );
+  assert.throws(
+    () =>
+      parseUploadedGradeWorkbook(
+        "csv",
+        Buffer.from(
+          csv.split("\n").slice(0, 2).join("\n").replace("测试甲", "错误姓名"),
+        ),
+        { components, roster },
+      ),
+    /所选班级名单不符/u,
+  );
+  const result = parseUploadedGradeWorkbook(
+    "csv",
+    Buffer.from(csv.split("\n").slice(0, 2).join("\n")),
+    { components, roster },
+  );
+  assert.equal(result.students[0]?.studentId, "student-a");
+  assert.throws(
+    () =>
+      parseUploadedGradeWorkbook(
+        "csv",
+        Buffer.from("学号,姓名,教学班,期末考试\n001,测试甲,其他教学班,80"),
+        { components, roster, classroomName: "目标教学班" },
+      ),
+    /教学班与所选班级不一致/u,
+  );
+});
+
+test("上传分项免修重新分配有效权重，真实零分及未录入分别保留", () => {
+  const components = [
+    { code: "a", name: "项目A", weight: 0.5 },
+    { code: "b", name: "项目B", weight: 0.5 },
+  ];
+  const result = parseUploadedGradeWorkbook(
+    "csv",
+    Buffer.from(
+      "学号,姓名,项目A,项目B\n001,甲,免修,80\n002,乙,0,0\n003,丙,,80",
+    ),
+    { components },
+  );
+  assert.equal(result.students[0]?.totalScore, 80);
+  assert.equal(result.students[0]?.componentStatuses?.a, "EXEMPT");
+  assert.equal(result.students[1]?.totalScore, 0);
+  assert.equal(result.students[2]?.status, "NOT_ENTERED");
+});
+
 test("完整成绩单不漏学生，保留零分、前导零学号和特殊状态，并显示正式权重", () => {
   const source = fixture();
   const base = source.students[0]!;

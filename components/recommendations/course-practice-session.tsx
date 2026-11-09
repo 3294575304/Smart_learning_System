@@ -270,6 +270,17 @@ export function CoursePracticeSession({ session }: Props) {
         <p className="mt-4 text-sm leading-7 whitespace-pre-wrap">
           {item.question.content}
         </p>
+        {session.mode === "PRACTICE" && item.reason ? (
+          <details className="mt-3 rounded-lg border border-sky-100 bg-sky-50/50 px-3 py-2 text-sm">
+            <summary className="cursor-pointer font-medium text-sky-900">
+              为什么推荐这题
+            </summary>
+            <p className="mt-2 leading-6 text-slate-700">{item.reason}</p>
+            {item.reasonSource === "HYBRID" ? (
+              <p className="mt-1 text-xs text-slate-600">AI 辅助选择学习建议</p>
+            ) : null}
+          </details>
+        ) : null}
         <QuestionAnswerInput
           answer={answer}
           disabled={busy}

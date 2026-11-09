@@ -1,4 +1,8 @@
-import type { QuestionStatus, QuestionType } from "@prisma/client";
+import type {
+  QuestionOrigin,
+  QuestionStatus,
+  QuestionType,
+} from "@prisma/client";
 
 export type QuestionAnswer =
   | { kind: "CHOICE"; correctOptionLabels: string[] }
@@ -34,6 +38,7 @@ export interface QuestionListItem {
   title: string;
   content: string;
   type: QuestionType;
+  origin: QuestionOrigin;
   defaultObjectiveKind?: string | null;
   courseObjective?: { code: string; title: string } | null;
   status: QuestionStatus;
@@ -52,6 +57,7 @@ export interface QuestionListItem {
 }
 
 export interface QuestionDetail extends QuestionListItem {
+  aiSource?: { promptVersion: string };
   explanation: string;
   options: QuestionOptionData[];
   answer: QuestionAnswer;

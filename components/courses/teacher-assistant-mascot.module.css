@@ -1,0 +1,33 @@
+.greeting {
+  transform-origin: 36px 46px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .greeting {
+    animation: assistant-greet 600ms ease-in-out 2;
+  }
+  .intro {
+    animation: assistant-appear 180ms ease-out;
+  }
+}
+
+@keyframes assistant-greet {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes assistant-appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -30,6 +30,7 @@ import { extractQuestionFile } from "@/services/question-import/file-extractor";
 import { createProgrammingConfigInTransaction } from "@/services/programming-questions/service";
 import { programmingConfigRevisionInputSchema } from "@/services/programming-questions/schemas";
 import { createQuestionInTransaction } from "@/services/questions/service";
+import { confirmedQuestionOrigin } from "./provenance";
 import { questionUpsertSchema } from "@/services/questions/schemas";
 import { getStorageService } from "@/services/storage";
 import { verifyProgrammingCandidate } from "@/services/ai-question-generation/verify-programming";
@@ -437,6 +438,7 @@ export async function listQuestionGenerationBatches(teacherId: string) {
     take: 30,
     select: {
       id: true,
+      courseId: true,
       mode: true,
       status: true,
       requestedCount: true,
@@ -741,6 +743,7 @@ export async function confirmQuestionCandidate(
             "课程分类或正式图谱已变化，请重新核对",
             409,
           );
+        const origin = confirmedQuestionOrigin(candidate);
         const createdId = await createQuestionInTransaction(
           tx,
           teacherId,
@@ -754,7 +757,7 @@ export async function confirmQuestionCandidate(
                 ? objectiveCode
                 : null,
           },
-          config ? QuestionStatus.DRAFT : undefined,
+          { status: config ? QuestionStatus.DRAFT : undefined, origin },
         );
         if (batch.syllabusStructureId)
           await tx.questionCourseObjective.create({
@@ -815,6 +818,8 @@ export async function confirmQuestionCandidate(
           afterData: {
             batchId,
             candidateId,
+            origin,
+            promptVersion: batch.promptVersion,
             graphVersionId: batch.graphVersionId,
             primaryConceptId: graphNode?.conceptId ?? null,
             sourceIds: (candidate.sourceRefs as Array<{ id: string }>).map(

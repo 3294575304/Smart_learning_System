@@ -1,5 +1,6 @@
 import { QuestionType } from "@prisma/client";
 import { z } from "zod";
+import { AI_PROMPTS } from "@/services/ai/prompt-registry";
 
 import { programmingConfigRevisionInputSchema } from "@/services/programming-questions/schemas";
 import {
@@ -8,7 +9,8 @@ import {
 } from "@/services/questions/schemas";
 
 export const AI_QUESTION_JOB_TYPE = "AI_QUESTION_GENERATION";
-export const AI_QUESTION_PROMPT_VERSION = "ai-question-v2";
+export const AI_QUESTION_PROMPT_VERSION =
+  AI_PROMPTS.question_generation.version;
 export const AI_QUESTION_RULE_VERSION = "ai-question-review-v2";
 
 export const questionGenerationBatchPathSchema = z.object({
@@ -21,6 +23,7 @@ export const questionGenerationRequestSchema = z
     mode: z.enum(["RANGE", "ANALOGY", "FILE"]),
     chapterCode: z.string().trim().max(100).nullable().default(null),
     conceptIds: z.array(z.string().cuid()).max(20).default([]),
+    balancedConcepts: z.boolean().optional(),
     sourceQuestionId: z.string().cuid().nullable().default(null),
     bloomLevel: z.enum([
       "REMEMBER",

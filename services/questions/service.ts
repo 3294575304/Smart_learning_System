@@ -5,6 +5,7 @@ import {
   AuditTargetType,
   Prisma,
   QuestionStatus,
+  QuestionOrigin,
   QuestionType,
   QuestionVisibility,
 } from "@prisma/client";
@@ -102,6 +103,7 @@ function listItemFromRecord(
     title: question.title,
     content: question.content,
     type: question.type,
+    origin: question.origin,
     defaultObjectiveKind: question.defaultObjectiveKind,
     status: question.status,
     questionCategoryId: question.questionCategoryId,
@@ -614,7 +616,18 @@ export async function getTeacherQuestion(
 ): Promise<QuestionDetail> {
   const question = await findQuestionRecord(teacherId, questionId);
   if (!question) throw new ResourceNotFoundError("题目不存在");
-  return detailFromRecord(teacherId, question);
+  const detail = detailFromRecord(teacherId, question);
+  if (question.origin === QuestionOrigin.MANUAL) return detail;
+  const candidate = await prisma.aIQuestionGenerationCandidate.findUnique({
+    where: { confirmedQuestionId: questionId },
+    select: {
+      status: true,
+      batch: { select: { promptVersion: true } },
+    },
+  });
+  return candidate?.status === "CONFIRMED"
+    ? { ...detail, aiSource: candidate.batch }
+    : detail;
 }
 
 export async function createQuestion(
@@ -631,7 +644,7 @@ export async function createQuestionInTransaction(
   transaction: Prisma.TransactionClient,
   teacherId: string,
   input: QuestionUpsertData,
-  status?: QuestionStatus,
+  options?: { status?: QuestionStatus; origin?: QuestionOrigin },
 ): Promise<string> {
   const questionCategory = await requireActiveQuestionCourseCategory(
     input.questionCategoryId,
@@ -644,7 +657,8 @@ export async function createQuestionInTransaction(
       creatorId: teacherId,
       ...persistenceFields(input),
       questionCategoryId: questionCategory.id,
-      ...(status ? { status } : {}),
+      ...(options?.status ? { status: options.status } : {}),
+      ...(options?.origin ? { origin: options.origin } : {}),
       options: { create: optionCreateData(input) },
       knowledgePointLinks: {
         create: input.knowledgePointIds.map((knowledgePointId) => ({

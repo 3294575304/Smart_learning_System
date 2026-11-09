@@ -1,6 +1,7 @@
 import { GradeValueStatus } from "@prisma/client";
 
 import type { QualityReportSourceSnapshot } from "@/services/quality-reports/schemas";
+import { calculateReportOutcomeScores } from "./outcome-calculation";
 import {
   buildGradeComposition,
   normalizeQualityReportNarrative,
@@ -42,10 +43,6 @@ export interface QualityReportStatistics {
 
 const INCLUDED_STATUS = GradeValueStatus.SCORED;
 const round = (value: number, places = 2) => Number(value.toFixed(places));
-
-function normalizeOutcomeScore(value: number) {
-  return Math.abs(value) > 1.5 ? value / 100 : value;
-}
 
 function normalizeOutcomeCode(value: string) {
   return value.normalize("NFKC").replace(/\s+/gu, "").toLowerCase();
@@ -103,32 +100,42 @@ export function calculateQualityReportStatistics(
         allocation.allocationRate,
       ]),
     );
-    const weightedParts = componentMeans.flatMap((component) => {
+    const weightedParts = source.components.flatMap((component) => {
       const allocationRate = allocationByCode.get(component.code);
-      return allocationRate === undefined || component.mean === null
+      return allocationRate === undefined
         ? []
         : [
             {
-              average: component.mean * component.weight * allocationRate,
               maximum: 100 * component.weight * allocationRate,
             },
           ];
     });
-    const hasCompleteWeights = weightedParts.length === componentMeans.length;
-    const weightedAverage = hasCompleteWeights
-      ? round(
-          weightedParts.reduce((sum, item) => sum + item.average, 0),
-          4,
-        )
-      : null;
-    const weightedMaximum = hasCompleteWeights
+    const recomputedScores = calculateReportOutcomeScores(
+      source.components,
+      source.students,
+      outcome,
+      source.sourceType === "PLATFORM",
+    );
+    const weightedMaximum = recomputedScores?.length
       ? round(
           weightedParts.reduce((sum, item) => sum + item.maximum, 0),
           4,
         )
       : null;
+    const meanIndex = recomputedScores?.length
+      ? recomputedScores.reduce((sum, score) => sum + score, 0) /
+        recomputedScores.length /
+        100
+      : null;
+    const computedAttainmentIndex =
+      meanIndex === null ? null : round(meanIndex, 4);
+    // A/B uses the same per-student exemption normalization as the official calculation.
+    const weightedAverage =
+      meanIndex !== null && weightedMaximum !== null
+        ? round(meanIndex * weightedMaximum, 4)
+        : null;
     const normalizedScores = (outcome.studentScores ?? []).map(
-      normalizeOutcomeScore,
+      (score) => score / 100,
     );
     const aboveHighCount = normalizedScores.filter(
       (value) => value >= 0.8,
@@ -143,10 +150,7 @@ export function calculateQualityReportStatistics(
       ...outcome,
       weightedAverage,
       weightedMaximum,
-      computedAttainmentIndex:
-        weightedAverage === null || !weightedMaximum
-          ? null
-          : round(weightedAverage / weightedMaximum, 4),
+      computedAttainmentIndex,
       aboveHighCount,
       aboveHighRate: normalizedScores.length
         ? round(aboveHighCount / normalizedScores.length, 4)

@@ -6,7 +6,7 @@ import {
   type QualityReportSourceSnapshot,
 } from "@/services/quality-reports/schemas";
 
-export const QUALITY_REPORT_AUDIT_RULE_VERSION = "quality-report-audit-v3";
+export const QUALITY_REPORT_AUDIT_RULE_VERSION = "quality-report-audit-v4";
 
 type AuditIssue = QualityReportAudit["issues"][number];
 
@@ -246,7 +246,13 @@ export function auditQualityReportDraft(
       const codes = new Set(
         (outcome.componentAllocations ?? []).map((item) => item.componentCode),
       );
-      return source.components.some((component) => !codes.has(component.code));
+      return (
+        codes.size === 0 ||
+        [...codes].some(
+          (code) =>
+            !source.components.some((component) => component.code === code),
+        )
+      );
     });
     if (allocationMissing.length > 0) {
       add(
@@ -254,7 +260,7 @@ export function auditQualityReportDraft(
         "WARNING",
         "OUTCOME_ATTAINMENT",
         "课程目标—考核方式占比不完整",
-        `目标 ${allocationMissing.map((item) => item.code).join("、")} 的定量表将出现“—”，无法对照大纲中的目标—考核方式占比。`,
+        `目标 ${allocationMissing.map((item) => item.code).join("、")} 缺少有效考核映射，或映射引用了本次成绩中不存在的项目。`,
         "在正式考核方案中补齐每个目标在各考核方式中的占比并重新发布。",
         ["outcomes.componentAllocations"],
       );
@@ -272,7 +278,7 @@ export function auditQualityReportDraft(
         "ERROR",
         "OUTCOME_ATTAINMENT",
         "课程目标达成度与模板 A/B 公式不一致",
-        `目标 ${calculationMismatches.map((item) => item.code).join("、")} 的正式达成度与按本报告分项平均分、考核权重及目标分配比例复算的 A/B 不一致。`,
+        `目标 ${calculationMismatches.map((item) => item.code).join("、")} 的正式达成度与按学生有效分项、免修权重重分配及目标占比复算的 A/B 不一致。`,
         "核对成绩发布、课程目标—考核方式映射和达成度计算版本；确保同一快照下 A/B 与正式达成度一致后重新生成。",
         [
           "outcomes.attainmentIndex",

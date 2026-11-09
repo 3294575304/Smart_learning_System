@@ -53,6 +53,18 @@ export interface DashboardOverview {
     generatedRecommendationCount: number;
   };
   ai: {
+    questionGeneration: AIQuestionGenerationMetrics;
+    gateway: Array<{
+      capability: string;
+      requests: number;
+      attempts: number;
+      failed: number;
+      wouldLimit: number;
+      rejected: number;
+      measuredAttempts: number;
+      totalTokens: number;
+      p95LatencyMs: number | null;
+    }>;
     executionRecordCount: number;
     analysisRecordCount: number;
     recommendationRecordCount: number;
@@ -69,6 +81,17 @@ export interface DashboardOverview {
     maintenanceMode: boolean;
     aiAnalysisEnabled: boolean;
   };
+}
+
+export interface AIQuestionGenerationMetrics {
+  generated: number;
+  confirmed: number;
+  editedBeforeConfirmation: number;
+  reviewEdits: number;
+  firstValidationChecks: number;
+  firstValidationPasses: number;
+  terminalBatches: number;
+  incompleteBatches: number;
 }
 
 export interface TrendPoint {

@@ -111,6 +111,7 @@ export async function executeClaimedQuestionObjectiveJob(
         content: true,
         type: true,
         questionCategoryId: true,
+        creatorId: true,
         options: { select: { content: true }, orderBy: { sortOrder: "asc" } },
       },
     });
@@ -161,7 +162,11 @@ export async function executeClaimedQuestionObjectiveJob(
         description: description.slice(0, 1_200),
       }));
     }
-    const provider = createAIProvider();
+    const provider = createAIProvider({
+      capability: "objective_classify",
+      actorId: question.creatorId,
+      requestId: jobId,
+    });
     if (!provider.classifyQuestionObjective)
       throw new Error("AI_OBJECTIVE_UNSUPPORTED");
     const output = parseQuestionObjectiveSuggestion(

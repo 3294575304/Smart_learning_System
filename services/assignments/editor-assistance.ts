@@ -1,11 +1,11 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { createAIProvider } from "@/services/ai/provider-factory";
+import { ZodError } from "zod";
+import { aiAttemptErrorCode, getPilotAIProvider } from "@/services/ai/gateway";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { getSystemConfigValue } from "@/services/system-config/service";
 import { assignmentEditorClassroomWhere } from "./creation-context";
 import { AssignmentOperationError } from "./errors";
 import { validateEditorAction } from "./editor-review";
@@ -251,14 +251,21 @@ export async function assembleAssignmentReview(
   let source: AssignmentAssemblyReview["source"] = "RULES";
   let model: string | null = null;
   let providerName: string | null = null;
-  if (await getSystemConfigValue("aiAnalysisEnabled")) {
+  const configured = await getPilotAIProvider({
+    capability: "assignment_suggestion",
+    actorId: teacherId,
+  });
+  let fallbackReason = configured.errorCode;
+  if (configured.provider) {
     try {
-      const provider = createAIProvider();
-      if (provider.assembleAssignment) {
+      const provider = configured.provider;
+      const assemble = provider.assembleAssignment?.bind(provider);
+      fallbackReason = "PROVIDER_CAPABILITY_UNAVAILABLE";
+      if (assemble) {
         providerName = provider.name;
         model = provider.model;
         const response = assemblyOutputSchema.parse(
-          await provider.assembleAssignment(
+          await assemble(
             {
               count: fallback.length,
               candidates: pool.map((q, index) => ({
@@ -272,6 +279,7 @@ export async function assembleAssignmentReview(
             { signal: AbortSignal.timeout(9_000) },
           ),
         );
+        fallbackReason = "ASSEMBLY_CONSTRAINTS_NOT_MET";
         const unique = new Set(response.picks.map((pick) => pick.key));
         if (
           unique.size === fallback.length &&
@@ -295,13 +303,15 @@ export async function assembleAssignmentReview(
           ) {
             selection = suggested;
             source = "AI";
+            fallbackReason = null;
           }
         }
       }
     } catch (error) {
-      console.warn("Assignment assembly used rule fallback", {
-        name: error instanceof Error ? error.name : "Unknown",
-      });
+      fallbackReason =
+        error instanceof ZodError
+          ? "PROVIDER_SCHEMA_INVALID"
+          : aiAttemptErrorCode(error);
     }
   }
   const covered = new Set(
@@ -321,6 +331,7 @@ export async function assembleAssignmentReview(
       source,
       provider: providerName,
       model,
+      fallbackReason,
       promptVersion: assemblyPromptVersion,
       ruleVersion: assemblyRuleVersion,
       graphVersionId: graph.id,

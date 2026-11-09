@@ -69,6 +69,10 @@ export async function POST(request: Request, context: Context) {
           majorClass: String(form.get("majorClass") ?? ""),
           college: String(form.get("college") ?? ""),
           major: String(form.get("major") ?? ""),
+          teachingMethodDetails: String(
+            form.get("teachingMethodDetails") ?? "",
+          ),
+          scoringCriteria: String(form.get("scoringCriteria") ?? ""),
           templateFileVersionId:
             String(form.get("templateFileVersionId") ?? "") || undefined,
           templateMappingConfirmed: form.has("templateMappingConfirmed")

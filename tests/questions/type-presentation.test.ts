@@ -65,6 +65,7 @@ function question(type: QuestionType): QuestionDetail {
     title: "通用课程题目",
     content: "请给出解答过程。",
     type,
+    origin: "MANUAL",
     status: "ACTIVE",
     questionCategoryId: "ccategory00000000000000001",
     questionCategoryName: "Python 程序设计",

@@ -15,6 +15,10 @@ import {
 import { prisma } from "@/lib/prisma";
 import { withClassroomQuery } from "@/lib/course-classroom";
 import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
+import {
+  loadTeacherEvaluationScope,
+  loadTeacherEvaluationStep,
+} from "@/services/course-analytics/evaluation-state";
 import { getTeacherCourseClassroom } from "@/services/courses/classroom-context";
 import { calculateAttendanceRate } from "@/services/attendance/calculation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -69,6 +73,7 @@ export async function getTeacherCourseAnalytics(
       name: true,
       courseNo: true,
       term: true,
+      status: true,
       currentPublishedAssessmentSchemeId: true,
       classrooms: {
         where: {
@@ -637,6 +642,15 @@ export async function getTeacherCourseAnalytics(
     (survey) => survey.status === CourseSurveyStatus.PUBLISHED,
   );
   const latestReport = reports[0] ?? null;
+  const evaluationNextStep =
+    course.status === "ARCHIVED"
+      ? null
+      : (
+          await loadTeacherEvaluationStep(
+            await loadTeacherEvaluationScope(teacherId, courseId),
+            classroomId,
+          )
+        ).step;
   const nextActions: Array<{
     key: string;
     title: string;
@@ -684,9 +698,10 @@ export async function getTeacherCourseAnalytics(
     });
   }
   if (
-    !latestReport ||
-    latestReport.status !== QualityReportStatus.SUCCEEDED ||
-    latestReport.reviewStatus !== QualityReportReviewStatus.APPROVED
+    !evaluationNextStep &&
+    (!latestReport ||
+      latestReport.status !== QualityReportStatus.SUCCEEDED ||
+      latestReport.reviewStatus !== QualityReportReviewStatus.APPROVED)
   ) {
     nextActions.push({
       key: "quality-report",
@@ -794,6 +809,7 @@ export async function getTeacherCourseAnalytics(
       dueAt: survey.dueAt,
     })),
     latestReport,
+    evaluationNextStep,
     nextActions: (section === "HISTORY" ||
     (reportingClassroomStatus && reportingClassroomStatus !== "ACTIVE")
       ? []

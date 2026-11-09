@@ -18,6 +18,8 @@ import {
 } from "@/services/admin/dashboard/metrics";
 import {
   loadAIOverview,
+  loadAIGatewayOverview,
+  loadAIQuestionGenerationMetrics,
   loadDistributions,
   loadLearningOverview,
   loadRecentAIFailures,
@@ -79,25 +81,28 @@ export async function getDashboardOverview(
   const range7 = createDashboardDateRange("7d", now);
   const range30 = createDashboardDateRange("30d", now);
   const previous7 = previousDashboardPeriod(range7);
-  const [users, teaching, learning, ai, config] = await Promise.all([
-    loadUserOverview({
-      schoolId,
-      current7Start: range7.start,
-      current7End: range7.end,
-      previous7Start: previous7.start,
-      previous7End: previous7.end,
-      current30Start: range30.start,
-    }),
-    loadTeachingOverview(schoolId),
-    loadLearningOverview({
-      schoolId,
-      current7Start: range7.start,
-      current30Start: range30.start,
-      end: range7.end,
-    }),
-    loadAIOverview({ schoolId, start7: range7.start, end: range7.end }),
-    getSystemConfig(),
-  ]);
+  const [users, teaching, learning, ai, config, gateway, questionGeneration] =
+    await Promise.all([
+      loadUserOverview({
+        schoolId,
+        current7Start: range7.start,
+        current7End: range7.end,
+        previous7Start: previous7.start,
+        previous7End: previous7.end,
+        current30Start: range30.start,
+      }),
+      loadTeachingOverview(schoolId),
+      loadLearningOverview({
+        schoolId,
+        current7Start: range7.start,
+        current30Start: range30.start,
+        end: range7.end,
+      }),
+      loadAIOverview({ schoolId, start7: range7.start, end: range7.end }),
+      getSystemConfig(),
+      loadAIGatewayOverview(schoolId, range7.start, range7.end),
+      loadAIQuestionGenerationMetrics(schoolId, range7.start, range7.end),
+    ]);
 
   const byRole = Object.fromEntries(
     Object.values(Role).map((role) => [
@@ -157,6 +162,8 @@ export async function getDashboardOverview(
           : Math.round(learning.averageGradedPercentage * 100) / 100,
     },
     ai: {
+      questionGeneration,
+      gateway,
       executionRecordCount:
         ai.analysisStatuses.reduce((sum, row) => sum + row._count._all, 0) +
         ai.tutoringStatuses.reduce((sum, row) => sum + row._count._all, 0),

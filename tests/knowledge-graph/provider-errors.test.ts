@@ -211,6 +211,17 @@ test(
         "body.html",
       ],
       [
+        new Response('{"error":{"message":"rate limited"}}', {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": "upstream-rate-limit",
+          },
+        }),
+        "PROVIDER_RATE_LIMITED",
+        "http.error",
+      ],
+      [
         new Response("", {
           status: 200,
           headers: { "content-type": "application/json" },

@@ -10,6 +10,7 @@ export const qualityReportPlatformInputSchema = z
     sourceType: z.literal(QualityReportSourceType.PLATFORM),
     ...templateSelectionShape,
     gradebookId: z.string().cuid(),
+    expectedPublicationId: z.string().cuid().optional(),
     outcomeAttainmentRunId: z.string().cuid().optional(),
     courseNature: z.string().trim().max(50).default(""),
     credits: z.coerce.number().min(0).max(20).default(0),

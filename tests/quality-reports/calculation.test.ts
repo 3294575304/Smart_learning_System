@@ -61,6 +61,67 @@ const source: QualityReportSourceSnapshot = {
   sourceReference: {},
 };
 
+test("目标成绩统一按百分制换算，极低分不误计为达标", () => {
+  const result = calculateQualityReportStatistics({
+    ...source,
+    outcomes: [
+      {
+        code: "O1",
+        title: "目标一",
+        threshold: 0.6,
+        attainmentIndex: 0.01,
+        participantCount: 4,
+        studentScores: [0, 0.5, 1, 1.5],
+      },
+    ],
+  });
+  assert.equal(result.outcomes[0]?.aboveThresholdCount, 0);
+  assert.equal(result.outcomes[0]?.aboveHighCount, 0);
+  assert.equal(result.outcomes[0]?.maximum, 0.015);
+  assert.equal(result.outcomes[0]?.median, 0.0075);
+});
+
+test("报告复算复用正式逐人免修规则，达成度与正式75分均值一致", () => {
+  const result = calculateQualityReportStatistics({
+    ...source,
+    sourceType: "PLATFORM",
+    components: [
+      { code: "a", name: "项目A", weight: 0.5 },
+      { code: "b", name: "项目B", weight: 0.5 },
+    ],
+    students: [
+      {
+        ...source.students[0]!,
+        componentScores: { a: 100, b: 40 },
+        totalScore: 70,
+      },
+      {
+        ...source.students[1]!,
+        componentScores: { a: null, b: 80 },
+        componentStatuses: { a: "EXEMPT", b: "COMPLETE" },
+        totalScore: 80,
+      },
+    ],
+    outcomes: [
+      {
+        code: "O1",
+        title: "目标一",
+        threshold: 0.6,
+        attainmentIndex: 0.75,
+        participantCount: 2,
+        studentScores: [70, 80],
+        componentAllocations: [
+          { componentCode: "a", allocationRate: 1 },
+          { componentCode: "b", allocationRate: 1 },
+        ],
+      },
+    ],
+  });
+  assert.equal(result.outcomes[0]?.computedAttainmentIndex, 0.75);
+  assert.equal(result.outcomes[0]?.weightedAverage, 75);
+  assert.equal(result.outcomes[0]?.weightedMaximum, 100);
+});
+
 test("成绩构成保留正式大纲考核名称和实际权重，不替换为固定平台文案", () => {
   assert.equal(
     buildGradeComposition([
@@ -199,7 +260,7 @@ test("按模板 A/B 口径计算目标统计并关联归一化学生自评", () 
           { componentCode: "regular", allocationRate: 0.5 },
           { componentCode: "final", allocationRate: 0.25 },
         ],
-        studentScores: [0.8, 60],
+        studentScores: [80, 60],
       },
     ],
     survey: {

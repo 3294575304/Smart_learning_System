@@ -1,4 +1,5 @@
-import { GradeValueStatus } from "@prisma/client";
+import { GradeValueStatus, Prisma } from "@prisma/client";
+import { calculateStudentOutcome } from "@/services/outcome-attainment/calculation";
 
 import type { QualityReportSourceSnapshot } from "@/services/quality-reports/schemas";
 
@@ -76,31 +77,52 @@ export function remapOutcomeAllocations(
   }));
 }
 
-function studentOutcomeScore(
-  student: ReportStudent,
+export function calculateReportOutcomeScores(
   components: readonly ReportComponent[],
-  allocations: ReadonlyMap<string, number>,
+  students: readonly ReportStudent[],
+  outcome: ReportOutcome,
+  includeSpecialStatuses = false,
 ) {
-  if (student.status !== GradeValueStatus.SCORED) return null;
-  const evidence = components.flatMap((component) => {
-    const allocationRate = allocations.get(component.code);
-    const score = student.componentScores[component.code];
-    return allocationRate === undefined || score === null || score === undefined
-      ? []
-      : [{ component, allocationRate, score }];
+  const byCode = new Map(
+    components.map((component) => [component.code, component]),
+  );
+  const allocations = outcome.componentAllocations ?? [];
+  if (
+    !allocations.length ||
+    allocations.some((item) => !byCode.has(item.componentCode))
+  )
+    return null;
+  const mappings = allocations.map((item) => ({
+    componentId: item.componentCode,
+    componentWeight: new Prisma.Decimal(
+      byCode.get(item.componentCode)!.weight,
+    ).mul(100),
+    allocationRate: new Prisma.Decimal(item.allocationRate).mul(100),
+  }));
+  return students.flatMap((student) => {
+    if (!includeSpecialStatuses && student.status !== GradeValueStatus.SCORED)
+      return [];
+    const componentScores = components.map((component) => {
+      const score = student.componentScores[component.code];
+      const status = student.componentStatuses?.[component.code];
+      return {
+        componentId: component.code,
+        status:
+          status === "EXEMPT"
+            ? ("EXEMPT" as const)
+            : status === "INCOMPLETE" || score === null || score === undefined
+              ? ("INCOMPLETE" as const)
+              : ("COMPLETE" as const),
+        score: score === null || score === undefined ? null : String(score),
+      };
+    });
+    const result = calculateStudentOutcome(
+      componentScores,
+      mappings,
+      new Prisma.Decimal(60),
+    );
+    return result.score === null ? [] : [result.score.toNumber()];
   });
-  if (evidence.length !== components.length) return null;
-  const denominator = evidence.reduce(
-    (sum, item) => sum + item.component.weight * item.allocationRate,
-    0,
-  );
-  if (denominator <= 0) return null;
-  const numerator = evidence.reduce(
-    (sum, item) =>
-      sum + item.score * item.component.weight * item.allocationRate,
-    0,
-  );
-  return round(numerator / denominator);
 }
 
 /**
@@ -113,29 +135,9 @@ export function calculateUploadedOutcomeAttainment(
   students: readonly ReportStudent[],
   outcomes: readonly ReportOutcome[],
 ): ReportOutcome[] {
-  const componentCodes = new Set(components.map((item) => item.code));
   return outcomes.map((outcome) => {
-    const allocations = new Map(
-      (outcome.componentAllocations ?? []).map((item) => [
-        item.componentCode,
-        item.allocationRate,
-      ]),
-    );
-    if (
-      allocations.size !== components.length ||
-      [...componentCodes].some((code) => !allocations.has(code))
-    ) {
-      return {
-        ...outcome,
-        attainmentIndex: null,
-        participantCount: 0,
-        studentScores: [],
-      };
-    }
-    const studentScores = students.flatMap((student) => {
-      const score = studentOutcomeScore(student, components, allocations);
-      return score === null ? [] : [score];
-    });
+    const studentScores =
+      calculateReportOutcomeScores(components, students, outcome) ?? [];
     const meanScore = studentScores.length
       ? studentScores.reduce((sum, score) => sum + score, 0) /
         studentScores.length

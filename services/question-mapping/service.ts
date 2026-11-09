@@ -242,12 +242,16 @@ async function mappingSource(
   return { questions, graphVersion };
 }
 
-function configuredMappingProvider() {
+function configuredMappingProvider(teacherId: string, jobId?: string) {
   let provider: AIProvider | null = null;
   let providerName = "unavailable";
   let model = "unavailable";
   try {
-    provider = createAIProvider();
+    provider = createAIProvider({
+      capability: "question_mapping",
+      actorId: teacherId,
+      requestId: jobId,
+    });
     providerName = provider.name;
     model = provider.model;
   } catch {
@@ -317,7 +321,7 @@ export async function queueQuestionMappingBatch(
     input.questionIds,
     graphVersionId,
   );
-  const configured = configuredMappingProvider();
+  const configured = configuredMappingProvider(teacherId);
   const inputFingerprint = learnerProfileFingerprint({
     idempotencyKey: input.idempotencyKey,
     promptVersion: QUESTION_MAPPING_PROMPT_VERSION,
@@ -424,7 +428,7 @@ export async function executeClaimedQuestionMappingJob(
       input.questionIds,
       batch.graphVersionId,
     );
-    const configured = configuredMappingProvider();
+    const configured = configuredMappingProvider(input.teacherId, jobId);
     const aiInput: QuestionMappingAIInput = {
       questions: questions.map((question) => ({
         id: question.id,
@@ -609,7 +613,10 @@ export async function createQuestionMappingBatch(
   let configuredProvider = "unavailable";
   let configuredModel = "unavailable";
   try {
-    provider = createAIProvider();
+    provider = createAIProvider({
+      capability: "question_mapping",
+      actorId: teacherId,
+    });
     configuredProvider = provider.name;
     configuredModel = provider.model;
   } catch {

@@ -216,7 +216,11 @@ export async function createStudentAnalysis(
     : null;
   if (aiAnalysisEnabled && !provider) {
     try {
-      provider = createAIProvider();
+      provider = createAIProvider({
+        capability: "student_analysis",
+        actorId: studentId,
+        requestId: requestKey,
+      });
     } catch {
       provider = null;
     }

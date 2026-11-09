@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LearningConversationHistory } from "./learning-conversation-history";
 import { MessageCircle, Send, Sparkles } from "lucide-react";
 import { requestApi } from "@/components/courses/request-api";
+import { requestLearningAnswer } from "./learning-assistant-request";
 import type {
   LearningAssistantReply,
   LearningAssistantRequest,
@@ -54,11 +55,24 @@ export function LearningAssistantPanel({
   const [text, setText] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   const requestIdentity = useRef<{ key: string; id: string } | null>(null);
+  const activeRequest = useRef<AbortController | null>(null);
+  const transcript = useRef<HTMLDivElement>(null);
+  const followAnswer = useRef(true);
+  const [preview, setPreview] = useState<{
+    question: string;
+    answer: string;
+  } | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => () => activeRequest.current?.abort(), []);
+  useEffect(() => {
+    if (followAnswer.current && transcript.current)
+      transcript.current.scrollTop = transcript.current.scrollHeight;
+  }, [preview, turns]);
   const topicName = topicValue.startsWith("CHAPTER:")
     ? course?.chapters.find((item) => `CHAPTER:${item.id}` === topicValue)?.name
     : course?.concepts.find(
@@ -67,6 +81,7 @@ export function LearningAssistantPanel({
 
   function resetConversation(preserveQuestion = false) {
     setTurns([]);
+    setPreview(null);
     setConversationId(null);
     requestIdentity.current = null;
     if (!preserveQuestion) setText("");
@@ -77,12 +92,17 @@ export function LearningAssistantPanel({
   async function ask(phase: "QUESTION" | "ADVICE", question = text) {
     if (
       pending ||
+      activeRequest.current ||
       !course ||
       (topicValue && !topicName) ||
       question.trim().length < 2
     )
       return;
     setPending(true);
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    followAnswer.current = true;
+    setPreview({ question, answer: "" });
     setError(null);
     setNotice(null);
     const separator = topicValue.indexOf(":");
@@ -108,32 +128,55 @@ export function LearningAssistantPanel({
       text: question,
       phase,
       history: turns
+        .filter(
+          (turn) =>
+            turn.reply.deliveryStatus !== "ABORTED" &&
+            turn.reply.deliveryStatus !== "PENDING",
+        )
         .flatMap((turn) => [
           { role: "user" as const, content: turn.question },
           { role: "assistant" as const, content: turn.reply.answer },
         ])
         .slice(-6),
     };
-    const response = await requestApi<LearningAssistantReply>(
-      `/api/student/courses/${encodeURIComponent(course.courseId)}/learning-assistant`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(input),
-      },
-    );
-    setPending(false);
-    if (!response.success) {
-      setError(response.error);
-      return;
+    let startedConversation: string | undefined;
+    try {
+      const reply = await requestLearningAnswer(
+        `/api/student/courses/${encodeURIComponent(course.courseId)}/learning-assistant`,
+        input,
+        controller.signal,
+        (event) => {
+          if (event.type === "start")
+            startedConversation = event.conversationId;
+          else setPreview({ question, answer: event.text });
+        },
+      );
+      requestIdentity.current = null;
+      setConversationId(reply.conversationId ?? null);
+      setTurns((current) => [...current, { question, phase, reply }]);
+      setPreview(null);
+      if (phase === "QUESTION" && reply.deliveryStatus !== "ABORTED")
+        setText("");
+    } catch (failure) {
+      if (controller.signal.aborted) {
+        requestIdentity.current = null;
+        if (startedConversation) setConversationId(startedConversation);
+        setNotice(
+          startedConversation
+            ? "已停止生成。已显示的回答可在历史对话中查看。"
+            : "已停止生成，可以重新发送问题。",
+        );
+      } else {
+        setError(
+          failure instanceof Error ? failure.message : "连接失败，请重试",
+        );
+      }
+      setPreview((current) => (current?.answer ? current : null));
+    } finally {
+      if (startedConversation) setHistoryRefresh((value) => value + 1);
+      activeRequest.current = null;
+      setPending(false);
     }
-    requestIdentity.current = null;
-    setConversationId(response.data.conversationId ?? null);
-    setTurns((current) => [
-      ...current,
-      { question, phase, reply: response.data },
-    ]);
-    if (phase === "QUESTION") setText("");
   }
   async function saveReflection() {
     if (!draft || pending) return;
@@ -165,6 +208,7 @@ export function LearningAssistantPanel({
         : `${conversation.topic.kind}:${conversation.topic.id}`,
     );
     setTurns(conversation.turns);
+    setPreview(null);
     setText("");
     setError(null);
     setDraft(null);
@@ -192,7 +236,7 @@ export function LearningAssistantPanel({
           <LearningConversationHistory
             key={courseId}
             courseId={courseId}
-            revision={`${conversationId}:${turns.length}`}
+            revision={`${conversationId}:${turns.length}:${historyRefresh}`}
             pending={pending}
             onRestore={restoreConversation}
             onDelete={(id) => {
@@ -297,10 +341,19 @@ export function LearningAssistantPanel({
           <p className="text-xs leading-5 text-slate-400">
             对话自动保存，可在左侧继续交流。学习反思由你确认后保存。
           </p>
-          {turns.length ? (
+          {turns.length || preview ? (
             <div
               className="max-h-[min(60vh,640px)] min-h-48 space-y-5 overflow-y-auto overscroll-contain rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4"
               aria-label="课程答疑记录"
+              ref={transcript}
+              onScroll={(event) => {
+                const element = event.currentTarget;
+                followAnswer.current =
+                  element.scrollHeight -
+                    element.scrollTop -
+                    element.clientHeight <
+                  80;
+              }}
             >
               {turns.map((turn, index) => (
                 <article key={index} className="space-y-3">
@@ -315,9 +368,13 @@ export function LearningAssistantPanel({
                   <div className="mr-2 space-y-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
                     <p className="flex items-center gap-1.5 text-xs font-semibold text-sky-700">
                       <Sparkles className="size-3.5" aria-hidden="true" />
-                      {turn.reply.fallbackUsed
-                        ? "课程基础帮助 · AI 暂不可用"
-                        : "学习助手"}
+                      {turn.reply.deliveryStatus === "ABORTED"
+                        ? "回答已中断 · 仅显示已保存内容"
+                        : turn.reply.deliveryStatus === "PENDING"
+                          ? "回答生成中 · 可稍后刷新历史"
+                          : turn.reply.fallbackUsed
+                            ? "课程基础帮助 · AI 暂不可用"
+                            : "学习助手"}
                     </p>
                     <p className="leading-7 break-words whitespace-pre-wrap">
                       {turn.reply.answer}
@@ -443,6 +500,8 @@ export function LearningAssistantPanel({
                       </div>
                     ) : null}
                     {turn.reply.status === "ANSWER" &&
+                    turn.reply.deliveryStatus !== "ABORTED" &&
+                    turn.reply.deliveryStatus !== "PENDING" &&
                     !turn.reply.fallbackUsed ? (
                       <button
                         className="text-xs text-slate-500 underline underline-offset-4"
@@ -463,6 +522,23 @@ export function LearningAssistantPanel({
                   </div>
                 </article>
               ))}
+              {preview ? (
+                <article className="space-y-3">
+                  <p className="ml-6 rounded-xl bg-sky-100 p-3 text-sm break-words whitespace-pre-wrap text-sky-950">
+                    {preview.question}
+                  </p>
+                  {preview.answer ? (
+                    <div className="mr-2 rounded-xl border border-slate-200 bg-white p-4 text-sm">
+                      <p className="mb-2 text-xs font-semibold text-sky-700">
+                        {pending ? "学习助手正在回答" : "回答已中断"}
+                      </p>
+                      <p className="leading-7 break-words whitespace-pre-wrap">
+                        {preview.answer}
+                      </p>
+                    </div>
+                  ) : null}
+                </article>
+              ) : null}
             </div>
           ) : (
             <div className="rounded-xl border border-dashed p-5 text-sm leading-6 text-slate-500">
@@ -470,7 +546,20 @@ export function LearningAssistantPanel({
               5？”或“这一章的列表和元组有什么区别？”
             </div>
           )}
-          {pending ? (
+          {pending && activeRequest.current ? (
+            <div className="flex flex-wrap items-center gap-3 text-sm text-sky-700">
+              <p role="status">
+                {preview?.answer ? "正在继续回答…" : "正在准备回答…"}
+              </p>
+              <button
+                type="button"
+                className="rounded-lg border px-3 py-1.5 font-medium"
+                onClick={() => activeRequest.current?.abort()}
+              >
+                停止生成
+              </button>
+            </div>
+          ) : pending ? (
             <p className="text-sm text-sky-700" role="status">
               正在处理，请稍候…
             </p>

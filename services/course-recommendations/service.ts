@@ -32,6 +32,8 @@ import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { AUTO_GRADABLE_QUESTION_TYPES } from "@/services/assignments/grading";
 import { rankCourseRecommendationCandidates } from "@/services/course-recommendations/algorithm";
+import { enhanceNewCourseRecommendationReasons } from "@/services/course-recommendations/reason-enhancement";
+import { COURSE_RECOMMENDATION_REASON_PROMPT_VERSION } from "@/services/course-recommendations/reason-focus";
 import {
   COURSE_RECOMMENDATION_RULE_VERSION,
   DEFAULT_COURSE_RECOMMENDATION_POLICY,
@@ -773,7 +775,7 @@ export async function createCourseRecommendations(
   const expiresAt = new Date(now);
   expiresAt.setUTCDate(expiresAt.getUTCDate() + 7);
   await expireStudentRecommendations(actor.id, now);
-  return runPracticeSerializable(
+  const { result, created } = await runPracticeSerializable(
     async (transaction) => {
       const policy = await ensureDefaultPolicy(
         transaction,
@@ -974,12 +976,15 @@ export async function createCourseRecommendations(
           select: { id: true },
         });
       if (existingCycle)
-        return courseRecommendationCycleView(
-          transaction,
-          existingCycle.id,
-          graph.versionNumber,
-          progress?.revisionNumber ?? null,
-        );
+        return {
+          created: false,
+          result: await courseRecommendationCycleView(
+            transaction,
+            existingCycle.id,
+            graph.versionNumber,
+            progress?.revisionNumber ?? null,
+          ),
+        };
       const excludedQuestionIds = [
         ...new Set([
           ...recentAnswers.map((item) => item.questionId),
@@ -1237,15 +1242,46 @@ export async function createCourseRecommendations(
           });
         }
       }
-      return courseRecommendationCycleView(
-        transaction,
-        cycle.id,
-        graph.versionNumber,
-        progress?.revisionNumber ?? null,
-      );
+      return {
+        created: true,
+        result: await courseRecommendationCycleView(
+          transaction,
+          cycle.id,
+          graph.versionNumber,
+          progress?.revisionNumber ?? null,
+        ),
+      };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
+  // Selection and its snapshots are committed before the optional provider call.
+  if (
+    !created ||
+    favorite ||
+    input.mode === "TEST" ||
+    input.template === "MIXED_TEST50"
+  )
+    return result;
+  const enhanced = await enhanceNewCourseRecommendationReasons(
+    actor.id,
+    result.cycle.id,
+    result.items,
+  );
+  if (!enhanced.size) return result;
+  return {
+    ...result,
+    items: result.items.map((item) => {
+      const reason = enhanced.get(item.id);
+      return reason
+        ? {
+            ...item,
+            reason,
+            source: RecommendationSource.HYBRID,
+            reasonPromptVersion: COURSE_RECOMMENDATION_REASON_PROMPT_VERSION,
+          }
+        : item;
+    }),
+  };
 }
 
 async function courseRecommendationCycleView(
@@ -1265,6 +1301,8 @@ async function courseRecommendationCycleView(
           questionId: true,
           reason: true,
           reasonCodes: true,
+          source: true,
+          reasonPromptVersion: true,
           rankingScore: true,
           assignedPoints: true,
           scoringRuleVersion: true,
@@ -1339,6 +1377,7 @@ export async function getStudentPracticeSession(
           id: true,
           status: true,
           reason: true,
+          source: true,
           wasCorrect: true,
           score: true,
           maxScore: true,
@@ -1427,6 +1466,7 @@ export async function getStudentPracticeSession(
       id: item.id,
       status: item.status,
       reason: item.reason,
+      reasonSource: item.source,
       wasCorrect: item.practiceAnswer?.isCorrect ?? item.wasCorrect,
       score:
         item.practiceAnswer?.score.toNumber() ?? item.score?.toNumber() ?? null,

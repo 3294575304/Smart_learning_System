@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { Role } from "@prisma/client";
+import { TeacherAssistantSurface } from "@/components/courses/teacher-assistant-surface";
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { requireAuthenticatedPageUser } from "@/services/auth/page-authorization";
@@ -21,6 +23,9 @@ export default async function NotificationsLayout({
       user={user}
     >
       {children}
+      {user.role === Role.TEACHER ? (
+        <TeacherAssistantSurface teacherId={user.id} />
+      ) : null}
     </DashboardShell>
   );
 }

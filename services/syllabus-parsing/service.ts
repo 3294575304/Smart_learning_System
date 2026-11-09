@@ -42,6 +42,7 @@ import {
 import type { SyllabusParseDraftView } from "@/services/syllabus-parsing/types";
 
 interface ParseDependencies {
+  jobId?: string;
   provider?: AIProvider;
   storage?: StorageService;
   timeoutMs?: number;
@@ -214,7 +215,11 @@ export async function createTeacherSyllabusParse(
     if (!provider) {
       const { createAIProvider } =
         await import("@/services/ai/provider-factory");
-      provider = createAIProvider();
+      provider = createAIProvider({
+        capability: "syllabus_parse",
+        actorId: teacherId,
+        requestId: dependencies.jobId,
+      });
     }
     const execution = await parseSyllabusStructure(
       provider,
@@ -419,6 +424,7 @@ export async function executeClaimedSyllabusParseJob(
     const result = await createTeacherSyllabusParse(
       input.teacherId,
       input.courseId,
+      { jobId },
     );
     await completeBackgroundJob(jobId, {
       leaseId,

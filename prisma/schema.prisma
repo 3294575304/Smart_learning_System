@@ -327,6 +327,7 @@ enum NotificationType {
   CLASSROOM_DISSOLVED
   /// 任课教师向本班发布的课程通知（区别于 SYSTEM_ANNOUNCEMENT 的管理员广播）。
   COURSE_ANNOUNCEMENT
+  QUALITY_REPORT_RESULT
 }
 
 enum NotificationPriority {
@@ -343,6 +344,7 @@ enum NotificationSourceType {
   ANNOUNCEMENT
   COURSE_SURVEY
   CLASSROOM
+  QUALITY_REPORT
 }
 
 enum AnnouncementTargetType {
@@ -516,6 +518,12 @@ enum StudentIdentityStatus {
   PENDING
   ACTIVATED
   DISABLED
+}
+
+enum QuestionOrigin {
+  MANUAL
+  AI_GENERATED
+  AI_ASSISTED
 }
 
 enum QuestionType {
@@ -866,6 +874,37 @@ model NotificationJobRun {
 
   @@index([type, startedAt])
   @@index([status, startedAt])
+}
+
+model AIQuotaReservation {
+  key        String   @id
+  actorId    String
+  schoolId   String?
+  capability String
+  units      Int
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, capability, createdAt])
+  @@index([schoolId, capability, createdAt])
+}
+
+model AIProviderAttemptLog {
+  id          String   @id @default(cuid())
+  schoolId    String?
+  capability  String
+  requestKey  String
+  operation   String
+  model       String
+  outcome     String
+  errorCode   String?
+  requestId   String?
+  latencyMs   Int
+  totalTokens Int?
+  wouldLimit  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([schoolId, createdAt])
+  @@index([createdAt])
 }
 
 model BackgroundJob {
@@ -1825,6 +1864,7 @@ model CourseQualityReport {
   workbookSizeBytes          Int?
   workbookChecksumSha256     String?                   @db.Char(64)
   errorCode                  String?                   @db.VarChar(100)
+  notificationPending        Boolean                   @default(false)
   startedAt                  DateTime?
   completedAt                DateTime?
   createdAt                  DateTime                  @default(now())
@@ -1849,6 +1889,7 @@ model CourseQualityReport {
   @@index([courseId, reviewStatus, createdAt])
   @@index([sourceFileVersionId])
   @@index([outcomeAttainmentRunId])
+  @@index([notificationPending, completedAt])
 }
 
 model CourseSurvey {
@@ -2502,6 +2543,8 @@ model AIQuestionGenerationBatch {
   failedCount          Int       @default(0)
   errorCode            String?   @db.VarChar(100)
   failureDetails       Json      @default("[]")
+  firstValidationChecks Int     @default(0)
+  firstValidationPasses Int     @default(0)
   provider             String?   @db.VarChar(100)
   model                String?   @db.VarChar(191)
   promptVersion        String    @db.VarChar(50)
@@ -2525,6 +2568,7 @@ model AIQuestionGenerationBatch {
   @@index([teacherId, createdAt])
   @@index([teacherId, deletedAt, createdAt])
   @@index([courseId, status, createdAt])
+  @@index([questionCategoryId, createdAt])
   @@index([sourceFileExpiresAt, sourceFileDeletedAt])
 }
 
@@ -2565,6 +2609,7 @@ model Question {
   title              String
   content            String                  @db.Text
   type               QuestionType
+  origin             QuestionOrigin          @default(MANUAL)
   defaultObjectiveKind String? @db.VarChar(20)
   visibility         QuestionVisibility      @default(PRIVATE)
   status             QuestionStatus          @default(DRAFT)
@@ -3845,6 +3890,7 @@ model PersonalizedRecommendation {
   targetConceptId    String?
   rankingScore       Decimal?             @db.Decimal(8, 2)
   reasonCodes        String[]             @default([])
+  reasonPromptVersion String?             @db.VarChar(50)
   cycleKey           String
   source             RecommendationSource
   status             RecommendationStatus @default(PENDING)

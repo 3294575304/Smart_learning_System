@@ -4,7 +4,7 @@ import { AIRecordStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { percentage } from "@/services/admin/dashboard/metrics";
-import { createAIProvider } from "@/services/ai/provider-factory";
+import { createAIHealthProvider } from "@/services/ai/provider-factory";
 import {
   AIProviderRequestError,
   type AIProviderErrorCode,
@@ -36,6 +36,7 @@ const PROBE_ERROR_MESSAGES: Record<AIProviderErrorCode, string> = {
   PROVIDER_UNAUTHORIZED: "AI 服务密钥认证失败",
   PROVIDER_FORBIDDEN: "AI 服务拒绝了探测请求",
   PROVIDER_MODEL_NOT_FOUND: "配置的 AI 模型不可用",
+  PROVIDER_LOCAL_QUOTA_EXCEEDED: "AI 请求额度已用完",
   PROVIDER_RATE_LIMITED: "AI 服务当前请求受限",
   PROVIDER_TIMEOUT: "AI 服务探测超时",
   PROVIDER_HTTP_ERROR: "AI 服务返回错误",
@@ -144,7 +145,7 @@ export async function checkAIHealth(
 
   let provider: AIProvider;
   try {
-    provider = createAIProvider();
+    provider = createAIHealthProvider();
   } catch {
     return {
       status: "UNAVAILABLE",

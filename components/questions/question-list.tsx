@@ -3,7 +3,10 @@ import { questionContentReview } from "@/services/questions/content-review";
 
 import { QuestionActions } from "@/components/questions/question-actions";
 import { QuestionObjectiveRetry } from "@/components/questions/question-objective-retry";
-import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
+import {
+  QUESTION_ORIGIN_LABELS,
+  QUESTION_TYPE_LABELS,
+} from "@/services/questions/constants";
 import type { QuestionListItem } from "@/services/questions/types";
 
 export function QuestionList({
@@ -28,6 +31,11 @@ export function QuestionList({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
                 <span>{QUESTION_TYPE_LABELS[question.type]}</span>
+                {question.origin !== "MANUAL" ? (
+                  <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-800">
+                    {QUESTION_ORIGIN_LABELS[question.origin]}
+                  </span>
+                ) : null}
                 <span>
                   课程目标：
                   {question.courseObjective

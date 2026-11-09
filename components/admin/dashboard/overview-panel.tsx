@@ -15,8 +15,33 @@ import {
 import { StatCard } from "@/components/dashboard/stat-card";
 import type { DashboardOverview } from "@/services/admin/dashboard/types";
 
+const capabilityLabels: Record<string, string> = {
+  assignment_suggestion: "作业智能组卷",
+  quality_report: "教学质量报告",
+  question_generation: "批量出题",
+  paper_parse: "试卷解析",
+  syllabus_parse: "大纲解析",
+  graph_enhance: "知识图谱增强",
+  question_mapping: "题目知识点映射",
+  objective_classify: "课程目标分类",
+  student_analysis: "学情分析",
+  learning_assistant: "课程答疑",
+  teacher_evaluation_intent: "教师评价助手",
+  recommend_explain: "课程推荐理由",
+  self_reflection: "自我反思",
+};
+
 function number(value: number): string {
   return new Intl.NumberFormat("zh-CN").format(value);
+}
+
+function rate(count: number, total: number): string {
+  return total
+    ? new Intl.NumberFormat("zh-CN", {
+        style: "percent",
+        maximumFractionDigits: 1,
+      }).format(count / total)
+    : "暂无样本";
 }
 
 function comparisonHint(overview: DashboardOverview): string {
@@ -40,6 +65,39 @@ export function OverviewPanel({
   if (loading && !data) return <SectionLoading label="正在汇总平台核心指标" />;
   if (error && !data) return <SectionError message={error} />;
   if (!data) return null;
+  const question = data.ai.questionGeneration;
+  const questionMetrics = [
+    {
+      label: "候选题采纳率",
+      value: rate(question.confirmed, question.generated),
+      hint: `${number(question.confirmed)} / ${number(question.generated)} 道已生成`,
+    },
+    {
+      label: "首次结构通过率",
+      value: rate(
+        question.firstValidationPasses,
+        question.firstValidationChecks,
+      ),
+      hint: `${number(question.firstValidationPasses)} / ${number(question.firstValidationChecks)} 次首次生成`,
+    },
+    {
+      label: "每道候选平均返修",
+      value: question.generated
+        ? `${(question.reviewEdits / question.generated).toFixed(1)} 次`
+        : "暂无样本",
+      hint: `${number(question.reviewEdits)} 次教师保存修改`,
+    },
+    {
+      label: "批次未完整生成率",
+      value: rate(question.incompleteBatches, question.terminalBatches),
+      hint: `${number(question.incompleteBatches)} / ${number(question.terminalBatches)} 个终态批次`,
+    },
+    {
+      label: "修改后采纳占比",
+      value: rate(question.editedBeforeConfirmation, question.confirmed),
+      hint: `${number(question.editedBeforeConfirmation)} / ${number(question.confirmed)} 道已采纳`,
+    },
+  ];
   return (
     <section aria-labelledby="overview-title">
       <div className="mb-4">
@@ -146,6 +204,76 @@ export function OverviewPanel({
               : `${data.ai.successRate}%`}
           </strong>
         </p>
+      </div>
+      <div className="mt-4">
+        <h3 className="mb-2 text-sm font-semibold">近 7 天 AI 出题</h3>
+        <p className="text-muted-foreground mb-2 text-xs">
+          按本校批次创建日期归组，显示截至当前的审核结果。首次结构通过率按已记录的首次生成统计。
+        </p>
+        <dl className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {questionMetrics.map(({ label, value, hint }) => (
+            <div className="bg-muted/60 rounded-lg px-4 py-3" key={label}>
+              <dt className="text-muted-foreground text-xs">{label}</dt>
+              <dd className="mt-1 text-sm font-semibold">{value}</dd>
+              <dd className="text-muted-foreground mt-1 text-xs">{hint}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="mt-4 overflow-x-auto">
+        <h3 className="mb-2 text-sm font-semibold">近 7 天外部 AI 调用</h3>
+        {data.ai.gateway.length ? (
+          <table className="w-full text-left text-sm whitespace-nowrap">
+            <thead>
+              <tr>
+                {[
+                  "能力",
+                  "请求",
+                  "上游尝试",
+                  "失败",
+                  "超额",
+                  "本地拒绝",
+                  "已知 Token",
+                  "用量覆盖",
+                  "P95 延迟",
+                ].map((heading) => (
+                  <th key={heading} scope="col" className="px-2 py-2">
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.ai.gateway.map((row) => (
+                <tr className="border-t" key={row.capability}>
+                  <th scope="row" className="px-2 py-2 font-medium">
+                    {capabilityLabels[row.capability] ?? row.capability}
+                  </th>
+                  <td className="px-2">{number(row.requests)}</td>
+                  <td className="px-2">{number(row.attempts)}</td>
+                  <td className="px-2">{number(row.failed)}</td>
+                  <td className="px-2">{number(row.wouldLimit)}</td>
+                  <td className="px-2">{number(row.rejected)}</td>
+                  <td className="px-2">
+                    {row.measuredAttempts ? number(row.totalTokens) : "未知"}
+                  </td>
+                  <td className="px-2">
+                    {row.measuredAttempts}/{row.attempts}
+                  </td>
+                  <td className="px-2">
+                    {row.p95LatencyMs === null
+                      ? "暂无"
+                      : `${number(row.p95LatencyMs)} ms`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            暂无本校外部 AI 调用记录。
+          </p>
+        )}
       </div>
     </section>
   );

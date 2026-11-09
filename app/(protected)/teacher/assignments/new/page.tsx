@@ -41,7 +41,7 @@ export default async function NewAssignmentPage({
           >
             {selectedClassroom ? "返回课程" : "返回作业管理"}
           </TeacherBackLink>
-          <h1 className="text-2xl font-semibold">创建作业</h1>
+          <h1 className="sr-only">创建作业</h1>
         </div>
         <div className="flex items-center gap-3 text-sm">
           {recentDrafts[0] ? (

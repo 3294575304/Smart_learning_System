@@ -377,7 +377,12 @@ export async function executeClaimedAIQuestionGenerationJob(
   });
   let provider;
   try {
-    provider = createAIProvider();
+    provider = createAIProvider({
+      capability: "question_generation",
+      actorId: batch.teacherId,
+      requestId: batch.id,
+      units: batch.requestedCount,
+    });
   } catch {
     await failBackgroundJob(
       jobId,
@@ -426,6 +431,12 @@ export async function executeClaimedAIQuestionGenerationJob(
     );
     return;
   }
+  let firstChecks = 0;
+  let firstPasses = 0;
+  const validationCounters = () => ({
+    firstValidationChecks: { increment: firstChecks },
+    firstValidationPasses: { increment: firstPasses },
+  });
   try {
     const source = await loadEvidence(batch);
     const types = Object.values(QuestionType).filter(
@@ -516,8 +527,12 @@ export async function executeClaimedAIQuestionGenerationJob(
                     : null,
               evidence: source.evidence,
               sourceQuestion: source.sourceQuestion,
-              concepts: source.concepts,
+              concepts:
+                source.request.balancedConcepts && source.concepts.length
+                  ? [source.concepts[(ordinal - 1) % source.concepts.length]]
+                  : source.concepts,
             };
+            if (attempt === 0) firstChecks++;
             const raw = await provider.generateQuestions(aiInput, {
               signal: AbortSignal.timeout(60_000),
               validationError,
@@ -525,6 +540,7 @@ export async function executeClaimedAIQuestionGenerationJob(
             const parsed = generatedQuestionsOutputSchema.parse(raw);
             if (parsed.questions.length !== 1)
               throw new Error("题目数量与请求不一致");
+            if (attempt === 0) firstPasses++;
             const local: typeof generated = [];
             for (const item of parsed.questions) {
               if (item.question.type !== type)
@@ -569,6 +585,12 @@ export async function executeClaimedAIQuestionGenerationJob(
                 )
               )
                 throw new Error("主知识点不在正式图谱范围内");
+              if (
+                source.request.balancedConcepts &&
+                aiInput.concepts.length === 1 &&
+                item.primaryConceptId !== aiInput.concepts[0].id
+              )
+                throw new Error("主知识点不符合本题分配的知识点");
               if (
                 source.concepts.length === 0 &&
                 item.primaryConceptId !== null
@@ -646,6 +668,11 @@ export async function executeClaimedAIQuestionGenerationJob(
             generated = local;
             break;
           } catch (error) {
+            if (
+              error instanceof AIProviderRequestError &&
+              error.code === "PROVIDER_LOCAL_QUOTA_EXCEEDED"
+            )
+              throw error;
             console.warn("[ai-question-generation-attempt-failed]", {
               batchId,
               type,
@@ -707,6 +734,7 @@ export async function executeClaimedAIQuestionGenerationJob(
             where: { id: batchId },
             data: {
               status: "FAILED",
+              ...validationCounters(),
               sourceFileExpiresAt: batch.sourceFileStorageKey
                 ? new Date(Date.now() + FILE_LIFETIME_MS)
                 : null,
@@ -746,6 +774,7 @@ export async function executeClaimedAIQuestionGenerationJob(
           where: { id: batchId },
           data: {
             status: failed ? "PARTIAL" : "READY",
+            ...validationCounters(),
             sourceFileExpiresAt: batch.sourceFileStorageKey
               ? new Date(Date.now() + FILE_LIFETIME_MS)
               : null,
@@ -761,9 +790,12 @@ export async function executeClaimedAIQuestionGenerationJob(
     );
   } catch (error) {
     const code =
-      error instanceof Error && /^(SOURCE_|COURSE_)/u.test(error.message)
-        ? error.message
-        : "AI_QUESTION_WORKER_ERROR";
+      error instanceof AIProviderRequestError &&
+      error.code === "PROVIDER_LOCAL_QUOTA_EXCEEDED"
+        ? error.code
+        : error instanceof Error && /^(SOURCE_|COURSE_)/u.test(error.message)
+          ? error.message
+          : "AI_QUESTION_WORKER_ERROR";
     await failBackgroundJob(
       jobId,
       {
@@ -777,6 +809,7 @@ export async function executeClaimedAIQuestionGenerationJob(
           where: { id: batchId },
           data: {
             status: willRetry ? "PENDING" : "FAILED",
+            ...validationCounters(),
             errorCode: code,
             ...(!willRetry && batch.sourceFileStorageKey
               ? { sourceFileExpiresAt: new Date(Date.now() + FILE_LIFETIME_MS) }

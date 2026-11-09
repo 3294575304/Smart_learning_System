@@ -1,8 +1,14 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { loadConversationForQuestion, saveConversationTurn } from "./history";
+import {
+  loadConversationForQuestion,
+  replaceStreamingLearningReply,
+  saveConversationTurn,
+} from "./history";
 
 import { prisma } from "@/lib/prisma";
+import { hasActiveExamAttempt } from "@/services/exams/assistant-policy";
+import { AuthorizationError } from "@/services/auth/policy";
 import { createAIProvider } from "@/services/ai/provider-factory";
 import { listStudentPracticeCourses } from "@/services/course-recommendations/service";
 import { getStudentPublishedKnowledgeGraph } from "@/services/knowledge-graph/service";
@@ -11,7 +17,9 @@ import { getSystemConfig } from "@/services/system-config/service";
 import { RecommendationOperationError } from "@/services/recommendations/errors";
 import {
   answerLearningQuestion,
+  restrictLearningInput,
   LEARNING_ASSISTANT_PROMPT_VERSION,
+  LEARNING_ASSISTANT_STREAM_PROMPT_VERSION,
 } from "./ai";
 import {
   learningAssistantRequestSchema,
@@ -22,12 +30,14 @@ import {
   suggestLearningPractice,
 } from "./context";
 import { sanitizeLearningText, summarizeTopicMastery } from "./policy";
+import { learningEventResponse, readLearningAnswerStream } from "./stream";
 
 export async function askCourseLearningAssistant(
   studentId: string,
   courseId: string,
   rawInput: unknown,
-): Promise<LearningAssistantReply> {
+  options?: { signal: AbortSignal; stream: boolean },
+): Promise<LearningAssistantReply | Response> {
   const request = learningAssistantRequestSchema.parse(rawInput);
   const courses = await listStudentPracticeCourses(studentId);
   const { course, topic, conceptIds } = resolveAuthorizedLearningTopic(
@@ -35,6 +45,7 @@ export async function askCourseLearningAssistant(
     courseId,
     request.topic,
   );
+  await assertLearningAssistantAvailable(studentId);
   const requestId = request.requestId ?? randomUUID();
   const conversation = await loadConversationForQuestion(
     studentId,
@@ -49,6 +60,7 @@ export async function askCourseLearningAssistant(
     };
   if (conversation.record)
     request.history = conversation.turns
+      .filter((turn) => turn.reply.deliveryStatus !== "ABORTED")
       .flatMap((turn) => [
         { role: "user" as const, content: turn.question },
         { role: "assistant" as const, content: turn.reply.answer },
@@ -63,6 +75,7 @@ export async function askCourseLearningAssistant(
       "课程图谱已更新，请刷新后继续提问",
       409,
     );
+  const graphVersion = graph.published.versionNumber;
   const stableKeys = new Set(
     graph.published.concepts
       .filter((item) => conceptIds.includes(item.conceptId))
@@ -126,67 +139,194 @@ export async function askCourseLearningAssistant(
   let provider = null;
   if (config.aiAnalysisEnabled) {
     try {
-      provider = createAIProvider();
+      provider = createAIProvider({
+        capability: "learning_assistant",
+        actorId: studentId,
+        requestId,
+      });
     } catch {
       provider = null;
     }
   }
-  const response = await answerLearningQuestion(provider, input);
-  const relevant =
-    response.output.status === "ANSWER" && !response.fallbackUsed;
-  const priorQuestion =
-    request.history.filter((item) => item.role === "user").at(-1)?.content ??
-    "";
-  const suggestion =
-    response.output.status === "ANSWER"
-      ? (suggestLearningPractice(
-          course,
-          request.topic,
-          request.text,
-          response.output.topicCode,
-        ) ??
-        (/刚才|这个主题|继续|需要|好的|给我/u.test(request.text)
-          ? suggestLearningPractice(
-              course,
-              request.topic,
-              priorQuestion,
-              response.output.topicCode,
-            )
-          : null))
-      : null;
-  const reply: LearningAssistantReply = {
-    ...response.output,
-    // 回答以纯文本返回，且再次清理可能从模型回复中出现的个人标识。
-    answer: sanitize(
-      response.output.answer +
-        (relevant && request.phase === "ADVICE" && !suggestion
-          ? "\n为了匹配练习题，请说明你想练习的具体知识点或章节；也可以展开可选主题自行指定。"
-          : ""),
-    ),
-    learningObservation: sanitize(response.output.learningObservation),
-    advice: response.output.advice.map(sanitize),
-    objectiveSummary:
-      response.output.status === "ANSWER" ? objectiveSummary : "",
-    canOfferAdvice: relevant && request.phase === "QUESTION",
-    practiceUrl: suggestion?.practiceUrl ?? null,
-    testUrl: suggestion?.testUrl ?? null,
-    ...(suggestion ? { practiceSuggestion: suggestion } : {}),
-    fallbackUsed: response.fallbackUsed,
-    graphVersion: graph.published.versionNumber,
-    profileRevision: profile.revisionNumber,
-    promptVersion: LEARNING_ASSISTANT_PROMPT_VERSION,
-    provider: provider?.name ?? null,
-    model: provider?.model ?? null,
+  if (provider) await assertLearningAssistantAvailable(studentId);
+  const save = (reply: LearningAssistantReply) =>
+    saveConversationTurn({
+      studentId,
+      courseId,
+      topicName: topic.name,
+      request,
+      requestId,
+      question: sanitize(request.text),
+      reply,
+      record: conversation.record,
+    });
+  const buildReply = (
+    response: Awaited<ReturnType<typeof answerLearningQuestion>>,
+    promptVersion: string,
+  ): LearningAssistantReply => {
+    const relevant =
+      response.output.status === "ANSWER" && !response.fallbackUsed;
+    const priorQuestion =
+      request.history.filter((item) => item.role === "user").at(-1)?.content ??
+      "";
+    const suggestion =
+      response.output.status === "ANSWER"
+        ? (suggestLearningPractice(
+            course,
+            request.topic,
+            request.text,
+            response.output.topicCode,
+          ) ??
+          (/刚才|这个主题|继续|需要|好的|给我/u.test(request.text)
+            ? suggestLearningPractice(
+                course,
+                request.topic,
+                priorQuestion,
+                response.output.topicCode,
+              )
+            : null))
+        : null;
+    const reply: LearningAssistantReply = {
+      ...response.output,
+      // 回答以纯文本返回，且再次清理可能从模型回复中出现的个人标识。
+      answer: sanitize(
+        response.output.answer +
+          (relevant && request.phase === "ADVICE" && !suggestion
+            ? "\n为了匹配练习题，请说明你想练习的具体知识点或章节；也可以展开可选主题自行指定。"
+            : ""),
+      ),
+      learningObservation: sanitize(response.output.learningObservation),
+      advice: response.output.advice.map(sanitize),
+      objectiveSummary:
+        response.output.status === "ANSWER" ? objectiveSummary : "",
+      canOfferAdvice: relevant && request.phase === "QUESTION",
+      practiceUrl: suggestion?.practiceUrl ?? null,
+      testUrl: suggestion?.testUrl ?? null,
+      ...(suggestion ? { practiceSuggestion: suggestion } : {}),
+      fallbackUsed: response.fallbackUsed,
+      graphVersion,
+      profileRevision: profile.revisionNumber,
+      promptVersion,
+      provider: provider?.name ?? null,
+      model: provider?.model ?? null,
+    };
+    return reply;
   };
-  const saved = await saveConversationTurn({
-    studentId,
-    courseId,
-    topicName: topic.name,
-    request,
-    requestId,
-    question: sanitize(request.text),
-    reply,
-    record: conversation.record,
-  });
+
+  if (
+    options?.stream &&
+    process.env.LEARNING_ASSISTANT_STREAM_DISABLED !== "true" &&
+    provider?.supportsCourseLearningStream &&
+    provider.streamCourseLearningQuestion &&
+    !restrictLearningInput(input)
+  ) {
+    const streamQuestion = provider.streamCourseLearningQuestion.bind(provider);
+    const abortedReply = (
+      text: string,
+      status: "PENDING" | "ABORTED",
+    ): LearningAssistantReply => ({
+      status: "ANSWER",
+      answer: text || "本轮尚未生成可保存的回答。",
+      learningObservation: "",
+      advice: [],
+      objectiveSummary: "",
+      canOfferAdvice: false,
+      practiceUrl: null,
+      testUrl: null,
+      fallbackUsed: false,
+      graphVersion,
+      profileRevision: profile.revisionNumber,
+      promptVersion: LEARNING_ASSISTANT_STREAM_PROMPT_VERSION,
+      provider: provider?.name ?? null,
+      model: provider?.model ?? null,
+      deliveryStatus: status,
+    });
+    options.signal.throwIfAborted();
+    const saved = await save(abortedReply("", "PENDING"));
+    if (saved.reply.deliveryStatus !== "PENDING")
+      return { ...saved.reply, conversationId: saved.id };
+    const replace = (reply: LearningAssistantReply) =>
+      replaceStreamingLearningReply(
+        studentId,
+        courseId,
+        saved.id,
+        requestId,
+        reply,
+      );
+    return learningEventResponse(
+      options.signal,
+      async (emit, requestSignal) => {
+        let published = "";
+        emit({ type: "start", conversationId: saved.id });
+        const signal = AbortSignal.any([
+          requestSignal,
+          AbortSignal.timeout(12_000),
+        ]);
+        let final: LearningAssistantReply;
+        try {
+          let response: Awaited<ReturnType<typeof answerLearningQuestion>>;
+          let promptVersion = LEARNING_ASSISTANT_STREAM_PROMPT_VERSION;
+          try {
+            response = await readLearningAnswerStream(
+              streamQuestion,
+              input,
+              signal,
+              async (text) => {
+                signal.throwIfAborted();
+                await assertLearningAssistantAvailable(studentId);
+                signal.throwIfAborted();
+                const safe = sanitize(text);
+                if (!safe || safe === published) return;
+                await replace(abortedReply(safe, "PENDING"));
+                published = safe;
+                if (!signal.aborted) emit({ type: "preview", text: safe });
+              },
+            );
+          } catch (error) {
+            if (published || signal.aborted) throw error;
+            await assertLearningAssistantAvailable(studentId);
+            response = await answerLearningQuestion(
+              provider,
+              input,
+              12_000,
+              signal,
+            );
+            promptVersion = LEARNING_ASSISTANT_PROMPT_VERSION;
+          }
+          signal.throwIfAborted();
+          await assertLearningAssistantAvailable(studentId);
+          signal.throwIfAborted();
+          final = {
+            ...buildReply(response, promptVersion),
+            deliveryStatus: response.fallbackUsed ? "DEGRADED" : "ANSWER",
+          };
+        } catch {
+          final = abortedReply(published, "ABORTED");
+        }
+        await replace(final);
+        if (!requestSignal.aborted) {
+          await assertLearningAssistantAvailable(studentId);
+          emit({ type: "done", reply: { ...final, conversationId: saved.id } });
+        }
+      },
+    );
+  }
+
+  const response = await answerLearningQuestion(
+    provider,
+    input,
+    12_000,
+    options?.signal,
+  );
+  options?.signal.throwIfAborted();
+  await assertLearningAssistantAvailable(studentId);
+  const saved = await save(
+    buildReply(response, LEARNING_ASSISTANT_PROMPT_VERSION),
+  );
   return { ...saved.reply, conversationId: saved.id };
+}
+
+async function assertLearningAssistantAvailable(studentId: string) {
+  if (await hasActiveExamAttempt(studentId))
+    throw new AuthorizationError("考试作答期间，课程答疑暂不可用。");
 }

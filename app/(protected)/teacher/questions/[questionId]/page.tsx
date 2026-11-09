@@ -8,7 +8,10 @@ import { QuestionGraphBindingPanel } from "@/components/questions/question-graph
 import { listTeacherBindingCourses } from "@/services/question-graph-bindings/service";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
+import {
+  QUESTION_ORIGIN_LABELS,
+  QUESTION_TYPE_LABELS,
+} from "@/services/questions/constants";
 import { questionIdSchema } from "@/services/questions/schemas";
 import { getTeacherQuestion } from "@/services/questions/service";
 import { listQuestionObjectiveCourses } from "@/services/question-objectives/editing";
@@ -54,6 +57,14 @@ export default async function QuestionDetailPage({
             {question.questionCategoryName ?? "待补课程分类"} · 创建者{" "}
             {question.creator.displayName}
           </p>
+          {question.origin !== "MANUAL" ? (
+            <p className="mt-2 text-sm text-violet-800">
+              {QUESTION_ORIGIN_LABELS[question.origin]}
+              {question.aiSource
+                ? ` · 提示词版本 ${question.aiSource.promptVersion}`
+                : null}
+            </p>
+          ) : null}
         </div>
         <QuestionActions questionId={question.id} />
       </div>

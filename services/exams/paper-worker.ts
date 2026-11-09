@@ -146,7 +146,11 @@ export async function executeClaimedExamPaperJob(
     return;
   }
   try {
-    const provider = createAIProvider();
+    const provider = createAIProvider({
+      capability: "paper_parse",
+      actorId: draft.teacherId,
+      requestId: jobId,
+    });
     const course = await prisma.course.findUnique({
       where: { id: draft.courseId },
       select: {

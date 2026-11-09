@@ -117,8 +117,8 @@ export function TeacherWorkspaceCards({
       accent: "bg-teal-50 text-teal-700 ring-teal-100",
     },
     {
-      label: "成绩与学情",
-      description: "查看课程成绩与学情分析",
+      label: "学情分析",
+      description: "学情分析与课程评价",
       href: `/teacher/results?${resultsParams.toString()}`,
       icon: BarChart3,
       accent: "bg-amber-50 text-amber-700 ring-amber-100",

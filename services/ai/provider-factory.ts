@@ -1,6 +1,10 @@
 import "server-only";
 
 import { MockAIProvider } from "@/services/ai/mock-provider";
+import {
+  createAIAttemptRunner,
+  type AIRequestScope,
+} from "@/services/ai/governance";
 import { OpenAICompatibleProvider } from "@/services/ai/openai-compatible";
 import type { AIProvider } from "@/services/ai/provider";
 import {
@@ -15,7 +19,15 @@ import {
   resolveAIThinkingMode,
 } from "@/services/ai/provider-config";
 
-export function createAIProvider(): AIProvider {
+export function createAIProvider(scope: AIRequestScope): AIProvider {
+  return configuredProvider(scope);
+}
+
+export function createAIHealthProvider(): AIProvider {
+  return configuredProvider();
+}
+
+function configuredProvider(scope?: AIRequestScope): AIProvider {
   const provider =
     process.env.AI_PROVIDER?.trim() ||
     (process.env.NODE_ENV === "production" ? "openai-compatible" : "mock");
@@ -57,6 +69,7 @@ export function createAIProvider(): AIProvider {
     knowledgeGraphMaxCompletionTokens,
     qualityReportMaxCompletionTokens,
     timeoutMs: parseTimeout(process.env.AI_TIMEOUT_MS),
+    runAttempt: scope ? createAIAttemptRunner(scope, model) : undefined,
   });
 }
 

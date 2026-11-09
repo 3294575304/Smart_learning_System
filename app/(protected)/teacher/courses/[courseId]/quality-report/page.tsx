@@ -7,21 +7,31 @@ import { QualityReportWorkspace } from "@/components/quality-reports/quality-rep
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
 import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
+import { gradebookIdSchema } from "@/services/gradebook/schemas";
+import { z } from "zod";
 
 export default async function QualityReportPage({
   params,
   searchParams,
 }: {
   params: Promise<{ courseId: string }>;
-  searchParams: Promise<{ classroomId?: string }>;
+  searchParams: Promise<{
+    classroomId?: string;
+    gradebookId?: string;
+    reportId?: string;
+  }>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
   const courseId = courseIdSchema.safeParse((await params).courseId);
   if (!courseId.success) notFound();
+  const query = await searchParams;
+  const gradebookId = gradebookIdSchema.optional().safeParse(query.gradebookId);
+  const reportId = z.string().cuid().optional().safeParse(query.reportId);
+  if (!gradebookId.success || !reportId.success) notFound();
   const classroom = await getTeacherCourseClassroomForPage(
     teacher.id,
     courseId.data,
-    (await searchParams).classroomId,
+    query.classroomId,
   );
   return (
     <section className="space-y-6">
@@ -35,9 +45,11 @@ export default async function QualityReportPage({
         title="课程教学质量分析"
       />
       <QualityReportWorkspace
-        key={`${courseId.data}:${classroom?.id ?? "all"}`}
+        key={`${courseId.data}:${classroom?.id ?? "all"}:${gradebookId.data ?? ""}:${reportId.data ?? ""}`}
         courseId={courseId.data}
         classroomId={classroom?.id}
+        initialGradebookId={gradebookId.data}
+        focusedReportId={reportId.data}
       />
     </section>
   );

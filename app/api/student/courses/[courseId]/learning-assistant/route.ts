@@ -20,11 +20,19 @@ export async function POST(
     );
     if (!courseId.success || !input.success)
       return apiError("请选择课程主题并检查问题内容（最多 2000 字）", 400);
-    return apiSuccess(
-      await askCourseLearningAssistant(student.id, courseId.data, input.data),
-      200,
-      { "Cache-Control": "private, no-store" },
+    const reply = await askCourseLearningAssistant(
+      student.id,
+      courseId.data,
+      input.data,
+      {
+        signal: request.signal,
+        stream:
+          request.headers.get("accept")?.includes("text/event-stream") ?? false,
+      },
     );
+    return reply instanceof Response
+      ? reply
+      : apiSuccess(reply, 200, { "Cache-Control": "private, no-store" });
   } catch (error) {
     return recommendationApiError(error);
   }

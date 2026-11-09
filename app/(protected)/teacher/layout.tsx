@@ -5,6 +5,7 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { ToastHost } from "@/components/ui/toast";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { getPublicSystemConfig } from "@/services/system-config/service";
+import { TeacherAssistantSurface } from "@/components/courses/teacher-assistant-surface";
 
 export default async function TeacherLayout({
   children,
@@ -24,6 +25,7 @@ export default async function TeacherLayout({
         {children}
       </DashboardShell>
       <ToastHost />
+      <TeacherAssistantSurface teacherId={user.id} />
     </>
   );
 }

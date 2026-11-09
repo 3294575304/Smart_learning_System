@@ -499,6 +499,22 @@ export function TeacherCourseAnalyticsView({
                 className="size-6 text-violet-500"
               />
             </div>
+            {data.evaluationNextStep ? (
+              <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-3">
+                <h3 className="text-sm font-semibold text-slate-900">下一步</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-700">
+                  {data.evaluationNextStep.detail}
+                </p>
+                {data.evaluationNextStep.action ? (
+                  <Link
+                    className="mt-2 inline-flex rounded-md bg-violet-700 px-3 py-2 text-sm font-medium text-white hover:bg-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700"
+                    href={data.evaluationNextStep.action.href}
+                  >
+                    {data.evaluationNextStep.action.label}
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
             <div className="mt-4 grid grid-cols-3 gap-2">
               <DataCell
                 compact

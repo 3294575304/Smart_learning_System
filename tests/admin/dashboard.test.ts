@@ -169,6 +169,17 @@ const overviewFixture: DashboardOverview = {
     generatedRecommendationCount: 9,
   },
   ai: {
+    questionGeneration: {
+      generated: 8,
+      confirmed: 4,
+      editedBeforeConfirmation: 1,
+      reviewEdits: 3,
+      firstValidationChecks: 0,
+      firstValidationPasses: 0,
+      terminalBatches: 2,
+      incompleteBatches: 1,
+    },
+    gateway: [],
     executionRecordCount: 6,
     analysisRecordCount: 5,
     recommendationRecordCount: 9,
@@ -199,6 +210,9 @@ test("指标卡片展示真实传入值和明确统计口径", () => {
   assert.match(html, />12</);
   assert.match(html, /排除已软删除题目/);
   assert.match(html, /82\.5%/);
+  assert.match(html, /近 7 天 AI 出题/);
+  assert.match(html, /25%/);
+  assert.match(html, /暂无样本/);
   assert.doesNotMatch(html, /passwordHash|AI_API_KEY|DATABASE_URL/);
 });
 

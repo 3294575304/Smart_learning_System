@@ -1,4 +1,14 @@
-import type { QuestionStatus, QuestionType } from "@prisma/client";
+import type {
+  QuestionOrigin,
+  QuestionStatus,
+  QuestionType,
+} from "@prisma/client";
+
+export const QUESTION_ORIGIN_LABELS: Record<QuestionOrigin, string> = {
+  MANUAL: "常规入库",
+  AI_GENERATED: "AI 候选 · 直接采纳",
+  AI_ASSISTED: "AI 候选 · 修改后采纳",
+};
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   SINGLE_CHOICE: "单选题",

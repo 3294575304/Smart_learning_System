@@ -118,7 +118,10 @@ export async function createSelfReflection(
   let provider = null;
   if (systemConfig.aiAnalysisEnabled) {
     try {
-      const candidate = createAIProvider();
+      const candidate = createAIProvider({
+        capability: "self_reflection",
+        actorId: studentId,
+      });
       const externalProvider = candidate.name !== "mock";
       provider =
         externalProvider && (!configuredSalt || configuredSalt.length < 16)

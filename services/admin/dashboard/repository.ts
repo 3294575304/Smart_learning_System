@@ -10,7 +10,10 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import type { DashboardActivity } from "@/services/admin/dashboard/types";
+import type {
+  DashboardActivity,
+  DashboardOverview,
+} from "@/services/admin/dashboard/types";
 
 const EFFECTIVE_SUBMISSION_STATUSES: SubmissionStatus[] = [
   SubmissionStatus.SUBMITTED,
@@ -197,6 +200,66 @@ export async function loadLearningOverview(input: {
     generatedAnalysisCount,
     generatedRecommendationCount,
   };
+}
+
+export async function loadAIQuestionGenerationMetrics(
+  schoolId: string,
+  start: Date,
+  end: Date,
+) {
+  const [metrics] = await prisma.$queryRaw<
+    DashboardOverview["ai"]["questionGeneration"][]
+  >`
+    WITH cohort AS (
+      SELECT b.id, b.status, b."firstValidationChecks", b."firstValidationPasses"
+      FROM "AIQuestionGenerationBatch" b
+      JOIN "QuestionCourseCategory" category ON category.id = b."questionCategoryId"
+      WHERE category."schoolId" = ${schoolId}
+        AND b."createdAt" >= (${start}::timestamptz AT TIME ZONE 'UTC')
+        AND b."createdAt" < (${end}::timestamptz AT TIME ZONE 'UTC')
+    ), candidates AS (
+      SELECT COUNT(*)::int AS generated,
+             COUNT(*) FILTER (WHERE c.status = 'CONFIRMED' AND q.id IS NOT NULL)::int AS confirmed,
+             COUNT(*) FILTER (WHERE c.status = 'CONFIRMED' AND q.origin = 'AI_ASSISTED')::int AS "editedBeforeConfirmation",
+             COALESCE(SUM(CASE WHEN jsonb_typeof(c."reviewHistory") = 'array'
+                               THEN jsonb_array_length(c."reviewHistory") ELSE 0 END), 0)::int AS "reviewEdits"
+      FROM cohort b
+      JOIN "AIQuestionGenerationCandidate" c ON c."batchId" = b.id
+      LEFT JOIN "Question" q ON q.id = c."confirmedQuestionId"
+    ), batches AS (
+      SELECT COALESCE(SUM("firstValidationChecks"), 0)::int AS "firstValidationChecks",
+             COALESCE(SUM("firstValidationPasses"), 0)::int AS "firstValidationPasses",
+             COUNT(*) FILTER (WHERE status IN ('READY', 'PARTIAL', 'FAILED'))::int AS "terminalBatches",
+             COUNT(*) FILTER (WHERE status IN ('PARTIAL', 'FAILED'))::int AS "incompleteBatches"
+      FROM cohort
+    )
+    SELECT * FROM candidates CROSS JOIN batches
+  `;
+  return metrics;
+}
+
+export function loadAIGatewayOverview(
+  schoolId: string,
+  start: Date,
+  end: Date,
+) {
+  return prisma.$queryRaw<DashboardOverview["ai"]["gateway"]>`
+    SELECT capability,
+      COUNT(DISTINCT "requestKey")::int AS requests,
+      COUNT(*) FILTER (WHERE outcome <> 'REJECTED')::int AS attempts,
+      COUNT(*) FILTER (WHERE outcome = 'FAILED')::int AS failed,
+      COUNT(DISTINCT "requestKey") FILTER (WHERE "wouldLimit")::int AS "wouldLimit",
+      COUNT(DISTINCT "requestKey") FILTER (WHERE outcome = 'REJECTED')::int AS rejected,
+      COUNT("totalTokens")::int AS "measuredAttempts",
+      COALESCE(SUM("totalTokens"), 0)::float8 AS "totalTokens",
+      (percentile_disc(0.95) WITHIN GROUP (ORDER BY "latencyMs")
+        FILTER (WHERE outcome <> 'REJECTED'))::int AS "p95LatencyMs"
+    FROM "AIProviderAttemptLog"
+    WHERE "schoolId" = ${schoolId}
+      AND "createdAt" >= (${start}::timestamptz AT TIME ZONE 'UTC')
+      AND "createdAt" < (${end}::timestamptz AT TIME ZONE 'UTC')
+    GROUP BY capability ORDER BY capability
+  `;
 }
 
 export async function loadAIOverview(input: {

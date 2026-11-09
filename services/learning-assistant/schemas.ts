@@ -60,6 +60,7 @@ export const learningPracticeSuggestionSchema = z
   })
   .strict();
 export interface LearningAssistantReply extends LearningAssistantOutput {
+  deliveryStatus?: "PENDING" | "ANSWER" | "DEGRADED" | "ABORTED";
   conversationId?: string;
   practiceSuggestion?: z.output<typeof learningPracticeSuggestionSchema>;
   objectiveSummary: string;
@@ -74,28 +75,41 @@ export interface LearningAssistantReply extends LearningAssistantOutput {
   model: string | null;
 }
 
+export const learningAssistantReplySchema = learningAssistantOutputSchema
+  .extend({
+    objectiveSummary: z.string().max(10000),
+    canOfferAdvice: z.boolean(),
+    practiceSuggestion: learningPracticeSuggestionSchema.optional(),
+    practiceUrl: z.string().max(3000).nullable(),
+    testUrl: z.string().max(3000).nullable(),
+    fallbackUsed: z.boolean(),
+    graphVersion: z.number().int(),
+    profileRevision: z.number().int().nullable(),
+    promptVersion: z.string(),
+    provider: z.string().nullable(),
+    model: z.string().nullable(),
+    conversationId: z.string().optional(),
+    deliveryStatus: z
+      .enum(["PENDING", "ANSWER", "DEGRADED", "ABORTED"])
+      .optional(),
+  })
+  .strict();
+
+export const learningStreamEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("start"), conversationId: z.string() }),
+  z.object({ type: z.literal("preview"), text: z.string().max(4000) }),
+  z.object({ type: z.literal("done"), reply: learningAssistantReplySchema }),
+  z.object({ type: z.literal("error"), message: z.string() }),
+]);
+export type LearningStreamEvent = z.output<typeof learningStreamEventSchema>;
+
 export const savedLearningTurnSchema = z
   .object({
     requestId: z.string().uuid(),
     question: z.string().min(1).max(2000),
     phase: z.enum(["QUESTION", "ADVICE"]),
     createdAt: z.string().datetime(),
-    reply: learningAssistantOutputSchema
-      .extend({
-        objectiveSummary: z.string().max(10000),
-        canOfferAdvice: z.boolean(),
-        practiceSuggestion: learningPracticeSuggestionSchema.optional(),
-        practiceUrl: z.string().max(3000).nullable(),
-        testUrl: z.string().max(3000).nullable(),
-        fallbackUsed: z.boolean(),
-        graphVersion: z.number().int(),
-        profileRevision: z.number().int().nullable(),
-        promptVersion: z.string(),
-        provider: z.string().nullable(),
-        model: z.string().nullable(),
-        conversationId: z.string().optional(),
-      })
-      .strict(),
+    reply: learningAssistantReplySchema,
   })
   .strict();
 export const savedLearningTurnsSchema = z

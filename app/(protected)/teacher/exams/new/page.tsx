@@ -15,6 +15,7 @@ export default async function NewExamPage() {
         courses={options.publicationCourses}
         classrooms={options.classrooms}
         conceptGroups={options.courses}
+        assemblyChapters={options.assemblyChapters}
         courseObjectives={courseObjectives}
       />
     </section>

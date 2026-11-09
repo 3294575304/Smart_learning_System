@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import { PrismaClient, QuestionType } from "@prisma/client";
 
@@ -17,7 +18,11 @@ import {
 import { AI_QUESTION_JOB_TYPE } from "@/services/ai-question-generation/schemas";
 import { executeClaimedAIQuestionGenerationJob } from "@/services/ai-question-generation/worker";
 import { claimNextBackgroundJob } from "@/services/background-jobs/repository";
-import { createQuestion } from "@/services/questions/service";
+import { loadAIQuestionGenerationMetrics } from "@/services/admin/dashboard/repository";
+import {
+  createQuestion,
+  getTeacherQuestion,
+} from "@/services/questions/service";
 import { assertIsolatedIntegrationEnvironment } from "../integration/database";
 
 assertIsolatedIntegrationEnvironment("HTTP_INTEGRATION_SCHEMA");
@@ -28,7 +33,7 @@ async function main() {
   const [teacher, otherTeacher, course] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { email: "teacher@example.com" },
-      select: { id: true },
+      select: { id: true, schoolId: true },
     }),
     prisma.user.findUniqueOrThrow({
       where: { email: "teacher2@example.com" },
@@ -42,6 +47,15 @@ async function main() {
       select: { id: true, questionCategoryId: true },
     }),
   ]);
+  assert.ok(teacher.schoolId);
+  const schoolId = teacher.schoolId;
+  const start = new Date(Date.now() - 3_600_000);
+  const end = new Date(Date.now() + 3_600_000);
+  const metricsBefore = await loadAIQuestionGenerationMetrics(
+    schoolId,
+    start,
+    end,
+  );
   const original = await createQuestion(teacher.id, {
     title: `变式原题 ${randomUUID().slice(0, 8)}`,
     content: "Python 中如何把用户输入的一行文本输出到标准输出？",
@@ -69,6 +83,7 @@ async function main() {
     multipleChoiceOptions: 4,
     idempotencyKey: randomUUID(),
   };
+  assert.equal(original.origin, "MANUAL");
   const requested = await queueQuestionGeneration(
     teacher.id,
     analogyInput,
@@ -178,11 +193,29 @@ async function main() {
   assert.equal(repeated.questionId, confirmed.questionId);
   const stored = await prisma.question.findUniqueOrThrow({
     where: { id: confirmed.questionId },
-    select: { status: true, questionCategoryId: true, type: true },
+    select: {
+      status: true,
+      questionCategoryId: true,
+      type: true,
+      origin: true,
+    },
   });
   assert.equal(stored.status, "ACTIVE");
   assert.equal(stored.questionCategoryId, course.questionCategoryId);
   assert.equal(stored.type, QuestionType.SINGLE_CHOICE);
+  assert.equal(stored.origin, "AI_ASSISTED");
+  assert.equal(
+    (await getTeacherQuestion(teacher.id, confirmed.questionId)).aiSource
+      ?.promptVersion,
+    "ai-question-v2",
+  );
+  const audit = await prisma.auditLog.findFirstOrThrow({
+    where: {
+      targetId: confirmed.questionId,
+      action: "AI_QUESTION_CANDIDATE_CONFIRMED",
+    },
+  });
+  assert.match(JSON.stringify(audit.afterData), /"origin":"AI_ASSISTED"/u);
   const jobStatusBeforeDelete = await prisma.backgroundJob.findUniqueOrThrow({
     where: { id: job.id },
     select: { status: true },
@@ -397,6 +430,14 @@ async function main() {
   );
   assert.equal(bulkResult.confirmedCount, 2);
   assert.equal(bulkResult.failed.length, 0);
+  const bulkOrigins = await prisma.question.findMany({
+    where: { aiGenerationCandidate: { batchId: bulkBatch.id } },
+    select: { origin: true },
+  });
+  assert.deepEqual(
+    bulkOrigins.map((item) => item.origin),
+    ["AI_GENERATED", "AI_GENERATED"],
+  );
   assert.equal(
     (
       await getQuestionGenerationBatch(teacher.id, bulkBatch.id)
@@ -567,6 +608,23 @@ async function main() {
     assert.equal(partial.status, "PARTIAL");
     assert.equal(partial.generatedCount, 1);
     assert.equal(partial.failedCount, 1);
+    const metrics = await loadAIQuestionGenerationMetrics(schoolId, start, end);
+    assert.deepEqual(metrics, {
+      generated: metricsBefore.generated + 5,
+      confirmed: metricsBefore.confirmed + 3,
+      editedBeforeConfirmation: metricsBefore.editedBeforeConfirmation + 1,
+      reviewEdits: metricsBefore.reviewEdits + 1,
+      firstValidationChecks: metricsBefore.firstValidationChecks + 6,
+      firstValidationPasses: metricsBefore.firstValidationPasses + 5,
+      terminalBatches: metricsBefore.terminalBatches + 4,
+      incompleteBatches: metricsBefore.incompleteBatches + 1,
+    });
+    const empty = await loadAIQuestionGenerationMetrics(
+      "another-school",
+      start,
+      end,
+    );
+    assert.ok(Object.values(empty).every((value) => value === 0));
     assert.equal(
       (partial.failureDetails as Array<{ ordinal: number }>)[0]?.ordinal,
       2,
@@ -595,6 +653,15 @@ async function main() {
     assert.equal(completed.candidates.length, 2);
     assert.equal(completed.candidates[0]?.id, firstCandidateId);
     assert.equal((completed.failureDetails as unknown[]).length, 0);
+    const retriedCounters =
+      await prisma.aIQuestionGenerationBatch.findUniqueOrThrow({
+        where: { id: partialBatch.id },
+        select: { firstValidationChecks: true, firstValidationPasses: true },
+      });
+    assert.deepEqual(retriedCounters, {
+      firstValidationChecks: 3,
+      firstValidationPasses: 2,
+    });
     const multipleBatch = await queueQuestionGeneration(
       teacher.id,
       {
@@ -703,6 +770,69 @@ async function main() {
     ),
     false,
   );
+  const legacyQuestions = await prisma.question.createManyAndReturn({
+    data: Array.from({ length: 21 }, (_, index) => ({
+      creatorId: teacher.id,
+      questionCategoryId: course.questionCategoryId,
+      title: `历史来源样本 ${index}`,
+      content: "历史题干",
+      type: "TRUE_FALSE",
+      correctBoolean: true,
+      explanation: "历史解析",
+      tags: ["AI 辅助出题"],
+    })),
+    select: { id: true },
+  });
+  await prisma.aIQuestionGenerationCandidate.createMany({
+    data: legacyQuestions.slice(0, 20).map(({ id }, index) => ({
+      batchId: pendingBatch.id,
+      ordinal: index + 1,
+      status: "CONFIRMED",
+      confirmedQuestionId: id,
+      questionJson: { title: "采纳后的标题", tags: ["教师标签"] },
+      sourceRefs: [],
+      qualityFlags: [],
+      reviewHistory:
+        index % 3 === 0
+          ? []
+          : [
+              {
+                revision: 1,
+                questionJson: {
+                  title: index % 3 === 1 ? "初始标题" : "采纳后的标题",
+                  tags: ["原标签"],
+                },
+                programmingConfig: null,
+              },
+            ],
+    })),
+  });
+  const migration = readFileSync(
+    "prisma/migrations/20261110140000_ai_question_provenance/migration.sql",
+    "utf8",
+  );
+  const backfill = migration.slice(migration.indexOf("WITH confirmed AS"));
+  for (const updatedCount of [20, 0]) {
+    assert.equal(await prisma.$executeRawUnsafe(backfill), updatedCount);
+    const origins = new Map(
+      (
+        await prisma.question.findMany({
+          where: { id: { in: legacyQuestions.map(({ id }) => id) } },
+          select: { id: true, origin: true },
+        })
+      ).map(({ id, origin }) => [id, origin]),
+    );
+    assert.deepEqual(
+      legacyQuestions.map(({ id }) => origins.get(id)),
+      legacyQuestions.map((_, index) =>
+        index === 20
+          ? "MANUAL"
+          : index % 3 === 1
+            ? "AI_ASSISTED"
+            : "AI_GENERATED",
+      ),
+    );
+  }
   await prisma.$disconnect();
 }
 
