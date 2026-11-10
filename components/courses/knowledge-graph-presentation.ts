@@ -33,10 +33,19 @@ export function graphChapterColors(graph: KnowledgeGraphStructure) {
 
 export function chineseGraphLabel(name: string, maxLineLength = 10) {
   const chars = Array.from(name.trim());
-  if (chars.length <= maxLineLength) return name.trim();
-  const first = chars.slice(0, maxLineLength).join("");
-  const second = chars.slice(maxLineLength, maxLineLength * 2).join("");
-  return `${first}\n${second}${chars.length > maxLineLength * 2 ? "…" : ""}`;
+  const lines = [""];
+  let width = 0;
+  for (const char of chars) {
+    const charWidth = /[\u0020-\u007e]/u.test(char) ? 0.55 : 1;
+    if (width + charWidth > maxLineLength) {
+      if (lines.length === 2) return `${lines.join("\n").trimEnd()}…`;
+      lines.push("");
+      width = 0;
+    }
+    lines[lines.length - 1] += char;
+    width += charWidth;
+  }
+  return lines.map((line) => line.trim()).join("\n");
 }
 
 /** 章节按教学顺序排列，知识点留在所属章节附近，阅读时不再持续漂移。 */

@@ -75,6 +75,20 @@ test("球形布局覆盖所有节点、保持身份和章节颜色，且不修�
   );
   assert.ok([...layout.values()].some((p) => p.z > 100));
   assert.ok([...layout.values()].some((p) => p.z < -100));
+  for (const edge of graph.edges) {
+    const parent = layout.get(edge.from);
+    const child = layout.get(edge.to);
+    assert.ok(parent && child);
+    const distance = Math.hypot(
+      parent.x - child.x,
+      parent.y - child.y,
+      parent.z - child.z,
+    );
+    assert.ok(
+      distance >= 80 && distance <= 150,
+      "附属知识点保持在章节附近并保留组内间距",
+    );
+  }
 });
 
 test("排序输入、改名称和筛选不导致球形坐标漂移", () => {

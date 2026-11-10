@@ -29,10 +29,10 @@ export function sphericalGraphLayout(graph: KnowledgeGraphStructure) {
         ).length,
     ),
   );
-  const clusterRadius = Math.max(90, Math.sqrt(largestCluster) * 32);
+  const clusterRadius = Math.max(100, Math.sqrt(largestCluster) * 36);
   const radius = Math.max(
-    340,
-    clusterRadius * Math.sqrt(Math.max(1, chapters.length)) * 1.5,
+    300,
+    clusterRadius * Math.sqrt(Math.max(1, chapters.length)),
   );
   const spherePoint = (index: number, count: number, distance: number) => {
     const y = 1 - (2 * (index + 0.5)) / Math.max(1, count);
@@ -49,7 +49,12 @@ export function sphericalGraphLayout(graph: KnowledgeGraphStructure) {
       positions.set(node.key, { x: index * 80, y: 0, z: 0, color: "#0f172a" }),
     );
   chapters.forEach((chapter, index) => {
-    const center = spherePoint(index, chapters.length, radius);
+    // 章节采用错层半径，避免所有星团落在同一个球壳上。
+    const center = spherePoint(
+      index,
+      chapters.length,
+      radius * (0.82 + (index % 3) * 0.09),
+    );
     const color = colors.get(chapter.key) ?? "#0369a1";
     positions.set(chapter.key, { ...center, color });
     const points = ordered.filter(
@@ -61,7 +66,8 @@ export function sphericalGraphLayout(graph: KnowledgeGraphStructure) {
       const offset = spherePoint(
         pointIndex,
         points.length,
-        Math.max(75, Math.sqrt(points.length) * 32),
+        Math.max(90, Math.sqrt(points.length) * 36) *
+          (0.86 + (pointIndex % 3) * 0.14),
       );
       positions.set(point.key, {
         x: center.x + offset.x,

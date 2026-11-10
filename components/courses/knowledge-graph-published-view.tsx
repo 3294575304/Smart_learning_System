@@ -156,16 +156,24 @@ export function KnowledgeGraphPublishedView({
               当前显示 {nodes.length} 个节点 · {edges.length} 条关系
             </p>
           </div>
-          <div className="grid min-w-0 gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
-            <KnowledgeGraphDirectory
-              compact
-              counts={NO_QUESTION_COUNTS}
-              graph={graph}
-              nodes={nodes}
-              onSelect={handleSelectNode}
-              selectedKey={selectedKey}
-              showQuestionCounts={false}
-            />
+          <div className="min-w-0 space-y-3">
+            <details className="rounded-xl border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-slate-700">
+                章节与知识点目录
+                <span className="ml-2 text-xs font-normal text-slate-500">
+                  展开查找并定位节点
+                </span>
+              </summary>
+              <KnowledgeGraphDirectory
+                compact
+                counts={NO_QUESTION_COUNTS}
+                graph={graph}
+                nodes={nodes}
+                onSelect={handleSelectNode}
+                selectedKey={selectedKey}
+                showQuestionCounts={false}
+              />
+            </details>
             <KnowledgeGraphCanvas
               compact
               edges={edges}
@@ -173,6 +181,7 @@ export function KnowledgeGraphPublishedView({
               nodeColorHelp="知识点球颜色表示我的掌握度；课程与章节仍按结构着色"
               nodes={nodes}
               onSelect={handleSelectNode}
+              onClearSelection={() => setSelectedKey(null)}
               selectedKey={selectedKey}
               structure={graph}
             />

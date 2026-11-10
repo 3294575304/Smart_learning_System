@@ -65,7 +65,7 @@ export function KnowledgeGraphDirectory({
   return (
     <nav
       aria-label="按章节查找知识点"
-      className="min-w-0 rounded-lg border bg-sky-50/60 p-3"
+      className="min-w-0 rounded-xl bg-slate-50/70 p-3"
     >
       <h4 className="font-medium">节点目录</h4>
       <p className="mt-1 text-xs leading-5 text-gray-500">
@@ -76,8 +76,8 @@ export function KnowledgeGraphDirectory({
       <div
         className={
           compact
-            ? "mt-3 max-h-64 overflow-y-auto md:max-h-[580px]"
-            : "mt-3 max-h-72 overflow-y-auto lg:max-h-[700px]"
+            ? "mt-3 max-h-64 overflow-y-auto"
+            : "mt-3 max-h-80 overflow-y-auto"
         }
       >
         <div
@@ -101,12 +101,15 @@ export function KnowledgeGraphDirectory({
             </button>
           ) : null}
           {groups.length ? (
-            <div className="mt-2 space-y-2 border-l-2 border-sky-100 pl-2">
+            <div className="mt-2 grid items-start gap-2 sm:grid-cols-2 2xl:grid-cols-3">
               {groups.map((group) => (
                 <details
                   key={group.key}
-                  open
-                  className="rounded border border-l-4 bg-white p-2"
+                  open={
+                    group.key === selectedKey ||
+                    group.nodes.some((node) => node.key === selectedKey)
+                  }
+                  className="min-w-0 rounded-lg border border-l-4 bg-white p-2"
                   style={{ borderLeftColor: group.color }}
                 >
                   <summary
