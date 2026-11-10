@@ -1,8 +1,12 @@
 "use client";
+import {
+  AttendanceStatusButton,
+  AttendanceStatusOptions,
+} from "@/components/attendance/attendance-status";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { correctAttendanceRecordSchema } from "@/services/attendance/schemas";
 import {
-  attendanceLabels,
+  attendanceMethodLabels,
   requestAttendanceApi,
   sessionLabels,
   type AttendanceRecordRow,
@@ -130,25 +134,11 @@ export function AttendanceWorkspace({
           <h2 className="font-semibold">
             纠正出勤 · {editing.record.student.profile?.displayName ?? "学生"}
           </h2>
-          <label className="block text-sm">
-            出勤状态
-            <select
-              value={editing.status}
-              disabled={busy}
-              onChange={(e) =>
-                setEditing({ ...editing, status: e.target.value })
-              }
-              className="ml-3 rounded-md border p-2"
-            >
-              {Object.entries(attendanceLabels)
-                .filter(([value]) => value !== "PENDING")
-                .map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-            </select>
-          </label>
+          <AttendanceStatusOptions
+            value={editing.status}
+            disabled={busy}
+            onChange={(status) => setEditing({ ...editing, status })}
+          />
           <label className="block text-sm">
             纠正原因
             <input
@@ -199,7 +189,9 @@ export function AttendanceWorkspace({
             <details className="mt-3 rounded-lg border p-3" key={session.id}>
               <summary className="cursor-pointer font-medium">
                 {session.title} · {session.classroom.name} ·{" "}
-                {sessionLabels[session.status] ?? session.status}
+                {sessionLabels[session.status] ?? session.status} ·{" "}
+                {attendanceMethodLabels[session.signInMethod] ??
+                  session.signInMethod}
               </summary>
               {session.records.map((record) => (
                 <div
@@ -210,15 +202,12 @@ export function AttendanceWorkspace({
                     {record.student.profile?.studentNo ?? "—"}{" "}
                     {record.student.profile?.displayName ?? "未命名"}
                   </span>
-                  <button
-                    disabled={busy}
-                    className="rounded border px-2 py-1"
-                    onClick={() => void correct(session, record)}
-                  >
-                    {attendanceLabels[record.currentStatus] ??
-                      record.currentStatus}
-                    （纠正）
-                  </button>
+                  <AttendanceStatusButton
+                    status={record.currentStatus}
+                    studentName={record.student.profile?.displayName ?? "学生"}
+                    disabled={busy || session.status === "CANCELLED"}
+                    onClick={() => correct(session, record)}
+                  />
                 </div>
               ))}
             </details>

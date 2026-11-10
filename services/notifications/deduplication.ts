@@ -3,6 +3,8 @@ function key(kind: string, sourceId: string): string {
 }
 
 export const notificationDeduplication = {
+  attendancePublished: (sessionId: string) =>
+    key("attendance-published", sessionId),
   assignmentPublished: (assignmentId: string, publicationKey?: string) =>
     key(
       "assignment-published",

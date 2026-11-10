@@ -18,6 +18,7 @@ interface NotificationPageProps {
 }
 
 const TYPE_LABELS: Record<NotificationType, string> = {
+  ATTENDANCE_PUBLISHED: "课堂签到",
   ASSIGNMENT_PUBLISHED: "作业发布",
   ASSIGNMENT_REVOKED: "作业撤销",
   ASSIGNMENT_DUE_SOON: "截止提醒",

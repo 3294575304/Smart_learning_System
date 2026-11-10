@@ -76,11 +76,7 @@ body {
 
 /* Keep native form, validation and keyboard behavior while styling the picker itself. */
 @supports (appearance: base-select) {
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
-    select:not([multiple]):not([size]) {
+  #dashboard-main[data-workspace-role] select:not([multiple]):not([size]) {
     appearance: base-select;
     display: flex;
     align-items: center;
@@ -101,10 +97,7 @@ body {
       background-color 0.15s;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size])::picker(select) {
     appearance: base-select;
     inline-size: anchor-size(width);
@@ -125,62 +118,40 @@ body {
     scrollbar-color: #cbd5e1 transparent;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size]):hover:not(:disabled) {
     border-color: #7dd3fc;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size]):focus-visible {
     outline: 2px solid #38bdf8;
     outline-offset: 2px;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
-    select:not([multiple]):not([size]):open {
+  #dashboard-main[data-workspace-role] select:not([multiple]):not([size]):open {
     border-color: #38bdf8;
     box-shadow: 0 0 0 3px #e0f2fe;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size]):disabled {
     background-color: #f8fafc;
     color: #94a3b8;
     cursor: not-allowed;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size])::picker-icon {
     color: #94a3b8;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size]):open::picker-icon {
     rotate: 180deg;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size])
     option {
     display: flex;
@@ -200,10 +171,7 @@ body {
     cursor: pointer;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size])
     option:checked {
     background: #f0f9ff;
@@ -211,10 +179,7 @@ body {
     font-weight: 500;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size])
     option:is(:hover, :focus-visible) {
     outline: none;
@@ -222,20 +187,14 @@ body {
     color: #0f172a;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size])
     option:checked:is(:hover, :focus-visible) {
     background: #e0f2fe;
     color: #075985;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size])
     option:disabled {
     background: transparent;
@@ -243,15 +202,63 @@ body {
     cursor: not-allowed;
   }
 
-  #dashboard-main:is(
-      [data-workspace-role="ADMIN"],
-      [data-workspace-role="SUPER_ADMIN"]
-    )
+  #dashboard-main[data-workspace-role]
     select:not([multiple]):not([size])
     option::checkmark {
     order: 1;
     margin-inline-start: auto;
     color: #0284c7;
+  }
+}
+
+/* Teacher and student controls keep the selected value on one line. */
+#dashboard-main:is(
+    [data-workspace-role="TEACHER"],
+    [data-workspace-role="STUDENT"]
+  )
+  select:not([multiple]):not([size]) {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Existing controls with a separate chevron retain one visible arrow. */
+@supports (appearance: base-select) {
+  #dashboard-main:is(
+      [data-workspace-role="TEACHER"],
+      [data-workspace-role="STUDENT"]
+    )
+    select.appearance-none::picker-icon {
+    display: none;
+  }
+
+  #dashboard-main:is(
+      [data-workspace-role="TEACHER"],
+      [data-workspace-role="STUDENT"]
+    )
+    select:not([multiple]):not([size])::picker-icon {
+    flex-shrink: 0;
+  }
+}
+
+/* Browsers without customizable pickers keep the same closed control design. */
+@supports not (appearance: base-select) {
+  #dashboard-main:is(
+      [data-workspace-role="TEACHER"],
+      [data-workspace-role="STUDENT"]
+    )
+    select:not([multiple]):not([size]) {
+    min-height: 2.5rem;
+    border: 1px solid #cfe4f0;
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background-color: white;
+    color: #334155;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 }
 

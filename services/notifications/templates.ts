@@ -51,6 +51,19 @@ export function assignmentPublishedTemplate(input: {
   );
 }
 
+export function attendancePublishedTemplate(input: {
+  courseName: string;
+  classroomName: string;
+  title: string;
+  opensAt: Date;
+  closesAt: Date;
+}): NotificationTemplate {
+  return template(
+    "课堂签到已发布",
+    `《${plainText(input.courseName, 80)}》${plainText(input.classroomName, 80)}发布了签到《${plainText(input.title, 80)}》，签到时间为 ${formatNotificationTime(input.opensAt)} 至 ${formatNotificationTime(input.closesAt)}，请及时完成。`,
+  );
+}
+
 export function assignmentDueSoonTemplate(input: {
   assignmentTitle: string;
   dueAt: Date;

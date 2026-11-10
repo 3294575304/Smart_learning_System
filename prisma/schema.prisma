@@ -243,6 +243,13 @@ enum AttendanceSessionStatus {
   CANCELLED
 }
 
+enum AttendanceSignInMethod {
+  DIRECT
+  LOCATION
+  CODE
+  GRAPHIC
+}
+
 enum AttendanceStatus {
   PENDING
   PRESENT
@@ -316,6 +323,7 @@ enum GradeImportExecutionStatus {
 }
 
 enum NotificationType {
+  ATTENDANCE_PUBLISHED
   ASSIGNMENT_REVOKED
   ASSIGNMENT_PUBLISHED
   ASSIGNMENT_DUE_SOON
@@ -336,6 +344,7 @@ enum NotificationPriority {
 }
 
 enum NotificationSourceType {
+  ATTENDANCE_SESSION
   ASSIGNMENT
   SUBMISSION
   AI_ANALYSIS
@@ -2300,21 +2309,26 @@ model ClassMembership {
 }
 
 model AttendanceSession {
-  id             String                  @id @default(cuid())
-  courseId       String
-  classroomId    String
-  teacherId      String
-  title          String                  @db.VarChar(120)
-  status         AttendanceSessionStatus @default(SCHEDULED)
-  startsAt       DateTime
-  signInOpensAt  DateTime
-  lateAfter      DateTime
-  signInClosesAt DateTime
-  endedAt        DateTime?
-  cancelledAt    DateTime?
-  revision       Int                     @default(0)
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  id                   String                  @id @default(cuid())
+  courseId             String
+  classroomId          String
+  teacherId            String
+  title                String                  @db.VarChar(120)
+  status               AttendanceSessionStatus @default(SCHEDULED)
+  signInMethod         AttendanceSignInMethod  @default(DIRECT)
+  locationLatitude     Float?
+  locationLongitude    Float?
+  locationRadiusMeters Int?
+  challengeHash        String?                 @db.VarChar(64)
+  startsAt             DateTime
+  signInOpensAt        DateTime
+  lateAfter            DateTime
+  signInClosesAt       DateTime
+  endedAt              DateTime?
+  cancelledAt          DateTime?
+  revision             Int                     @default(0)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   course    Course             @relation(fields: [courseId], references: [id], onDelete: Restrict)
   classroom Classroom          @relation(fields: [classroomId], references: [id], onDelete: Restrict)
@@ -2332,6 +2346,8 @@ model AttendanceRecord {
   studentId             String
   currentStatus         AttendanceStatus @default(PENDING)
   currentRevisionNumber Int              @default(0)
+  challengeAttempts     Int              @default(0)
+  challengeLockedUntil  DateTime?
   signedAt              DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt

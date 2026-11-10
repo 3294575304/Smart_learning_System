@@ -9,7 +9,7 @@ import { requestNotificationApi } from "@/components/notifications/request-api";
 import { formatUnreadBadge } from "@/components/notifications/presenters";
 
 export const NOTIFICATIONS_CHANGED_EVENT = "notifications:changed";
-const POLLING_INTERVAL_MS = 60_000;
+const POLLING_INTERVAL_MS = 15_000;
 
 export function NotificationIndicator() {
   const pathname = usePathname();
@@ -43,6 +43,7 @@ export function NotificationIndicator() {
       NOTIFICATIONS_CHANGED_EVENT,
       onNotificationsChanged,
     );
+    window.addEventListener("focus", onNotificationsChanged);
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -50,6 +51,7 @@ export function NotificationIndicator() {
         NOTIFICATIONS_CHANGED_EVENT,
         onNotificationsChanged,
       );
+      window.removeEventListener("focus", onNotificationsChanged);
     };
   }, [refresh]);
 
