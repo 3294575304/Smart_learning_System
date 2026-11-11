@@ -120,6 +120,8 @@ async function main() {
   assert.equal(opened.isOpen, true);
   let overview = await getStudentTaskOverview(student.id);
   assert.deepEqual(overview.counts, {
+    exam: 0,
+    examUpcoming: 0,
     assignment: 2,
     attendance: 1,
     survey: 1,
@@ -180,6 +182,8 @@ async function main() {
   });
   overview = await getStudentTaskOverview(student.id);
   assert.deepEqual(overview.counts, {
+    exam: 0,
+    examUpcoming: 0,
     assignment: 1,
     attendance: 0,
     survey: 0,

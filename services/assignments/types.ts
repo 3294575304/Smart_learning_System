@@ -1,6 +1,7 @@
 import type {
   AssignmentStatus,
   ClassroomStatus,
+  ExamSubmissionReason,
   GradingStatus,
   QuestionType,
   SubmissionStatus,
@@ -90,6 +91,11 @@ export interface SubmittedAnswerView {
 }
 
 export interface SubmissionResultView {
+  examReceipt: {
+    reason: ExamSubmissionReason | null;
+    lastSavedAt: Date | null;
+    answeredCount: number;
+  } | null;
   id: string;
   assignmentId: string;
   assignmentTitle: string;

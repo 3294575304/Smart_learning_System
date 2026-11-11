@@ -99,9 +99,13 @@ export default async function TeacherSubmissionsPage({
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <TeacherBackLink
-              href={examSessionId ? "/teacher/exams" : "/teacher/assignments"}
+              href={
+                examSessionId
+                  ? `/teacher/exams/${examSessionId}`
+                  : "/teacher/assignments"
+              }
             >
-              {examSessionId ? "返回考试管理" : "返回作业管理"}
+              {examSessionId ? "返回考试场次" : "返回作业管理"}
             </TeacherBackLink>
             <h1 className="mt-3 text-2xl font-semibold">批改提交</h1>
             <p className="text-muted-foreground mt-2 text-sm">

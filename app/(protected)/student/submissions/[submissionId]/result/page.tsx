@@ -18,11 +18,19 @@ import { ProgrammingAttemptStatus } from "@/components/assignments/programming-a
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentSubmissionResult } from "@/services/assignments/service";
+import { ExamScoreReview } from "@/components/exams/exam-score-review";
+import { getStudentExamReview } from "@/services/exams/score-reviews";
 
 interface Props {
   params: Promise<{ submissionId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
+const examReceiptLabels = {
+  MANUAL: "主动交卷",
+  TIME_UP: "到时自动收卷",
+  SWITCH_LIMIT: "切屏超限自动交卷",
+} as const;
+
 export default async function ResultPage({ params, searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const query = await searchParams;
@@ -40,6 +48,10 @@ export default async function ResultPage({ params, searchParams }: Props) {
       (await params).submissionId,
     );
     await assertAssignmentTaskScope(result.assignmentId, scope.data);
+    const canReviewExam = Boolean(result.examReceipt && result.isPublished);
+    const examReview = canReviewExam
+      ? await getStudentExamReview(student.id, result.id)
+      : null;
     const percentage = hundredPointScore(result.score, result.maxScore);
     const feedback = result.answers.filter((answer) => answer.teacherFeedback);
     const answers = result.isPublished
@@ -53,18 +65,44 @@ export default async function ResultPage({ params, searchParams }: Props) {
         <div>
           <Link
             className="inline-flex rounded-lg border bg-white px-3 py-2 text-sm text-sky-700 hover:bg-sky-50"
-            href={`/student/assignments?${returnParams}`}
+            href={
+              result.examReceipt
+                ? studentTaskHref("/student/exams", scope.data)
+                : `/student/assignments?${returnParams}`
+            }
           >
-            ← 返回作业与成绩
+            ← {result.examReceipt ? "返回我的考试" : "返回作业与成绩"}
           </Link>
           <h1 className="mt-2 text-2xl font-semibold break-words">
-            {result.assignmentTitle} · 提交结果
+            {result.assignmentTitle} ·{" "}
+            {result.examReceipt ? "交卷回执" : "提交结果"}
           </h1>
           <p className="mt-2 text-sm text-gray-500">
             第 {result.attemptNumber} 次提交 ·{" "}
             {result.submittedAt?.toLocaleString("zh-CN")}
           </p>
         </div>
+        {result.examReceipt && (
+          <section
+            className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950"
+            aria-labelledby="exam-receipt"
+          >
+            <h2 id="exam-receipt" className="font-semibold">
+              考试已收卷
+            </h2>
+            <p className="mt-2 text-sm">
+              {result.examReceipt.reason
+                ? examReceiptLabels[result.examReceipt.reason]
+                : "历史记录未记录交卷方式"}{" "}
+              · 已收到 {result.examReceipt.answeredCount} 题作答
+            </p>
+            <p className="mt-1 text-sm">
+              {result.examReceipt.lastSavedAt &&
+                `账号最近保存 ${result.examReceipt.lastSavedAt.toLocaleString("zh-CN")} · `}
+              收卷以服务端收到的答案为准。
+            </p>
+          </section>
+        )}
         {result.isPublished ? (
           <section
             className="rounded-xl border bg-white p-4 sm:p-6"
@@ -105,12 +143,17 @@ export default async function ResultPage({ params, searchParams }: Props) {
             <p className="font-medium text-amber-900">
               {result.status === "GRADED"
                 ? "批改已完成，等待公布成绩"
-                : "作业已提交成功"}
+                : result.examReceipt
+                  ? "成绩待公布"
+                  : "作业已提交成功"}
             </p>
             <p className="mt-2 text-sm leading-6 text-amber-800">
               可以回看本次提交的答案。成绩和反馈将在教师公布后显示。
             </p>
           </div>
+        )}
+        {canReviewExam && (
+          <ExamScoreReview submissionId={result.id} initial={examReview} />
         )}
         {result.programmingAttempts.length > 0 ? (
           <div className="space-y-4">

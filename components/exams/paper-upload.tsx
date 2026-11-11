@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { ArrowRight, Upload } from "lucide-react";
 import { useState } from "react";
 
 type DraftSummary = {
@@ -14,6 +14,13 @@ type DraftSummary = {
   job: { progress: number; status: string } | null;
 };
 
+const draftLabels: Record<string, string> = {
+  PENDING: "等待解析",
+  READY: "待审核",
+  FAILED: "解析失败",
+  PUBLISHED: "已发布",
+};
+
 export function PaperUpload({
   courses,
   drafts,
@@ -21,14 +28,13 @@ export function PaperUpload({
   courses: Array<{ id: string; name: string; term: string }>;
   drafts: DraftSummary[];
 }) {
-  const router = useRouter();
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [confirmedBlank, setConfirmedBlank] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function upload() {
-    if (!courseId || !file) return;
+    if (busy || !courseId || !file || !confirmedBlank) return;
     setBusy(true);
     setError("");
     try {
@@ -43,8 +49,7 @@ export function PaperUpload({
       const body = await response.json();
       if (!response.ok || !body.success)
         throw new Error(body.error ?? "上传失败");
-      router.push(`/teacher/exams/drafts/${body.data.id}`);
-      router.refresh();
+      window.location.replace("/teacher/exams#exam-paper-drafts");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "上传失败");
     } finally {
@@ -52,16 +57,33 @@ export function PaperUpload({
     }
   }
   return (
-    <div className="space-y-6">
-      <section className="space-y-4 rounded-xl border bg-white p-5">
-        <h2 className="font-semibold">上传并生成考试草稿</h2>
-        <label className="block text-sm">
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+      <form
+        aria-labelledby="exam-upload-title"
+        aria-busy={busy}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void upload();
+        }}
+        className="space-y-4 rounded-2xl border border-sky-100 bg-white p-4 sm:p-5"
+      >
+        <div>
+          <h2 id="exam-upload-title" className="font-semibold text-slate-950">
+            生成试卷草稿
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            上传后可在考试管理查看解析进度，核对题目后再发布。
+          </p>
+        </div>
+        <label className="grid min-w-0 gap-1.5 text-sm font-medium">
           课程
           <select
-            className="mt-1 block w-full rounded border p-2"
+            className="h-10 min-w-0 rounded-lg border bg-white px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
             value={courseId}
+            disabled={busy || courses.length === 0}
             onChange={(event) => setCourseId(event.target.value)}
           >
+            {courses.length === 0 && <option value="">暂无可选课程</option>}
             {courses.map((course) => (
               <option key={course.id} value={course.id}>
                 {course.name} · {course.term}
@@ -69,24 +91,25 @@ export function PaperUpload({
             ))}
           </select>
         </label>
-        <label className="block text-sm">
+        <label className="grid min-w-0 gap-1.5 text-sm font-medium">
           试卷文件
           <input
             accept=".doc,.docx,.pdf,.txt,.json"
-            className="mt-1 block w-full rounded border p-2"
+            aria-describedby="exam-upload-formats"
+            className="min-h-10 w-full min-w-0 rounded-lg border text-sm text-slate-700 file:me-3 file:min-h-10 file:border-0 file:bg-sky-50 file:px-3 file:font-medium file:text-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+            disabled={busy}
             type="file"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           />
         </label>
-        <p className="text-sm text-slate-600">
-          支持文本型和扫描版 PDF、DOCX 图题，以及 DOC、TXT、JSON 文字题。旧 DOC
-          图题请转为 DOCX 或 PDF。AI
-          解析后需教师逐题核对；发布时才进入共享题库。
+        <p id="exam-upload-formats" className="text-sm text-slate-600">
+          支持 PDF、DOCX、DOC、TXT 和 JSON。含图题的旧 DOC 请转为 DOCX 或 PDF。
         </p>
-        <label className="flex items-start gap-2 text-sm">
+        <label className="flex items-start gap-2.5 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">
           <input
-            className="mt-1"
+            className="mt-1.5 size-4 shrink-0 accent-sky-700"
             type="checkbox"
+            disabled={busy}
             checked={confirmedBlank}
             onChange={(event) => setConfirmedBlank(event.target.checked)}
           />
@@ -98,38 +121,51 @@ export function PaperUpload({
             {error}
           </p>
         )}
-        <button
-          className="rounded bg-sky-700 px-4 py-2 text-white disabled:opacity-50"
-          disabled={busy || !file || !courseId || !confirmedBlank}
-          onClick={() => void upload()}
-        >
-          {busy ? "正在上传…" : "上传并开始 AI 解析"}
-        </button>
-      </section>
-      <section className="space-y-3">
-        <h2 className="font-semibold">继续审核草稿</h2>
+        <div className="flex justify-end border-t pt-4">
+          <button
+            type="submit"
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
+            disabled={busy || !file || !courseId || !confirmedBlank}
+          >
+            <Upload aria-hidden="true" className="size-4" />
+            {busy ? "正在上传…" : "上传并开始解析"}
+          </button>
+        </div>
+      </form>
+      <section className="space-y-3 rounded-2xl border border-sky-100 bg-white p-4 sm:p-5">
+        <h2 className="font-semibold text-slate-950">试卷草稿</h2>
         {drafts.length ? (
-          <ul className="space-y-2">
+          <ul className="divide-y">
             {drafts.map((draft) => (
-              <li className="rounded-xl border bg-white p-4" key={draft.id}>
+              <li key={draft.id}>
                 <Link
-                  className="font-medium text-sky-700"
+                  className="flex min-w-0 items-center justify-between gap-3 rounded-lg px-2 py-3 text-sky-800 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
                   href={`/teacher/exams/drafts/${draft.id}`}
                 >
-                  {draft.title || draft.sourceFileName}
+                  <div className="min-w-0">
+                    <p className="font-medium [overflow-wrap:anywhere]">
+                      {draft.title || draft.sourceFileName}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {draft.status === "PENDING" &&
+                      draft.job?.status === "RUNNING"
+                        ? "解析中"
+                        : (draftLabels[draft.status] ?? "待处理")}{" "}
+                      · {draft._count.questions} 题 ·{" "}
+                      {new Date(draft.updatedAt).toLocaleString("zh-CN")}
+                      {draft.status === "PENDING" &&
+                      draft.job?.status === "RUNNING"
+                        ? ` · 解析 ${draft.job.progress}%`
+                        : ""}
+                    </p>
+                  </div>
+                  <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
                 </Link>
-                <p className="mt-1 text-sm text-slate-600">
-                  {draft.status} · {draft._count.questions} 题 ·{" "}
-                  {new Date(draft.updatedAt).toLocaleString("zh-CN")}
-                  {draft.status === "PENDING"
-                    ? ` · 解析 ${draft.job?.progress ?? 0}%`
-                    : ""}
-                </p>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="rounded-xl border p-5 text-sm text-slate-600">
+          <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
             暂无试卷草稿。
           </p>
         )}

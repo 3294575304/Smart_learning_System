@@ -52,6 +52,14 @@ export default async function StudentExamReportPage({
         <p className="text-sm text-slate-600">
           {report.classroomName} · 本报告只显示你的作答与可公布的班级汇总。
         </p>
+        {report.publishedSubmissionId && (
+          <Link
+            className="mt-3 inline-flex min-h-10 items-center rounded-lg border bg-white px-3 text-sm font-medium text-sky-800 hover:bg-sky-50"
+            href={`/student/submissions/${report.publishedSubmissionId}/result#exam-score-review`}
+          >
+            查看答卷与成绩复核
+          </Link>
+        )}
       </div>
       <section className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border bg-white p-5">
@@ -108,7 +116,10 @@ export default async function StudentExamReportPage({
           未覆盖正式知识点的题目：{report.unmappedQuestions} 道。
         </p>
       </section>
-      <section className="rounded-xl border bg-white p-5">
+      <section
+        id="exam-wrong-questions"
+        className="scroll-mt-24 rounded-xl border bg-white p-5"
+      >
         <h2 className="text-lg font-semibold">本次错题</h2>
         {report.wrong.length ? (
           <ul className="mt-3 space-y-2">

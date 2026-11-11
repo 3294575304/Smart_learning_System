@@ -17,6 +17,7 @@ function sample(): StudentClassAnalysis {
       teacher: { profile: null },
     },
     classroom: { id: "class", name: "示例班", status: "ACTIVE" },
+    assignmentProgress: { total: 0, submitted: 0, overdue: 0 },
     total: 0,
     submitted: 0,
     unsubmitted: 0,

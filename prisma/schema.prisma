@@ -27,6 +27,9 @@ enum AuditAction {
   EXAM_DRAFT_CREATED
   EXAM_DRAFT_UPDATED
   EXAM_DRAFT_REVIEWED
+  EXAM_PUBLICATION_POLICY_UPDATED
+  EXAM_SCORE_REVIEW_REQUESTED
+  EXAM_SCORE_REVIEW_RESOLVED
   ASSIGNMENT_ASSEMBLY_PREVIEWED
   ASSIGNMENT_CATEGORY_CORRECTED
   ASSIGNMENT_DRAFT_DELETED
@@ -596,6 +599,17 @@ enum AssignmentStatus {
 enum ExamType {
   MIDTERM
   FINAL
+}
+
+enum ExamSubmissionReason {
+  MANUAL
+  TIME_UP
+  SWITCH_LIMIT
+}
+
+enum ExamPublicationMode {
+  SCHEDULED
+  WHEN_READY
 }
 
 enum SubmissionStatus {
@@ -2839,6 +2853,7 @@ enum AssignmentCategory {
 }
 
 model Assignment {
+  examPublication ExamResultPublication?
   examSessionId       String?
   examSession         ExamSession?            @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
   category            AssignmentCategory      @default(PRACTICE)
@@ -2904,6 +2919,31 @@ model ExamSession {
 
   @@index([teacherId, startsAt])
   @@index([questionCategoryId, startsAt])
+}
+
+model ExamResultPublication {
+  assignmentId String              @id
+  mode         ExamPublicationMode
+  scheduledAt  DateTime?
+  completedAt  DateTime?
+  checkedAt    DateTime?
+  revision     String              @db.Uuid
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  assignment   Assignment          @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@index([completedAt, checkedAt])
+}
+
+model ExamScoreReview {
+  id           String     @id @default(cuid())
+  submissionId String     @unique
+  reason       String     @db.VarChar(1000)
+  response     String?    @db.VarChar(1000)
+  resolvedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
 }
 
 model ExamPaperDraft {
@@ -3287,6 +3327,7 @@ model AssignmentQuestionConceptSnapshot {
 }
 
 model Submission {
+  examScoreReview  ExamScoreReview?
   examSwitchEvents ExamSwitchEvent[]
   makeupGrants     AssignmentMakeupGrant[]
   attachments      SubmissionAttachment[]
@@ -3298,6 +3339,7 @@ model Submission {
   status           SubmissionStatus        @default(IN_PROGRESS)
   startedAt        DateTime                @default(now())
   submittedAt      DateTime?
+  examSubmissionReason ExamSubmissionReason?
   gradedAt         DateTime?
   publishedAt      DateTime?
   withdrawnAt      DateTime?

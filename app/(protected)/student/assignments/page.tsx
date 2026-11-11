@@ -1,3 +1,14 @@
+import {
+  StudentActivityFilters,
+  StudentActivityPagination,
+  activityCardClass,
+} from "@/components/dashboard/student-activity-list";
+import { activityHref } from "@/services/student-experience/activity-query";
+import {
+  readActivityPage,
+  readActivityPageQuery,
+} from "@/services/student-experience/activity-page";
+import { loadActivityAssignments } from "@/services/student-experience/activity-service";
 import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { studentScoreLabel } from "@/services/recommendations/scoring";
@@ -18,26 +29,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { PageIndex } from "@/components/dashboard/page-index";
+
 import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import {
-  studentAssignmentListQuerySchema,
-  type StudentAssignmentListQuery,
-} from "@/services/assignments/schemas";
-import { listStudentAssignmentPage } from "@/services/assignments/service";
+
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentCourseContext } from "@/services/courses/student-access";
-
-const FILTERS: Array<{
-  value: StudentAssignmentListQuery["status"];
-  label: string;
-}> = [
-  { value: "ALL", label: "全部" },
-  { value: "TODO", label: "待完成" },
-  { value: "SUBMITTED", label: "已提交" },
-  { value: "EXPIRED", label: "已截止" },
-];
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -52,25 +49,13 @@ const STATE_LABELS: Record<ReturnType<typeof assignmentState>, string> = {
   EXPIRED: "已截止",
 };
 
-function pageHref(
-  query: StudentAssignmentListQuery,
-  page: number,
-  courseId?: string,
-  classroomId?: string,
-): string {
-  const params = new URLSearchParams({
-    status: query.status,
-    page: String(page),
-  });
-  if (courseId) params.set("courseId", courseId);
-  if (classroomId) params.set("classroomId", classroomId);
-  return `/student/assignments?${params.toString()}`;
-}
-
 export default async function StudentAssignmentsPage({ searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
-  const scopeResult = studentTaskScopeSchema.safeParse(raw);
+  const scopeResult = studentTaskScopeSchema.safeParse({
+    ...raw,
+    classroomId: raw.classroomId === "" ? undefined : raw.classroomId,
+  });
   if (!scopeResult.success) notFound();
   const { courseId, classroomId } = scopeResult.data;
   let course: Awaited<ReturnType<typeof getStudentCourseContext>> | null = null;
@@ -85,13 +70,6 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
   const classrooms = await listStudentTaskClassrooms(student.id, course?.id);
   if (classroomId && !classrooms.some((item) => item.id === classroomId))
     notFound();
-  const parsed = studentAssignmentListQuerySchema.safeParse({
-    page: typeof raw.page === "string" ? raw.page : undefined,
-    status: typeof raw.status === "string" ? raw.status : undefined,
-  });
-  const query = parsed.success
-    ? parsed.data
-    : studentAssignmentListQuerySchema.parse({});
   if (raw.view === "records") {
     const parsedResults = studentResultsQuerySchema.safeParse({
       page:
@@ -150,17 +128,11 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
     );
   }
   const now = new Date();
-  const result = await listStudentAssignmentPage(
-    student.id,
-    query,
-    course?.id,
-    classroomId,
-    now,
+  const query = readActivityPageQuery("assignments", raw);
+  const result = await readActivityPage(() =>
+    loadActivityAssignments(student.id, query, now),
   );
-  const {
-    items: pageItems,
-    pagination: { page, totalPages, total },
-  } = result;
+  const { items: pageItems, pagination } = result;
 
   return (
     <section className="space-y-4">
@@ -187,54 +159,25 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
         title="我的作业"
       />
 
-      <StudentTaskScope
+      <StudentActivityFilters
+        view="assignments"
+        query={query}
         classrooms={classrooms}
-        courseId={course?.id}
-        selectedId={classroomId}
-        summary={`当前 ${total} 项作业 · 最新发布在前`}
+        total={pagination.total}
       />
       <StudentAssignmentTabs
         view="work"
         courseId={course?.id}
         classroomId={classroomId}
       />
-      <nav
-        aria-label="作业状态筛选"
-        className="flex gap-2 overflow-x-auto pb-1"
-      >
-        {FILTERS.map((filter) => (
-          <Link
-            aria-current={query.status === filter.value ? "page" : undefined}
-            className={`shrink-0 rounded-full border px-4 py-2 text-sm ${
-              query.status === filter.value
-                ? "border-sky-600 bg-sky-700 text-white"
-                : "bg-white hover:bg-gray-50"
-            }`}
-            href={pageHref(
-              { ...query, status: filter.value },
-              1,
-              course?.id,
-              classroomId,
-            )}
-            key={filter.value}
-          >
-            {filter.label}
-          </Link>
-        ))}
-      </nav>
-
       {pageItems.length === 0 ? (
         <EmptyState
+          compact
           action={
             query.status === "ALL" ? null : (
               <Link
                 className="text-sm font-medium underline"
-                href={pageHref(
-                  { ...query, status: "ALL" },
-                  1,
-                  course?.id,
-                  classroomId,
-                )}
+                href={activityHref("assignments", { courseId, classroomId })}
               >
                 查看全部作业
               </Link>
@@ -256,7 +199,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
             const state = assignmentState(assignment, now);
             return (
               <Link
-                className="min-w-0 rounded-xl border bg-white p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600"
+                className={`${activityCardClass} transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600`}
                 href={studentTaskHref(
                   state === "SUBMITTED" && assignment.latestSubmissionId
                     ? `/student/submissions/${assignment.latestSubmissionId}/result`
@@ -321,17 +264,11 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
         </div>
       )}
 
-      {totalPages > 1 ? (
-        <PageIndex
-          ariaLabel="作业分页"
-          hrefForPage={(targetPage) =>
-            pageHref(query, targetPage, course?.id, classroomId)
-          }
-          page={page}
-          summary={`第 ${page} / ${totalPages} 页`}
-          totalPages={totalPages}
-        />
-      ) : null}
+      <StudentActivityPagination
+        view="assignments"
+        query={query}
+        pagination={pagination}
+      />
     </section>
   );
 }

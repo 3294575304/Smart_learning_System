@@ -10,9 +10,17 @@ import { QuestionType, SubmissionStatus } from "@prisma/client";
 import Image from "next/image";
 import { Save } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
+import { EditorDialog } from "@/components/assignments/editor-dialog";
 import { QuestionText } from "@/components/assignments/question-text";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 import {
@@ -58,6 +66,9 @@ interface SavedAnswer {
 interface Props {
   autosaveDelayMs: number;
   scope?: StudentTaskScope;
+  exam?: boolean;
+  examLocked?: boolean;
+  banner?: ReactNode;
   submission: {
     id: string;
     assignmentTitle: string;
@@ -66,6 +77,7 @@ interface Props {
     status: SubmissionStatus;
     version: number;
     dueAt: Date | null;
+    lastSavedAt?: Date | null;
     questions: DraftQuestion[];
     answers: SavedAnswer[];
   };
@@ -165,6 +177,9 @@ export function AnswerSheet({
   autosaveDelayMs,
   submission,
   scope = {},
+  exam = false,
+  examLocked = false,
+  banner,
 }: Props) {
   const router = useRouter();
   const storageKey = `assignment-draft:${submission.id}`;
@@ -173,7 +188,12 @@ export function AnswerSheet({
   );
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState(
+    submission.lastSavedAt ?? null,
+  );
   const [attachmentPending, setAttachmentPending] = useState(false);
+  const [examConfirmation, setExamConfirmation] = useState(false);
+  const questionPanel = useRef<HTMLElement>(null);
   const [finalAction, setFinalAction] = useState<FinalAction | null>(null);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [pendingDraft, setPendingDraft] = useState<AssignmentLocalDraft | null>(
@@ -187,6 +207,13 @@ export function AnswerSheet({
   const versionRef = useRef(submission.version);
   const latestAnswersRef = useRef(answers);
   const activeSaveRef = useRef<Promise<boolean> | null>(null);
+  const firstUnsavedEditRef = useRef<number | null>(null);
+  const queuedAutosaveRef = useRef(false);
+  const examLockedRef = useRef(examLocked);
+  const saveConflictRef = useRef(false);
+  useEffect(() => {
+    examLockedRef.current = examLocked;
+  }, [examLocked]);
   const finalActionRef = useRef<FinalAction | null>(null);
   const leavingRef = useRef(false);
   const hydratedRef = useRef(false);
@@ -248,7 +275,12 @@ export function AnswerSheet({
   const persist = useCallback(
     async (finalizing = false): Promise<boolean> => {
       while (activeSaveRef.current) await activeSaveRef.current;
-      if (draftDecisionRef.current || (finalActionRef.current && !finalizing))
+      if (
+        examLockedRef.current ||
+        saveConflictRef.current ||
+        draftDecisionRef.current ||
+        (finalActionRef.current && !finalizing)
+      )
         return false;
       const snapshot = latestAnswersRef.current;
       const responseTimes = timingTracker.checkpoint();
@@ -260,6 +292,7 @@ export function AnswerSheet({
       }
       setSaveState("saving");
       setSaveError(null);
+      firstUnsavedEditRef.current = null;
       const task = (async () => {
         const response = await requestAssignmentApi<{
           version: number;
@@ -277,12 +310,15 @@ export function AnswerSheet({
           setSaveState("failed");
           setSaveError(response.error);
           setSaveConflict(response.status === 409);
+          saveConflictRef.current = exam && response.status === 409;
           return false;
         }
         versionRef.current = response.data.version;
+        setLastSavedAt(new Date(response.data.lastSavedAt));
         setSaveConflict(false);
         setSaveState(latestAnswersRef.current === snapshot ? "saved" : "idle");
         if (latestAnswersRef.current === snapshot) {
+          firstUnsavedEditRef.current = null;
           clearLocalDraft();
         }
         return true;
@@ -294,7 +330,7 @@ export function AnswerSheet({
         activeSaveRef.current = null;
       }
     },
-    [clearLocalDraft, persistLocalDraft, submission.id, timingTracker],
+    [clearLocalDraft, exam, persistLocalDraft, submission.id, timingTracker],
   );
 
   useEffect(() => {
@@ -360,31 +396,58 @@ export function AnswerSheet({
   useEffect(() => {
     if (
       !hydratedRef.current ||
+      examLocked ||
       finalActionRef.current ||
       draftDecisionRef.current
     )
       return;
     persistLocalDraft(latestAnswersRef.current, timingTracker.checkpoint());
+    if (saveConflictRef.current) return;
     setSaveState("idle");
-    const timer = window.setTimeout(() => void persist(), autosaveDelayMs);
+    const firstEdit = firstUnsavedEditRef.current;
+    const delay =
+      exam && firstEdit !== null
+        ? Math.max(
+            0,
+            Math.min(
+              autosaveDelayMs,
+              800,
+              3_000 - (performance.now() - firstEdit),
+            ),
+          )
+        : autosaveDelayMs;
+    const timer = window.setTimeout(() => {
+      if (exam && queuedAutosaveRef.current) return;
+      queuedAutosaveRef.current = exam;
+      void persist().finally(() => {
+        queuedAutosaveRef.current = false;
+      });
+    }, delay);
     return () => window.clearTimeout(timer);
-  }, [answers, autosaveDelayMs, persist, persistLocalDraft, timingTracker]);
+  }, [
+    answers,
+    autosaveDelayMs,
+    exam,
+    examLocked,
+    persist,
+    persistLocalDraft,
+    timingTracker,
+  ]);
 
   async function finish(action: FinalAction) {
     if (
       !hydratedRef.current ||
+      examLocked ||
       attachmentPending ||
       finalActionRef.current ||
       draftDecisionRef.current
     )
       return;
-    if (action === "submit") {
+    if (action === "submit" && !exam) {
       const blank = submission.questions.filter((question) =>
         isBlankAnswer(answers[question.id]),
       ).length;
-      const confirmation = blank
-        ? `还有 ${blank} 题未作答。确认提交作业？提交后本次答案将不能修改。`
-        : "确认提交作业？提交后本次答案将不能修改。";
+      const confirmation = `${blank ? `还有 ${blank} 题未作答。` : ""}确认提交作业？提交后本次答案将不能修改。`;
       if (!window.confirm(confirmation)) return;
     }
     finalActionRef.current = action;
@@ -394,7 +457,10 @@ export function AnswerSheet({
       if (action === "exit") {
         leavingRef.current = true;
         window.location.replace(
-          studentTaskHref("/student/assignments?status=TODO", scope),
+          studentTaskHref(
+            exam ? "/student/exams" : "/student/assignments?status=TODO",
+            scope,
+          ),
         );
         return;
       }
@@ -424,9 +490,14 @@ export function AnswerSheet({
   }
 
   function changeAnswer(questionId: string, answer: QuestionAnswerState) {
-    if (finalActionRef.current || draftDecisionRef.current) return;
+    if (examLocked || finalActionRef.current || draftDecisionRef.current)
+      return;
     const updated = { ...latestAnswersRef.current, [questionId]: answer };
     latestAnswersRef.current = updated;
+    if (exam) {
+      firstUnsavedEditRef.current ??= performance.now();
+      persistLocalDraft(updated, timingTracker.snapshot());
+    }
     setAnswers(updated);
   }
 
@@ -440,8 +511,15 @@ export function AnswerSheet({
   }
 
   const hasQuestionNavigation = submission.questions.length > 1;
+  const blankExamQuestions = exam
+    ? submission.questions.flatMap((question, index) =>
+        isBlankAnswer(answers[question.id])
+          ? [{ number: question.sortOrder, index }]
+          : [],
+      )
+    : [];
   const editingDisabled =
-    !ready || Boolean(pendingDraft) || Boolean(finalAction);
+    examLocked || !ready || Boolean(pendingDraft) || Boolean(finalAction);
 
   function resolveDraft(useLocal: boolean) {
     if (useLocal && pendingDraft) {
@@ -459,7 +537,7 @@ export function AnswerSheet({
 
   return (
     <section className="space-y-6">
-      {pendingDraft && (
+      {pendingDraft && !examLocked && (
         <section
           aria-labelledby="assignment-recovery-title"
           className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4"
@@ -500,10 +578,13 @@ export function AnswerSheet({
           {localDraftStored
             ? "答案已暂存在此浏览器，尚未保存到账号。"
             : "答案仍保留在本页，请保持页面打开。"}
-          连接恢复后会重试保存。
+          {examLocked
+            ? "收卷以截止前同步到账号的答案为准。"
+            : "连接恢复后会重试保存。"}
         </p>
       )}
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white/95 p-4 shadow-sm backdrop-blur">
+        {banner}
         <div className="min-w-0 flex-1 basis-56">
           <h1 className="font-semibold break-words">
             {submission.assignmentTitle}
@@ -529,28 +610,39 @@ export function AnswerSheet({
           <button
             className="min-h-10 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
             disabled={editingDisabled || attachmentPending}
-            onClick={() => void finish("submit")}
+            onClick={() => {
+              if (exam) setExamConfirmation(true);
+              else void finish("submit");
+            }}
             type="button"
           >
-            {finalAction === "submit" ? "提交中…" : "提交作业"}
+            {finalAction === "submit" ? "提交中…" : exam ? "交卷" : "提交作业"}
           </button>
         </div>
         <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-slate-600">
           <p role="status">
-            {!ready
-              ? "正在恢复作答，请稍候…"
-              : attachmentPending
-                ? "正在处理附件，请稍等。"
-                : finalAction === "exit"
-                  ? "正在保存草稿，保存成功后返回作业列表。"
-                  : saveState === "saving"
-                    ? "正在保存草稿…"
-                    : saveState === "saved"
-                      ? "已保存到账号，仍可继续作答。"
-                      : pendingDraft
-                        ? "选择恢复方式后可继续作答。"
-                        : "修改后会自动保存，也可以保存并退出。"}
+            {examLocked
+              ? "当前答卷只读。"
+              : !ready
+                ? "正在恢复作答，请稍候…"
+                : attachmentPending
+                  ? "正在处理附件，请稍等。"
+                  : finalAction === "exit"
+                    ? "正在保存草稿，保存成功后返回作业列表。"
+                    : saveState === "saving"
+                      ? "正在保存草稿…"
+                      : saveState === "saved"
+                        ? "已保存到账号，仍可继续作答。"
+                        : pendingDraft
+                          ? "选择恢复方式后可继续作答。"
+                          : "修改后会自动保存，也可以保存并退出。"}
           </p>
+          {exam && lastSavedAt && (
+            <p>
+              账号最近保存{" "}
+              {lastSavedAt.toLocaleTimeString("zh-CN", { hour12: false })}
+            </p>
+          )}
           {saveState === "failed" && (
             <>
               <p role="alert" className="text-red-700">
@@ -572,7 +664,9 @@ export function AnswerSheet({
               )}
               <button
                 className="min-h-8 rounded-md px-2 font-medium text-sky-800 underline focus-visible:outline-2 focus-visible:outline-sky-700"
-                disabled={Boolean(finalAction)}
+                disabled={
+                  examLocked || (exam && saveConflict) || Boolean(finalAction)
+                }
                 onClick={() => void persist()}
                 type="button"
               >
@@ -582,6 +676,71 @@ export function AnswerSheet({
           )}
         </div>
       </div>
+
+      {exam && (
+        <EditorDialog
+          open={examConfirmation && !examLocked}
+          title="确认交卷"
+          busy={Boolean(finalAction)}
+          onClose={() => setExamConfirmation(false)}
+        >
+          {blankExamQuestions.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-sm text-amber-900">
+                还有 {blankExamQuestions.length} 题未作答，可选择题号返回检查。
+              </p>
+              <div
+                className="mt-2 flex flex-wrap gap-2"
+                aria-label="未作答题目"
+              >
+                {blankExamQuestions.map(({ number, index }) => (
+                  <button
+                    key={index}
+                    type="button"
+                    disabled={Boolean(finalAction)}
+                    onClick={() => {
+                      setExamConfirmation(false);
+                      selectQuestion(index);
+                      window.requestAnimationFrame(() =>
+                        questionPanel.current?.focus(),
+                      );
+                    }}
+                    className="min-h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm text-amber-950 hover:bg-amber-100"
+                  >
+                    第 {number} 题
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-slate-700">所有题目均已作答。</p>
+          )}
+          <p className="mt-3 text-sm text-slate-700">交卷后答卷将锁定。</p>
+          {saveState === "failed" && saveError && (
+            <p role="alert" className="mt-2 text-sm text-rose-800">
+              {saveError}
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              disabled={Boolean(finalAction)}
+              onClick={() => setExamConfirmation(false)}
+              className="min-h-10 rounded-lg border px-4 text-sm disabled:opacity-50"
+            >
+              继续作答
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(finalAction)}
+              onClick={() => void finish("submit")}
+              className="min-h-10 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50"
+            >
+              {finalAction ? "正在交卷…" : "确认交卷"}
+            </button>
+          </div>
+        </EditorDialog>
+      )}
 
       <div className="space-y-6" inert={Boolean(finalAction)}>
         {hasQuestionNavigation && (
@@ -619,7 +778,9 @@ export function AnswerSheet({
                 question.title.trim() === submission.assignmentTitle.trim();
               return (
                 <article
-                  className="min-w-0 rounded-xl border bg-white p-4 sm:p-5"
+                  ref={exam ? questionPanel : undefined}
+                  tabIndex={exam ? -1 : undefined}
+                  className="min-w-0 scroll-mt-48 rounded-xl border bg-white p-4 sm:p-5"
                   key={question.id}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">

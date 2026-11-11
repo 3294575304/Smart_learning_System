@@ -1,15 +1,22 @@
+import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
+import {
+  StudentActivityFilters,
+  StudentActivityPagination,
+} from "@/components/dashboard/student-activity-list";
+import {
+  readActivityPage,
+  readActivityPageQuery,
+} from "@/services/student-experience/activity-page";
+import { loadActivityAttendance } from "@/services/student-experience/activity-service";
 import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
-import { StudentTaskScope } from "@/components/dashboard/student-task-scope";
-import { studentTaskScopeSchema } from "@/services/student-experience/task-scope";
+
 import { listStudentTaskClassrooms } from "@/services/courses/student-access";
 import { Role } from "@prisma/client";
-import { notFound } from "next/navigation";
 
 import { StudentAttendanceView } from "@/components/attendance/student-attendance-view";
 import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
-import { ResourceNotFoundError } from "@/services/auth/policy";
-import { getStudentAttendance } from "@/services/attendance/service";
+
 import { requirePageRole } from "@/services/auth/page-authorization";
 
 export default async function StudentAttendancePage({
@@ -19,26 +26,17 @@ export default async function StudentAttendancePage({
 }) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
-  const scopeResult = studentTaskScopeSchema.safeParse(raw);
-  if (!scopeResult.success) notFound();
-  const { courseId: requestedCourseId, classroomId } = scopeResult.data;
-  let data: Awaited<ReturnType<typeof getStudentAttendance>>;
-  try {
-    data = await getStudentAttendance(
-      student.id,
-      requestedCourseId,
-      classroomId,
-    );
-  } catch (error) {
-    if (error instanceof ResourceNotFoundError) notFound();
-    throw error;
-  }
-  const courseId = data.course?.id;
+  const query = readActivityPageQuery("attendance", raw);
+  const { courseId, classroomId } = query;
+  const data = await readActivityPage(() =>
+    loadActivityAttendance(student.id, query),
+  );
   const classrooms = (
     await listStudentTaskClassrooms(student.id, courseId)
   ).filter((item) => item.courseName !== null);
   return (
     <section className="space-y-4">
+      <SurveyAvailabilityRefresh at={data.nextChangeAt?.toISOString()} />
       <PageHeader
         actions={
           courseId ? (
@@ -61,19 +59,24 @@ export default async function StudentAttendancePage({
         }
         eyebrow={data.course?.name}
       />
-      <StudentTaskScope
+      <StudentActivityFilters
+        view="attendance"
+        query={query}
         classrooms={classrooms}
-        courseId={courseId}
-        selectedId={classroomId}
-        summary={`共 ${data.records.length} 条出勤记录`}
+        total={data.pagination.total}
       />
       <StudentAttendanceView
         key={`${courseId ?? "all"}:${classroomId ?? "all"}`}
-        initialRecords={data.records}
+        initialRecords={data.items.map((row) => row.record)}
         rate={data.summary.rate}
         denominator={data.summary.denominator}
         classroomId={classroomId}
         courseId={courseId}
+      />
+      <StudentActivityPagination
+        view="attendance"
+        query={query}
+        pagination={data.pagination}
       />
     </section>
   );

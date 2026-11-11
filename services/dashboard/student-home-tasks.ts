@@ -10,7 +10,7 @@ import { listStudentCourseSurveys } from "@/services/course-surveys/service";
 export async function getStudentHomeTasks(
   studentId: string,
   now = new Date(),
-  scope?: { courseId: string; classroomId: string },
+  scope?: { courseId?: string; classroomId?: string },
 ) {
   const [surveys, attendance] = await Promise.all([
     listStudentCourseSurveys(studentId, scope?.courseId, scope?.classroomId),

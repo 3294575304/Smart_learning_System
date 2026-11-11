@@ -78,7 +78,7 @@ export function ScoreChart({
 }) {
   if (!points.length)
     return (
-      <div className="my-4 flex min-h-44 flex-col items-center justify-center rounded-xl bg-slate-50/80 px-5 text-center">
+      <div className="mt-4 flex min-h-44 flex-1 flex-col items-center justify-center rounded-xl bg-slate-50/80 px-5 text-center">
         <ChartNoAxesCombined
           aria-hidden="true"
           className="size-7 text-slate-300"
@@ -95,7 +95,7 @@ export function ScoreChart({
   if (points.length === 1) {
     const only = points[0];
     return (
-      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-5">
+      <div className="mt-4 flex flex-1 flex-col rounded-xl border border-slate-200 bg-slate-50/60 p-5">
         <p className="text-xs font-medium text-slate-600">最近一次已公布成绩</p>
         <p className="mt-2 text-sm font-medium [overflow-wrap:anywhere] break-words text-slate-900">
           {recordLabel(only.kind, only.href)} · {only.title}
@@ -111,7 +111,7 @@ export function ScoreChart({
             </p>
           ) : null}
         </div>
-        <p className="mt-3 text-xs leading-5 text-slate-600">
+        <p className="mt-auto pt-3 text-xs leading-5 text-slate-600">
           只有 1 项已公布成绩，暂时不展示趋势；累积到 2 项后会自动显示变化曲线。
         </p>
         <Link
@@ -136,14 +136,15 @@ export function ScoreChart({
     .map((p, i) => `${i === 0 ? "M" : "L"}${xs[i]},${y(p.percentage)}`)
     .join(" ");
   return (
-    <figure className="mt-4 min-w-0">
+    <figure className="mt-4 flex min-w-0 flex-1 flex-col">
       <div
         role="region"
         aria-label="作业与考试成绩图，可横向滚动"
         tabIndex={0}
-        className="overflow-x-auto rounded-lg focus-visible:outline-2 focus-visible:outline-sky-700"
+        className="flex flex-1 items-center overflow-x-auto rounded-lg focus-visible:outline-2 focus-visible:outline-sky-700"
       >
         <div
+          className="w-full"
           style={{ minWidth: Math.max(340, left + points.length * 82 + right) }}
         >
           <svg
@@ -334,14 +335,14 @@ export function StudentAnalysisWorkspace({
           : "结合已公布作业反馈，先复习反复出错的内容。";
   const metrics = [
     {
-      label: "我的在线任务提交率",
+      label: "任务提交率",
       value: s.completion === null ? "—" : `${s.completion}%`,
-      detail: `已提交 ${s.submitted} / ${s.total} 项`,
+      detail: `已提交 ${s.submitted} / ${s.total} 项${s.total > s.assignmentProgress.total ? " · 含已结束考试" : ""}`,
       icon: CheckCheck,
       tint: "bg-sky-50 text-sky-600",
     },
     {
-      label: "我的作业与考试均分",
+      label: "作业与考试均分",
       value: s.average ?? "—",
       detail: s.gradedCount
         ? `来自 ${s.gradedCount} 项百分制成绩`
@@ -361,7 +362,7 @@ export function StudentAnalysisWorkspace({
       tint: "bg-amber-50 text-amber-600",
     },
     {
-      label: "我的出勤次数",
+      label: "出勤次数",
       value: s.attendance.total,
       detail: s.attendance.total
         ? `正常 ${s.attendance.present} 次 · 待确认 ${s.attendance.pending} 次`
@@ -371,18 +372,25 @@ export function StudentAnalysisWorkspace({
     },
   ];
   return (
-    <section className="space-y-5 pb-2" aria-label="个人学情分析看板">
-      <StudentPageHeader
-        title="学习分析"
-        description="查看我的作业、成绩和出勤记录。"
-        actions={
-          <StudentCourseReturnLink
-            courseId={s.course.id}
-            classroomId={s.classroom.id}
-          />
-        }
-      />
-      <header className={`${panel} relative overflow-hidden px-5 py-5 sm:px-6`}>
+    <section
+      className="grid gap-5 pb-2 xl:grid-cols-[minmax(0,1fr)_22.5rem]"
+      aria-label="个人学情分析看板"
+    >
+      <div className="min-w-0 xl:col-span-2 xl:row-start-1">
+        <StudentPageHeader
+          title="学习分析"
+          description="查看我的作业、成绩和出勤记录。"
+          actions={
+            <StudentCourseReturnLink
+              courseId={s.course.id}
+              classroomId={s.classroom.id}
+            />
+          }
+        />
+      </div>
+      <header
+        className={`${panel} relative overflow-hidden px-5 py-5 sm:px-6 xl:col-span-2 xl:row-start-2`}
+      >
         <div
           aria-hidden="true"
           className="absolute inset-y-0 left-0 w-1 bg-sky-500"
@@ -419,9 +427,9 @@ export function StudentAnalysisWorkspace({
           </div>
         </div>
       </header>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:col-span-2 xl:row-start-3 xl:grid-cols-4 xl:gap-5">
         {metrics.map((m) => (
-          <article key={m.label} className={`${panel} p-4 sm:p-5`}>
+          <article key={m.label} className={`${panel} p-4 sm:p-5 xl:p-6`}>
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-xs font-medium text-slate-500">{m.label}</h2>
               <span
@@ -437,8 +445,10 @@ export function StudentAnalysisWorkspace({
           </article>
         ))}
       </div>
-      <div className="grid items-start gap-5 lg:grid-cols-12">
-        <section className={`${panel} p-5 sm:p-6 lg:col-span-8`}>
+      <div className="grid items-start gap-5 lg:grid-cols-12 xl:contents">
+        <section
+          className={`${panel} flex flex-col p-5 sm:p-6 lg:col-span-8 xl:col-span-1 xl:col-start-1 xl:row-start-4`}
+        >
           <PanelTitle
             icon={<ChartNoAxesCombined className="size-4" />}
             title="我的作业与考试成绩"
@@ -452,13 +462,15 @@ export function StudentAnalysisWorkspace({
           />
           <ScoreChart points={s.scoreHistory} />
         </section>
-        <section className={`${panel} p-5 sm:p-6 lg:col-span-4`}>
+        <section
+          className={`${panel} flex flex-col p-5 sm:p-6 lg:col-span-4 xl:col-span-1 xl:col-start-2 xl:row-start-4`}
+        >
           <PanelTitle
             icon={<Layers3 className="size-4" />}
             title="我的在线任务进度"
             description="当前教学班的正式作业与已结束考试"
           />
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-5">
+          <div className="mt-6 flex flex-1 flex-wrap items-center justify-center gap-5">
             <div
               className="flex size-32 shrink-0 items-center justify-center rounded-full"
               role="img"
@@ -514,13 +526,15 @@ export function StudentAnalysisWorkspace({
               ))}
             </dl>
           </div>
-          <p className="mt-5 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+          <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
             提交情况与评分状态分别统计，待公布成绩不计为零分。
           </p>
         </section>
       </div>
-      <div className="grid items-start gap-5 lg:grid-cols-12">
-        <section className={`${panel} overflow-hidden lg:col-span-8`}>
+      <div className="grid items-start gap-5 lg:grid-cols-12 xl:contents">
+        <section
+          className={`${panel} flex flex-col overflow-hidden lg:col-span-8 xl:col-span-1 xl:col-start-1 xl:row-start-5`}
+        >
           <div className="p-5 sm:px-6">
             <PanelTitle
               icon={<ClipboardList className="size-4" />}
@@ -535,13 +549,13 @@ export function StudentAnalysisWorkspace({
             />
           </div>
           {s.recent.length ? (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col">
               <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-3 border-y border-slate-100 bg-slate-50/70 px-5 py-2 text-xs text-slate-500 sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:px-6">
                 <span>任务名称</span>
                 <span className="hidden sm:block">提交时间</span>
                 <span className="text-right">成绩 / 状态</span>
               </div>
-              <ul className="divide-y divide-slate-100">
+              <ul className="flex-1 divide-y divide-slate-100">
                 {s.recent.map((row) => (
                   <li key={row.id}>
                     <Link
@@ -589,104 +603,106 @@ export function StudentAnalysisWorkspace({
                   </li>
                 ))}
               </ul>
-            </>
+            </div>
           ) : (
-            <div className="px-6 pt-3 pb-8 text-center text-sm text-slate-500">
+            <div className="flex flex-1 items-center justify-center px-6 pb-8 text-center text-sm text-slate-500">
               我还没有提交作业
             </div>
           )}
         </section>
-        <aside className="space-y-5 lg:col-span-4">
-          <section className={`${panel} p-5 sm:p-6`}>
-            <PanelTitle
-              icon={<CalendarCheck2 className="size-4" />}
-              title="我的出勤记录"
-              action={
-                <Link
-                  href={`/student/attendance?${scope}`}
-                  className={panelAction}
-                >
-                  明细
-                  <ArrowUpRight className="size-3.5" aria-hidden="true" />
-                </Link>
-              }
-            />
-            {s.attendance.total ? (
-              <>
-                <div
-                  className="mt-5 flex h-2 overflow-hidden rounded-full bg-slate-100"
-                  role="img"
-                  aria-label={attendance
-                    .map((a) => `${a.label}${a.value}次`)
-                    .join("，")}
-                >
-                  {attendance
-                    .filter((a) => a.value)
-                    .map((a) => (
-                      <div
-                        key={a.label}
-                        className={a.color}
-                        style={{
-                          width: `${(a.value / s.attendance.total) * 100}%`,
-                        }}
-                      />
-                    ))}
-                </div>
-                <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-4">
-                  {attendance.map((a) => (
-                    <div key={a.label}>
-                      <dt className="flex items-center gap-1.5 text-xs text-slate-500">
-                        <span className={`size-1.5 rounded-full ${a.color}`} />
-                        {a.label}
-                      </dt>
-                      <dd className="mt-1 text-base font-semibold text-slate-700">
-                        {a.value}
-                        <span className="ml-1 text-xs font-normal text-slate-500">
-                          次
-                        </span>
-                      </dd>
-                    </div>
+        <section
+          className={`${panel} flex flex-col p-5 sm:p-6 lg:col-span-4 xl:col-span-1 xl:col-start-2 xl:row-start-5`}
+        >
+          <PanelTitle
+            icon={<CalendarCheck2 className="size-4" />}
+            title="我的出勤记录"
+            action={
+              <Link
+                href={`/student/attendance?${scope}`}
+                className={panelAction}
+              >
+                明细
+                <ArrowUpRight className="size-3.5" aria-hidden="true" />
+              </Link>
+            }
+          />
+          {s.attendance.total ? (
+            <>
+              <div
+                className="mt-5 flex h-2 overflow-hidden rounded-full bg-slate-100"
+                role="img"
+                aria-label={attendance
+                  .map((a) => `${a.label}${a.value}次`)
+                  .join("，")}
+              >
+                {attendance
+                  .filter((a) => a.value)
+                  .map((a) => (
+                    <div
+                      key={a.label}
+                      className={a.color}
+                      style={{
+                        width: `${(a.value / s.attendance.total) * 100}%`,
+                      }}
+                    />
                   ))}
-                </dl>
-              </>
-            ) : (
-              <p className="py-6 text-center text-sm text-slate-500">
-                我还没有出勤记录
-              </p>
-            )}
-          </section>
-          <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-white to-sky-50/70 p-5 sm:p-6">
-            <PanelTitle
-              icon={<Lightbulb className="size-4" />}
-              title="接下来可以做"
-            />
-            <div className="mt-4 space-y-4">
-              {tips.map((tip) => (
-                <div key={tip.title}>
-                  <h3 className="text-sm font-semibold text-slate-700">
-                    {tip.title}
-                  </h3>
-                  <p className="mt-1.5 text-xs leading-6 text-slate-500">
-                    {tip.text}
-                  </p>
-                  <Link
-                    href={tip.href}
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-sky-700"
-                  >
-                    {tip.label}
-                    <ArrowRight className="size-3" aria-hidden="true" />
-                  </Link>
-                </div>
-              ))}
-              <p className="border-t border-sky-100 pt-3 text-xs leading-6 text-slate-500">
-                {scoreTip}
-              </p>
-            </div>
-          </section>
-        </aside>
+              </div>
+              <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-4">
+                {attendance.map((a) => (
+                  <div key={a.label}>
+                    <dt className="flex items-center gap-1.5 text-xs text-slate-500">
+                      <span className={`size-1.5 rounded-full ${a.color}`} />
+                      {a.label}
+                    </dt>
+                    <dd className="mt-1 text-base font-semibold text-slate-700">
+                      {a.value}
+                      <span className="ml-1 text-xs font-normal text-slate-500">
+                        次
+                      </span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          ) : (
+            <p className="flex flex-1 items-center justify-center py-6 text-center text-sm text-slate-500">
+              我还没有出勤记录
+            </p>
+          )}
+        </section>
       </div>
+      <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-white to-sky-50/70 p-5 sm:p-6 xl:col-span-2 xl:row-start-6">
+        <PanelTitle
+          icon={<Lightbulb className="size-4" />}
+          title="接下来可以做"
+        />
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] xl:gap-7">
+          <div className="space-y-4">
+            {tips.map((tip) => (
+              <div key={tip.title}>
+                <h3 className="text-sm font-semibold text-slate-700">
+                  {tip.title}
+                </h3>
+                <p className="mt-1.5 text-xs leading-6 text-slate-500">
+                  {tip.text}
+                </p>
+                <Link
+                  href={tip.href}
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-sky-700"
+                >
+                  {tip.label}
+                  <ArrowRight className="size-3" aria-hidden="true" />
+                </Link>
+              </div>
+            ))}
+          </div>
+          <p className="border-t border-sky-100 pt-3 text-xs leading-6 text-slate-500 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-7">
+            {scoreTip}
+          </p>
+        </div>
+      </section>
       <section
-        className={`${panel} flex flex-wrap items-center justify-between gap-4 p-5`}
+        className={`${panel} flex flex-wrap items-center justify-between gap-4 p-5 xl:col-span-2 xl:row-start-7`}
       >
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
@@ -707,7 +723,7 @@ export function StudentAnalysisWorkspace({
           <ArrowRight className="size-3.5" aria-hidden="true" />
         </Link>
       </section>
-      <footer className="flex flex-wrap items-start justify-between gap-2 px-1 text-[11px] leading-5 text-slate-500">
+      <footer className="flex flex-wrap items-start justify-between gap-2 px-1 text-[11px] leading-5 text-slate-500 xl:col-span-2 xl:row-start-8">
         <p className="inline-flex max-w-3xl items-start gap-1.5">
           <Info className="mt-1 size-3 shrink-0" aria-hidden="true" />
           均分取当前教学班已公布的作业与考试百分制成绩；同步到已发布台账的考试只计一次。仅台账录入的考试不计入提交率，自主练习和未评分项不计入均分。

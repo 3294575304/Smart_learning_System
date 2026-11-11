@@ -16,13 +16,13 @@ test("课程学习中心提供当前课程的作业、签到和问卷入口", as
 
 test("任务中心按待完成作业、开放签到和待填问卷汇总", async () => {
   const page = await readFile("app/(protected)/student/tasks/page.tsx", "utf8");
-  assert.match(page, /getStudentTaskOverview\(student\.id\)/u);
+  assert.match(page, /loadActivityTasks\(student\.id, query\)/u);
   assert.match(page, /overview\.counts\[kind\]/u);
-  assert.match(page, /<StudentTaskList\s+items=\{overview\.items\}/u);
+  assert.match(page, /<StudentTaskList\s+items=\{pending\}/u);
   assert.match(page, /暂无待办/u);
-  assert.match(page, /\/student\/assignments\?status=ALL/u);
-  assert.match(page, /\/student\/attendance/u);
-  assert.match(page, /\/student\/surveys/u);
+  assert.match(page, /view: "assignments"/u);
+  assert.match(page, /view: "attendance"/u);
+  assert.match(page, /view: "surveys"/u);
 });
 
 test("课程筛选进入服务层并先校验学生课程归属", async () => {

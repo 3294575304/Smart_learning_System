@@ -1,5 +1,13 @@
 import { getStudentExamTasks } from "@/services/dashboard/student-exam-tasks";
+import { getStudentClassAnalytics } from "@/services/dashboard/student-class-analytics";
+import { getStudentExamClassAverage } from "@/services/exams/student-score-context";
 import { getStudentTaskOverview } from "@/services/dashboard/student-task-service";
+import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
+import {
+  correctTeacherGradeEntry,
+  createTeacherCourseGradebook,
+  publishTeacherGradebook,
+} from "@/services/gradebook/service";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createCanvas } from "@napi-rs/canvas";
@@ -7,7 +15,12 @@ import { Prisma, Role } from "@prisma/client";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
-import { startOrResumeAttempt } from "@/services/assignments/service";
+import {
+  getStudentSubmissionResult,
+  saveStudentAnswers,
+  startOrResumeAttempt,
+  submitStudentAssignment,
+} from "@/services/assignments/service";
 import { claimBackgroundJobById } from "@/services/background-jobs/repository";
 import { createBackgroundJob } from "@/services/background-jobs/repository";
 import {
@@ -26,11 +39,16 @@ import { executeClaimedExamPaperJob } from "@/services/exams/paper-worker";
 import { EXAM_PAPER_JOB_TYPE } from "@/services/exams/paper-ai";
 import { readAssignmentQuestionImage } from "@/services/exams/paper-images";
 import { getTeacherExamDetails } from "@/services/exams/analysis";
+import {
+  publishDueExamResults,
+  setExamResultPublication,
+} from "@/services/exams/result-management";
 import { getStudentExamReport } from "@/services/exams/student-report";
 import { paperDraftQuestionSchema } from "@/services/exams/paper-schemas";
 import {
   cancelExamSession,
   createExamSession,
+  getStudentExamAttemptStatus,
   listEligibleExamQuestions,
   listTeacherExams,
   recordExamSwitch,
@@ -103,6 +121,92 @@ async function main() {
       joinCode: randomUUID(),
     },
   });
+  const examScope = { courseId: course.id, classroomId: first.id };
+  const audit = { ipAddress: null, userAgent: null };
+  const draftScheme = await prisma.assessmentSchemeDraft.create({
+    data: {
+      courseId: course.id,
+      createdById: teacher.id,
+      structureJson: {},
+      sourceFingerprint: "a".repeat(64),
+    },
+  });
+  const review = await prisma.assessmentSchemeReviewRevision.create({
+    data: {
+      draftId: draftScheme.id,
+      courseId: course.id,
+      editedById: teacher.id,
+      revisionNumber: 1,
+      structureJson: {},
+      sourceFingerprint: "a".repeat(64),
+    },
+  });
+  const scheme = await prisma.publishedAssessmentScheme.create({
+    data: {
+      courseId: course.id,
+      reviewRevisionId: review.id,
+      sourcePublishedSyllabusStructureId: publishedSyllabus.id,
+      publishedById: teacher.id,
+      versionNumber: 1,
+      structureJson: {},
+      sourceFingerprint: "a".repeat(64),
+      calculationRuleVersion: "test",
+      components: {
+        create: {
+          code: "FINAL",
+          name: "期末成绩录入",
+          type: "FINAL_EXAM",
+          fullScore: 100,
+          weight: 100,
+          sourceType: "MANUAL",
+          sortOrder: 1,
+          sourceJson: [],
+          rubricJson: [],
+        },
+      },
+    },
+  });
+  await prisma.course.update({
+    where: { id: course.id },
+    data: { currentPublishedAssessmentSchemeId: scheme.id },
+  });
+  const book = await createTeacherCourseGradebook(
+    teacher.id,
+    course.id,
+    first.id,
+    audit,
+  );
+  const gradeItem = await prisma.gradeItem.findFirstOrThrow({
+    where: { gradebookId: book.id },
+  });
+  await correctTeacherGradeEntry(
+    teacher.id,
+    book.id,
+    gradeItem.id,
+    student.id,
+    {
+      status: "SCORED",
+      score: 46.2,
+      reason: "录入线下考核成绩",
+      idempotencyKey: randomUUID(),
+      expectedRevisionNumber: 0,
+    },
+    audit,
+  );
+  await publishTeacherGradebook(teacher.id, book.id, audit);
+  const ledger = await listPublishedExamScores([first.id], student.id);
+  assert.equal(ledger.length, 1);
+  assert.equal(ledger[0].score, 46.2);
+  assert.equal(ledger[0].assignmentId, null);
+  const noOnlineExam = await getStudentClassAnalytics(student.id, examScope);
+  assert.deepEqual(noOnlineExam.exams, {
+    recent: null,
+    missed: 0,
+    scoredCount: 0,
+    average: null,
+  });
+  assert.equal(noOnlineExam.classes[0].total, 0);
+  assert.equal(noOnlineExam.classes[0].average, 46.2);
   const content = `不可重复题干 ${randomUUID()}`;
   const question = await prisma.question.create({
     data: {
@@ -155,9 +259,10 @@ async function main() {
     student.id,
     new Date(exam.startsAt.getTime() - 1),
   );
-  assert.equal(beforeExam.items.length, 0);
-  assert.equal(beforeExam.scheduled.length, 1);
-  assert.ok(beforeExam.scheduled[0].href.startsWith("/student/exams#exam-"));
+  assert.equal(beforeExam.filter((item) => item.status === "TODO").length, 0);
+  assert.equal(beforeExam.length, 1);
+  assert.equal(beforeExam[0].status, "UPCOMING");
+  assert.match(beforeExam[0].href, /^\/student\/exams\?.*focus=.+#exam-/u);
   const duringExam = await getStudentTaskOverview(student.id, exam.startsAt, {
     courseId: course.id,
     classroomId: first.id,
@@ -166,18 +271,21 @@ async function main() {
   assert.equal(duringExam.counts.assignment, 0);
   assert.equal(duringExam.items[0].kind, "exam");
   assert.ok(!JSON.stringify(duringExam).includes(content));
-  assert.equal(
-    (await getStudentExamTasks(other.id, exam.startsAt)).items.length,
-    0,
-  );
-  assert.equal(
-    (await getStudentExamTasks(student.id, exam.endsAt)).items.length,
-    0,
-  );
+  assert.equal((await getStudentExamTasks(other.id, exam.startsAt)).length, 0);
+  assert.equal((await getStudentExamTasks(student.id, exam.endsAt)).length, 0);
   const ownAssignment = exam.assignments.find(
     (a) => a.classroomId === first.id,
   );
   assert.ok(ownAssignment);
+  const missed = await getStudentClassAnalytics(
+    student.id,
+    examScope,
+    exam.endsAt,
+  );
+  assert.equal(missed.exams.missed, 1);
+  assert.equal(missed.exams.recent?.resultState, "MISSED");
+  assert.equal(missed.classes[0].total, 1);
+  assert.equal(missed.classes[0].assignmentProgress.total, 0);
   const submittedFixture = await prisma.submission.create({
     data: {
       assignmentId: ownAssignment.id,
@@ -187,8 +295,43 @@ async function main() {
     },
   });
   assert.equal(
-    (await getStudentExamTasks(student.id, exam.startsAt)).items.length,
+    (await getStudentExamTasks(student.id, exam.startsAt)).length,
     0,
+  );
+  await prisma.submission.update({
+    where: { id: submittedFixture.id },
+    data: { status: "GRADED", score: 0, maxScore: 100, percentage: 0 },
+  });
+  const awaiting = await getStudentClassAnalytics(
+    student.id,
+    examScope,
+    exam.endsAt,
+  );
+  assert.equal(awaiting.exams.recent?.resultState, "AWAITING");
+  assert.equal(awaiting.exams.average, null);
+  await prisma.submission.update({
+    where: { id: submittedFixture.id },
+    data: { status: "PUBLISHED", publishedAt: exam.endsAt },
+  });
+  const publishedHome = await getStudentClassAnalytics(
+    student.id,
+    examScope,
+    exam.endsAt,
+  );
+  assert.equal(publishedHome.exams.average, 0);
+  assert.equal(publishedHome.exams.scoredCount, 1);
+  assert.equal(
+    publishedHome.exams.recent?.publishedSubmissionId,
+    submittedFixture.id,
+  );
+  assert.equal(
+    await getStudentExamClassAverage(
+      student.id,
+      ownAssignment.id,
+      first.id,
+      exam.endsAt,
+    ),
+    null,
   );
   await prisma.submission.delete({ where: { id: submittedFixture.id } });
   await prisma.examSession.update({
@@ -196,7 +339,7 @@ async function main() {
     data: { cancelledAt: new Date() },
   });
   assert.equal(
-    (await getStudentExamTasks(student.id, exam.startsAt)).items.length,
+    (await getStudentExamTasks(student.id, exam.startsAt)).length,
     0,
   );
   await prisma.examSession.update({
@@ -208,7 +351,7 @@ async function main() {
     data: { status: "COMPLETED" },
   });
   assert.equal(
-    (await getStudentExamTasks(student.id, exam.startsAt)).items.length,
+    (await getStudentExamTasks(student.id, exam.startsAt)).length,
     0,
   );
   await prisma.classroom.update({
@@ -227,6 +370,39 @@ async function main() {
   assert.equal(scopedExams[0].id, exam.id);
   assert.equal(scopedExams[0].assignments.length, 1);
   assert.equal(scopedExams[0].assignments[0].classroom.name, first.name);
+  const statusIds = async (
+    status: "UPCOMING" | "IN_PROGRESS" | "ENDED",
+    now: Date,
+  ) =>
+    (
+      await listTeacherExams(teacher.id, { courseId: course.id, status }, now)
+    ).map(({ id }) => id);
+  assert.deepEqual(
+    await statusIds("UPCOMING", new Date(exam.startsAt.getTime() - 1)),
+    [exam.id],
+  );
+  assert.deepEqual(await statusIds("IN_PROGRESS", exam.startsAt), [exam.id]);
+  assert.deepEqual(await statusIds("ENDED", exam.endsAt), [exam.id]);
+  assert.deepEqual(
+    (
+      await listTeacherExams(teacher.id, {
+        courseId: course.id,
+        keyword: "期中",
+        type: "MIDTERM",
+      })
+    ).map(({ id }) => id),
+    [exam.id],
+  );
+  assert.equal(
+    (
+      await listTeacherExams(teacher.id, {
+        courseId: course.id,
+        keyword: "期中",
+        type: "FINAL",
+      })
+    ).length,
+    0,
+  );
   await assert.rejects(listTeacherExams(other.id, { courseId: course.id }));
   await assert.rejects(listTeacherExams(other.id, { classroomId: first.id }));
   await assert.rejects(listTeacherExams(teacher.id, { courseId: "invalid" }));
@@ -272,6 +448,15 @@ async function main() {
     }),
   );
   await cancelExamSession(teacher.id, exam.id);
+  assert.deepEqual(
+    (
+      await listTeacherExams(teacher.id, {
+        courseId: course.id,
+        status: "CANCELLED",
+      })
+    ).map(({ id }) => id),
+    [exam.id],
+  );
   assert.equal(
     (await getTeacherExamDetails(teacher.id, exam.id)).analysis,
     null,
@@ -288,14 +473,29 @@ async function main() {
   const live = await createExamSession(teacher.id, {
     ...input,
     requestId: randomUUID(),
-    classroomIds: [first.id],
+    classroomIds: [first.id, second.id],
     startsAt: new Date(Date.now() - 60_000),
     endsAt: new Date(Date.now() + 3_600_000),
   });
+  const firstLive = live.assignments.find(
+    (item) => item.classroomId === first.id,
+  );
+  const secondLive = live.assignments.find(
+    (item) => item.classroomId === second.id,
+  );
+  assert.ok(firstLive && secondLive);
   const attempt = await startOrResumeAttempt(
     student.id,
-    live.assignments[0].id,
+    firstLive.id,
     randomUUID(),
+  );
+  assert.equal(
+    (await getStudentExamAttemptStatus(student.id, attempt.id)).state,
+    "WORKING",
+  );
+  await assert.rejects(getStudentExamAttemptStatus(other.id, attempt.id));
+  await assert.rejects(
+    submitStudentAssignment(student.id, attempt.id, "EXAM_AUTO"),
   );
   const switched = await recordExamSwitch(student.id, attempt.id, randomUUID());
   assert.equal(switched.shouldSubmit, true);
@@ -303,6 +503,88 @@ async function main() {
     where: { id: attempt.id },
   });
   assert.notEqual(saved.status, "IN_PROGRESS");
+  assert.equal(saved.examSubmissionReason, "SWITCH_LIMIT");
+  const collected = await getStudentExamAttemptStatus(student.id, attempt.id);
+  assert.equal(collected.state, "COLLECTED");
+  assert.equal(collected.switches, 1);
+  assert.equal(
+    (await submitStudentAssignment(student.id, attempt.id, "EXAM_AUTO"))
+      .examReceipt?.reason,
+    "SWITCH_LIMIT",
+  );
+  const [manualStudent, timedStudent] = await Promise.all(
+    ["student2@example.com", "student3@example.com"].map((email) =>
+      prisma.user.findUniqueOrThrow({ where: { email } }),
+    ),
+  );
+  await prisma.classMembership.createMany({
+    data: [manualStudent, timedStudent].map(({ id }) => ({
+      classroomId: second.id,
+      studentId: id,
+    })),
+  });
+  const manual = await startOrResumeAttempt(
+    manualStudent.id,
+    secondLive.id,
+    randomUUID(),
+  );
+  const timed = await startOrResumeAttempt(
+    timedStudent.id,
+    secondLive.id,
+    randomUUID(),
+  );
+  const liveQuestion = await prisma.assignmentQuestion.findFirstOrThrow({
+    where: { assignmentId: secondLive.id },
+  });
+  const savedAnswers = await saveStudentAnswers(manualStudent.id, manual.id, {
+    version: 0,
+    answers: [
+      { assignmentQuestionId: liveQuestion.id, kind: "TEXT", value: "答案" },
+    ],
+  });
+  const manualResult = await submitStudentAssignment(
+    manualStudent.id,
+    manual.id,
+  );
+  assert.deepEqual(manualResult.examReceipt, {
+    reason: "MANUAL",
+    lastSavedAt: savedAnswers.lastSavedAt,
+    answeredCount: 1,
+  });
+  const cutoff = new Date(Date.now() - 1000);
+  await prisma.examSession.update({
+    where: { id: live.id },
+    data: { endsAt: cutoff },
+  });
+  await prisma.assignment.update({
+    where: { id: secondLive.id },
+    data: { dueAt: cutoff },
+  });
+  await assert.rejects(
+    saveStudentAnswers(timedStudent.id, timed.id, { version: 0, answers: [] }),
+  );
+  const timedResult = await submitStudentAssignment(
+    timedStudent.id,
+    timed.id,
+    "EXAM_AUTO",
+  );
+  assert.equal(timedResult.examReceipt?.reason, "TIME_UP");
+  assert.equal(timedResult.examReceipt?.answeredCount, 0);
+  assert.equal(
+    (await getStudentSubmissionResult(timedStudent.id, timed.id)).isPublished,
+    false,
+  );
+  await setExamResultPublication(
+    teacher.id,
+    secondLive.id,
+    { mode: "WHEN_READY" },
+    { ipAddress: null, userAgent: "exam-integration" },
+  );
+  assert.equal(await publishDueExamResults(), 2);
+  assert.equal(await publishDueExamResults(), 0);
+  console.log(
+    "Exam receipt reasons, accepted answer count and status ownership passed",
+  );
   const paperText = `题号：1\n填空题 独立试卷题干 ${randomUUID()} ____\n答案：exam-answer\n解析：用于考试草稿集成测试。`;
   const context = { ipAddress: null, userAgent: "exam-integration" };
   async function parseDraft() {

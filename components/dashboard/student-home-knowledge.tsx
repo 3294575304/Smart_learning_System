@@ -58,6 +58,7 @@ export async function StudentHomeKnowledge({
         profileHref={`/student/courses/${courseId}/profile?${new URLSearchParams({ classroomId })}`}
         generatedAt={knowledge.generatedAt.toISOString()}
         profileRevision={knowledge.profileRevision}
+        dashboard
       />
       <p className="mt-3 text-xs leading-5 text-slate-600">
         当前教学班已授 {knowledge.taughtCount}/{knowledge.totalCount}{" "}

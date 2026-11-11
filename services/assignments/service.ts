@@ -16,6 +16,7 @@ import {
 import { assertClassroomWorkAllowed } from "./classroom-work";
 import { assignmentSectionWhere } from "@/services/assignments/presentation";
 import "server-only";
+import type { ExamSubmissionReason } from "@prisma/client";
 import { assignmentStatusWhere } from "./presentation";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -1292,6 +1293,7 @@ export async function getStudentSubmissionDraft(
     status: submission.status,
     version: submission.saveVersion,
     lastSavedAt: submission.lastSavedAt,
+    examSessionId: submission.assignment.examSessionId,
     dueAt: work.dueAt,
     canWrite: work.canWrite,
     writeBlockedReason: work.reason,
@@ -1581,6 +1583,8 @@ export async function submitStudentAssignment(
       include: gradingSubmissionInclude,
     });
     if (!submission) throw new ResourceNotFoundError("作答记录不存在");
+    if (mode === "EXAM_AUTO" && !submission.assignment.examSessionId)
+      throw new ResourceNotFoundError("考试作答不存在");
     if (submission.status !== SubmissionStatus.IN_PROGRESS) return;
     const membership = submission.assignment.classroom.memberships.find(
       (item) => item.studentId === studentId,
@@ -1596,6 +1600,10 @@ export async function submitStudentAssignment(
           )
         : { grant: null };
     const now = new Date();
+    let examSubmissionReason: ExamSubmissionReason | null = submission
+      .assignment.examSessionId
+      ? "MANUAL"
+      : null;
     if (mode === "EXAM_AUTO") {
       const exam = await transaction.examSession.findFirst({
         where: {
@@ -1609,11 +1617,18 @@ export async function submitStudentAssignment(
       });
       if (now < exam.endsAt && switches <= exam.allowedSwitches)
         throw new AssignmentOperationError("尚未达到考试自动交卷条件", 409);
+      examSubmissionReason = now >= exam.endsAt ? "TIME_UP" : "SWITCH_LIMIT";
     } else {
       await assertClassroomWorkAllowed(
         transaction,
         submission.assignment.classroomId,
       );
+      if (
+        submission.assignment.examSessionId &&
+        submission.assignment.dueAt &&
+        new Date() >= submission.assignment.dueAt
+      )
+        throw new AssignmentOperationError("考试时间已到，等待自动收卷", 409);
     }
     const claimed = await transaction.submission.updateMany({
       where: {
@@ -1621,7 +1636,11 @@ export async function submitStudentAssignment(
         studentId,
         status: SubmissionStatus.IN_PROGRESS,
       },
-      data: { status: SubmissionStatus.SUBMITTED, submittedAt: now },
+      data: {
+        status: SubmissionStatus.SUBMITTED,
+        submittedAt: now,
+        examSubmissionReason,
+      },
     });
     if (claimed.count !== 1) return;
     if (work.grant) {
@@ -1767,6 +1786,7 @@ export async function getStudentSubmissionResult(
         select: {
           title: true,
           status: true,
+          examSessionId: true,
           classroom: {
             select: {
               memberships: {
@@ -1835,7 +1855,29 @@ export async function getStudentSubmissionResult(
     throw new AssignmentOperationError("作业尚未提交", 409);
   }
   const isPublished = submission.status === SubmissionStatus.PUBLISHED;
+  const answeredQuestions = new Set<string>();
+  if (submission.assignment.examSessionId) {
+    for (const answer of submission.answers) {
+      if (
+        answer.booleanAnswer !== null ||
+        answer.selectedOptions.length > 0 ||
+        answer.textAnswer?.trim()
+      ) {
+        answeredQuestions.add(answer.assignmentQuestionId);
+      }
+    }
+    for (const attachment of submission.attachments) {
+      answeredQuestions.add(attachment.assignmentQuestionId);
+    }
+  }
   return {
+    examReceipt: submission.assignment.examSessionId
+      ? {
+          reason: submission.examSubmissionReason,
+          lastSavedAt: submission.lastSavedAt,
+          answeredCount: answeredQuestions.size,
+        }
+      : null,
     id: submission.id,
     assignmentId: submission.assignmentId,
     assignmentTitle: submission.assignment.title,

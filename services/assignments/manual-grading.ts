@@ -810,6 +810,7 @@ export async function publishAssignmentResults(
   teacherId: string,
   assignmentId: string,
   auditContext: AuditRequestContext,
+  automaticExamRevision?: string,
 ): Promise<PublishAssignmentResultsResult> {
   const result = await runAssignmentSerializable<PublishTransactionResult>(
     async (transaction) => {
@@ -818,6 +819,59 @@ export async function publishAssignmentResults(
         assignmentId,
         teacherId,
       );
+      if (lifecycle.examSessionId) {
+        const exam = await transaction.examSession.findUnique({
+          where: { id: lifecycle.examSessionId },
+          select: {
+            endsAt: true,
+            cancelledAt: true,
+            teacher: { select: { status: true } },
+          },
+        });
+        const policy = await transaction.examResultPublication.findUnique({
+          where: { assignmentId },
+        });
+        const now = new Date();
+        if (!exam || exam.cancelledAt || exam.endsAt > now)
+          throw new AssignmentOperationError("考试结束后才能公布成绩", 409);
+        if (automaticExamRevision) {
+          if (
+            !policy ||
+            exam.teacher.status !== "ACTIVE" ||
+            policy.completedAt ||
+            policy.revision !== automaticExamRevision ||
+            (policy.scheduledAt && policy.scheduledAt > now)
+          )
+            throw new AssignmentOperationError(
+              "考试公布计划已变化或未到公布时间",
+              409,
+            );
+        } else if (policy && !policy.completedAt) {
+          throw new AssignmentOperationError(
+            "当前班级已启用自动公布，请先在考试监考页切换为手动公布",
+            409,
+          );
+        }
+        const collecting = await transaction.submission.findFirst({
+          where: {
+            assignmentId,
+            status: "IN_PROGRESS",
+            student: {
+              classMemberships: {
+                some: { classroomId: lifecycle.classroom.id, status: "ACTIVE" },
+              },
+            },
+          },
+          select: { id: true },
+        });
+        if (collecting)
+          throw new AssignmentOperationError(
+            "仍有考试答卷待收卷，请稍后再公布",
+            409,
+          );
+      } else if (automaticExamRevision) {
+        throw new ResourceNotFoundError("考试不存在");
+      }
       const capability = assignmentCapabilities({
         ...lifecycle,
         activeMakeupCount: await countUsableGrants(transaction, assignmentId),
@@ -939,12 +993,18 @@ export async function publishAssignmentResults(
           "成绩发布状态已发生变化，请刷新后重试",
         );
       }
+      if (automaticExamRevision) {
+        await transaction.examResultPublication.update({
+          where: { assignmentId, revision: automaticExamRevision },
+          data: { completedAt: now },
+        });
+      }
       await writeTeachingAuditLog(transaction, {
         actorId: teacherId,
         action: AuditAction.ASSIGNMENT_RESULTS_PUBLISHED,
         targetType: AuditTargetType.ASSIGNMENT,
         targetId: assignmentId,
-        summary: `正式发布作业“${assignment.title}”的 ${updated.count} 份成绩`,
+        summary: `正式公布${lifecycle.examSessionId ? "考试" : "作业"}“${assignment.title}”的 ${updated.count} 份成绩`,
         beforeData: {
           gradedCount: publishable.length,
           publishedCount: alreadyPublished.length,
@@ -999,6 +1059,8 @@ export async function getAssignmentPublicationState(
       status: true,
       publishedAt: true,
       dueAt: true,
+      examSession: { select: { endsAt: true, cancelledAt: true } },
+      examPublication: { select: { completedAt: true } },
       classroom: {
         select: {
           status: true,
@@ -1032,6 +1094,28 @@ export async function getAssignmentPublicationState(
   const members = new Set(
     assignment.classroom.memberships.map((item) => item.studentId),
   );
+  const exam = assignment.examSession;
+  const examWaiting = exam && !exam.cancelledAt && exam.endsAt > new Date();
+  const examCollecting =
+    exam &&
+    !examWaiting &&
+    !exam.cancelledAt &&
+    (await prisma.submission.count({
+      where: {
+        assignmentId,
+        status: "IN_PROGRESS",
+        studentId: { in: [...members] },
+      },
+    }));
+  const examBlock = exam?.cancelledAt
+    ? "已取消的考试不能公布成绩"
+    : examWaiting
+      ? "考试结束后才能公布成绩"
+      : examCollecting
+        ? "仍有考试答卷待收卷"
+        : assignment.examPublication && !assignment.examPublication.completedAt
+          ? "该班已启用自动公布，可在考试监考页调整"
+          : null;
   const latest = latestEffectiveSubmissions(
     assignment.submissions.filter((item) => members.has(item.studentId)),
   );
@@ -1050,8 +1134,9 @@ export async function getAssignmentPublicationState(
     ...assignment,
     activeMakeupCount: grantWindow.count,
   });
-  const deadlines =
-    assignment.classroom.status === "ACTIVE"
+  const deadlines = examWaiting
+    ? [exam.endsAt]
+    : assignment.classroom.status === "ACTIVE"
       ? [assignment.dueAt, grantWindow.nextAt].filter(
           (date): date is Date => date !== null && date > new Date(),
         )
@@ -1072,6 +1157,7 @@ export async function getAssignmentPublicationState(
       : null;
   const gradedCount = latest.filter((item) => item.status === "GRADED").length;
   const blockedReason =
+    examBlock ??
     capability.publicationBlockedReason ??
     (pendingCount
       ? `还有 ${pendingCount} 份最新提交未完成批改`
@@ -1088,6 +1174,7 @@ export async function getAssignmentPublicationState(
     gradedCount: latest.filter((item) => item.status === "GRADED").length,
     publishedCount: latest.filter((item) => item.status === "PUBLISHED").length,
     canPublish:
+      !examBlock &&
       capability.canPublishResults &&
       pendingCount === 0 &&
       latest.some((item) => item.status === "GRADED"),

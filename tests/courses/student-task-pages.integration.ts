@@ -43,8 +43,11 @@ async function main() {
   const otherTeacher = await prisma.user.create({
     data: { role: "TEACHER", passwordHash },
   });
+  const school = await prisma.school.create({
+    data: { key: "student-pages", name: "页面验收学校" },
+  });
   const admin = await prisma.user.create({
-    data: { role: "ADMIN", passwordHash },
+    data: { role: "ADMIN", passwordHash, schoolId: school.id },
   });
   const student = await prisma.user.create({
     data: {
@@ -338,6 +341,80 @@ async function main() {
         );
       }
     }
+
+    for (const view of [
+      "tasks",
+      "exams",
+      "assignments",
+      "attendance",
+      "surveys",
+    ]) {
+      const route = `/api/student/activity/${view}`;
+      check(
+        (await request(route, "")).status === 401,
+        "activity list requires authentication",
+      );
+      check(
+        (await request(route, sessions.teacher)).status === 403,
+        "activity list rejects teacher role",
+      );
+      check(
+        (await request(`${route}?status=TODO&status=ALL`)).status === 400,
+        "repeated filters are rejected",
+      );
+      check(
+        (
+          await request(
+            `${route}?courseId=${foreignCourse.id}&classroomId=${foreignRoom.id}`,
+          )
+        ).status === 404,
+        "foreign scope is rejected",
+      );
+      const response = await request(`${route}?${scope}&page=999`);
+      check(response.ok, "scoped activity list returns a success envelope");
+      const body = (await response.json()) as {
+        success: boolean;
+        data: {
+          items: Array<{
+            id: string;
+            title: string;
+            kind: string;
+            status: string;
+          }>;
+          filters: { status: string };
+          pagination: { page: number; totalPages: number; pageSize: number };
+        };
+      };
+      check(
+        body.success &&
+          body.data.filters.status === "ALL" &&
+          body.data.pagination.pageSize === 8 &&
+          body.data.pagination.page ===
+            Math.max(1, body.data.pagination.totalPages) &&
+          body.data.items.every(
+            (row) => row.id && row.title && row.kind && row.status,
+          ),
+        "activity envelope, default filters and page clamp match the contract",
+      );
+    }
+    const combined = await request(
+      `/api/student/activity/tasks?${scope}&kind=survey&status=UPCOMING`,
+    );
+    const combinedBody = (await combined.json()) as {
+      data: { items: Array<{ kind: string; status: string }> };
+    };
+    check(
+      combined.ok &&
+        combinedBody.data.items.length === 1 &&
+        combinedBody.data.items.every(
+          (row) => row.kind === "survey" && row.status === "UPCOMING",
+        ),
+      "task type, class and status are combined",
+    );
+    check(
+      (await request("/api/student/activity/exams?kind=survey")).status === 400,
+      "view-specific filters are validated",
+    );
     const center = `/student/courses/${course.id}/learning-center?classroomId=${room.id}`;
     const coursePage = await page(`${center}&tab=tasks`);
     check(
@@ -394,7 +471,8 @@ async function main() {
     );
     const list = await page(`/student/assignments?${scope}`);
     check(
-      !list.includes("<select") && !list.includes("全部教学班"),
+      !/<select[^>]*name="classroomId"/u.test(list) &&
+        !list.includes("全部教学班"),
       "fixed assignment scope",
     );
     check(
@@ -402,7 +480,9 @@ async function main() {
       "no cross-class/course assignments",
     );
     check(
-      list.includes(`page=2&courseId=${course.id}&classroomId=${room.id}`),
+      list
+        .replaceAll("&amp;", "&")
+        .includes(`/student/assignments?${scope}&page=2`),
       "pagination preserves scope",
     );
     const listTitles = (html: string) =>
@@ -423,7 +503,9 @@ async function main() {
       );
       assert.deepEqual(listTitles(pending), newestTitles);
       check(
-        pending.includes(`status=TODO&page=2&${scope}`),
+        pending
+          .replaceAll("&amp;", "&")
+          .includes(`/student/assignments?${scope}&status=TODO&page=2`),
         "merged filter keeps scope in pagination",
       );
     }
@@ -467,7 +549,10 @@ async function main() {
         scoped.includes(`${center}&tab=tasks`),
         `${area} returns to same class tasks`,
       );
-      check(!scoped.includes("<select"), `no switcher: ${area}`);
+      check(
+        !/<select[^>]*name="classroomId"/u.test(scoped),
+        `no classroom switcher: ${area}`,
+      );
       const global = await page(`/student/${area}`);
       check(
         global.includes("<select") && global.includes("全部教学班"),
@@ -519,7 +604,10 @@ async function main() {
     check(
       overview.items.length > 5 &&
         overview.total ===
-          Object.values(overview.counts).reduce((a, b) => a + b, 0),
+          overview.counts.exam +
+            overview.counts.assignment +
+            overview.counts.attendance +
+            overview.counts.survey,
       "counts before preview cutoff",
     );
     check(overview.scheduledSurveys.length === 1, "scheduled separately");

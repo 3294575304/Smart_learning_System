@@ -1,15 +1,19 @@
+import {
+  StudentActivityFilters,
+  StudentActivityPagination,
+  activityCardClass,
+} from "@/components/dashboard/student-activity-list";
+import {
+  readActivityPage,
+  readActivityPageQuery,
+} from "@/services/student-experience/activity-page";
+import { loadActivitySurveys } from "@/services/student-experience/activity-service";
 import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
-import {
-  COURSE_SURVEY_AVAILABILITY_LABELS,
-  nextCourseSurveyChangeAt,
-} from "@/services/course-surveys/availability";
-import { StudentTaskScope } from "@/components/dashboard/student-task-scope";
-import {
-  studentTaskScopeSchema,
-  studentTaskHref,
-} from "@/services/student-experience/task-scope";
+import { COURSE_SURVEY_AVAILABILITY_LABELS } from "@/services/course-surveys/availability";
+
+import { studentTaskHref } from "@/services/student-experience/task-scope";
 import { listStudentTaskClassrooms } from "@/services/courses/student-access";
 import { Role } from "@prisma/client";
 import { ArrowRight, ClipboardCheck } from "lucide-react";
@@ -19,7 +23,7 @@ import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { listStudentCourseSurveys } from "@/services/course-surveys/service";
+
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentCourseContext } from "@/services/courses/student-access";
 
@@ -30,9 +34,8 @@ export default async function StudentSurveysPage({
 }) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
-  const scopeResult = studentTaskScopeSchema.safeParse(raw);
-  if (!scopeResult.success) notFound();
-  const { courseId, classroomId } = scopeResult.data;
+  const query = readActivityPageQuery("surveys", raw);
+  const { courseId, classroomId } = query;
   let course: Awaited<ReturnType<typeof getStudentCourseContext>> | null = null;
   if (courseId) {
     try {
@@ -42,25 +45,16 @@ export default async function StudentSurveysPage({
       throw error;
     }
   }
-  let surveys: Awaited<ReturnType<typeof listStudentCourseSurveys>>;
-  try {
-    surveys = await listStudentCourseSurveys(
-      student.id,
-      course?.id,
-      classroomId,
-    );
-  } catch (error) {
-    if (error instanceof ResourceNotFoundError) notFound();
-    throw error;
-  }
+  const result = await readActivityPage(() =>
+    loadActivitySurveys(student.id, query),
+  );
+  const surveys = result.items.map((row) => row.survey);
   const classrooms = (
     await listStudentTaskClassrooms(student.id, course?.id)
   ).filter((item) => item.courseName !== null);
-  const now = new Date();
-  const nextChange = nextCourseSurveyChangeAt(surveys, now);
   return (
     <section className="space-y-4">
-      <SurveyAvailabilityRefresh at={nextChange?.toISOString()} />
+      <SurveyAvailabilityRefresh at={result.nextChangeAt?.toISOString()} />
       <PageHeader
         actions={
           course ? (
@@ -83,14 +77,15 @@ export default async function StudentSurveysPage({
         eyebrow={course?.name}
         title="课程问卷"
       />
-      <StudentTaskScope
+      <StudentActivityFilters
+        view="surveys"
+        query={query}
         classrooms={classrooms}
-        courseId={course?.id}
-        selectedId={classroomId}
-        summary={`共 ${surveys.length} 份问卷 · ${surveys.filter((item) => item.isOpen && !item.submittedAt).length} 份待完成 · ${surveys.filter((item) => item.availability === "SCHEDULED").length} 份待开放`}
+        total={result.pagination.total}
       />
       {surveys.length === 0 ? (
         <EmptyState
+          compact
           description={
             course && classroomId
               ? "本班暂无可查看的问卷。"
@@ -103,11 +98,8 @@ export default async function StudentSurveysPage({
         <div className="grid gap-4 md:grid-cols-2">
           {surveys.map((survey) => (
             <Link
-              className="rounded-xl border bg-white p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600"
-              href={studentTaskHref(
-                `/student/surveys/${survey.id}`,
-                scopeResult.data,
-              )}
+              className={`${activityCardClass} transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600`}
+              href={studentTaskHref(`/student/surveys/${survey.id}`, query)}
               key={survey.id}
             >
               <div className="flex items-start justify-between gap-3">
@@ -145,6 +137,11 @@ export default async function StudentSurveysPage({
           ))}
         </div>
       )}
+      <StudentActivityPagination
+        view="surveys"
+        query={query}
+        pagination={result.pagination}
+      />
     </section>
   );
 }

@@ -1,5 +1,12 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { EmptyState } from "@/components/dashboard/empty-state";
+import { CalendarCheck } from "lucide-react";
+import {
+  activityActionClass,
+  activityCardClass,
+} from "@/components/dashboard/student-activity-list";
 import { requestApi } from "@/components/courses/request-api";
 import { attendanceSignInState } from "@/services/student-experience/task-policy";
 type RecordView = {
@@ -14,7 +21,7 @@ type RecordView = {
     signInOpensAt: Date | string;
     signInClosesAt: Date | string;
     course: { name: string };
-    classroom: { name: string };
+    classroom: { name: string; status: string };
   };
   revisions: Array<{
     id: string;
@@ -45,7 +52,8 @@ export function StudentAttendanceView({
   classroomId?: string;
 }) {
   const [records, setRecords] = useState(initialRecords);
-  const [summary, setSummary] = useState({ rate, denominator });
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -57,20 +65,8 @@ export function StudentAttendanceView({
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => setRecords(initialRecords), [initialRecords]);
-  async function reload() {
-    const params = new URLSearchParams();
-    if (courseId) params.set("courseId", courseId);
-    if (classroomId) params.set("classroomId", classroomId);
-    const attendanceUrl = `/api/student/attendance?${params}`;
-    const result = await requestApi<{
-      records: RecordView[];
-      summary: { rate: string | null; denominator: number };
-    }>(attendanceUrl);
-    if (result.success) {
-      setRecords(result.data.records);
-      setSummary(result.data.summary);
-      setError(null);
-    } else setError("记录更新失败，请点击刷新记录重试。" + result.error);
+  function reload() {
+    startRefresh(() => router.refresh());
   }
   async function sign(sessionId: string) {
     if (requestInFlight.current) return;
@@ -102,7 +98,7 @@ export function StudentAttendanceView({
             : record,
         ),
       );
-      await reload();
+      reload();
     } finally {
       requestInFlight.current = false;
       setPending(null);
@@ -119,15 +115,12 @@ export function StudentAttendanceView({
         </p>
       )}
       <button
-        className="rounded-lg border bg-white px-3 py-2 text-sm disabled:opacity-50"
-        disabled={pending !== null}
-        onClick={() => {
-          setPending("refresh");
-          void reload().finally(() => setPending(null));
-        }}
+        className={`${activityActionClass} disabled:opacity-50`}
+        disabled={pending !== null || refreshing}
+        onClick={reload}
         type="button"
       >
-        {pending === "refresh" ? "刷新中…" : "刷新记录"}
+        {refreshing ? "刷新中…" : "刷新记录"}
       </button>
       {error ? (
         <div
@@ -137,73 +130,83 @@ export function StudentAttendanceView({
           {error}
         </div>
       ) : null}
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className={activityCardClass}>
         <h2 className="font-semibold">出勤汇总</h2>
         <p className="mt-2 text-2xl font-semibold">
-          {summary.rate === null ? "暂无已完成的有效课堂" : `${summary.rate}%`}
+          {rate === null ? "暂无已完成的有效课堂" : `${rate}%`}
         </p>
         <p className="text-sm text-gray-500">
-          请假和取消场次不进入分母；共 {summary.denominator} 次有效课堂。
+          请假和取消场次不进入分母；共 {denominator} 次有效课堂。
         </p>
       </div>
       {records.length === 0 ? (
-        <div className="rounded-xl border bg-white p-6 text-sm text-gray-500">
-          {courseId && classroomId ? "本班暂无签到记录。" : "暂无签到记录。"}
-        </div>
+        <EmptyState
+          compact
+          icon={CalendarCheck}
+          title={
+            courseId && classroomId
+              ? "本班暂无签到记录"
+              : "暂无符合条件的签到记录"
+          }
+          description="可以调整教学班或状态筛选。"
+        />
       ) : (
-        records.map((record) => (
-          <article
-            className="rounded-xl border border-slate-200 bg-white p-4"
-            key={record.id}
-          >
-            <div className="flex flex-wrap justify-between gap-3">
-              <div>
-                <h2 className="font-medium">{record.session.title}</h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  {record.session.course.name} · {record.session.classroom.name}{" "}
-                  · {new Date(record.session.startsAt).toLocaleString("zh-CN")}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-medium">
-                  {labels[record.currentStatus] ?? record.currentStatus}
-                </p>
-                {now > 0 &&
-                attendanceSignInState(record.session, new Date(now)) ===
-                  "AVAILABLE" &&
-                record.currentStatus === "PENDING" ? (
-                  <button
-                    className="mt-2 rounded-lg bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
-                    type="button"
-                    disabled={pending !== null}
-                    onClick={() => void sign(record.session.id)}
-                  >
-                    {pending === record.session.id ? "签到中…" : "立即签到"}
-                  </button>
-                ) : record.currentStatus === "PENDING" && now > 0 ? (
-                  <p className="mt-2 text-xs text-slate-500">
-                    {attendanceSignInState(record.session, new Date(now)) ===
-                    "UPCOMING"
-                      ? "尚未到签到时间"
-                      : "签到已结束"}
+        <div className="grid items-start gap-4 md:grid-cols-2">
+          {records.map((record) => (
+            <article className={activityCardClass} key={record.id}>
+              <div className="flex flex-wrap justify-between gap-3">
+                <div>
+                  <h2 className="font-medium">{record.session.title}</h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {record.session.course.name} ·{" "}
+                    {record.session.classroom.name} ·{" "}
+                    {new Date(record.session.startsAt).toLocaleString("zh-CN")}
                   </p>
-                ) : null}
-              </div>
-            </div>
-            {record.revisions.length ? (
-              <details className="mt-3 text-sm">
-                <summary className="cursor-pointer">查看变更历史</summary>
-                {record.revisions.map((revision) => (
-                  <p className="mt-1 text-gray-600" key={revision.id}>
-                    {labels[revision.previousStatus]} →{" "}
-                    {labels[revision.newStatus]}
-                    {revision.reason ? `：${revision.reason}` : ""}
+                </div>
+                <div className="text-right">
+                  <p className="font-medium">
+                    {labels[record.currentStatus] ?? record.currentStatus}
                   </p>
-                ))}
-              </details>
-            ) : null}
-          </article>
-        ))
+                  {now > 0 &&
+                  record.session.classroom.status === "ACTIVE" &&
+                  attendanceSignInState(record.session, new Date(now)) ===
+                    "AVAILABLE" &&
+                  record.currentStatus === "PENDING" ? (
+                    <button
+                      className="mt-2 rounded-lg bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
+                      type="button"
+                      disabled={pending !== null || refreshing}
+                      onClick={() => void sign(record.session.id)}
+                    >
+                      {pending === record.session.id ? "签到中…" : "立即签到"}
+                    </button>
+                  ) : record.currentStatus === "PENDING" && now > 0 ? (
+                    <p className="mt-2 text-xs text-slate-500">
+                      {attendanceSignInState(record.session, new Date(now)) ===
+                        "UPCOMING" ||
+                      (record.session.status === "SCHEDULED" &&
+                        new Date(record.session.signInClosesAt).getTime() > now)
+                        ? "尚未到签到时间"
+                        : "签到已结束"}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              {record.revisions.length ? (
+                <details className="mt-3 text-sm">
+                  <summary className="cursor-pointer">查看变更历史</summary>
+                  {record.revisions.map((revision) => (
+                    <p className="mt-1 text-gray-600" key={revision.id}>
+                      {labels[revision.previousStatus]} →{" "}
+                      {labels[revision.newStatus]}
+                      {revision.reason ? `：${revision.reason}` : ""}
+                    </p>
+                  ))}
+                </details>
+              ) : null}
+            </article>
+          ))}
+        </div>
       )}
     </div>
   );

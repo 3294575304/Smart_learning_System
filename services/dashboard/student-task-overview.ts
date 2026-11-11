@@ -15,6 +15,11 @@ export type StudentTaskItem = {
   courseName: string | null;
   classroomName: string;
   dueAt: Date;
+  status: "TODO" | "UPCOMING" | "DONE";
+  opensAt?: Date;
+  windowMinutes?: number;
+  attemptLimit?: number;
+  canEnter?: boolean;
   href: string;
   action: string;
   state: string;
@@ -66,7 +71,6 @@ export function summarizeStudentTasks(
     attendance: Attendance[];
     surveys: Survey[];
     exams?: StudentTaskItem[];
-    scheduledExams?: Array<StudentTaskItem & { opensAt: Date }>;
   },
   now: Date,
 ) {
@@ -82,6 +86,7 @@ export function summarizeStudentTasks(
       {
         id: `assignment:${assignment.id}`,
         kind: "assignment" as const,
+        status: "TODO" as const,
         title: assignment.title,
         courseName: context.classroom.course?.name ?? null,
         classroomName: context.classroom.name,
@@ -105,6 +110,7 @@ export function summarizeStudentTasks(
     items.push({
       id: `attendance:${record.id}`,
       kind: "attendance",
+      status: "TODO",
       title: record.session.title,
       courseName: record.session.course.name,
       classroomName: record.session.classroom.name,
@@ -122,6 +128,7 @@ export function summarizeStudentTasks(
     items.push({
       id: `survey:${survey.id}`,
       kind: "survey",
+      status: "TODO",
       title: survey.title,
       courseName: survey.course.name,
       classroomName: survey.classroom.name,
@@ -134,7 +141,8 @@ export function summarizeStudentTasks(
       state: "待完成",
     });
   }
-  items.push(...(input.exams ?? []));
+  const exams = input.exams ?? [];
+  items.push(...exams.filter((exam) => exam.status === "TODO"));
   items.sort(
     (left, right) =>
       Number(right.kind === "exam") - Number(left.kind === "exam") ||
@@ -160,22 +168,27 @@ export function summarizeStudentTasks(
         { courseId: survey.course.id, classroomId: survey.classroom.id },
       ),
     }));
+  const upcomingExams = exams.filter((exam) => exam.status === "UPCOMING");
+  const nextExam =
+    items.find((item) => item.kind === "exam") ?? upcomingExams.at(0) ?? null;
   const changes = [
     nextCourseSurveyChangeAt(input.surveys, now),
-    ...(input.scheduledExams ?? []).map((item) => item.opensAt),
+    ...upcomingExams.map((item) => item.opensAt ?? null),
     ...items.map((item) => item.dueAt),
   ].filter((date): date is Date => date !== null && date > now);
   return {
-    items,
+    items: [...items, ...upcomingExams],
+    pendingItems: items,
+    nextExam,
     total: items.length,
     counts: {
       exam: items.filter((item) => item.kind === "exam").length,
+      examUpcoming: upcomingExams.length,
       assignment: items.filter((item) => item.kind === "assignment").length,
       attendance: items.filter((item) => item.kind === "attendance").length,
       survey: items.filter((item) => item.kind === "survey").length,
     },
     scheduledSurveys,
-    scheduledExams: input.scheduledExams ?? [],
     nextChangeAt: changes.length
       ? changes.sort((a, b) => a.getTime() - b.getTime())[0]
       : null,

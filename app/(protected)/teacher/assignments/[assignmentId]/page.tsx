@@ -56,7 +56,7 @@ export default async function TeacherAssignmentPage({
         <TeacherBackLink
           href={
             examSessionId
-              ? "/teacher/exams"
+              ? `/teacher/exams/${examSessionId}`
               : assignment.classroom.status === "ACTIVE" &&
                   !["ARCHIVED", "REVOKED"].includes(assignment.status) &&
                   assignment.status !== "CLOSED"
@@ -64,7 +64,7 @@ export default async function TeacherAssignmentPage({
                 : "/teacher/assignments?section=HISTORY"
           }
         >
-          {examSessionId ? "返回考试管理" : "返回作业管理"}
+          {examSessionId ? "返回考试场次" : "返回作业管理"}
         </TeacherBackLink>
         <header className="rounded-xl border bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">

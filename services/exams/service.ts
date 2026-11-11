@@ -24,7 +24,11 @@ import {
   plusThreeYears,
 } from "./fingerprint";
 import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
-import { teacherExamListSchema, type ExamCreateInput } from "./schemas";
+import {
+  teacherExamListSchema,
+  type ExamCreateInput,
+  type TeacherExamListScope,
+} from "./schemas";
 
 async function ownedCourse(teacherId: string, courseId: string) {
   const course = await prisma.course.findFirst({
@@ -379,9 +383,11 @@ export async function createExamSession(
 
 export async function listTeacherExams(
   teacherId: string,
-  scope: { courseId?: string; classroomId?: string } = {},
+  scope: TeacherExamListScope = {},
+  now = new Date(),
 ) {
-  const { courseId, classroomId } = teacherExamListSchema.parse(scope);
+  const { courseId, classroomId, keyword, status, type } =
+    teacherExamListSchema.parse(scope);
   if (
     courseId &&
     !(await prisma.course.findFirst({
@@ -398,15 +404,34 @@ export async function listTeacherExams(
     }))
   )
     throw new ResourceNotFoundError("班级不存在");
+  const statusWhere: Record<
+    NonNullable<TeacherExamListScope["status"]>,
+    Prisma.ExamSessionWhereInput
+  > = {
+    UPCOMING: { cancelledAt: null, startsAt: { gt: now } },
+    IN_PROGRESS: {
+      cancelledAt: null,
+      startsAt: { lte: now },
+      endsAt: { gt: now },
+    },
+    ENDED: { cancelledAt: null, endsAt: { lte: now } },
+    CANCELLED: { cancelledAt: { not: null } },
+  };
   return prisma.examSession.findMany({
     where: {
       teacherId,
+      type,
+      ...(keyword ? { title: { contains: keyword, mode: "insensitive" } } : {}),
+      ...(status ? statusWhere[status] : {}),
       ...(courseId ? { courseId } : {}),
-      ...(classroomId ? { assignments: { some: { classroomId } } } : {}),
+      ...(classroomId
+        ? { assignments: { some: { classroomId, deletedAt: null } } }
+        : {}),
     },
     include: {
+      course: { select: { name: true } },
       assignments: {
-        ...(classroomId ? { where: { classroomId } } : {}),
+        where: { deletedAt: null, ...(classroomId ? { classroomId } : {}) },
         select: { id: true, classroom: { select: { name: true } } },
       },
     },
@@ -461,26 +486,35 @@ export async function cancelExamSession(
   }, "考试状态已变化，请刷新后重试");
 }
 
-export async function listStudentExams(studentId: string) {
+export async function listStudentExams(
+  studentId: string,
+  scope: { courseId?: string; classroomId?: string } = {},
+) {
+  const assignmentWhere = {
+    deletedAt: null,
+    status: { in: ["PUBLISHED", "CLOSED"] },
+    ...(scope.classroomId ? { classroomId: scope.classroomId } : {}),
+    classroom: {
+      ...(scope.courseId ? { courseId: scope.courseId } : {}),
+      memberships: { some: { studentId, status: "ACTIVE" } },
+    },
+  } satisfies Prisma.AssignmentWhereInput;
   return prisma.examSession.findMany({
     where: {
       cancelledAt: null,
-      assignments: {
-        some: {
-          classroom: { memberships: { some: { studentId, status: "ACTIVE" } } },
-        },
-      },
+      courseId: scope.courseId,
+      assignments: { some: assignmentWhere },
     },
     include: {
+      course: { select: { name: true } },
       assignments: {
-        where: {
-          deletedAt: null,
-          status: { in: ["PUBLISHED", "CLOSED"] },
-          classroom: { memberships: { some: { studentId, status: "ACTIVE" } } },
-        },
+        where: assignmentWhere,
+        orderBy: { id: "asc" },
         select: {
           id: true,
           status: true,
+          publishedAt: true,
+          dueAt: true,
           classroomId: true,
           classroom: { select: { name: true, status: true, courseId: true } },
           submissions: {
@@ -492,8 +526,60 @@ export async function listStudentExams(studentId: string) {
         },
       },
     },
-    orderBy: { startsAt: "desc" },
+    orderBy: [{ startsAt: "desc" }, { id: "desc" }],
   });
+}
+
+export async function getStudentExamAttemptStatus(
+  studentId: string,
+  submissionId: string,
+) {
+  const submission = await prisma.submission.findFirst({
+    where: { id: submissionId, studentId, assignment: { deletedAt: null } },
+    select: {
+      status: true,
+      assignment: {
+        select: {
+          status: true,
+          classroom: {
+            select: {
+              status: true,
+              memberships: {
+                where: { studentId, status: "ACTIVE" },
+                select: { id: true },
+                take: 1,
+              },
+            },
+          },
+          examSession: {
+            select: { endsAt: true, cancelledAt: true, allowedSwitches: true },
+          },
+        },
+      },
+      _count: { select: { examSwitchEvents: true } },
+    },
+  });
+  const exam = submission?.assignment.examSession;
+  if (!submission || !exam) throw new ResourceNotFoundError("考试作答不存在");
+  const classroom = submission.assignment.classroom;
+  const closed =
+    Boolean(exam.cancelledAt) ||
+    submission.status === "WITHDRAWN" ||
+    (submission.status === "IN_PROGRESS" &&
+      (submission.assignment.status !== "PUBLISHED" ||
+        classroom.status !== "ACTIVE" ||
+        classroom.memberships.length === 0));
+  return {
+    state: closed
+      ? ("CLOSED" as const)
+      : submission.status === "IN_PROGRESS"
+        ? ("WORKING" as const)
+        : ("COLLECTED" as const),
+    serverNow: new Date().toISOString(),
+    endsAt: exam.endsAt.toISOString(),
+    allowedSwitches: exam.allowedSwitches,
+    switches: submission._count.examSwitchEvents,
+  };
 }
 
 export async function recordExamSwitch(
@@ -507,7 +593,15 @@ export async function recordExamSwitch(
         id: submissionId,
         studentId,
         status: "IN_PROGRESS",
-        assignment: { examSessionId: { not: null } },
+        assignment: {
+          examSessionId: { not: null },
+          deletedAt: null,
+          status: "PUBLISHED",
+          classroom: {
+            status: "ACTIVE",
+            memberships: { some: { studentId, status: "ACTIVE" } },
+          },
+        },
       },
       select: { assignment: { select: { examSession: true } } },
     });

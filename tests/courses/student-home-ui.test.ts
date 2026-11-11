@@ -8,23 +8,35 @@ import type { StudentTaskOverview } from "@/services/dashboard/student-task-over
 
 Object.assign(globalThis, { React });
 function overview(count = 0): StudentTaskOverview {
-  return {
-    total: count,
-    counts: { exam: 0, assignment: count, attendance: 0, survey: 0 },
-    nextChangeAt: null,
-    scheduledSurveys: [],
-    scheduledExams: [],
-    items: Array.from({ length: count }, (_, i) => ({
+  const items: StudentTaskOverview["items"] = Array.from(
+    { length: count },
+    (_, i) => ({
       id: `a${i}`,
       kind: "assignment",
+      status: "TODO",
       title: `任务 ${i}`,
       courseName: "Python",
       classroomName: "二班",
       dueAt: new Date("2026-10-28T08:00:00Z"),
-      href: `/student/assignments/a${i}?courseId=c&classroomId=k`,
+      href: "/student/assignments/a?courseId=c&classroomId=k",
       action: "开始作业",
       state: "待完成",
-    })),
+    }),
+  );
+  return {
+    total: count,
+    counts: {
+      exam: 0,
+      examUpcoming: 0,
+      assignment: count,
+      attendance: 0,
+      survey: 0,
+    },
+    nextChangeAt: null,
+    scheduledSurveys: [],
+    nextExam: null,
+    pendingItems: items,
+    items,
   };
 }
 
@@ -92,11 +104,21 @@ test("首页与任务中心只消费同一聚合服务，首页不再加载旧�
     "app/(protected)/student/tasks/page.tsx",
   ]) {
     const source = await readFile(path, "utf8");
-    assert.match(source, /getStudentTaskOverview\(student.id(?:,\s*now)?\)/u);
+    assert.match(
+      source,
+      path.includes("/tasks/")
+        ? /loadActivityTasks\(student.id, query\)/u
+        : /getStudentTaskOverview\(student.id(?:,\s*now)?\)/u,
+    );
     assert.doesNotMatch(
       source,
       /getStudentDashboard|listStudentAssignments|getStudentHomeTasks/u,
     );
     assert.match(source, /overview.nextChangeAt/u);
   }
+  const activity = await readFile(
+    "services/student-experience/activity-service.ts",
+    "utf8",
+  );
+  assert.match(activity, /getStudentTaskOverview\(studentId, now,/u);
 });

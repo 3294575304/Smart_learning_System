@@ -2,7 +2,10 @@ import { getStudentExamTasks } from "./student-exam-tasks";
 import "server-only";
 
 import { getStudentClassroomContext } from "@/services/courses/student-access";
-import { studentTaskScopeSchema } from "@/services/student-experience/task-scope";
+import {
+  studentTaskScopeSchema,
+  type StudentTaskScope,
+} from "@/services/student-experience/task-scope";
 import { prisma } from "@/lib/prisma";
 import { listStudentPendingAssignments } from "@/services/assignments/service";
 import { getStudentHomeTasks } from "./student-home-tasks";
@@ -14,13 +17,13 @@ import {
 export async function getStudentTaskOverview(
   studentId: string,
   now = new Date(),
-  classScope?: { courseId: string; classroomId: string },
+  classScope?: StudentTaskScope,
 ) {
   const scope =
     classScope === undefined
       ? undefined
-      : studentTaskScopeSchema.required().strict().parse(classScope);
-  if (scope) {
+      : studentTaskScopeSchema.strict().parse(classScope);
+  if (scope?.classroomId) {
     const classroom = await getStudentClassroomContext(
       studentId,
       scope.classroomId,
@@ -74,8 +77,7 @@ export async function getStudentTaskOverview(
     {
       assignments,
       contexts,
-      exams: exams.items,
-      scheduledExams: exams.scheduled,
+      exams,
       attendance: home.attendance,
       surveys: [...home.surveys, ...home.scheduledSurveys],
     },

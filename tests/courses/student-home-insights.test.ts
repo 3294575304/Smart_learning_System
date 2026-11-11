@@ -8,10 +8,11 @@ import type { StudentTaskOverview } from "../../services/dashboard/student-task-
 import { StudentAssignmentRings } from "../../components/dashboard/student-assignment-rings";
 const overview: StudentTaskOverview = {
   total: 0,
-  counts: { exam: 0, assignment: 0, attendance: 0, survey: 0 },
+  counts: { exam: 0, examUpcoming: 0, assignment: 0, attendance: 0, survey: 0 },
   items: [],
   scheduledSurveys: [],
-  scheduledExams: [],
+  pendingItems: [],
+  nextExam: null,
   nextChangeAt: null,
 };
 function item(
@@ -30,6 +31,7 @@ function item(
       teacher: { profile: null },
     },
     classroom: { id, name: `班级${id}`, status },
+    assignmentProgress: { total, submitted, overdue: 0 },
     total,
     submitted,
     unsubmitted: total - submitted,
@@ -57,7 +59,8 @@ test("主页空看板不补造学习时长、成绩或知识评估", () => {
     React.createElement(StudentHomeInsights, { classes: [], overview }),
   );
   assert.match(html, /学习主页数据看板/);
-  assert.match(html, /暂无已开放正式作业/);
+  assert.match(html, /暂无已开放任务/);
+  assert.match(html, /暂无已公布的线上考试成绩/);
   assert.match(html, /暂无待办/);
   assert.doesNotMatch(html, /NaN|Infinity|学习时长|AI互动次数|累计登录/);
 });
@@ -74,12 +77,19 @@ test("同名课程分别展示，结课记录不混入当前汇总，待办分�
       overview: {
         ...overview,
         total: 4,
-        counts: { exam: 0, assignment: 2, attendance: 1, survey: 1 },
+        counts: {
+          exam: 0,
+          examUpcoming: 0,
+          assignment: 2,
+          attendance: 1,
+          survey: 1,
+        },
       },
     }),
   );
   assert.match(html, /75%/);
-  assert.match(html, /已交 3\/4 项正式作业/);
+  assert.match(html, /已交 3\/4 项/);
+  assert.doesNotMatch(html, /含已结束考试/);
   assert.match(html, /作业 2/);
   assert.match(html, /签到 1/);
   assert.match(html, /问卷 1/);
@@ -90,7 +100,10 @@ test("同名课程分别展示，结课记录不混入当前汇总，待办分�
 });
 
 test("作业环图区分未到期、逾期和已交，无作业不显示零提交率", () => {
-  const row = { ...item("one", 9, 6), overdue: 2 };
+  const row = {
+    ...item("one", 9, 6),
+    assignmentProgress: { total: 9, submitted: 6, overdue: 2 },
+  };
   const html = renderToStaticMarkup(
     React.createElement(StudentAssignmentRings, {
       classes: [row, item("two", 0, 0)],

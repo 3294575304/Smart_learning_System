@@ -7,6 +7,7 @@ import { TeacherAssignmentNav } from "@/components/assignments/teacher-assignmen
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role, SubmissionStatus } from "@prisma/client";
 import { Eye } from "lucide-react";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { ResultsPagination } from "@/components/assignment-results/pagination";
@@ -142,9 +143,13 @@ export default async function AssignmentResultsPage({
         <AssignmentStateRefresh renderedAt={Date.now()} />
         <header>
           <TeacherBackLink
-            href={examSessionId ? "/teacher/exams" : "/teacher/assignments"}
+            href={
+              examSessionId
+                ? `/teacher/exams/${examSessionId}`
+                : "/teacher/assignments"
+            }
           >
-            {examSessionId ? "返回考试管理" : "返回作业管理"}
+            {examSessionId ? "返回考试场次" : "返回作业管理"}
           </TeacherBackLink>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -161,6 +166,14 @@ export default async function AssignmentResultsPage({
                 assignmentId={results.assignment.id}
                 publication={publication}
               />
+              {examSessionId && (
+                <Link
+                  className="text-sm font-medium text-sky-800 hover:underline"
+                  href={`/teacher/exams/${examSessionId}/monitor?classroomId=${results.assignment.classroom.id}`}
+                >
+                  监考与公布设置
+                </Link>
+              )}
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs">
                 基于每名学生最新有效提交
               </span>

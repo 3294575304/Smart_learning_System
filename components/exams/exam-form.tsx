@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { QuestionType } from "@prisma/client";
 import { selectAssignmentQuestions } from "@/services/assignments/editor-helpers";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import { ExamAIGeneration } from "@/components/exams/exam-ai-generation";
+import { ExamPublicationDialog } from "@/components/exams/exam-publication-dialog";
+import { ExamRulePresets } from "@/components/exams/exam-rule-presets";
+import { checkExamPublication } from "@/services/exams/publication-check";
+import type { ExamCreateInput } from "@/services/exams/schemas";
 import { toggleChapterConcepts } from "@/services/exams/concept-selection";
 import {
   DEFAULT_EXAM_TYPE_WEIGHTS,
@@ -29,6 +31,8 @@ const emptyCounts = () =>
   Object.fromEntries(
     Object.values(QuestionType).map((type) => [type, 0]),
   ) as Record<QuestionType, number>;
+const examField =
+  "h-10 w-full min-w-0 rounded-lg border bg-white px-3 font-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
 export function ExamForm({
   courses,
   classrooms,
@@ -59,8 +63,8 @@ export function ExamForm({
     objectives: Array<{ code: string; title: string }>;
   }>;
 }) {
-  const router = useRouter();
   const requestIdRef = useRef<string | null>(null);
+  const [publication, setPublication] = useState<ExamCreateInput | null>(null);
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
   const currentCourseRef = useRef(courseId);
   currentCourseRef.current = courseId;
@@ -349,7 +353,7 @@ export function ExamForm({
       return next;
     });
   }
-  async function publish() {
+  function previewPublication() {
     if (
       autoMode &&
       (totalPoints !== 100 || selected.some((item) => item.points <= 0))
@@ -357,50 +361,94 @@ export function ExamForm({
       setError("自动组卷总分须为 100 分，且每题分值大于零；请重新配分");
       return;
     }
-    if (!window.confirm("发布后试卷和考试规则将冻结。确认发布？")) return;
+    const result = checkExamPublication(
+      {
+        requestId: (requestIdRef.current ??= crypto.randomUUID()),
+        courseId,
+        classroomIds,
+        type,
+        title,
+        startsAt,
+        endsAt,
+        allowedSwitches,
+        questions: selected.map(({ questionId, points }) => ({
+          questionId,
+          points,
+        })),
+      },
+      availableClassrooms.map(({ id }) => id),
+    );
+    if (result.error !== undefined) {
+      setError(result.error);
+      return;
+    }
+    setError("");
+    setPublication(result.data);
+  }
+
+  async function publish() {
+    if (!publication || busy) return;
     setBusy(true);
     setError("");
     try {
       const response = await fetch("/api/teacher/exams", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requestId: (requestIdRef.current ??= crypto.randomUUID()),
-          courseId,
-          classroomIds,
-          type,
-          title,
-          startsAt: new Date(startsAt).toISOString(),
-          endsAt: new Date(endsAt).toISOString(),
-          allowedSwitches,
-          questions: selected.map(({ questionId, points }) => ({
-            questionId,
-            points,
-          })),
-        }),
+        body: JSON.stringify(publication),
       });
       const body = await response.json();
       if (!response.ok || !body.success)
         throw new Error(body.error ?? "发布失败");
       publishedRef.current = true;
       window.sessionStorage.removeItem("exam-auto-draft");
-      router.push("/teacher/exams");
-      router.refresh();
+      window.location.replace("/teacher/exams");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "发布失败");
     } finally {
       setBusy(false);
     }
   }
+  const availableClassrooms = classrooms.filter(
+    (item) => item.courseId === courseId,
+  );
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 rounded-xl border bg-white p-5 sm:grid-cols-2">
-        <label>
+      <nav aria-label="考试创建步骤" className="flex flex-wrap gap-2 text-sm">
+        {[
+          ["exam-schedule", "考试安排"],
+          ["exam-questions", "试卷选题"],
+          ["exam-publish", "发布核对"],
+        ].map(([id, label]) => (
+          <a
+            key={id}
+            href={`#${id}`}
+            className="rounded-lg border bg-white px-3 py-2 text-sky-800 hover:bg-sky-50"
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
+      <section
+        id="exam-schedule"
+        className="grid scroll-mt-24 gap-4 rounded-2xl border border-sky-100 bg-white p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-3"
+      >
+        <h2 className="font-semibold text-slate-950 sm:col-span-2 xl:col-span-3">
+          考试安排
+        </h2>
+        <label className="grid min-w-0 gap-1.5 text-sm font-medium">
+          考试名称
+          <input
+            className={examField}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </label>
+        <label className="grid min-w-0 gap-1.5 text-sm font-medium">
           课程
           <select
-            className="mt-1 w-full rounded border p-2"
+            className={examField}
             value={courseId}
-            disabled={assembling || busy}
+            disabled={assembling || busy || courses.length === 0}
             onChange={(e) => {
               setCourseId(e.target.value);
               setClassroomIds([]);
@@ -416,6 +464,7 @@ export function ExamForm({
               setScoresEdited(false);
             }}
           >
+            {courses.length === 0 && <option value="">暂无可选课程</option>}
             {courses.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {item.term}
@@ -423,10 +472,10 @@ export function ExamForm({
             ))}
           </select>
         </label>
-        <label>
+        <label className="grid min-w-0 gap-1.5 text-sm font-medium">
           考试类型
           <select
-            className="mt-1 w-full rounded border p-2"
+            className={examField}
             value={type}
             onChange={(e) => setType(e.target.value)}
           >
@@ -434,76 +483,77 @@ export function ExamForm({
             <option value="FINAL">期末考试</option>
           </select>
         </label>
-        <label>
-          考试名称
-          <input
-            className="mt-1 w-full rounded border p-2"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </label>
-        <label>
-          允许切屏次数
-          <input
-            className="mt-1 w-full rounded border p-2"
-            type="number"
-            min="0"
-            max="20"
-            value={allowedSwitches}
-            onChange={(e) => setAllowedSwitches(Number(e.target.value))}
-          />
-        </label>
-        <label>
+        <label className="grid min-w-0 gap-1.5 text-sm font-medium">
           开考时间
           <input
-            className="mt-1 w-full rounded border p-2"
+            className={examField}
             type="datetime-local"
             value={startsAt}
             onChange={(e) => setStartsAt(e.target.value)}
           />
         </label>
-        <label>
+        <label className="grid min-w-0 gap-1.5 text-sm font-medium">
           截止时间
           <input
-            className="mt-1 w-full rounded border p-2"
+            className={examField}
             type="datetime-local"
             value={endsAt}
             onChange={(e) => setEndsAt(e.target.value)}
           />
         </label>
-        <fieldset className="sm:col-span-2">
-          <legend>参加班级</legend>
-          <div className="flex flex-wrap gap-3">
-            {classrooms
-              .filter((item) => item.courseId === courseId)
-              .map((item) => (
-                <label key={item.id}>
-                  <input
-                    type="checkbox"
-                    checked={classroomIds.includes(item.id)}
-                    onChange={(e) =>
-                      setClassroomIds((old) =>
-                        e.target.checked
-                          ? [...old, item.id]
-                          : old.filter((id) => id !== item.id),
-                      )
-                    }
-                  />{" "}
-                  {item.name}
-                </label>
-              ))}
+        <div className="min-w-0 space-y-2">
+          <label className="grid min-w-0 gap-1.5 text-sm font-medium">
+            允许切屏次数
+            <input
+              className={examField}
+              type="number"
+              min="0"
+              max="20"
+              value={allowedSwitches}
+              onChange={(e) => setAllowedSwitches(Number(e.target.value))}
+            />
+          </label>
+          <ExamRulePresets
+            switches={allowedSwitches}
+            onChange={setAllowedSwitches}
+          />
+        </div>
+        <fieldset className="min-w-0 sm:col-span-2 xl:col-span-3">
+          <legend className="text-sm font-medium">参加班级</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {availableClassrooms.map((item) => (
+              <label
+                key={item.id}
+                className="inline-flex min-h-10 min-w-0 items-center gap-2 rounded-lg border bg-sky-50/40 px-3 text-sm [overflow-wrap:anywhere]"
+              >
+                <input
+                  className="size-4 shrink-0 accent-sky-700"
+                  type="checkbox"
+                  checked={classroomIds.includes(item.id)}
+                  onChange={(e) =>
+                    setClassroomIds((old) =>
+                      e.target.checked
+                        ? [...old, item.id]
+                        : old.filter((id) => id !== item.id),
+                    )
+                  }
+                />
+                {item.name}
+              </label>
+            ))}
+            {availableClassrooms.length === 0 && (
+              <p className="text-sm text-slate-600">
+                所选课程暂无可参加考试的班级。
+              </p>
+            )}
           </div>
         </fieldset>
       </section>
-      <section className="space-y-3 rounded-xl border bg-white p-5">
+      <section
+        id="exam-questions"
+        className="scroll-mt-24 space-y-4 rounded-2xl border border-sky-100 bg-white p-4 sm:p-5"
+      >
         <h2 className="font-semibold">试卷选题</h2>
-        <p className="text-sm">
-          已有整份试卷？
-          <Link className="text-sky-700 underline" href="/teacher/exams/import">
-            上传并由 AI 生成考试草稿
-          </Link>
-          ，审核后直接发布。
-        </p>
         <div className="space-y-4 rounded-lg border border-sky-200 bg-sky-50/40 p-4">
           <h3 className="font-medium">按知识点自动组卷</h3>
           <p className="text-xs text-slate-600">
@@ -787,7 +837,7 @@ export function ExamForm({
           ))}
         </ul>
       </section>
-      <section className="rounded-xl border bg-white p-5">
+      <section className="rounded-2xl border border-sky-100 bg-white p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">
             题序 · {selected.length} 题 · 总分 {totalPoints} 分
@@ -821,9 +871,9 @@ export function ExamForm({
           {selected.map((item, index) => (
             <li
               key={item.questionId}
-              className="flex items-center gap-2 border-b py-2"
+              className="flex flex-wrap items-center gap-2 border-b py-2"
             >
-              <span className="flex-1">
+              <span className="min-w-0 flex-1 basis-48 [overflow-wrap:anywhere]">
                 {index + 1}. {item.title}
               </span>
               <input
@@ -859,28 +909,45 @@ export function ExamForm({
           ))}
         </ol>
       </section>
-      {error && (
-        <p role="alert" className="text-red-700">
-          {error}
-        </p>
-      )}
-      <button
-        className="rounded bg-sky-700 px-5 py-2 text-white disabled:opacity-50"
-        disabled={
-          busy ||
-          !courseId ||
-          !classroomIds.length ||
-          !title ||
-          !startsAt ||
-          !endsAt ||
-          !selected.length ||
-          (autoMode &&
-            (totalPoints !== 100 || selected.some((item) => item.points <= 0)))
-        }
-        onClick={publish}
+      <div
+        id="exam-publish"
+        className="flex scroll-mt-24 flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-100 bg-white p-4"
       >
-        {busy ? "处理中…" : "确认发布考试"}
-      </button>
+        {error ? (
+          <p role="alert" className="text-sm text-red-700">
+            {error}
+          </p>
+        ) : (
+          <p className="text-sm text-slate-600">
+            已选 {classroomIds.length} 个班级 · {selected.length} 道题 ·{" "}
+            {totalPoints} 分
+          </p>
+        )}
+        <button
+          type="button"
+          className="ms-auto inline-flex min-h-10 items-center rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
+          disabled={busy || assembling}
+          onClick={previewPublication}
+        >
+          核对并发布
+        </button>
+      </div>
+      <ExamPublicationDialog
+        exam={publication}
+        course={
+          courses.find((item) => item.id === publication?.courseId)?.name ?? ""
+        }
+        classrooms={availableClassrooms
+          .filter(({ id }) => publication?.classroomIds.includes(id))
+          .map(({ name }) => name)}
+        busy={busy}
+        error={error}
+        onClose={() => {
+          setPublication(null);
+          setError("");
+        }}
+        onConfirm={() => void publish()}
+      />
     </div>
   );
 }

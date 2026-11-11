@@ -15,7 +15,6 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { ScrollableActionGrid } from "@/components/ui/scrollable-action-grid";
 import { TeacherAssignmentProgress } from "@/components/dashboard/teacher-assignment-progress";
 import { TeacherCardClassroomFilter } from "@/components/dashboard/teacher-card-classroom-filter";
 import { filterDashboardClassroomItems } from "@/services/dashboard/teacher-dashboard-view";
@@ -163,257 +162,262 @@ export function TeacherWorkspaceCards({
       icon: GitBranch,
     },
   ];
+  // 指标卡在六列基准上铺满两行：五张时 3×2 + 2×3，六张时全部 2 列。
+  const statFirstRow = Math.ceil(stats.length / 2);
+  const statSpan = (index: number) =>
+    stats.length % 2 === 0 || index < statFirstRow
+      ? "sm:col-span-2"
+      : "sm:col-span-3";
   return (
-    <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-      <aside className="contents min-w-0 xl:grid xl:gap-4">
-        <section
-          aria-labelledby="quick-actions-title"
-          className={`${styles.card} order-1 min-w-0 rounded-xl border bg-white p-4 xl:order-none`}
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:grid-rows-[auto_auto_auto]">
+      <section
+        aria-labelledby="quick-actions-title"
+        className={`${styles.card} flex min-w-0 flex-col rounded-xl border bg-white p-4 xl:col-start-1 xl:row-start-1`}
+      >
+        <h2 id="quick-actions-title" className={`${styles.heading} font-semibold`}>
+          快捷入口
+        </h2>
+        <div
+          aria-label="快捷入口列表"
+          role="region"
+          className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3"
         >
-          <h2
-            id="quick-actions-title"
-            className={`${styles.heading} font-semibold`}
-          >
-            快捷入口
-          </h2>
-          <div className="mt-3">
-            <ScrollableActionGrid
-              label="快捷入口列表"
-              count={quickLinks.length}
-            >
-              {quickLinks.map(
-                ({ label, description, href, icon: Icon, accent }) => (
-                  <Link
-                    key={label}
-                    href={href}
-                    className={`${styles.shortcut} group flex min-w-0 items-center gap-3 border p-3 focus-visible:outline-2 focus-visible:outline-sky-600 active:bg-teal-50`}
-                  >
-                    <span
-                      className={`rounded-xl p-2.5 ring-1 ring-inset ${accent}`}
-                    >
-                      <Icon aria-hidden="true" className="size-4" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className="mt-1 hidden truncate text-[11px] leading-4 text-slate-500 sm:block">
-                        {description}
-                      </p>
-                    </div>
-                    <ArrowRight
-                      aria-hidden="true"
-                      className="hidden size-3 shrink-0 text-slate-300 group-hover:text-teal-600 sm:block"
-                    />
-                  </Link>
-                ),
-              )}
-            </ScrollableActionGrid>
-          </div>
-        </section>
-        <section
-          aria-labelledby="teacher-next-actions"
-          className={`${styles.card} order-2 min-w-0 rounded-xl border bg-white p-4 xl:order-none`}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2
-                id="teacher-next-actions"
-                className={`${styles.heading} font-semibold`}
-              >
-                当前待办{" "}
-                <span className="rounded-full bg-teal-50 px-2 text-xs font-medium text-teal-700">
-                  {todo.length} 项
-                </span>
-              </h2>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                只列需要你处理的事项，完成后自动移除。
-              </p>
-            </div>
-            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
-              <TeacherCardClassroomFilter
-                label="待办班级"
-                classrooms={workspace.classrooms}
-                value={todoClass}
-                onChange={setTodoClass}
-              />
-              <span className="text-xs text-slate-500">
-                待批改 {todoMetrics.pendingReviewCount} 份 · 待公布{" "}
-                {todoMetrics.publishableCount} 份
-              </span>
-              <button
-                type="button"
-                disabled={refreshing}
-                onClick={() => refresh(() => router.refresh())}
-                className="rounded-lg border px-2 py-1.5 text-xs text-sky-700 disabled:opacity-60"
-              >
-                {refreshing ? "刷新中…" : "刷新待办"}
-              </button>
-            </div>
-          </div>
-          {refreshing ? (
-            <p role="status" className="mt-2 text-xs text-slate-500">
-              正在获取最新待办，班级筛选仍可使用。
-            </p>
-          ) : null}
-          {!todo.length ? (
-            <div className="mt-3 flex items-center gap-3 rounded-lg bg-emerald-50 px-3 py-3">
-              <CheckCircle2
-                aria-hidden="true"
-                className="size-5 shrink-0 text-emerald-600"
-              />
-              <div>
-                <p className="text-sm font-medium text-emerald-900">
-                  当前没有需要处理的事项
-                </p>
-                <p className="mt-1 text-xs text-emerald-800">
-                  进行中的作业可在下方教学动态中查看。
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div
-              className={`${styles.scrollArea} mt-3 max-h-48 divide-y divide-slate-100 overflow-y-auto`}
-            >
-              {todo.map((item) => (
-                <Link
-                  key={item.key}
-                  href={item.href}
-                  className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-600"
-                >
-                  <span
-                    className={`shrink-0 rounded-md px-2 py-1 text-xs ${item.kind === "recover" ? "bg-amber-50 text-amber-900" : item.kind === "publish" ? "bg-emerald-50 text-emerald-800" : "bg-sky-50 text-sky-800"}`}
-                  >
-                    {item.kind === "recover"
-                      ? "待恢复"
-                      : item.kind === "publish"
-                        ? "待公布"
-                        : "待处理"}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{item.title}</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {item.scope} · {item.detail}
-                    </p>
-                  </div>
-                  <ArrowRight
-                    aria-hidden="true"
-                    className="size-4 shrink-0 text-slate-400"
-                  />
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-        <section
-          aria-labelledby="teaching-activity-title"
-          className={`${styles.card} order-5 min-w-0 rounded-xl border bg-white p-4 xl:order-none`}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <h2
-              id="teaching-activity-title"
-              className={`${styles.heading} font-semibold`}
-            >
-              近期作业动态
-            </h2>
-            <Link
-              className="text-xs font-medium text-sky-700 hover:underline"
-              href={scopedAssignmentsHref(activityClass)}
-            >
-              全部作业 →
-            </Link>
-          </div>
-          <div className="mt-3">
-            <TeacherCardClassroomFilter
-              label="作业动态班级"
-              classrooms={workspace.classrooms}
-              value={activityClass}
-              onChange={setActivityClass}
-            />
-          </div>
-          {!recentAssignments.length ? (
-            <p className="py-5 text-center text-sm text-slate-500">
-              当前范围暂无作业。
-            </p>
-          ) : (
-            <div
-              className={`${styles.scrollArea} mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto`}
-            >
-              {recentAssignments.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/teacher/assignments/${item.id}`}
-                  className="group flex items-center justify-between gap-3 rounded-lg px-2 py-3 hover:bg-slate-50 hover:text-teal-700"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{item.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {item.classroomName} · {item.submissionCount} 人已提交
-                      {item.dueAt
-                        ? ` · ${item.dueAt.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })} 截止`
-                        : ""}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
-                    {item.status === "DRAFT"
-                      ? "草稿"
-                      : item.status === "CLOSED"
-                        ? "已关闭"
-                        : item.dueAt && item.dueAt.getTime() <= renderedAt
-                          ? "已截止"
-                          : "已发布"}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-      </aside>
-      <div className="contents min-w-0 xl:grid xl:gap-4">
-        <TeacherAssignmentProgress workspace={workspace} />
-        <section
-          aria-labelledby="course-overview-title"
-          className={`${styles.card} order-4 min-w-0 rounded-xl border bg-white p-4 xl:order-none`}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <h2
-              id="course-overview-title"
-              className={`${styles.heading} font-semibold`}
-            >
-              教学概况
-            </h2>
-            <Link className="text-xs text-sky-700 hover:underline" href={base}>
-              课程详情 →
-            </Link>
-          </div>
-          <div className="mt-3">
-            <TeacherCardClassroomFilter
-              label="教学概况班级"
-              classrooms={workspace.classrooms}
-              value={overviewClass}
-              onChange={setOverviewClass}
-            />
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {stats.map(({ label, value, href, icon: Icon }) => (
+          {quickLinks.map(
+            ({ label, description, href, icon: Icon, accent }) => (
               <Link
                 key={label}
                 href={href}
-                className={`${styles.metric} group flex min-w-0 flex-col gap-2 border p-3`}
+                className={`${styles.shortcut} group flex min-w-0 items-center gap-3 border p-3 focus-visible:outline-2 focus-visible:outline-sky-600 active:bg-teal-50`}
               >
-                <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <Icon aria-hidden="true" className="size-3.5 shrink-0" />
-                  {label}
+                <span
+                  className={`rounded-xl p-2.5 ring-1 ring-inset ${accent}`}
+                >
+                  <Icon aria-hidden="true" className="size-4" />
                 </span>
-                <strong className="text-2xl font-semibold tracking-tight text-slate-800 tabular-nums">
-                  {value}
-                </strong>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{label}</p>
+                  <p className="mt-1 hidden truncate text-[11px] leading-4 text-slate-500 sm:block">
+                    {description}
+                  </p>
+                </div>
+                <ArrowRight
+                  aria-hidden="true"
+                  className="hidden size-3 shrink-0 text-slate-300 group-hover:text-teal-600 sm:block"
+                />
+              </Link>
+            ),
+          )}
+        </div>
+      </section>
+      <section
+        aria-labelledby="teacher-next-actions"
+        className={`${styles.card} flex min-w-0 flex-col rounded-xl border bg-white p-4 xl:col-start-1 xl:row-start-2`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2
+              id="teacher-next-actions"
+              className={`${styles.heading} font-semibold`}
+            >
+              当前待办{" "}
+              <span className="rounded-full bg-teal-50 px-2 text-xs font-medium text-teal-700">
+                {todo.length} 项
+              </span>
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              只列需要你处理的事项，完成后自动移除。
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => refresh(() => router.refresh())}
+            className="shrink-0 rounded-lg border px-2 py-1.5 text-xs text-sky-700 disabled:opacity-60"
+          >
+            {refreshing ? "刷新中…" : "刷新待办"}
+          </button>
+        </div>
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+          <TeacherCardClassroomFilter
+            label="待办班级"
+            classrooms={workspace.classrooms}
+            value={todoClass}
+            onChange={setTodoClass}
+          />
+          <span className="text-xs text-slate-500">
+            待批改 {todoMetrics.pendingReviewCount} 份 · 待公布{" "}
+            {todoMetrics.publishableCount} 份
+          </span>
+        </div>
+        {refreshing ? (
+          <p role="status" className="mt-2 text-xs text-slate-500">
+            正在获取最新待办，班级筛选仍可使用。
+          </p>
+        ) : null}
+        {!todo.length ? (
+          <div className="mt-3 flex flex-1 items-center gap-3 rounded-lg bg-emerald-50 px-3 py-3">
+            <CheckCircle2
+              aria-hidden="true"
+              className="size-5 shrink-0 text-emerald-600"
+            />
+            <div>
+              <p className="text-sm font-medium text-emerald-900">
+                当前没有需要处理的事项
+              </p>
+              <p className="mt-1 text-xs text-emerald-800">
+                进行中的作业可在下方教学动态中查看。
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={`${styles.scrollArea} mt-3 min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto`}
+          >
+            {todo.map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-600"
+              >
+                <span
+                  className={`shrink-0 rounded-md px-2 py-1 text-xs ${item.kind === "recover" ? "bg-amber-50 text-amber-900" : item.kind === "publish" ? "bg-emerald-50 text-emerald-800" : "bg-sky-50 text-sky-800"}`}
+                >
+                  {item.kind === "recover"
+                    ? "待恢复"
+                    : item.kind === "publish"
+                      ? "待公布"
+                      : "待处理"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {item.scope} · {item.detail}
+                  </p>
+                </div>
+                <ArrowRight
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-slate-400"
+                />
               </Link>
             ))}
           </div>
-          <p className="mt-3 border-t pt-3 text-xs leading-5 text-slate-500">
-            题目与知识点为课程共用资源；人数按当前班级范围去重，作业按发布班次统计。
+        )}
+      </section>
+      <TeacherAssignmentProgress
+        workspace={workspace}
+        className="xl:col-start-2 xl:row-span-2 xl:row-start-1"
+      />
+      <section
+        aria-labelledby="course-overview-title"
+        className={`${styles.card} flex min-w-0 flex-col rounded-xl border bg-white p-4 xl:col-start-2 xl:row-start-3`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h2
+            id="course-overview-title"
+            className={`${styles.heading} font-semibold`}
+          >
+            教学概况
+          </h2>
+          <Link className="text-xs text-sky-700 hover:underline" href={base}>
+            课程详情 →
+          </Link>
+        </div>
+        <div className="mt-3">
+          <TeacherCardClassroomFilter
+            label="教学概况班级"
+            classrooms={workspace.classrooms}
+            value={overviewClass}
+            onChange={setOverviewClass}
+          />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
+          {stats.map(({ label, value, href, icon: Icon }, index) => (
+            <Link
+              key={label}
+              href={href}
+              className={`${styles.metric} group flex min-w-0 flex-col gap-2 border p-3 ${statSpan(index)} ${
+                index === stats.length - 1 && stats.length % 2 === 1
+                  ? "col-span-2"
+                  : ""
+              }`}
+            >
+              <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+                {label}
+              </span>
+              <strong className="text-2xl font-semibold tracking-tight text-slate-800 tabular-nums">
+                {value}
+              </strong>
+            </Link>
+          ))}
+        </div>
+        <p className="mt-auto border-t pt-3 text-xs leading-5 text-slate-500">
+          题目与知识点为课程共用资源；人数按当前班级范围去重，作业按发布班次统计。
+        </p>
+      </section>
+      <section
+        aria-labelledby="teaching-activity-title"
+        className={`${styles.card} flex min-w-0 flex-col rounded-xl border bg-white p-4 xl:col-start-1 xl:row-start-3`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h2
+            id="teaching-activity-title"
+            className={`${styles.heading} font-semibold`}
+          >
+            近期作业动态
+          </h2>
+          <Link
+            className="text-xs font-medium text-sky-700 hover:underline"
+            href={scopedAssignmentsHref(activityClass)}
+          >
+            全部作业 →
+          </Link>
+        </div>
+        <div className="mt-3">
+          <TeacherCardClassroomFilter
+            label="作业动态班级"
+            classrooms={workspace.classrooms}
+            value={activityClass}
+            onChange={setActivityClass}
+          />
+        </div>
+        {!recentAssignments.length ? (
+          <p className="py-5 text-center text-sm text-slate-500">
+            当前范围暂无作业。
           </p>
-        </section>
-      </div>
+        ) : (
+          <div
+            className={`${styles.scrollArea} mt-3 min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto`}
+          >
+            {recentAssignments.map((item) => (
+              <Link
+                key={item.id}
+                href={`/teacher/assignments/${item.id}`}
+                className="group flex items-center justify-between gap-3 rounded-lg px-2 py-3 hover:bg-slate-50 hover:text-teal-700"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{item.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {item.classroomName} · {item.submissionCount} 人已提交
+                    {item.dueAt
+                      ? ` · ${item.dueAt.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })} 截止`
+                      : ""}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
+                  {item.status === "DRAFT"
+                    ? "草稿"
+                    : item.status === "CLOSED"
+                      ? "已关闭"
+                      : item.dueAt && item.dueAt.getTime() <= renderedAt
+                        ? "已截止"
+                        : "已发布"}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

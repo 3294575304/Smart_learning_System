@@ -152,9 +152,19 @@ export async function createPaperDraft(
   }
 }
 
-export async function listPaperDrafts(teacherId: string) {
+export async function listPaperDrafts(
+  teacherId: string,
+  scope?: { courseId?: string; classroomId?: string },
+) {
   return prisma.examPaperDraft.findMany({
-    where: { teacherId },
+    where: {
+      teacherId,
+      ...(scope && {
+        publishedExamId: null,
+        ...(scope.courseId && { courseId: scope.courseId }),
+        ...(scope.classroomId && { classroomIds: { has: scope.classroomId } }),
+      }),
+    },
     select: {
       id: true,
       courseId: true,

@@ -3,8 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { AssignmentOperationError } from "@/services/assignments/errors";
-import { latestEffectiveSubmissions } from "@/services/assignments/reporting";
-import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
+import { loadExamScoreContext } from "./student-score-context";
 import { oneDecimal, percent } from "./analysis-statistics";
 
 export async function getStudentExamReport(
@@ -71,39 +70,15 @@ export async function getStudentExamReport(
     throw new AssignmentOperationError("考试尚未结束", 409);
   const assignment = exam.assignments[0];
   if (!assignment) throw new ResourceNotFoundError("考试不存在");
-  const submissions = await prisma.submission.findMany({
-    where: {
-      assignmentId: assignment.id,
-      status: { in: ["SUBMITTED", "PENDING_REVIEW", "GRADED", "PUBLISHED"] },
-    },
-    select: {
-      id: true,
-      assignmentId: true,
-      studentId: true,
-      attemptNumber: true,
-      status: true,
-      submittedAt: true,
-      score: true,
-      maxScore: true,
-    },
-  });
-  const latest =
-    latestEffectiveSubmissions(submissions).get(assignment.id) ?? new Map();
+  const { latest, ledgerByStudent, scoreFor, classScores, classAverage } =
+    await loadExamScoreContext(assignment.id, assignment.classroomId, [
+      ...new Set([
+        studentId,
+        ...assignment.classroom.memberships.map((member) => member.studentId),
+      ]),
+    ]);
   const own = latest.get(studentId);
-  const ledger = await listPublishedExamScores([assignment.classroomId]);
-  const ledgerByStudent = new Map(
-    ledger
-      .filter((item) => item.assignmentId === assignment.id)
-      .map((item) => [item.studentId, item]),
-  );
-  const ownLedger = ledgerByStudent.get(studentId);
-  const ownScore = ownLedger
-    ? ownLedger.status === "SCORED" && ownLedger.score !== null
-      ? { score: ownLedger.score, max: ownLedger.maxScore }
-      : null
-    : own?.status === "PUBLISHED" && own.score !== null && own.maxScore !== null
-      ? { score: own.score.toNumber(), max: own.maxScore.toNumber() }
-      : null;
+  const ownScore = scoreFor(studentId);
   if (!ownScore) throw new AssignmentOperationError("成绩待公布", 409);
   const published = [...latest.values()].filter(
     (item) =>
@@ -114,22 +89,6 @@ export async function getStudentExamReport(
       (!ledgerByStudent.has(item.studentId) ||
         ledgerByStudent.get(item.studentId)?.status === "SCORED"),
   );
-  const classScores = assignment.classroom.memberships.flatMap((member) => {
-    const grade = ledgerByStudent.get(member.studentId);
-    const submission = latest.get(member.studentId);
-    if (grade)
-      return grade.status === "SCORED" &&
-        grade.score !== null &&
-        grade.maxScore > 0
-        ? [(grade.score / grade.maxScore) * 100]
-        : [];
-    return submission?.status === "PUBLISHED" &&
-      submission.score !== null &&
-      submission.maxScore !== null &&
-      submission.maxScore.toNumber() > 0
-      ? [(submission.score.toNumber() / submission.maxScore.toNumber()) * 100]
-      : [];
-  });
   const ownPercent =
     ownScore.max > 0 ? oneDecimal((ownScore.score / ownScore.max) * 100) : null;
   const rank =
@@ -209,6 +168,7 @@ export async function getStudentExamReport(
     }
   }
   return {
+    publishedSubmissionId: own?.status === "PUBLISHED" ? own.id : null,
     examId,
     title: exam.title,
     courseId: exam.courseId,
@@ -217,13 +177,7 @@ export async function getStudentExamReport(
     score: ownScore.score,
     maxScore: ownScore.max,
     percentage: ownPercent,
-    classAverage:
-      classScores.length >= 5
-        ? oneDecimal(
-            classScores.reduce((sum, score) => sum + score, 0) /
-              classScores.length,
-          )
-        : null,
+    classAverage,
     rankBand: rank,
     classScoredCount: classScores.length,
     concepts: [...concepts.values()].map((item) => ({

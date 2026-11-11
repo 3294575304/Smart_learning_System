@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { activityHref } from "@/services/student-experience/activity-query";
 import { studentTaskHref } from "@/services/student-experience/task-scope";
 import { publishedResultsWhere } from "@/services/assignments/work-access";
 import { EFFECTIVE_SUBMISSION_STATUSES } from "@/services/assignments/reporting";
@@ -8,7 +9,7 @@ import type { StudentTaskItem } from "./student-task-overview";
 export async function getStudentExamTasks(
   studentId: string,
   now: Date,
-  scope?: { courseId: string; classroomId: string },
+  scope?: { courseId?: string; classroomId?: string },
 ) {
   const assignments = await prisma.assignment.findMany({
     where: {
@@ -49,7 +50,6 @@ export async function getStudentExamTasks(
     },
   });
   const items: StudentTaskItem[] = [];
-  const scheduled = [];
   for (const assignment of assignments) {
     const exam = assignment.examSession;
     if (
@@ -66,32 +66,33 @@ export async function getStudentExamTasks(
       Math.min(exam.endsAt.getTime(), assignment.dueAt.getTime()),
     );
     if (dueAt <= opensAt) continue;
-    const item = {
+    const canEnter = opensAt <= now;
+    const scope = {
+      courseId: exam.courseId,
+      classroomId: assignment.classroomId,
+    };
+    items.push({
       id: `exam:${assignment.id}`,
-      kind: "exam" as const,
+      kind: "exam",
+      status: canEnter ? "TODO" : "UPCOMING",
       title: exam.title,
       courseName: exam.course.name,
       classroomName: assignment.classroom.name,
+      opensAt,
       dueAt,
-      href: studentTaskHref(`/student/assignments/${assignment.id}`, {
-        courseId: exam.courseId,
-        classroomId: assignment.classroomId,
-      }),
-      action: "查看考试",
-      state: "考试中",
-    };
-    if (opensAt > now)
-      scheduled.push({
-        ...item,
-        opensAt,
-        state: "待开考",
-        href: `/student/exams#exam-${assignment.id}`,
-      });
-    else items.push(item);
+      canEnter,
+      attemptLimit: 1,
+      windowMinutes: Math.ceil((dueAt.getTime() - opensAt.getTime()) / 60000),
+      href: canEnter
+        ? studentTaskHref(`/student/assignments/${assignment.id}`, scope)
+        : `${activityHref("exams", { ...scope, focus: assignment.id })}#exam-${assignment.id}`,
+      action: canEnter ? "进入考试" : "查看安排",
+      state: canEnter ? "考试中" : "待开考",
+    });
   }
-  scheduled.sort(
+  return items.sort(
     (a, b) =>
-      a.opensAt.getTime() - b.opensAt.getTime() || a.id.localeCompare(b.id),
+      (a.opensAt?.getTime() ?? 0) - (b.opensAt?.getTime() ?? 0) ||
+      a.id.localeCompare(b.id),
   );
-  return { items, scheduled };
 }

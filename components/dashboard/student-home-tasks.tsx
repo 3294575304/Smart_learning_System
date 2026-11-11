@@ -53,29 +53,33 @@ function PendingTaskDistribution({
 export function StudentHomeTasks({
   overview,
   scope,
+  dashboard = false,
 }: {
   overview: StudentTaskOverview;
   scope?: { courseId: string; classroomId: string };
+  dashboard?: boolean;
 }) {
   const scopedHref = (path: string) =>
     scope ? `${path}?${new URLSearchParams(scope)}` : path;
   const [kind, setKind] = useState<StudentTaskKind | "all">("all");
-  const items = overview.items.filter(
+  const items = overview.pendingItems.filter(
     (item) => kind === "all" || item.kind === kind,
   );
+  const FilterPanel = dashboard && overview.total > 0 ? "details" : "div";
   return (
     <section
       aria-labelledby="pending-tasks-heading"
-      className="flex min-w-0 flex-col rounded-2xl border border-sky-100 bg-white p-4 sm:p-5"
+      className={`flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5 ${dashboard ? "border-neutral-300 bg-neutral-100" : "border-sky-100 bg-white"}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2
           id="pending-tasks-heading"
-          className="text-base font-semibold text-slate-950"
+          className={`font-semibold text-slate-950 ${dashboard ? "text-xl" : "text-base"}`}
         >
           我的待办{" "}
-          {scope && (
+          {((scope && !dashboard) || overview.total > 0) && (
             <span className="text-sm font-normal text-slate-600">
+              {dashboard ? "· " : ""}
               {overview.total} 项
             </span>
           )}
@@ -83,89 +87,131 @@ export function StudentHomeTasks({
         {!scope && (
           <StudentPageLink
             href="/student/tasks"
-            className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-sky-50 px-3 text-sm font-medium text-sky-800 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-sky-700"
+            className={`inline-flex min-h-10 items-center gap-1 rounded-md text-sm font-medium focus-visible:outline-2 focus-visible:outline-sky-700 ${dashboard ? "underline-offset-4 hover:underline" : "bg-sky-50 px-3 text-sky-800 hover:bg-sky-100"}`}
           >
             查看全部任务
-            <ArrowRight aria-hidden="true" className="size-4" />
+            {!dashboard && <ArrowRight aria-hidden="true" className="size-4" />}
           </StudentPageLink>
         )}
       </div>
-      <div
+      {dashboard && overview.total > 0 && (
+        <div className="mt-2">
+          {items.length ? (
+            <StudentTaskList
+              items={items.slice(0, 3)}
+              priorityId={overview.pendingItems[0]?.id}
+              layout="home"
+            />
+          ) : (
+            <p className="border-t border-neutral-300 py-3 text-sm text-neutral-600">
+              此类暂无待办
+            </p>
+          )}
+        </div>
+      )}
+      <FilterPanel
         className={
-          scope
-            ? "mt-3"
-            : "mt-3 flex flex-wrap items-center gap-4 rounded-xl bg-slate-50 p-3"
+          dashboard
+            ? "mt-1"
+            : scope
+              ? "mt-3"
+              : "mt-3 flex flex-wrap items-center gap-4 rounded-xl bg-slate-50 p-3"
         }
       >
-        {!scope && overview.total > 0 && (
-          <PendingTaskDistribution overview={overview} />
+        {dashboard && overview.total > 0 && (
+          <summary className="min-h-9 cursor-pointer content-center rounded-md text-sm font-medium focus-visible:outline-2 focus-visible:outline-sky-700">
+            待办分类与更多
+          </summary>
         )}
-        {!scope && !overview.total && (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <CheckCircle2
-              aria-hidden="true"
-              className="size-5 shrink-0 text-emerald-700"
-            />
-            <p className="text-sm font-medium text-slate-800">
-              暂无待办，当前没有需要处理的考试、作业、签到或问卷
-            </p>
-            <StudentPageLink
-              href="/student/courses"
-              className="inline-flex min-h-10 items-center gap-1 rounded text-sm font-medium text-sky-800 focus-visible:outline-2 focus-visible:outline-sky-700"
-            >
-              进入我的课程
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </StudentPageLink>
-          </div>
-        )}
-        {overview.total > 0 && (
-          <div
-            role="group"
-            aria-label="待办分类"
-            className="flex min-w-0 flex-wrap gap-1.5"
-          >
-            {(
-              [
-                { id: "all", label: "全部", count: overview.total },
-                {
-                  id: "assignment",
-                  label: "作业",
-                  count: overview.counts.assignment,
-                },
-                {
-                  id: "attendance",
-                  label: "签到",
-                  count: overview.counts.attendance,
-                },
-                { id: "survey", label: "问卷", count: overview.counts.survey },
-                { id: "exam", label: "考试", count: overview.counts.exam },
-              ] as const
-            ).map((filter) => (
-              <button
-                key={filter.id}
-                type="button"
-                aria-pressed={kind === filter.id}
-                onClick={() => setKind(filter.id)}
-                className={`min-h-10 rounded-lg border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 ${kind === filter.id ? "border-sky-700 bg-sky-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-sky-50"}`}
+        <div
+          className={
+            dashboard ? "flex flex-wrap items-center gap-3" : "contents"
+          }
+        >
+          {!scope && overview.total > 0 && (
+            <PendingTaskDistribution overview={overview} />
+          )}
+          {!scope && !overview.total && (
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+              <CheckCircle2
+                aria-hidden="true"
+                className="size-5 shrink-0 text-emerald-700"
+              />
+              <p className="text-sm font-medium text-slate-800">
+                暂无待办，当前没有需要处理的考试、作业、签到或问卷
+              </p>
+              <StudentPageLink
+                href="/student/courses"
+                className="inline-flex min-h-10 items-center gap-1 rounded text-sm font-medium text-sky-800 focus-visible:outline-2 focus-visible:outline-sky-700"
               >
-                {!scope && filter.id !== "all" && (
-                  <span
-                    aria-hidden="true"
-                    className="mr-1.5 inline-block size-2 rounded-full border border-white"
-                    style={{ background: taskColors[filter.id] }}
-                  />
-                )}
-                {filter.label}
-                {filter.id === "all"
-                  ? scope
-                    ? ` ${filter.count}`
-                    : ""
-                  : ` ${filter.count}`}
-              </button>
-            ))}
+                进入我的课程
+                <ArrowRight aria-hidden="true" className="size-4" />
+              </StudentPageLink>
+            </div>
+          )}
+          {overview.total > 0 && (
+            <div
+              role="group"
+              aria-label="待办分类"
+              className="flex min-w-0 flex-wrap gap-1.5"
+            >
+              {(
+                [
+                  { id: "all", label: "全部", count: overview.total },
+                  {
+                    id: "assignment",
+                    label: "作业",
+                    count: overview.counts.assignment,
+                  },
+                  {
+                    id: "attendance",
+                    label: "签到",
+                    count: overview.counts.attendance,
+                  },
+                  {
+                    id: "survey",
+                    label: "问卷",
+                    count: overview.counts.survey,
+                  },
+                  { id: "exam", label: "考试", count: overview.counts.exam },
+                ] as const
+              ).map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  aria-pressed={kind === filter.id}
+                  onClick={() => setKind(filter.id)}
+                  className={`min-h-10 rounded-lg border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 ${kind === filter.id ? "border-sky-700 bg-sky-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-sky-50"}`}
+                >
+                  {!scope && filter.id !== "all" && (
+                    <span
+                      aria-hidden="true"
+                      className="mr-1.5 inline-block size-2 rounded-full border border-white"
+                      style={{ background: taskColors[filter.id] }}
+                    />
+                  )}
+                  {filter.label}
+                  {filter.id === "all"
+                    ? scope
+                      ? ` ${filter.count}`
+                      : ""
+                    : ` ${filter.count}`}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {dashboard && items.length > 3 && (
+          <div className="mt-3">
+            <StudentTaskList items={items.slice(3, 5)} layout="home" />
+            {items.length > 5 && (
+              <p className="mt-2 text-xs text-neutral-600">
+                其余 {items.length - 5} 项可在全部任务中查看。
+              </p>
+            )}
           </div>
         )}
-      </div>
+      </FilterPanel>
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {kind === "all"
           ? "全部待办"
@@ -177,12 +223,12 @@ export function StudentHomeTasks({
             }[kind]}
         ，共 {items.length} 项，显示 {Math.min(items.length, 5)} 项。
       </div>
-      {(scope || overview.total > 0) && (
+      {!dashboard && (scope || overview.total > 0) && (
         <div className="mt-3">
           {items.length ? (
             <StudentTaskList
               items={items.slice(0, 5)}
-              priorityId={overview.items[0]?.id}
+              priorityId={overview.pendingItems[0]?.id}
               showContext={!scope}
             />
           ) : (
@@ -202,25 +248,6 @@ export function StudentHomeTasks({
               {scope ? "课程记录" : "全部任务"}中查看。
             </p>
           )}
-        </div>
-      )}
-      {overview.scheduledExams.length > 0 && (
-        <div className="mt-4 border-t pt-3">
-          <h3 className="text-sm font-medium">
-            近期考试 · {overview.scheduledExams.length} 场
-          </h3>
-          {overview.scheduledExams.slice(0, 2).map((exam) => (
-            <a
-              key={exam.id}
-              href={exam.href}
-              className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 focus-visible:outline-2"
-            >
-              <span>
-                {exam.title} · {exam.classroomName}
-              </span>
-              <span>{studentTaskDate(exam.opensAt)} 开考</span>
-            </a>
-          ))}
         </div>
       )}
       {overview.scheduledSurveys.length > 0 && (

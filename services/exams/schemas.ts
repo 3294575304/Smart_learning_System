@@ -1,10 +1,22 @@
 import { ExamType, QuestionType } from "@prisma/client";
 import { z } from "zod";
 
+export const teacherExamStatusLabels = {
+  UPCOMING: "未开始",
+  IN_PROGRESS: "进行中",
+  ENDED: "已结束",
+  CANCELLED: "已取消",
+} as const;
+
 export const teacherExamListSchema = z.object({
   courseId: z.string().cuid().optional(),
   classroomId: z.string().cuid().optional(),
+  keyword: z.string().trim().max(120).optional(),
+  status: z.enum(["UPCOMING", "IN_PROGRESS", "ENDED", "CANCELLED"]).optional(),
+  type: z.nativeEnum(ExamType).optional(),
 });
+
+export type TeacherExamListScope = z.infer<typeof teacherExamListSchema>;
 
 export const examCreateSchema = z
   .object({

@@ -222,6 +222,11 @@ export function getSegmentLabels(
   pathname: string,
   labels: Readonly<Record<string, string>> = SEGMENT_LABELS,
 ): Readonly<Record<string, string>> {
+  if (pathname === "/teacher/exams/import")
+    return { ...labels, import: "上传试卷" };
+  if (pathname === "/teacher/exams/new") return { ...labels, new: "新建考试" };
+  if (/^\/teacher\/exams\/[^/]+\/monitor$/.test(pathname))
+    return { ...labels, monitor: "考试监考" };
   if (/^\/teacher\/assignments\/[^/]+\/results$/.test(pathname))
     return { ...labels, results: "成绩统计" };
   // 教师课程通知与管理员「系统公告」同名段，按路径区分标题。

@@ -36,7 +36,9 @@ export function buildBreadcrumbs(
         !labels[segment] &&
         ((index === 2 &&
           segments[0] === "teacher" &&
-          ["assignments", "classrooms", "questions"].includes(segments[1])) ||
+          ["assignments", "classrooms", "questions", "exams"].includes(
+            segments[1],
+          )) ||
           (index === 2 &&
             segments[0] === "student" &&
             ["assignments", "recommendations", "wrong-questions"].includes(

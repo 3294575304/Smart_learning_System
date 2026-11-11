@@ -1,3 +1,4 @@
+import { getStudentExamClassAverage } from "@/services/exams/student-score-context";
 import { Role } from "@prisma/client";
 import { Suspense } from "react";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
@@ -36,6 +37,16 @@ export default async function StudentPage({
   } catch {
     notFound();
   }
+  const recentExam = analytics.exams.recent;
+  const classAverage =
+    recentExam?.resultState === "PUBLISHED"
+      ? await getStudentExamClassAverage(
+          student.id,
+          recentExam.assignmentId,
+          recentExam.classroomId,
+          now,
+        )
+      : null;
   return (
     <>
       <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
@@ -45,6 +56,8 @@ export default async function StudentPage({
         insights={
           <StudentHomeInsights
             classes={analytics.classes}
+            exams={analytics.exams}
+            examClassAverage={classAverage}
             selected={selected}
             knowledge={
               selected ? (

@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -11,6 +10,10 @@ import {
   type PointerEvent,
 } from "react";
 import { QuestionType } from "@prisma/client";
+import { ExamPublicationDialog } from "@/components/exams/exam-publication-dialog";
+import { ExamRulePresets } from "@/components/exams/exam-rule-presets";
+import { checkExamPublication } from "@/services/exams/publication-check";
+import type { ExamCreateInput } from "@/services/exams/schemas";
 
 import type { getPaperDraft } from "@/services/exams/paper-drafts";
 import {
@@ -79,6 +82,7 @@ function QuestionEditor({
   sourceFormat,
   objectives,
   onChanged,
+  onDirtyChange,
 }: {
   draftId: string;
   row: Row;
@@ -86,6 +90,7 @@ function QuestionEditor({
   sourceFormat: string;
   objectives: Draft["objectives"];
   onChanged: () => Promise<void>;
+  onDirtyChange: (id: string, dirty: boolean) => void;
 }) {
   const parsed = paperDraftQuestionSchema.safeParse(row.questionJson);
   const [question, setQuestion] = useState<PaperDraftQuestion>(
@@ -109,6 +114,16 @@ function QuestionEditor({
       ? JSON.stringify(question.programmingConfig, null, 2)
       : "",
   );
+  const initialQuestion = useRef(question);
+  const initialConfig = useRef(configText);
+  const dirty =
+    JSON.stringify(question) !== JSON.stringify(initialQuestion.current) ||
+    points !== row.points ||
+    configText !== initialConfig.current;
+  useEffect(() => {
+    onDirtyChange(row.id, dirty);
+    return () => onDirtyChange(row.id, false);
+  }, [dirty, onDirtyChange, row.id]);
   const [assetId, setAssetId] = useState(sourceAssets[0]?.id ?? "");
   const [rectangle, setRectangle] = useState<{
     x: number;
@@ -643,11 +658,12 @@ function QuestionEditor({
 export function PaperDraftEditor({
   initial,
   classrooms,
+  courseName,
 }: {
   initial: Draft;
   classrooms: Array<{ id: string; name: string; courseId: string | null }>;
+  courseName: string;
 }) {
-  const router = useRouter();
   const [draft, setDraft] = useState(initial);
   const [title, setTitle] = useState(initial.title);
   const [type, setType] = useState(initial.type);
@@ -660,6 +676,17 @@ export function PaperDraftEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [publication, setPublication] = useState<{
+    exam: ExamCreateInput;
+    revision: number;
+  } | null>(null);
+  const [dirtyQuestions, setDirtyQuestions] = useState<string[]>([]);
+  const markDirty = useCallback((id: string, dirty: boolean) => {
+    setDirtyQuestions((previous) => {
+      if (previous.includes(id) === dirty) return previous;
+      return dirty ? [...previous, id] : previous.filter((item) => item !== id);
+    });
+  }, []);
   const requestId = useRef(crypto.randomUUID());
   const base = `/api/teacher/exams/drafts/${draft.id}`;
   const refresh = useCallback(async () => {
@@ -751,22 +778,58 @@ export function PaperDraftEditor({
       setBusy(false);
     }
   }
-  async function publish() {
-    if (
-      !window.confirm(
-        "发布后试卷、题目图片和考试规则会冻结，新题将进入共享题库。确认发布？",
-      )
-    )
+  function previewPublication() {
+    setMessage("");
+    const settingsChanged =
+      title.trim() !== draft.title ||
+      type !== draft.type ||
+      startsAt !== localDatetime(draft.startsAt) ||
+      endsAt !== localDatetime(draft.endsAt) ||
+      allowedSwitches !== draft.allowedSwitches ||
+      classroomIds.length !== draft.classroomIds.length ||
+      classroomIds.some((id) => !draft.classroomIds.includes(id));
+    if (settingsChanged || dirtyQuestions.length) {
+      setError("请先保存考试设置和修改过的题目，再核对发布。");
       return;
+    }
+    if (reviewed !== draft.questions.length) {
+      setError("请先完成全部题目的审核。");
+      return;
+    }
+    const result = checkExamPublication(
+      {
+        requestId: requestId.current,
+        courseId: draft.courseId,
+        title: draft.title,
+        type: draft.type,
+        startsAt: draft.startsAt ?? undefined,
+        endsAt: draft.endsAt ?? undefined,
+        allowedSwitches: draft.allowedSwitches,
+        classroomIds: draft.classroomIds,
+        questions: draft.questions.map((row) => ({
+          questionId: row.id,
+          points: row.points,
+        })),
+      },
+      availableClassrooms.map(({ id }) => id),
+    );
+    if (result.error !== undefined) {
+      setError(result.error);
+      return;
+    }
+    setError("");
+    setPublication({ exam: result.data, revision: draft.revision });
+  }
+  async function publish() {
+    if (!publication || busy) return;
     setBusy(true);
     setError("");
     try {
       await api(`${base}/publish`, "POST", {
-        expectedRevision: draft.revision,
-        requestId: requestId.current,
+        expectedRevision: publication.revision,
+        requestId: publication.exam.requestId,
       });
-      router.push("/teacher/exams");
-      router.refresh();
+      window.location.replace("/teacher/exams");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "发布失败");
     } finally {
@@ -776,6 +839,9 @@ export function PaperDraftEditor({
   const reviewed = draft.questions.filter(
     (row) => row.reviewedRevision === row.revision,
   ).length;
+  const availableClassrooms = classrooms.filter(
+    (item) => item.courseId === draft.courseId,
+  );
   return (
     <div className="space-y-5">
       <section className="rounded-xl border bg-white p-5">
@@ -859,40 +925,44 @@ export function PaperDraftEditor({
                 onChange={(event) => setEndsAt(event.target.value)}
               />
             </label>
-            <label className="text-sm">
-              允许切屏次数
-              <input
-                className="mt-1 w-full rounded border p-2"
-                min="0"
-                max="20"
-                type="number"
-                value={allowedSwitches}
-                onChange={(event) =>
-                  setAllowedSwitches(Number(event.target.value))
-                }
+            <div className="min-w-0 space-y-2">
+              <label className="block text-sm">
+                允许切屏次数
+                <input
+                  className="mt-1 w-full rounded border p-2"
+                  min="0"
+                  max="20"
+                  type="number"
+                  value={allowedSwitches}
+                  onChange={(event) =>
+                    setAllowedSwitches(Number(event.target.value))
+                  }
+                />
+              </label>
+              <ExamRulePresets
+                switches={allowedSwitches}
+                onChange={setAllowedSwitches}
               />
-            </label>
+            </div>
             <fieldset className="sm:col-span-2">
               <legend className="text-sm">参加班级</legend>
               <div className="mt-2 flex flex-wrap gap-4">
-                {classrooms
-                  .filter((item) => item.courseId === draft.courseId)
-                  .map((item) => (
-                    <label className="text-sm" key={item.id}>
-                      <input
-                        checked={classroomIds.includes(item.id)}
-                        type="checkbox"
-                        onChange={(event) =>
-                          setClassroomIds((current) =>
-                            event.target.checked
-                              ? [...current, item.id]
-                              : current.filter((id) => id !== item.id),
-                          )
-                        }
-                      />{" "}
-                      {item.name}
-                    </label>
-                  ))}
+                {availableClassrooms.map((item) => (
+                  <label className="text-sm" key={item.id}>
+                    <input
+                      checked={classroomIds.includes(item.id)}
+                      type="checkbox"
+                      onChange={(event) =>
+                        setClassroomIds((current) =>
+                          event.target.checked
+                            ? [...current, item.id]
+                            : current.filter((id) => id !== item.id),
+                        )
+                      }
+                    />{" "}
+                    {item.name}
+                  </label>
+                ))}
               </div>
             </fieldset>
             <button
@@ -957,6 +1027,7 @@ export function PaperDraftEditor({
                   sourceFormat={draft.sourceFormat}
                   objectives={draft.objectives}
                   onChanged={refresh}
+                  onDirtyChange={markDirty}
                 />
               </div>
             ))}
@@ -973,21 +1044,28 @@ export function PaperDraftEditor({
           )}
           <button
             className="rounded bg-sky-700 px-5 py-2 text-white disabled:opacity-50"
-            disabled={
-              busy ||
-              !draft.questions.length ||
-              reviewed !== draft.questions.length ||
-              !draft.title ||
-              !draft.startsAt ||
-              !draft.endsAt ||
-              !draft.classroomIds.length
-            }
-            onClick={() => void publish()}
+            disabled={busy}
+            onClick={previewPublication}
           >
-            {busy ? "处理中…" : "审核完成，发布考试"}
+            核对并发布
           </button>
         </>
       )}
+      <ExamPublicationDialog
+        exam={publication?.exam ?? null}
+        course={courseName}
+        classrooms={availableClassrooms
+          .filter(({ id }) => publication?.exam.classroomIds.includes(id))
+          .map(({ name }) => name)}
+        fromPaper
+        busy={busy}
+        error={error}
+        onClose={() => {
+          setPublication(null);
+          setError("");
+        }}
+        onConfirm={() => void publish()}
+      />
       {draft.status === "PUBLISHED" && (
         <Link className="text-sky-700 underline" href="/teacher/exams">
           查看已发布考试

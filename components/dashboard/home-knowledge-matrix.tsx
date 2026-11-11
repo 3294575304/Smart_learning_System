@@ -33,11 +33,13 @@ export function HomeKnowledgeMatrix({
   profileHref,
   generatedAt,
   profileRevision,
+  dashboard = false,
 }: {
   chapters: HomeKnowledgeChapter[];
   profileHref: string;
   generatedAt: string | null;
   profileRevision: number | null;
+  dashboard?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const concepts = [
@@ -51,7 +53,7 @@ export function HomeKnowledgeMatrix({
       count: concepts.filter((concept) => concept.status === status).length,
     }))
     .filter(({ count }) => count > 0);
-  return (
+  const matrix = (
     <>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-slate-600">
@@ -229,5 +231,48 @@ export function HomeKnowledgeMatrix({
         </div>
       </details>
     </>
+  );
+  if (!dashboard) return matrix;
+  const practice = concepts.filter(
+    (concept) =>
+      concept.status === "DEVELOPING" || concept.status === "NEEDS_SUPPORT",
+  ).length;
+  const assessed = concepts.some(
+    (concept) =>
+      concept.status === "MASTERED" ||
+      concept.status === "DEVELOPING" ||
+      concept.status === "NEEDS_SUPPORT",
+  );
+  return (
+    <div className="mt-3 flex flex-1 flex-col">
+      <p className="text-sm leading-5 text-neutral-600">
+        {!chapters.length
+          ? "暂无章节"
+          : !assessed
+            ? `${concepts.length} 个知识点 · 暂无掌握结论`
+            : `${practice} 个知识点待巩固`}
+      </p>
+      {chapters.length > 0 && (
+        <ul
+          aria-label="章节预览"
+          className="mt-4 grid flex-1 grid-cols-2 content-stretch gap-2 sm:grid-cols-3"
+        >
+          {chapters.slice(0, 6).map((chapter) => (
+            <li
+              key={chapter.key}
+              className="flex min-w-0 items-center rounded-lg bg-neutral-200 px-2 py-2 text-xs leading-5 [overflow-wrap:anywhere]"
+            >
+              {chapter.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      <details className="mt-2">
+        <summary className="min-h-9 cursor-pointer content-center rounded-md text-sm font-medium focus-visible:outline-2 focus-visible:outline-sky-700">
+          查看章节与依据
+        </summary>
+        {matrix}
+      </details>
+    </div>
   );
 }

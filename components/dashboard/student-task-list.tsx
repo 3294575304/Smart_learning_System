@@ -45,8 +45,54 @@ export function StudentTaskList({
   items: StudentTaskItem[];
   priorityId?: string;
   showContext?: boolean;
-  layout?: "compact" | "workspace";
+  layout?: "compact" | "workspace" | "home";
 }) {
+  if (layout === "home") {
+    return (
+      <ul className="divide-y divide-neutral-300 border-t border-neutral-300">
+        {items.map((item) => {
+          const start = item.kind === "exam" ? item.opensAt : undefined;
+          const time = start ?? item.dueAt;
+          return (
+            <li key={item.id}>
+              <Link
+                href={item.href}
+                title={`${studentTaskContext(item)} · ${item.state}`}
+                className="grid min-h-12 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-md py-2.5 hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-sky-700 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-full bg-neutral-950"
+                />
+                <span className="font-medium [overflow-wrap:anywhere]">
+                  <span className="sr-only">{item.action}：</span>
+                  {item.title}
+                  {item.id === priorityId && (
+                    <span className="sr-only"> 优先处理</span>
+                  )}
+                </span>
+                <span className="col-start-2 text-sm text-neutral-600 sm:col-start-auto sm:text-end">
+                  {start
+                    ? "开考"
+                    : item.kind === "attendance"
+                      ? "签到截止"
+                      : "截止"}{" "}
+                  <time dateTime={time.toISOString()}>
+                    {studentTaskDate(time)}
+                  </time>
+                  <span className="sr-only">
+                    {item.windowMinutes !== undefined &&
+                      ` · 限时 ${item.windowMinutes} 分钟`}
+                    {item.kind === "survey" && " · 不计入成绩"}
+                  </span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
   const workspace = layout === "workspace";
   return (
     <ul className={cn("divide-y divide-slate-100", workspace && "@container")}>
@@ -115,10 +161,23 @@ export function StudentTaskList({
                     className="mr-1 inline size-3.5 align-text-bottom"
                   />
                 )}
-                <time dateTime={item.dueAt.toISOString()}>
-                  {studentTaskDate(item.dueAt)}
-                </time>{" "}
-                {item.kind === "attendance" ? "结束签到" : "截止"}
+                {item.kind === "exam" && item.opensAt ? (
+                  <>
+                    开考{" "}
+                    <time dateTime={item.opensAt.toISOString()}>
+                      {studentTaskDate(item.opensAt)}
+                    </time>
+                    {item.windowMinutes !== undefined &&
+                      ` · 限时 ${item.windowMinutes} 分钟`}
+                  </>
+                ) : (
+                  <>
+                    {item.kind === "attendance" ? "结束签到" : "截止"}{" "}
+                    <time dateTime={item.dueAt.toISOString()}>
+                      {studentTaskDate(item.dueAt)}
+                    </time>
+                  </>
+                )}
                 {item.kind === "survey" ? " · 不计入成绩" : ""}
               </p>
             </div>

@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { Role } from "@prisma/client";
 import { notFound } from "next/navigation";
 
 import { PaperDraftEditor } from "@/components/exams/paper-draft-editor";
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { getTeacherAssignmentEditorOptions } from "@/services/assignments/service";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -21,12 +21,21 @@ export default async function ExamDraftPage({
       getTeacherAssignmentEditorOptions(teacher.id),
     ]);
     return (
-      <section className="mx-auto max-w-5xl space-y-5">
-        <Link className="text-sm text-sky-700" href="/teacher/exams/import">
-          ← 返回试卷草稿
-        </Link>
-        <h1 className="text-2xl font-semibold">审核在线考试草稿</h1>
-        <PaperDraftEditor initial={draft} classrooms={options.classrooms} />
+      <section className="space-y-5">
+        <header className="flex flex-wrap items-center gap-3">
+          <TeacherBackLink href="/teacher/exams">返回考试管理</TeacherBackLink>
+          <h1 className="text-2xl font-semibold text-slate-950">
+            审核试卷草稿
+          </h1>
+        </header>
+        <PaperDraftEditor
+          initial={draft}
+          classrooms={options.classrooms}
+          courseName={
+            options.publicationCourses.find(({ id }) => id === draft.courseId)
+              ?.name ?? "原试卷课程"
+          }
+        />
       </section>
     );
   } catch (error) {

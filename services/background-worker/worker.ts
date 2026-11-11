@@ -6,6 +6,7 @@ import type { BackgroundJob } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { pruneAIProviderAttemptLogs } from "@/services/ai/governance";
 import { finalizeExpiredExams } from "@/services/exams/expiry";
+import { publishDueExamResults } from "@/services/exams/result-management";
 import {
   claimNextBackgroundJob,
   failBackgroundJob,
@@ -121,6 +122,7 @@ export class PersistentLongTaskWorker {
           });
           await deleteExpiredQuestionSourceFiles();
           await finalizeExpiredExams();
+          await publishDueExamResults();
           await enqueueMissingQuestionObjectiveJobs();
           this.lastRecoveryAt = Date.now();
         }

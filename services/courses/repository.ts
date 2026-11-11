@@ -211,12 +211,19 @@ export function findActiveCourseTemplateByCode(
   });
 }
 
+export function teacherCourseManagementWhere(teacherId: string) {
+  return {
+    teacherId,
+    status: { not: CourseStatus.ARCHIVED },
+  } satisfies Prisma.CourseWhereInput;
+}
+
 export async function loadTeacherCourses(
   teacherId: string,
   client: DatabaseClient = prisma,
 ): Promise<TeacherCourseRecord[]> {
   return client.course.findMany({
-    where: { teacherId, status: { not: CourseStatus.ARCHIVED } },
+    where: teacherCourseManagementWhere(teacherId),
     select: teacherCourseSelect,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
@@ -230,8 +237,7 @@ export function findTeacherCourseById(
   return client.course.findFirst({
     where: {
       id: courseId,
-      teacherId,
-      status: { not: CourseStatus.ARCHIVED },
+      ...teacherCourseManagementWhere(teacherId),
     },
     select: teacherCourseSelect,
   });

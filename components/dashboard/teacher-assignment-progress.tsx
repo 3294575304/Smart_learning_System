@@ -229,8 +229,10 @@ function ClassRateBars({
 
 export function TeacherAssignmentProgress({
   workspace,
+  className,
 }: {
   workspace: Workspace;
+  className?: string;
 }) {
   const [classroomId, setClassroomId] = useState("");
   const allClasses = summarizeAssignmentRatesByClass(
@@ -248,7 +250,7 @@ export function TeacherAssignmentProgress({
   return (
     <section
       aria-labelledby="assignment-progress-title"
-      className={`${styles.card} order-3 min-w-0 border bg-white p-4 xl:order-none`}
+      className={`${styles.card} flex min-w-0 flex-col border bg-white p-4 xl:max-h-[520px] xl:overflow-y-auto ${className ?? ""}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2

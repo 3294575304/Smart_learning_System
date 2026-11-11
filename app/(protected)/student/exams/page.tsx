@@ -1,166 +1,178 @@
 import Link from "next/link";
 import { Role } from "@prisma/client";
+import { ClipboardCheck } from "lucide-react";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { listStudentExams } from "@/services/exams/service";
+import { listStudentTaskClassrooms } from "@/services/courses/student-access";
 import { StudentPageHeader } from "@/components/dashboard/student-page-header";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
+import { EmptyState } from "@/components/dashboard/empty-state";
+import {
+  StudentActivityFilters,
+  StudentActivityPagination,
+  activityActionClass,
+  activityCardClass,
+} from "@/components/dashboard/student-activity-list";
+import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
+import { activityHref } from "@/services/student-experience/activity-query";
+import {
+  readActivityPage,
+  readActivityPageQuery,
+} from "@/services/student-experience/activity-page";
+import { loadActivityExams } from "@/services/student-experience/activity-service";
 import { studentTaskHref } from "@/services/student-experience/task-scope";
 
-const button =
-  "inline-flex min-h-10 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
-export default async function StudentExamsPage() {
+const statusLabel = {
+  TODO: "考试中",
+  UPCOMING: "待开考",
+  SUBMITTED: "已提交",
+  EXPIRED: "已结束",
+};
+const formatTime = new Intl.DateTimeFormat("zh-CN", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Shanghai",
+});
+
+export default async function StudentExamsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const student = await requirePageRole(Role.STUDENT);
-  const exams = await listStudentExams(student.id);
-  const now = new Date();
+  const query = readActivityPageQuery("exams", await searchParams);
+  const [result, classrooms] = await Promise.all([
+    readActivityPage(() => loadActivityExams(student.id, query)),
+    listStudentTaskClassrooms(student.id, query.courseId),
+  ]);
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
+      <SurveyAvailabilityRefresh at={result.nextChangeAt?.toISOString()} />
       <StudentPageHeader
         title="我的考试"
-        description="查看考试安排、考核要求和我的提交状态。正在进行的考试也会显示在学习任务中。"
+        description="查看考试安排、考核要求和提交状态。"
         actions={
-          <Link className={button} href="/student/tasks">
+          <StudentBackLink
+            href={activityHref("tasks", {
+              courseId: query.courseId,
+              classroomId: query.classroomId,
+            })}
+          >
             返回学习任务
-          </Link>
+          </StudentBackLink>
         }
       />
-      {exams.length ? (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {exams.flatMap((exam) =>
-            exam.assignments.map((assignment) => {
-              const submitted = assignment.submissions.some(
-                (s) => s.status !== "IN_PROGRESS",
-              );
-              const writable =
-                assignment.status === "PUBLISHED" &&
-                assignment.classroom.status === "ACTIVE";
-              const state = submitted
-                ? "已提交"
-                : !writable
-                  ? "只读记录"
-                  : now < exam.startsAt
-                    ? "待开考"
-                    : now >= exam.endsAt
-                      ? "已结束"
-                      : "考试中";
-              const scope = {
-                courseId: exam.courseId,
-                classroomId: assignment.classroomId,
-              };
-              const href =
-                now < exam.startsAt
-                  ? `#exam-${assignment.id}`
-                  : studentTaskHref(
-                      `/student/assignments/${assignment.id}`,
-                      scope,
-                    );
-              return (
-                <article
-                  id={`exam-${assignment.id}`}
-                  key={assignment.id}
-                  className="flex min-w-0 flex-col rounded-2xl border bg-white p-5"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-lg font-semibold break-words">
-                      {exam.title}
-                    </h2>
-                    <span className="shrink-0 rounded-full bg-sky-50 px-3 py-1 text-xs text-sky-800">
-                      {state}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-600">
-                    {assignment.classroom.name} ·{" "}
-                    {exam.type === "MIDTERM" ? "期中考试" : "期末考试"}
+      <StudentActivityFilters
+        view="exams"
+        query={query}
+        classrooms={classrooms.filter((room) => room.courseName !== null)}
+        total={result.pagination.total}
+      />
+      {result.items.length ? (
+        <div className="grid items-start gap-4 md:grid-cols-2">
+          {result.items.map((exam) => (
+            <article
+              id={`exam-${exam.id}`}
+              key={exam.id}
+              className={`${activityCardClass} scroll-mt-24`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <h2 className="min-w-0 text-base font-semibold break-words">
+                  {exam.title}
+                </h2>
+                <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs text-sky-800">
+                  {statusLabel[exam.status]}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                {[
+                  exam.courseName,
+                  exam.classroomName,
+                  exam.examType === "MIDTERM" ? "期中考试" : "期末考试",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                <time dateTime={exam.startsAt.toISOString()}>
+                  {formatTime.format(exam.startsAt)}
+                </time>{" "}
+                开考 ·{" "}
+                <time dateTime={exam.dueAt.toISOString()}>
+                  {formatTime.format(exam.dueAt)}
+                </time>{" "}
+                截止
+              </p>
+              <details className="mt-3 rounded-lg border border-sky-100 px-3 py-2 text-sm">
+                <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-sky-700">
+                  考核要求与学习安排
+                </summary>
+                <div className="mt-3 space-y-2 text-slate-700">
+                  <p>
+                    考试约{" "}
+                    {Math.round(
+                      (exam.dueAt.getTime() - exam.startsAt.getTime()) / 60000,
+                    )}{" "}
+                    分钟，允许切屏 {exam.allowedSwitches} 次。请在截止前提交。
                   </p>
-                  <dl className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm">
-                    <div>
-                      <dt className="text-slate-600">开考时间</dt>
-                      <dd className="mt-1 font-medium">
-                        {exam.startsAt.toLocaleString("zh-CN")}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-slate-600">截止时间</dt>
-                      <dd className="mt-1 font-medium">
-                        {exam.endsAt.toLocaleString("zh-CN")}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-slate-600">考试时长</dt>
-                      <dd className="mt-1 font-medium">
-                        {Math.round(
-                          (exam.endsAt.getTime() - exam.startsAt.getTime()) /
-                            60000,
-                        )}{" "}
-                        分钟
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-slate-600">允许切屏</dt>
-                      <dd className="mt-1 font-medium">
-                        {exam.allowedSwitches} 次
-                      </dd>
-                    </div>
-                  </dl>
-                  <details className="mt-4 rounded-xl border p-3">
-                    <summary className="cursor-pointer rounded font-medium focus-visible:outline-2 focus-visible:outline-sky-700">
-                      考核要求与学习安排
-                    </summary>
-                    <div className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
-                      <p>
-                        请在规定时间内作答并提交，不支持重复提交。切屏要求以考试页面提示为准。
-                      </p>
-                      <p>
-                        当前未提供可公开的考点清单，具体考试范围以教师公布内容为准。
-                      </p>
-                      <p>
-                        备考时，先查看本课程作业中的错题和教师反馈，再复习掌握证据不足的知识点，最后进行限时综合练习。课程复习内容不等于考试范围。
-                      </p>
-                      <Link
-                        className={button}
-                        href={studentTaskHref(
-                          `/student/courses/${exam.courseId}/learning-center?tab=tasks`,
-                          scope,
-                        )}
-                      >
-                        查看课程任务
-                      </Link>
-                      <Link
-                        className={`${button} ml-2`}
-                        href={studentTaskHref(
-                          "/student/wrong-questions",
-                          scope,
-                        )}
-                      >
-                        按课程复习
-                      </Link>
-                    </div>
-                  </details>
-                  <div className="mt-4">
-                    {now >= exam.endsAt && (
-                      <Link
-                        className={`${button} mr-2`}
-                        href={`/student/exams/${exam.id}/report?classroomId=${assignment.classroomId}`}
-                      >
-                        查看考试报告
-                      </Link>
-                    )}
-                    <Link className={button} href={href}>
-                      {submitted || !writable || now >= exam.endsAt
-                        ? "查看考试记录"
-                        : now < exam.startsAt
-                          ? "查看考试安排"
-                          : "进入考试"}
+                  <p>
+                    考试范围以教师公布内容为准。可先查看本课程任务和错题，再安排限时练习。
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      className={activityActionClass}
+                      href={studentTaskHref(
+                        `/student/courses/${exam.scope.courseId}/learning-center?tab=tasks`,
+                        exam.scope,
+                      )}
+                    >
+                      查看课程任务
+                    </Link>
+                    <Link
+                      className={activityActionClass}
+                      href={studentTaskHref(
+                        "/student/wrong-questions",
+                        exam.scope,
+                      )}
+                    >
+                      按课程复习
                     </Link>
                   </div>
-                </article>
-              );
-            }),
-          )}
+                </div>
+              </details>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {exam.status !== "UPCOMING" && (
+                  <Link className={activityActionClass} href={exam.href}>
+                    {exam.status === "TODO" ? "进入考试" : "查看考试记录"}
+                  </Link>
+                )}
+                {exam.canViewReport && (
+                  <Link
+                    className={activityActionClass}
+                    href={studentTaskHref(
+                      `/student/exams/${exam.examId}/report`,
+                      exam.scope,
+                    )}
+                  >
+                    查看考试报告
+                  </Link>
+                )}
+              </div>
+            </article>
+          ))}
         </div>
       ) : (
-        <div className="rounded-2xl border bg-white p-8 text-slate-600">
-          暂无考试安排。已开放的作业、签到和问卷可在学习任务中查看。
-        </div>
+        <EmptyState
+          compact
+          icon={ClipboardCheck}
+          title="暂无符合条件的考试"
+          description="可以调整教学班或状态筛选。"
+        />
       )}
+      <StudentActivityPagination
+        view="exams"
+        query={query}
+        pagination={result.pagination}
+      />
     </section>
   );
 }

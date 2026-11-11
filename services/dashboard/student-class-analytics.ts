@@ -6,6 +6,7 @@ import { listStudentCourseEvaluationContexts } from "@/services/gradebook/servic
 import { assignmentReportingWhere } from "@/services/assignments/reporting";
 import { latestEffectiveSubmissions } from "@/services/assignments/latest-submissions";
 import { hundredPointScore } from "@/services/assignments/presentation";
+import { oneDecimal } from "@/services/exams/analysis-statistics";
 import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
 export const studentClassAnalyticsQuery = z
   .object({
@@ -13,6 +14,20 @@ export const studentClassAnalyticsQuery = z
     classroomId: z.string().cuid().optional(),
   })
   .strict();
+export type StudentHomeExamResult = {
+  assignmentId: string;
+  examId: string;
+  courseId: string;
+  classroomId: string;
+  courseName: string;
+  classroomName: string;
+  title: string;
+  endsAt: Date;
+  percentage: number | null;
+  resultState: "PUBLISHED" | "AWAITING" | "MISSED" | "RECORDED";
+  publishedSubmissionId: string | null;
+};
+
 export async function getStudentClassAnalytics(
   studentId: string,
   rawQuery: unknown,
@@ -42,10 +57,14 @@ export async function getStudentClassAnalytics(
         prisma.assignment.findMany({
           where: {
             classroomId: { in: ids },
+            deletedAt: null,
             ...assignmentReportingWhere("ALL", now),
             OR: [
               { examSessionId: null },
-              { examSession: { cancelledAt: null, endsAt: { lte: now } } },
+              {
+                status: { in: ["PUBLISHED", "CLOSED"] },
+                examSession: { cancelledAt: null, endsAt: { lte: now } },
+              },
             ],
           },
           select: {
@@ -53,7 +72,9 @@ export async function getStudentClassAnalytics(
             classroomId: true,
             title: true,
             dueAt: true,
-            examSession: { select: { type: true } },
+            examSession: {
+              select: { id: true, type: true, endsAt: true, courseId: true },
+            },
             submissions: {
               where: { studentId },
               select: {
@@ -85,9 +106,13 @@ export async function getStudentClassAnalytics(
         listPublishedExamScores(ids, studentId, now),
       ])
     : [[], [], []];
+  const examResults: StudentHomeExamResult[] = [];
+  const examScores: number[] = [];
   const classes = visible.map((context) => {
     const work = assignments.filter(
-      (x) => x.classroomId === context.classroom.id,
+      (x) =>
+        x.classroomId === context.classroom.id &&
+        (!x.examSession || x.examSession.courseId === context.course.id),
     );
     const gradeScores = publishedExamScores.filter(
       (item) => item.classroomId === context.classroom.id,
@@ -122,6 +147,46 @@ export async function getStudentClassAnalytics(
         (row.percentage < 0 || row.percentage > 100)
       )
         row.percentage = null;
+
+    const assignmentRows = rows.filter((row) => !row.assignment.examSession);
+    const assignmentSubmitted = assignmentRows.filter(
+      (row) => row.submission,
+    ).length;
+    const assignmentOverdue = assignmentRows.filter(
+      (row) =>
+        !row.submission && row.assignment.dueAt && row.assignment.dueAt <= now,
+    ).length;
+    for (const row of rows) {
+      const exam = row.assignment.examSession;
+      if (!exam) continue;
+      const resultState =
+        row.percentage !== null
+          ? "PUBLISHED"
+          : row.grade && row.grade.status !== "ABSENT"
+            ? "RECORDED"
+            : row.submission
+              ? "AWAITING"
+              : "MISSED";
+      const percentage =
+        row.percentage === null ? null : oneDecimal(row.percentage);
+      examResults.push({
+        assignmentId: row.assignment.id,
+        examId: exam.id,
+        courseId: context.course.id,
+        classroomId: context.classroom.id,
+        courseName: context.course.name,
+        classroomName: context.classroom.name,
+        title: row.assignment.title,
+        endsAt: exam.endsAt,
+        percentage,
+        resultState,
+        publishedSubmissionId:
+          row.submission?.status === "PUBLISHED" && percentage !== null
+            ? row.submission.id
+            : null,
+      });
+      if (row.percentage !== null) examScores.push(row.percentage);
+    }
     const submitted = rows.filter((x) => x.submission).length;
     const gradeOnly = gradeScores.filter(
       (item) =>
@@ -153,6 +218,11 @@ export async function getStudentClassAnalytics(
     );
     return {
       ...context,
+      assignmentProgress: {
+        total: assignmentRows.length,
+        submitted: assignmentSubmitted,
+        overdue: assignmentOverdue,
+      },
       total: work.length,
       submitted,
       unsubmitted: work.length - submitted,
@@ -276,7 +346,29 @@ export async function getStudentClassAnalytics(
         .slice(0, 8),
     };
   });
-  return { contexts, classes, query, updatedAt: now };
+  examResults.sort(
+    (a, b) =>
+      b.endsAt.getTime() - a.endsAt.getTime() ||
+      a.assignmentId.localeCompare(b.assignmentId),
+  );
+  return {
+    contexts,
+    classes,
+    query,
+    updatedAt: now,
+    exams: {
+      recent: examResults[0] ?? null,
+      missed: examResults.filter((result) => result.resultState === "MISSED")
+        .length,
+      scoredCount: examScores.length,
+      average: examScores.length
+        ? oneDecimal(
+            examScores.reduce((sum, score) => sum + score, 0) /
+              examScores.length,
+          )
+        : null,
+    },
+  };
 }
 
 export type StudentClassAnalysis = Awaited<
