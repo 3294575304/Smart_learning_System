@@ -1,0 +1,108 @@
+/* Use the browser's accessible select behavior, with a styled popover where supported. */
+@supports (appearance: base-select) {
+  .shell {
+    position: relative;
+    padding-inline: 0;
+  }
+
+  .shell > span {
+    display: none;
+  }
+
+  .shell > svg {
+    position: absolute;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .shell > svg:first-child {
+    left: 14px;
+  }
+
+  .shell > svg:last-child {
+    right: 14px;
+    transition: rotate 160ms;
+  }
+
+  .shell:has(select:open) > svg:last-child {
+    rotate: 180deg;
+  }
+
+  .shell select.select,
+  .select::picker(select) {
+    appearance: base-select;
+  }
+
+  .shell select.select {
+    display: flex;
+    width: 100%;
+    min-height: 48px;
+    align-items: center;
+    padding: 12px 42px;
+    cursor: pointer;
+  }
+
+  .select::picker-icon {
+    display: none;
+  }
+
+  .select::picker(select) {
+    width: anchor-size(width);
+    max-width: calc(100vw - 32px);
+    max-height: min(320px, 45vh);
+    margin-block: 8px;
+    border: 1px solid #dde7e9;
+    border-radius: 12px;
+    padding: 6px;
+    background: #fff;
+    color: #344d5d;
+    box-shadow:
+      0 12px 32px #112b3c14,
+      0 2px 6px #112b3c08;
+    scrollbar-width: thin;
+    scrollbar-color: #d1dce1 transparent;
+  }
+
+  .select option {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 12px;
+    margin-block: 2px;
+    border-radius: 7px;
+    padding: 10px 12px;
+    background: #fff;
+    color: #344d5d;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .select option[value=""] {
+    display: none;
+  }
+
+  .select option:hover,
+  .select option:focus-visible {
+    outline: none;
+    background: #f1f7f7;
+  }
+
+  .select option:checked {
+    background: #eaf6f3;
+    color: #24716d;
+    font-weight: 500;
+  }
+
+  .select option::checkmark {
+    order: 1;
+    margin-left: auto;
+    color: #328b7e;
+  }
+
+  .select:has(option[value=""]:checked) {
+    color: #82919c;
+  }
+}

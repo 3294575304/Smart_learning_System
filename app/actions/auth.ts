@@ -9,6 +9,7 @@ import {
   roleHomePath,
 } from "@/services/auth/authorization";
 import { verifyPassword } from "@/services/auth/password";
+import { validateLoginCaptcha } from "@/services/auth/captcha";
 import {
   claimStudentAccount,
   StudentClaimError,
@@ -67,6 +68,15 @@ export async function loginAction(
       error: "请检查登录信息",
       status: 400,
       fieldErrors: fieldErrors(parsed.error.flatten().fieldErrors),
+    };
+  }
+
+  if (!(await validateLoginCaptcha(parsed.data))) {
+    return {
+      success: false,
+      error: "验证码错误或已过期，请换一张后重试",
+      status: 400,
+      fieldErrors: { captchaAnswer: ["验证码错误或已过期"] },
     };
   }
 
@@ -144,6 +154,15 @@ export async function adminLoginAction(
       error: "请检查登录信息",
       status: 400,
       fieldErrors: fieldErrors(parsed.error.flatten().fieldErrors),
+    };
+  }
+
+  if (!(await validateLoginCaptcha(parsed.data))) {
+    return {
+      success: false,
+      error: "验证码错误或已过期，请换一张后重试",
+      status: 400,
+      fieldErrors: { captchaAnswer: ["验证码错误或已过期"] },
     };
   }
 

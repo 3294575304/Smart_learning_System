@@ -1,0 +1,681 @@
+.page {
+  display: grid;
+  min-height: 100svh;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: #fff;
+  color: #152d3e;
+}
+
+.universe {
+  position: relative;
+  min-height: 100svh;
+  overflow: hidden;
+  background: #112b3c;
+}
+
+.art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.waveEdge {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: clamp(60px, 12%, 100px);
+  height: 100%;
+  pointer-events: none;
+}
+
+.coralMotion {
+  animation: coral-drift 11s ease-in-out infinite;
+}
+
+.tealMotion {
+  animation: teal-drift 8s ease-in-out infinite;
+}
+
+.gloveMotion {
+  transform-origin: 280px 960px;
+  animation: explorer-wave 9s ease-in-out infinite;
+}
+
+.stars > circle {
+  animation: star-glow 5s ease-in-out infinite;
+}
+
+.stars > circle:nth-child(3n) {
+  animation-delay: -1.7s;
+  animation-duration: 6s;
+}
+
+.stars > circle:nth-child(3n + 1) {
+  animation-delay: -3.4s;
+  animation-duration: 7s;
+}
+
+@keyframes coral-drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes teal-drift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-5px, -16px);
+  }
+}
+
+@keyframes explorer-wave {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(2.5deg);
+  }
+}
+
+@keyframes star-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art .stars > circle,
+  .art .coralMotion,
+  .art .tealMotion,
+  .art .gloveMotion {
+    animation: none;
+  }
+}
+
+.brand {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  margin: 44px 0 0 9%;
+  color: #fff;
+}
+
+.brandMark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #ffffff30;
+  border-radius: 13px;
+  background: #ffffff08;
+  color: #7ee0d4;
+}
+
+.brandName {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+.brandEnglish {
+  margin-top: 4px;
+  color: #a9bac6;
+  font-size: 9px;
+  letter-spacing: 0.19em;
+}
+
+.heroCopy {
+  position: relative;
+  z-index: 1;
+  margin: 68px 9% 0;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #a9d7d7;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+}
+
+.eyebrow::before {
+  width: 20px;
+  height: 1px;
+  background: #67d8d1;
+  content: "";
+}
+
+.heroCopy h2 {
+  margin-top: 22px;
+  color: #fff8ed;
+  font-size: clamp(30px, 3vw, 46px);
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+}
+
+.heroCopy p {
+  margin-top: 15px;
+  color: #afc1ce;
+  font-size: 13px;
+  line-height: 1.9;
+  letter-spacing: 0.04em;
+}
+
+.artCaption {
+  position: absolute;
+  z-index: 1;
+  right: 22%;
+  bottom: 30px;
+  color: #ffe5d3;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+}
+
+.content {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 28px clamp(32px, 5vw, 90px) 20px;
+}
+
+.topline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-self: flex-end;
+  color: #84909b;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.formPanel {
+  width: 100%;
+  max-width: 390px;
+  margin: auto;
+  padding: 20px 0;
+}
+
+.widePanel {
+  max-width: 460px;
+}
+
+.scrollPage .formPanel {
+  display: flex;
+  min-height: calc(100svh - 48px);
+  flex-direction: column;
+  justify-content: center;
+}
+
+.afterFold {
+  width: 100%;
+  max-width: 390px;
+  margin: 32px auto 24px;
+}
+
+.registerForm {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 16px;
+  margin-top: 28px;
+}
+
+.registerForm > div {
+  min-width: 0;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.registerHint {
+  color: #7b8791;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.welcome {
+  color: #798892;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+}
+
+.heading {
+  margin-top: 14px;
+  overflow-wrap: anywhere;
+  font-size: clamp(26px, 2.4vw, 34px);
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.03em;
+}
+
+.description {
+  margin-top: 10px;
+  color: #7b8791;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.announcement {
+  margin-top: 22px;
+  border: 1px solid #f1dfbb;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fffbf3;
+  color: #826138;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.form {
+  display: grid;
+  gap: 20px;
+  margin-top: 28px;
+}
+
+.field > label {
+  color: #344d5d;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.field > div {
+  min-height: 50px;
+  margin-top: 9px;
+  border-color: #e0e6e9;
+  border-radius: 7px;
+  padding-inline: 14px;
+  background: #fbfcfd;
+}
+
+.field > div:focus-within {
+  border-color: #479b9e;
+  --tw-ring-color: #5fc7c324;
+  background: #fbfcfd;
+}
+
+.field > div:has([aria-invalid="true"]) {
+  border-color: #dc7a7e;
+}
+
+.field > div > svg {
+  width: 17px;
+  height: 17px;
+  color: #8b9ba7;
+}
+
+@supports (appearance: base-select) {
+  .field > div:has(select) {
+    padding-inline: 0;
+  }
+}
+
+.field > div > span {
+  display: none;
+}
+
+.field input,
+.field select {
+  min-height: 48px;
+  padding-left: 12px;
+  color: #253f50;
+  font-size: 13px;
+}
+
+.field input {
+  caret-color: #328f96;
+  font-size: 14px;
+}
+
+/* Browser autofill paints only the input; match the surrounding icon area. */
+.field input:autofill,
+.field input:-webkit-autofill {
+  border-radius: 6px;
+  background-color: #fbfcfd;
+  box-shadow: 0 0 0 1000px #fbfcfd inset;
+  -webkit-text-fill-color: #253f50;
+  caret-color: #328f96;
+}
+
+.field input::placeholder {
+  color: #929fa8;
+}
+
+.submit {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 5px;
+  border-radius: 7px;
+  background: #d94b50;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 160ms,
+    box-shadow 160ms;
+}
+
+.captchaRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 138px;
+  align-items: start;
+  gap: 12px;
+}
+
+.captchaRow > div {
+  min-width: 0;
+}
+
+.captchaImage {
+  display: grid;
+  height: 50px;
+  margin-top: 29px;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid #d7e8e4;
+  border-radius: 7px;
+  background: #eef7f5;
+  color: #328f96;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.captchaImage img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.captchaImage:disabled {
+  cursor: wait;
+}
+
+.captchaImage:focus-visible {
+  outline: 2px solid #328f96;
+  outline-offset: 3px;
+}
+
+.captchaHint,
+.captchaError {
+  margin-top: 9px;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.captchaHint {
+  color: #7b8791;
+}
+.captchaError {
+  color: #bd3b43;
+}
+
+.submit:hover:not(:disabled) {
+  background: #c73e44;
+  box-shadow: 0 5px 18px #d94b5026;
+}
+
+.submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.submit:focus-visible,
+.registration a:focus-visible,
+.adminLink:focus-visible {
+  outline: 2px solid #328f96;
+  outline-offset: 4px;
+}
+
+.registration {
+  color: #7b8791;
+  text-align: center;
+  font-size: 12px;
+}
+
+.registration a {
+  margin-left: 6px;
+  color: #bd3b43;
+  font-weight: 500;
+  text-underline-offset: 4px;
+}
+
+.registration a:hover {
+  text-decoration: underline;
+}
+
+.adminEntry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 22px;
+  border-top: 1px solid #edf0f2;
+  padding-top: 16px;
+  color: #84919b;
+  font-size: 12px;
+}
+
+.adminLink:hover {
+  color: #253f50;
+}
+
+.footer {
+  color: #919ba3;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+@media (min-width: 1600px) {
+  .heroCopy {
+    margin-top: 95px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .page {
+    grid-template-columns: 45% 55%;
+  }
+
+  .content {
+    padding-inline: 32px;
+  }
+
+  .heroCopy h2 {
+    font-size: 30px;
+  }
+
+  .heroCopy p {
+    max-width: 220px;
+  }
+}
+
+@media (min-width: 701px) and (max-height: 850px) {
+  .content {
+    padding-block: 22px 16px;
+  }
+  .formPanel {
+    padding-block: 12px;
+  }
+  .heading {
+    margin-top: 8px;
+    font-size: 28px;
+    line-height: 1.4;
+  }
+  .description {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .form {
+    gap: 14px;
+    margin-top: 22px;
+  }
+  .field > div {
+    min-height: 44px;
+    margin-top: 7px;
+  }
+  .field input,
+  .field select {
+    min-height: 42px;
+    padding-block: 8px;
+  }
+  .field select {
+    font-size: 13px;
+  }
+  .captchaImage {
+    height: 44px;
+    margin-top: 27px;
+  }
+  .captchaHint,
+  .captchaError {
+    margin-top: 6px;
+  }
+  .submit {
+    min-height: 44px;
+    margin-top: 0;
+  }
+  .adminEntry {
+    margin-top: 18px;
+    padding-top: 12px;
+  }
+  .heroCopy {
+    margin-top: 46px;
+  }
+  .heroCopy h2 {
+    font-size: 36px;
+    line-height: 1.4;
+  }
+
+  .heroCopy p {
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 700px) {
+  .page {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .universe {
+    min-height: 130px;
+    height: 130px;
+  }
+
+  .art {
+    inset: auto 0 -200px auto;
+    width: 320px;
+    height: 440px;
+    mask-image: linear-gradient(to right, transparent, #000 22%);
+  }
+
+  .waveEdge {
+    display: none;
+  }
+
+  .brand {
+    margin: 18px 0 0 25px;
+  }
+
+  .brandName {
+    font-size: 18px;
+  }
+
+  .heroCopy {
+    margin: 16px 25px;
+  }
+
+  .heroCopy h2 {
+    margin-top: 0;
+    font-size: 18px;
+    line-height: 1.6;
+  }
+
+  .heroCopy h2 br {
+    display: none;
+  }
+
+  .eyebrow,
+  .heroCopy p,
+  .artCaption {
+    display: none;
+  }
+
+  .content {
+    flex: 1;
+    padding: 20px 26px 16px;
+  }
+
+  .topline {
+    display: none;
+  }
+
+  .formPanel {
+    padding: 0 0 20px;
+  }
+
+  .heading {
+    margin-top: 8px;
+    font-size: 25px;
+  }
+
+  .form {
+    gap: 14px;
+    margin-top: 22px;
+  }
+
+  .description {
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  .field > div {
+    min-height: 44px;
+    margin-top: 7px;
+  }
+  .field input,
+  .field select {
+    min-height: 42px;
+    padding-block: 8px;
+  }
+  .captchaImage {
+    height: 44px;
+    margin-top: 27px;
+  }
+  .submit {
+    min-height: 44px;
+  }
+  .adminEntry {
+    margin-top: 18px;
+    padding-top: 12px;
+  }
+
+  .registerForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

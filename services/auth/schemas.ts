@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { normalizeStudentNo } from "@/services/student-identities/normalization";
+import { loginCaptchaFields } from "./captcha-schema";
 
 function fitsBcryptLimit(password: string): boolean {
   return new TextEncoder().encode(password).length <= 72;
@@ -35,6 +36,7 @@ export const strongPasswordSchema = z
   .refine(fitsBcryptLimit, "密码的 UTF-8 长度不能超过 72 字节");
 
 export const loginSchema = z.object({
+  ...loginCaptchaFields,
   schoolId: z.string().trim().min(1, "请选择已有学校"),
   email: loginIdentifierSchema,
   password: z
@@ -45,6 +47,7 @@ export const loginSchema = z.object({
 });
 
 export const adminLoginSchema = z.object({
+  ...loginCaptchaFields,
   email: normalizedEmailSchema,
   password: z
     .string()
