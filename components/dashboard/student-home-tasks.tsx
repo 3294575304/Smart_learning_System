@@ -2,7 +2,11 @@
 import { StudentPageLink } from "./student-page-link";
 import React, { useState } from "react";
 import { CheckCircle2, ArrowRight } from "lucide-react";
-import { StudentTaskList } from "./student-task-list";
+import {
+  StudentTaskList,
+  STUDENT_TASK_PRESENTATION,
+} from "./student-task-list";
+import { FOCUS_RING, FOCUS_RING_TIGHT } from "./ui-focus";
 import {
   studentTaskContext,
   studentTaskDate,
@@ -10,12 +14,19 @@ import {
   type StudentTaskKind,
 } from "@/services/dashboard/student-task-overview";
 
-const taskColors = {
-  assignment: "#0369a1",
-  attendance: "#047857",
-  survey: "#6d28d9",
-  exam: "#b45309",
-};
+/**
+ * 任务类别的取色不再在本文件另存一份。
+ * 改造前这里有一份 hex（用于环图与筛选色点），student-task-list 里另有一份
+ * Tailwind 类名（用于图标底），同一个语义两处维护、改一处必忘另一处。
+ * 现在统一由 STUDENT_TASK_PRESENTATION.mark 提供，且已改为同一品牌色的
+ * 4 级明度（类别靠图例文字区分），不再各占一个色相。
+ */
+const taskMarks = {
+  assignment: STUDENT_TASK_PRESENTATION.assignment.mark,
+  attendance: STUDENT_TASK_PRESENTATION.attendance.mark,
+  survey: STUDENT_TASK_PRESENTATION.survey.mark,
+  exam: STUDENT_TASK_PRESENTATION.exam.mark,
+} as const;
 
 function PendingTaskDistribution({
   overview,
@@ -31,8 +42,8 @@ function PendingTaskDistribution({
     ? ((counts.assignment + counts.attendance + counts.survey) / total) * 100
     : 0;
   const background = total
-    ? `conic-gradient(${taskColors.assignment} 0 ${assignmentEnd}%, ${taskColors.attendance} ${assignmentEnd}% ${attendanceEnd}%, ${taskColors.survey} ${attendanceEnd}% ${surveyEnd}%, ${taskColors.exam} ${surveyEnd}% 100%)`
-    : "#e2e8f0";
+    ? `conic-gradient(${taskMarks.assignment} 0 ${assignmentEnd}%, ${taskMarks.attendance} ${assignmentEnd}% ${attendanceEnd}%, ${taskMarks.survey} ${attendanceEnd}% ${surveyEnd}%, ${taskMarks.exam} ${surveyEnd}% 100%)`
+    : "var(--progress-track)";
   return (
     <div
       role="img"
@@ -42,7 +53,7 @@ function PendingTaskDistribution({
     >
       <span
         aria-hidden="true"
-        className="grid size-13 place-items-center rounded-full bg-white text-lg font-semibold text-slate-950 tabular-nums"
+        className="bg-card grid size-11 place-items-center rounded-full text-lg font-semibold text-neutral-950 tabular-nums"
       >
         {total}
       </span>
@@ -69,16 +80,16 @@ export function StudentHomeTasks({
   return (
     <section
       aria-labelledby="pending-tasks-heading"
-      className={`flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5 ${dashboard ? "border-neutral-300 bg-neutral-100" : "border-sky-100 bg-white"}`}
+      className="border-border bg-card flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2
           id="pending-tasks-heading"
-          className={`font-semibold text-slate-950 ${dashboard ? "text-xl" : "text-base"}`}
+          className={`font-semibold text-neutral-950 ${dashboard ? "text-xl" : "text-base"}`}
         >
           我的待办{" "}
           {((scope && !dashboard) || overview.total > 0) && (
-            <span className="text-sm font-normal text-slate-600">
+            <span className="text-sm font-normal text-neutral-600">
               {dashboard ? "· " : ""}
               {overview.total} 项
             </span>
@@ -87,27 +98,37 @@ export function StudentHomeTasks({
         {!scope && (
           <StudentPageLink
             href="/student/tasks"
-            className={`inline-flex min-h-10 items-center gap-1 rounded-md text-sm font-medium focus-visible:outline-2 focus-visible:outline-sky-700 ${dashboard ? "underline-offset-4 hover:underline" : "bg-sky-50 px-3 text-sky-800 hover:bg-sky-100"}`}
+            className={`inline-flex min-h-10 items-center gap-1 rounded-md text-sm font-medium ${FOCUS_RING} ${dashboard ? "underline-offset-4 hover:underline" : "bg-brand/10 text-brand-strong hover:bg-muted px-3"}`}
           >
             查看全部任务
             {!dashboard && <ArrowRight aria-hidden="true" className="size-4" />}
           </StudentPageLink>
         )}
       </div>
+      {/*
+        待办从「首屏 3 条 + 折叠 2 条」改为 5 条直出。
+        产品约定本就是最多展示 5 项（见上方 sr-only 文案），
+        把第 4、5 条藏在折叠里等于让学生多点一次才能看全自己有什么事。
+      */}
       {dashboard && overview.total > 0 && (
         <div className="mt-2">
           {items.length ? (
             <StudentTaskList
-              items={items.slice(0, 3)}
+              items={items.slice(0, 5)}
               priorityId={overview.pendingItems[0]?.id}
               layout="home"
             />
           ) : (
-            <p className="border-t border-neutral-300 py-3 text-sm text-neutral-600">
+            <p className="border-border border-t py-3 text-sm text-neutral-600">
               此类暂无待办
             </p>
           )}
         </div>
+      )}
+      {dashboard && items.length > 5 && (
+        <p className="mt-2 text-xs text-neutral-600">
+          其余 {items.length - 5} 项可在全部任务中查看。
+        </p>
       )}
       <FilterPanel
         className={
@@ -115,12 +136,14 @@ export function StudentHomeTasks({
             ? "mt-1"
             : scope
               ? "mt-3"
-              : "mt-3 flex flex-wrap items-center gap-4 rounded-xl bg-slate-50 p-3"
+              : "bg-muted/65 mt-3 flex flex-wrap items-center gap-4 rounded-xl p-3"
         }
       >
         {dashboard && overview.total > 0 && (
-          <summary className="min-h-9 cursor-pointer content-center rounded-md text-sm font-medium focus-visible:outline-2 focus-visible:outline-sky-700">
-            待办分类与更多
+          <summary
+            className={`min-h-10 cursor-pointer content-center rounded-md text-sm font-medium ${FOCUS_RING_TIGHT}`}
+          >
+            按类别筛选
           </summary>
         )}
         <div
@@ -137,12 +160,12 @@ export function StudentHomeTasks({
                 aria-hidden="true"
                 className="size-5 shrink-0 text-emerald-700"
               />
-              <p className="text-sm font-medium text-slate-800">
+              <p className="text-sm font-medium text-neutral-800">
                 暂无待办，当前没有需要处理的考试、作业、签到或问卷
               </p>
               <StudentPageLink
                 href="/student/courses"
-                className="inline-flex min-h-10 items-center gap-1 rounded text-sm font-medium text-sky-800 focus-visible:outline-2 focus-visible:outline-sky-700"
+                className={`text-brand-strong inline-flex min-h-10 items-center gap-1 rounded-md text-sm font-medium ${FOCUS_RING}`}
               >
                 进入我的课程
                 <ArrowRight aria-hidden="true" className="size-4" />
@@ -181,13 +204,13 @@ export function StudentHomeTasks({
                   type="button"
                   aria-pressed={kind === filter.id}
                   onClick={() => setKind(filter.id)}
-                  className={`min-h-10 rounded-lg border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 ${kind === filter.id ? "border-sky-700 bg-sky-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-sky-50"}`}
+                  className={`min-h-10 rounded-md border px-3 text-sm font-medium ${FOCUS_RING} ${kind === filter.id ? "border-brand bg-brand text-white" : "border-border bg-card hover:bg-muted text-neutral-700"}`}
                 >
                   {!scope && filter.id !== "all" && (
                     <span
                       aria-hidden="true"
                       className="mr-1.5 inline-block size-2 rounded-full border border-white"
-                      style={{ background: taskColors[filter.id] }}
+                      style={{ background: taskMarks[filter.id] }}
                     />
                   )}
                   {filter.label}
@@ -201,16 +224,6 @@ export function StudentHomeTasks({
             </div>
           )}
         </div>
-        {dashboard && items.length > 3 && (
-          <div className="mt-3">
-            <StudentTaskList items={items.slice(3, 5)} layout="home" />
-            {items.length > 5 && (
-              <p className="mt-2 text-xs text-neutral-600">
-                其余 {items.length - 5} 项可在全部任务中查看。
-              </p>
-            )}
-          </div>
-        )}
       </FilterPanel>
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {kind === "all"
@@ -232,18 +245,18 @@ export function StudentHomeTasks({
               showContext={!scope}
             />
           ) : (
-            <div className="flex items-center gap-2 rounded-xl bg-slate-50 p-3">
+            <div className="bg-muted/65 flex items-center gap-2 rounded-xl p-3">
               <CheckCircle2
                 aria-hidden="true"
                 className="size-5 shrink-0 text-emerald-700"
               />
-              <p className="text-sm font-medium text-slate-800">
+              <p className="text-sm font-medium text-neutral-800">
                 {overview.total === 0 ? "暂无待办" : "此类暂无待办"}
               </p>
             </div>
           )}
           {items.length > 5 && (
-            <p className="mt-3 text-xs text-slate-600">
+            <p className="mt-3 text-xs text-neutral-600">
               其余 {items.length - 5} 项可在
               {scope ? "课程记录" : "全部任务"}中查看。
             </p>
@@ -251,22 +264,24 @@ export function StudentHomeTasks({
         </div>
       )}
       {overview.scheduledSurveys.length > 0 && (
-        <details className="mt-4 border-t border-slate-100 pt-3">
-          <summary className="cursor-pointer rounded text-sm font-medium text-slate-700 focus-visible:outline-2 focus-visible:outline-sky-700">
+        <details className="border-border mt-4 border-t pt-3">
+          <summary
+            className={`cursor-pointer rounded-md text-sm font-medium text-neutral-700 ${FOCUS_RING_TIGHT}`}
+          >
             问卷开放预告 · {overview.scheduledSurveys.length} 份
           </summary>
-          <p className="mt-2 text-xs text-slate-600">
+          <p className="mt-2 text-xs text-neutral-600">
             暂不计入待办，问卷不计入成绩。
           </p>
           <ul className="mt-2 space-y-2">
             {overview.scheduledSurveys.slice(0, 2).map((survey) => (
               <li
                 key={survey.id}
-                className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600"
+                className="bg-muted/65 rounded-md p-3 text-xs text-neutral-600"
               >
                 <StudentPageLink
                   href={survey.href}
-                  className="inline-flex min-h-9 items-center font-medium text-sky-800 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-sky-700"
+                  className={`text-brand-strong inline-flex min-h-10 items-center font-medium underline underline-offset-4 ${FOCUS_RING}`}
                 >
                   {survey.title}
                 </StudentPageLink>
@@ -280,7 +295,7 @@ export function StudentHomeTasks({
           {overview.scheduledSurveys.length > 2 && (
             <StudentPageLink
               href={scopedHref("/student/surveys")}
-              className="inline-flex min-h-10 items-center text-sm text-sky-800 underline"
+              className={`text-brand-strong inline-flex min-h-10 items-center text-sm underline ${FOCUS_RING}`}
             >
               查看全部开放安排
             </StudentPageLink>

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   ClipboardList,
+  FileClock,
   GitBranch,
   GraduationCap,
   Sparkles,
@@ -168,6 +169,11 @@ async function courseContent(
                   href: `/student/assignments?${scoped}`,
                   label: "我的作业",
                   Icon: ClipboardList,
+                },
+                {
+                  href: `/student/exams?${scoped}`,
+                  label: "我的考试",
+                  Icon: FileClock,
                 },
                 {
                   href: `/student/attendance?${scoped}`,

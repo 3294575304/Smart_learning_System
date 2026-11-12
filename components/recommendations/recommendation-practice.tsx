@@ -1,4 +1,6 @@
 "use client";
+import { QuestionText } from "@/components/assignments/question-text";
+import { PracticeChoiceReview } from "./practice-choice-review";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
 
 import { studentScoreLabel } from "@/services/recommendations/scoring";
@@ -81,8 +83,10 @@ function withQuestionId(
 
 function PracticeResult({
   result,
+  recommendation,
 }: {
   result: RecommendationPracticeResultView;
+  recommendation: RecommendationDetailView;
 }) {
   return (
     <section className="space-y-5">
@@ -136,6 +140,15 @@ function PracticeResult({
               {answer.maxScore}
             </span>
           </div>
+          <div className="mt-3 space-y-3">
+            <QuestionText text={recommendation.content} />
+            {recommendation.options.length > 0 && (
+              <PracticeChoiceReview
+                options={recommendation.options}
+                feedback={answer.choiceFeedback}
+              />
+            )}
+          </div>
           <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
             <div className="rounded-md bg-sky-50/70 p-3">
               <dt className="text-gray-500">你的答案</dt>
@@ -152,7 +165,7 @@ function PracticeResult({
           </dl>
           <div className="mt-4 rounded-md border-l-4 border-blue-300 bg-blue-50 p-3 text-sm">
             <p className="font-medium">答案解析</p>
-            <p className="mt-1 whitespace-pre-wrap">{answer.explanation}</p>
+            <QuestionText text={answer.explanation} />
           </div>
           <div className="mt-3 rounded-md border-l-4 border-amber-300 bg-amber-50 p-3 text-sm">
             <p className="font-medium">推荐理由</p>
@@ -329,7 +342,7 @@ export function RecommendationPractice({
 
       {!embedded && <div className="flex justify-end">{favorite}</div>}
       {result ? (
-        <PracticeResult result={result} />
+        <PracticeResult result={result} recommendation={recommendation} />
       ) : recommendation.status === RecommendationStatus.COMPLETED ? (
         <div
           className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"
@@ -346,9 +359,9 @@ export function RecommendationPractice({
               </h2>
               {embedded && <div className="shrink-0">{favorite}</div>}
             </div>
-            <p className="mt-4 text-sm leading-7 [overflow-wrap:anywhere] whitespace-pre-wrap">
-              {recommendation.content}
-            </p>
+            <div className="mt-4">
+              <QuestionText text={recommendation.content} />
+            </div>
             <textarea
               aria-label="Python 代码"
               className="mt-4 min-h-80 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900"
@@ -429,9 +442,9 @@ export function RecommendationPractice({
                 </span>
               )}
             </div>
-            <p className="mt-5 text-sm leading-7 [overflow-wrap:anywhere] whitespace-pre-wrap">
-              {recommendation.content}
-            </p>
+            <div className="mt-5">
+              <QuestionText text={recommendation.content} />
+            </div>
             <QuestionAnswerInput
               answer={watchedAnswer}
               disabled={form.formState.isSubmitting}

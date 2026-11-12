@@ -21,6 +21,32 @@
   --input: oklch(0.89 0.03 218);
   --ring: oklch(0.64 0.14 230);
   --radius: 0.75rem;
+
+  /*
+   * 品牌锚点：SVG / conic-gradient / 内联样式无法读取 Tailwind 工具类，
+   * 此前直接写死 hex，换肤时必须逐处改。统一收在这里，组件只引用变量。
+   * 取值与 sky-700 / sky-800 / neutral-200 / neutral-500 / rose-700 一致，
+   * 因此本次收编不产生任何视觉变化。
+   */
+  --brand: #0369a1;
+  --brand-strong: #075985;
+  --progress-track: #e5e5e5;
+  --mark-muted: #737373;
+  --mark-danger: #be123c;
+
+  /*
+   * 页面级容器表面（学生端首页外卡）。
+   *
+   * 演进过程记一笔，避免反复：试过接近纯白（0.997）—— 大面积白块压在浅蓝底上，
+   * 色相对比大、显得贴上去；又试过几乎等于背景（0.993）—— 差不到 1 个明度点，
+   * 容器消失，整页糊成一片同色，反而没有层次。
+   *
+   * 现在的方向是"底板 + 浮卡"：外卡比页面底**深**一档，成为承托内容的底板，
+   * 内部所有卡片回到 --card（近白）浮起来。层次靠明度差表达，不靠阴影，
+   * 白卡面积小所以不刺眼，底板是背景同族（色相 220、色度 0.013）所以不冲突。
+   * 实测：页面底 98.2 < 外卡 97.4 < 卡片 99.7。
+   */
+  --surface: oklch(0.974 0.013 220);
 }
 
 @theme inline {
@@ -42,6 +68,9 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-surface: var(--surface);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

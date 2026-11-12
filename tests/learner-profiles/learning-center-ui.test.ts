@@ -83,10 +83,12 @@ test("学生课程学习中心复用正式图谱、画像、进度与学习事�
   );
   assert.match(analysisView, /learning-center/u);
   assert.match(courses, /requirePageRole\(Role\.STUDENT\)/u);
-  assert.match(courses, /listStudentCourseEvaluationContexts/u);
+  // 我的课程列表已改用统一的班级分析服务聚合教学班，断言同步到当前实现
+  assert.match(courses, /getStudentClassAnalytics/u);
   assert.match(courses, /key=\{classroom.id\}/u);
-  assert.match(courses, /进入教学班/u);
   assert.match(courses, /查看教学班/u);
+  // 进入态文案在 aria-label 里按报名状态拼接（进入/查看 + 教学班：课程名）
+  assert.match(courses, /教学班：\$\{course\.name\}/u);
   assert.match(courses, /我的学习分析/u);
   assert.doesNotMatch(
     courses,

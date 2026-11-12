@@ -165,6 +165,7 @@ export interface RecommendationPracticeAnswerResultView {
   title: string;
   studentAnswer: string;
   correctAnswer: string;
+  choiceFeedback?: { selectedOptionIds: string[]; correctOptionIds: string[] };
   explanation: string;
   recommendationReason: string;
   isCorrect: boolean;

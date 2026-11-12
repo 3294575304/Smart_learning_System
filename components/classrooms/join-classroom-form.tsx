@@ -15,12 +15,14 @@ interface JoinClassroomFormProps {
   compact?: boolean;
   inputId?: string;
   onSuccess?: () => void;
+  reloadOnSuccess?: boolean;
 }
 
 export function JoinClassroomForm({
   compact = false,
   inputId = "join-code",
   onSuccess,
+  reloadOnSuccess = false,
 }: JoinClassroomFormProps = {}) {
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -55,7 +57,8 @@ export function JoinClassroomForm({
     }
     reset();
     onSuccess?.();
-    router.refresh();
+    if (reloadOnSuccess) window.location.reload();
+    else router.refresh();
   });
 
   return (

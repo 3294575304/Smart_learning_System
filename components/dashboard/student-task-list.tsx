@@ -7,34 +7,50 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "./ui-focus";
 import {
   studentTaskContext,
   studentTaskDate,
   type StudentTaskItem,
 } from "@/services/dashboard/student-task-overview";
 
+/**
+ * 任务类别的唯一真源。
+ *
+ * color：图标底。按 S3/D17 的结论统一为中性 —— 此前四类各占一个色相
+ *        （琥珀/蓝/绿/紫），加上品牌色和三个状态色，一屏出现 5 个以上色相。
+ *        类别改由图标形状 + 上下文文字承担，图标底只提供"这里有张图"的结构感。
+ *
+ * mark：需要传给 SVG / 内联样式的色值（类别环、筛选色点）。
+ *       取同一品牌色的 4 级明度而非 4 个色相，配合图例文字区分类别。
+ *       顺序与 student-home-tasks 里环图的分段顺序一致，两处共用此真源。
+ */
 export const STUDENT_TASK_PRESENTATION = {
   exam: {
     label: "课程考试",
     icon: ClipboardCheck,
-    color: "bg-amber-50 text-amber-800",
+    color: "bg-neutral-100 text-neutral-700",
+    mark: "color-mix(in srgb, var(--brand) 30%, #fff)",
   },
   assignment: {
     label: "课程作业",
     icon: ClipboardList,
-    color: "bg-sky-50 text-sky-700",
+    color: "bg-neutral-100 text-neutral-700",
+    mark: "var(--brand)",
   },
   attendance: {
     label: "课堂签到",
     icon: CalendarCheck,
-    color: "bg-emerald-50 text-emerald-700",
+    color: "bg-neutral-100 text-neutral-700",
+    mark: "color-mix(in srgb, var(--brand) 68%, #fff)",
   },
   survey: {
     label: "课程问卷",
     icon: ClipboardCheck,
-    color: "bg-violet-50 text-violet-700",
+    color: "bg-neutral-100 text-neutral-700",
+    mark: "color-mix(in srgb, var(--brand) 48%, #fff)",
   },
-};
+} as const;
 
 export function StudentTaskList({
   items,
@@ -49,7 +65,7 @@ export function StudentTaskList({
 }) {
   if (layout === "home") {
     return (
-      <ul className="divide-y divide-neutral-300 border-t border-neutral-300">
+      <ul className="divide-border border-border divide-y border-t">
         {items.map((item) => {
           const start = item.kind === "exam" ? item.opensAt : undefined;
           const time = start ?? item.dueAt;
@@ -58,11 +74,11 @@ export function StudentTaskList({
               <Link
                 href={item.href}
                 title={`${studentTaskContext(item)} · ${item.state}`}
-                className="grid min-h-12 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-md py-2.5 hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-sky-700 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+                className={`hover:bg-muted grid min-h-12 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-md py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto] ${FOCUS_RING}`}
               >
                 <span
                   aria-hidden="true"
-                  className="size-2 rounded-full bg-neutral-950"
+                  className="bg-brand size-2 rounded-full"
                 />
                 <span className="font-medium [overflow-wrap:anywhere]">
                   <span className="sr-only">{item.action}：</span>
@@ -95,7 +111,9 @@ export function StudentTaskList({
   }
   const workspace = layout === "workspace";
   return (
-    <ul className={cn("divide-y divide-slate-100", workspace && "@container")}>
+    <ul
+      className={cn("divide-y divide-neutral-200", workspace && "@container")}
+    >
       {items.map((item) => {
         const presentation = STUDENT_TASK_PRESENTATION[item.kind];
         const Icon = presentation.icon;
@@ -111,7 +129,10 @@ export function StudentTaskList({
             )}
           >
             <span
-              className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${presentation.color}`}
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center rounded-xl",
+                presentation.color,
+              )}
             >
               <Icon aria-hidden="true" className="size-5" />
             </span>
@@ -119,39 +140,39 @@ export function StudentTaskList({
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <p
                   className={cn(
-                    "max-w-full min-w-0 [overflow-wrap:anywhere] text-slate-900",
+                    "max-w-full min-w-0 [overflow-wrap:anywhere] text-neutral-900",
                     workspace ? "font-semibold" : "text-sm font-medium",
                   )}
                 >
                   {item.title}
                   {!workspace && priority && (
-                    <span className="ml-2 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-900">
+                    <span className="bg-brand/10 text-brand-strong ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium">
                       优先处理
                     </span>
                   )}
                 </p>
                 <span
                   className={cn(
-                    "text-xs text-slate-600",
-                    workspace && "rounded-full bg-slate-100 px-2 py-0.5",
+                    "text-xs text-neutral-600",
+                    workspace && "rounded-full bg-neutral-100 px-2 py-0.5",
                   )}
                 >
                   {item.state}
                 </span>
                 {workspace && priority && items.length > 1 && (
-                  <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">
+                  <span className="bg-brand/10 text-brand-strong rounded-full px-2 py-0.5 text-xs font-medium">
                     优先处理
                   </span>
                 )}
               </div>
               {showContext && (
-                <p className="mt-1 text-xs leading-5 [overflow-wrap:anywhere] text-slate-600">
+                <p className="mt-1 text-xs leading-5 [overflow-wrap:anywhere] text-neutral-600">
                   {studentTaskContext(item)}
                 </p>
               )}
               <p
                 className={cn(
-                  "text-xs leading-5 text-slate-600",
+                  "text-xs leading-5 text-neutral-600",
                   workspace && "mt-0.5",
                 )}
               >
@@ -185,12 +206,13 @@ export function StudentTaskList({
               aria-label={`${item.action}：${item.title}`}
               href={item.href}
               className={cn(
-                "inline-flex min-h-10 shrink-0 items-center gap-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700",
+                "inline-flex min-h-10 shrink-0 items-center gap-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                FOCUS_RING,
                 workspace &&
                   "col-start-2 justify-self-start @min-[26rem]:col-start-3 @min-[26rem]:justify-self-end",
                 workspace && priority
-                  ? "border-sky-700 bg-sky-700 text-white hover:border-sky-800 hover:bg-sky-800"
-                  : "border-slate-200 text-sky-700 hover:border-sky-200 hover:bg-sky-50",
+                  ? "border-brand bg-brand hover:border-brand-strong hover:bg-brand-strong text-white"
+                  : "text-brand border-neutral-300 hover:border-neutral-400 hover:bg-neutral-200",
               )}
             >
               {item.action}

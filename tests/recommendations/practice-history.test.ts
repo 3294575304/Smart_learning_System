@@ -49,6 +49,39 @@ test("saved code is escaped and retained in read-only history", () => {
   assert.match(html, /&lt;script&gt;/);
   assert.doesNotMatch(html, /<script>/);
 });
+test("choice review marks option IDs only when graded feedback exists", () => {
+  const item: RecommendationDetailView = {
+    ...detail(),
+    type: "SINGLE_CHOICE",
+    options: [
+      { id: "a", label: "A", content: "相同选项文本", sortOrder: 0 },
+      { id: "b", label: "B", content: "相同选项文本", sortOrder: 1 },
+    ],
+  };
+  const render = (view: RecommendationDetailView) =>
+    renderToStaticMarkup(
+      React.createElement(PracticeHistoryQuestion, { item: view }),
+    );
+  assert.doesNotMatch(render(item), /正确答案|你的选择/);
+  const html = render({
+    ...item,
+    historyFeedback: {
+      questionId: "q",
+      title: "历史题目",
+      studentAnswer: "A. 相同选项文本",
+      correctAnswer: "B. 相同选项文本",
+      choiceFeedback: { selectedOptionIds: ["a"], correctOptionIds: ["b"] },
+      explanation: "根据选项 ID 标注判分结果。",
+      recommendationReason: "review",
+      isCorrect: false,
+      score: 0,
+      maxScore: 10,
+      responseTimeMs: null,
+    },
+  });
+  assert.match(html, />A<.*你的选择.*>B<.*正确答案/);
+  assert.match(html, /答案解析/);
+});
 test("an expired seven-question group has readable content and no obsolete submit UI", () => {
   const item = detail();
   const set: PracticeSet = {

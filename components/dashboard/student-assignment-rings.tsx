@@ -1,5 +1,6 @@
 import { StudentPageLink } from "./student-page-link";
 import React from "react";
+import { FOCUS_RING } from "./ui-focus";
 import type { StudentClassAnalysis } from "@/services/dashboard/student-class-analytics";
 import { studentEnrollmentLabel } from "@/services/courses/student-enrollment";
 
@@ -27,21 +28,29 @@ export function StudentAssignmentRings({
             const completion = total
               ? Math.round((submitted / total) * 100)
               : null;
+            /**
+             * 环的三段色走 CSS 变量而非写死 hex：
+             * 之前换肤必须同时改 SVG 属性，而 SVG 读不到 Tailwind 工具类。
+             */
             const parts = [
-              { label: "已提交", count: submitted, color: "#0369a1" },
+              { label: "已提交", count: submitted, color: "var(--brand)" },
               {
                 label: "未交未截止",
                 count: total - submitted - overdue,
-                color: "#64748b",
+                color: "var(--mark-muted)",
               },
-              { label: "逾期未交", count: overdue, color: "#be123c" },
+              {
+                label: "逾期未交",
+                count: overdue,
+                color: "var(--mark-danger)",
+              },
             ];
             let offset = 0;
             return (
               <StudentPageLink
                 key={item.classroom.id}
                 href={`/student/assignments?${new URLSearchParams({ courseId: item.course.id, classroomId: item.classroom.id })}`}
-                className="flex min-w-0 flex-[1_1_16rem] items-center gap-3 rounded-lg border border-sky-100 px-3 py-3 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-700"
+                className={`border-border hover:bg-muted flex min-w-0 flex-[1_1_16rem] items-center gap-3 rounded-xl border px-3 py-3 ${FOCUS_RING}`}
               >
                 <div className="relative size-14 shrink-0">
                   <svg
@@ -55,7 +64,7 @@ export function StudentAssignmentRings({
                       cy="60"
                       r="47"
                       fill="none"
-                      stroke="#e2e8f0"
+                      stroke="var(--progress-track)"
                       strokeWidth="10"
                     />
                     {parts.map((p) => {
@@ -82,16 +91,16 @@ export function StudentAssignmentRings({
                     aria-hidden="true"
                     className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
                   >
-                    <strong className="text-xs font-semibold text-slate-950 tabular-nums">
+                    <strong className="text-xs font-semibold text-neutral-950 tabular-nums">
                       {total ? `${completion}%` : "—"}
                     </strong>
                   </div>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-medium [overflow-wrap:anywhere] text-slate-900">
+                  <h3 className="text-sm font-medium [overflow-wrap:anywhere] text-neutral-900">
                     {item.course.name} · {item.classroom.name}
                   </h3>
-                  <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
+                  <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-neutral-600">
                     {total ? (
                       <>
                         <span>
@@ -116,7 +125,7 @@ export function StudentAssignmentRings({
           })}
         </div>
       ) : (
-        <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600">
+        <p className="bg-muted/65 rounded-xl p-5 text-sm text-neutral-600">
           暂无在学课程，加入课程后可查看作业进展。
         </p>
       )}
@@ -125,7 +134,7 @@ export function StudentAssignmentRings({
   return (
     <section
       aria-labelledby="home-assignment-progress"
-      className="flex min-w-0 flex-col rounded-[1.25rem] border border-neutral-300 bg-neutral-100 p-4 sm:p-5"
+      className="border-border bg-card flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5"
     >
       <header className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2">
         <div className="min-w-0">
@@ -147,10 +156,10 @@ export function StudentAssignmentRings({
                   aria-valuemax={total}
                   aria-valuenow={submitted}
                   aria-valuetext={`已交 ${submitted} 项，共 ${total} 项`}
-                  className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-300"
+                  className="bg-muted h-2.5 flex-1 overflow-hidden rounded-full"
                 >
                   <div
-                    className="h-full rounded-full bg-neutral-950"
+                    className="bg-brand h-full rounded-full"
                     style={{ width: `${(100 * submitted) / total}%` }}
                   />
                 </div>
@@ -169,10 +178,10 @@ export function StudentAssignmentRings({
           <div className="mt-3 flex min-h-0 flex-1 [scrollbar-gutter:stable] flex-col gap-2 overflow-y-auto overscroll-y-contain">
             {classProgress}
           </div>
-          <footer className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-neutral-300 pt-2">
+          <footer className="border-border mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t pt-2">
             <StudentPageLink
               href="/student/assignments"
-              className="inline-flex min-h-9 items-center text-sm font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-sky-700"
+              className={`inline-flex min-h-10 items-center text-sm font-medium underline underline-offset-4 ${FOCUS_RING}`}
             >
               查看全部作业
             </StudentPageLink>
@@ -187,7 +196,7 @@ export function StudentAssignmentRings({
         <>
           <StudentPageLink
             href="/student/assignments"
-            className="mb-2 inline-flex min-h-9 items-center text-sm font-medium underline underline-offset-4"
+            className="mb-2 inline-flex min-h-10 items-center text-sm font-medium underline underline-offset-4"
           >
             查看作业
           </StudentPageLink>

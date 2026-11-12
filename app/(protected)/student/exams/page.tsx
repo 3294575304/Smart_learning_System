@@ -5,6 +5,7 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { listStudentTaskClassrooms } from "@/services/courses/student-access";
 import { StudentPageHeader } from "@/components/dashboard/student-page-header";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
+import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import {
   StudentActivityFilters,
@@ -13,7 +14,6 @@ import {
   activityCardClass,
 } from "@/components/dashboard/student-activity-list";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
-import { activityHref } from "@/services/student-experience/activity-query";
 import {
   readActivityPage,
   readActivityPageQuery,
@@ -51,14 +51,17 @@ export default async function StudentExamsPage({
         title="我的考试"
         description="查看考试安排、考核要求和提交状态。"
         actions={
-          <StudentBackLink
-            href={activityHref("tasks", {
-              courseId: query.courseId,
-              classroomId: query.classroomId,
-            })}
-          >
-            返回学习任务
-          </StudentBackLink>
+          query.courseId && query.classroomId ? (
+            <StudentCourseReturnLink
+              courseId={query.courseId}
+              classroomId={query.classroomId}
+              tab="tasks"
+            />
+          ) : (
+            <StudentBackLink href="/student/tasks">
+              返回学习任务
+            </StudentBackLink>
+          )
         }
       />
       <StudentActivityFilters

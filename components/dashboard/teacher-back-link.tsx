@@ -7,9 +7,11 @@ import { useEffect, useState } from "react";
 export function TeacherBackLink({
   href,
   children,
+  closePreviewTab = false,
 }: {
   href: string;
   children: string;
+  closePreviewTab?: boolean;
 }) {
   const [pending, setPending] = useState(false);
   useEffect(() => {
@@ -29,8 +31,17 @@ export function TeacherBackLink({
           !event.shiftKey &&
           !event.altKey &&
           event.button === 0
-        )
+        ) {
+          if (closePreviewTab && window.history.length === 1) {
+            // A preview opened in its own tab can close without resetting the editor.
+            window.close();
+            if (window.closed) {
+              event.preventDefault();
+              return;
+            }
+          }
           setPending(true);
+        }
       }}
     >
       {pending ? (

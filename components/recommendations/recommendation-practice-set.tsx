@@ -6,6 +6,7 @@ import { canAnswerPractice } from "@/services/practice-sets/types";
 import { useSearchParams } from "next/navigation";
 import { practiceListReturnUrl } from "@/services/practice-sets/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import {
   ArrowLeft,
   ChevronDown,
@@ -33,8 +34,8 @@ import type { PracticeSet } from "@/services/practice-sets/types";
 import type { RecommendationDetailView } from "@/services/recommendations/types";
 
 const controlClass =
-  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50";
-const secondaryClass = `${controlClass} border-sky-200 bg-white text-sky-800 hover:bg-sky-50`;
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-800 disabled:opacity-50";
+const secondaryClass = `${controlClass} border-slate-300 bg-white text-cyan-950 hover:bg-cyan-50`;
 
 function questionState(
   question: PracticeSet["questions"][number],
@@ -359,6 +360,22 @@ export function RecommendationPracticeSet({
     (q) => q.status === "COMPLETED" || q.judgingStatus,
   ).length;
   const cachedCurrent = cache[current];
+  const questionHeading = useRef<HTMLHeadingElement>(null);
+  const moveFocus = useRef(false);
+  function goToQuestion(id: string) {
+    if (id === current) {
+      questionHeading.current?.focus();
+    } else {
+      moveFocus.current = true;
+      setCurrent(id);
+    }
+    setNavigatorOpen(false);
+  }
+  useEffect(() => {
+    if (!moveFocus.current) return;
+    moveFocus.current = false;
+    questionHeading.current?.focus();
+  }, [current]);
   useEffect(() => {
     if (!draftsReady) return;
     let alive = true;
@@ -406,13 +423,39 @@ export function RecommendationPracticeSet({
     };
   }, [current, retry, cachedCurrent, draftsReady]);
   return (
-    <section className="mx-auto max-w-7xl min-w-0 space-y-4">
-      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white px-4 py-3 sm:px-5">
+    <section className="@container mx-auto max-w-7xl min-w-0 rounded-xl border border-slate-200 bg-slate-100">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-slate-200 bg-white px-3 py-3 sm:px-5">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
-          <a href={returnTo} className={secondaryClass}>
-            <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
-            返回自主练习
-          </a>
+          {readOnly ? (
+            <a href={returnTo} className={secondaryClass}>
+              <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
+              返回自主练习
+            </a>
+          ) : (
+            <button
+              type="button"
+              className={secondaryClass}
+              disabled={!draftsReady || working || Boolean(draft.conflict)}
+              onClick={() => void draft.saveAndExit(saveSnapshot)}
+            >
+              <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
+              {draft.saving ? "保存中…" : "退出练习"}
+            </button>
+          )}
+          <div className="max-w-56 min-w-0 flex-[1_1_10rem]">
+            <p className="text-xs text-slate-700 tabular-nums">
+              第 {index + 1} / {questions.length} 题 · 已提交 {submitted}/
+              {questions.length}
+            </p>
+            {!readOnly && (
+              <progress
+                aria-label="练习提交进度"
+                max={questions.length}
+                value={submitted}
+                className="mt-1 block h-1.5 w-full appearance-none overflow-hidden rounded-full bg-slate-200 [&::-moz-progress-bar]:bg-cyan-900 [&::-webkit-progress-bar]:bg-slate-200 [&::-webkit-progress-value]:bg-cyan-900"
+              />
+            )}
+          </div>
           <div className="min-w-0 flex-1 basis-48">
             <p className="text-xs [overflow-wrap:anywhere] text-slate-600">
               {set.courseName}
@@ -449,30 +492,22 @@ export function RecommendationPracticeSet({
         </div>
       </header>
 
-      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
+      <div className="grid min-w-0 @min-[48rem]:grid-cols-[minmax(0,1fr)_14rem]">
         <aside
           aria-labelledby="practice-progress"
-          className="min-w-0 rounded-2xl border bg-white p-4 xl:sticky xl:top-24 xl:col-start-2 xl:row-start-1"
+          className="min-w-0 border-b border-slate-200 bg-white p-3 sm:p-4 @min-[48rem]:sticky @min-[48rem]:top-20 @min-[48rem]:col-start-2 @min-[48rem]:row-start-1 @min-[48rem]:border-s @min-[48rem]:border-b-0"
         >
           <div className="flex items-center justify-between gap-2">
             <h2
               id="practice-progress"
               className="text-sm font-semibold text-slate-950"
             >
-              练习进度
+              答题卡
             </h2>
             <p className="text-xs text-slate-600 tabular-nums">
               已提交 {submitted}/{questions.length}
             </p>
           </div>
-          {!readOnly && (
-            <progress
-              aria-label="练习提交进度"
-              max={questions.length}
-              value={submitted}
-              className="mt-2 block h-2 w-full overflow-hidden rounded-full accent-sky-700"
-            />
-          )}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-slate-600">
             {scoring.pendingCount > 0 && (
               <span>待判 {scoring.pendingCount}</span>
@@ -502,7 +537,8 @@ export function RecommendationPracticeSet({
             aria-expanded={navigatorOpen}
             aria-controls="practice-question-navigator"
             className={
-              secondaryClass + " mt-3 w-full justify-between xl:hidden"
+              secondaryClass +
+              " mt-3 w-full justify-between @min-[48rem]:hidden"
             }
             onClick={() => setNavigatorOpen((open) => !open)}
           >
@@ -517,10 +553,10 @@ export function RecommendationPracticeSet({
             aria-label="题号导航"
             className={
               (navigatorOpen ? "block" : "hidden") +
-              " mt-3 border-t pt-3 xl:block"
+              " mt-3 border-t pt-3 @min-[48rem]:block"
             }
           >
-            <div className="grid max-h-64 grid-cols-5 gap-1.5 overflow-y-auto px-1 py-1 sm:grid-cols-8 xl:grid-cols-5">
+            <div className="grid max-h-64 grid-cols-5 gap-1.5 overflow-y-auto px-1 py-1 sm:grid-cols-8 @min-[48rem]:grid-cols-4">
               {viewQuestions.map((question, i) => {
                 const state = questionState(
                   question,
@@ -536,11 +572,12 @@ export function RecommendationPracticeSet({
                     aria-label={"第 " + (i + 1) + " 题，" + state.label}
                     aria-current={selected ? "step" : undefined}
                     title={state.label}
-                    onClick={() => setCurrent(question.id)}
+                    onClick={() => goToQuestion(question.id)}
                     className={
                       "min-h-11 rounded-lg border text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-700 disabled:opacity-60 " +
-                      state.color +
-                      (selected ? " ring-2 ring-sky-600 ring-inset" : "")
+                      (selected
+                        ? "border-cyan-950 bg-cyan-900 text-white"
+                        : state.color)
                     }
                   >
                     {i + 1} <span aria-hidden="true">{state.mark}</span>
@@ -557,11 +594,33 @@ export function RecommendationPracticeSet({
           </nav>
         </aside>
 
-        <div className="min-w-0 space-y-3 xl:col-start-1 xl:row-start-1">
-          <div className="min-w-0 rounded-2xl border bg-white p-4 sm:p-5">
-            <h2 className="mb-2 text-xs font-semibold text-sky-800">
+        <div className="min-w-0 space-y-3 p-3 sm:p-5 @min-[48rem]:col-start-1 @min-[48rem]:row-start-1">
+          <div className="mx-auto max-w-3xl min-w-0 rounded-lg p-1 sm:p-3">
+            <h2
+              ref={questionHeading}
+              tabIndex={-1}
+              className="mb-2 scroll-mt-24 rounded text-sm font-semibold text-cyan-950 focus-visible:outline-2 focus-visible:outline-cyan-800"
+            >
               第 {index + 1} / {questions.length} 题
             </h2>
+            {cachedCurrent && (
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="rounded bg-cyan-100 px-2 py-1 font-medium text-cyan-950">
+                  {QUESTION_TYPE_LABELS[cachedCurrent.type]}
+                </span>
+                {cachedCurrent.assignedPoints != null && (
+                  <span>{cachedCurrent.assignedPoints} 分</span>
+                )}
+                {cachedCurrent.knowledgePoints.length > 0 && (
+                  <span className="[overflow-wrap:anywhere]">
+                    知识点 ·{" "}
+                    {cachedCurrent.knowledgePoints
+                      .map((point) => point.name)
+                      .join("、")}
+                  </span>
+                )}
+              </div>
+            )}
             {((!readOnly && !draftsReady) || busy) && (
               <p role="status" className="py-4 text-sm text-slate-600">
                 正在加载题目…
@@ -718,7 +777,7 @@ export function RecommendationPracticeSet({
                 type="button"
                 className={secondaryClass}
                 disabled={!draftsReady || working || index <= 0}
-                onClick={() => setCurrent(questions[index - 1].id)}
+                onClick={() => goToQuestion(questions[index - 1].id)}
               >
                 <ChevronLeft aria-hidden="true" className="size-4 shrink-0" />
                 上一题
@@ -729,7 +788,7 @@ export function RecommendationPracticeSet({
                 disabled={
                   !draftsReady || working || index >= questions.length - 1
                 }
-                onClick={() => setCurrent(questions[index + 1].id)}
+                onClick={() => goToQuestion(questions[index + 1].id)}
               >
                 下一题
                 <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
@@ -750,7 +809,7 @@ export function RecommendationPracticeSet({
                   type="button"
                   className={
                     controlClass +
-                    " border-sky-700 bg-sky-700 text-white hover:bg-sky-800"
+                    " border-cyan-900 bg-cyan-900 text-white hover:bg-cyan-950"
                   }
                   disabled={
                     !draftsReady || working || busy || Boolean(draft.conflict)

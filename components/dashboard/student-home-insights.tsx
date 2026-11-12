@@ -1,6 +1,14 @@
 import { StudentHomeExams } from "./student-home-exams";
 import { StudentPageLink } from "./student-page-link";
 import React, { type ReactNode } from "react";
+import {
+  ArrowUpRight,
+  BookOpen,
+  CalendarClock,
+  ChartColumn,
+  ClipboardCheck,
+} from "lucide-react";
+import { FOCUS_RING } from "./ui-focus";
 import { StudentEnrollmentPicker } from "./student-enrollment-picker";
 import { HomeKnowledgeMatrix } from "./home-knowledge-matrix";
 import { StudentAssignmentRings } from "./student-assignment-rings";
@@ -63,12 +71,16 @@ export function StudentHomeInsights({
   const metrics = [
     {
       label: "在学课程",
+      icon: BookOpen,
+      href: "/student/courses",
       value: current.length,
       unit: "门",
       detail: "按已加入班级分别统计",
     },
     {
       label: "7 天内截止",
+      icon: CalendarClock,
+      href: "/student/tasks",
       value: dueSoon.length,
       unit: "项",
       detail: dueBreakdown.join(" · ") || "暂无 7 天内截止的任务",
@@ -76,7 +88,9 @@ export function StudentHomeInsights({
     },
     {
       label: "任务提交率",
-      value: total ? `${Math.round((submitted / total) * 100)}%` : "—",
+      icon: ClipboardCheck,
+      href: "/student/analytics",
+      value: total ? `${Math.round((submitted / total) * 100)}%` : null,
       unit: "",
       detail: total
         ? `已交 ${submitted}/${total} 项${includesExams ? " · 含已结束考试" : ""}`
@@ -84,7 +98,10 @@ export function StudentHomeInsights({
     },
     {
       label: "线上考试均分",
-      value: exams.average ?? "—",
+      icon: ChartColumn,
+      href: "/student/exams",
+      value: exams.average,
+      emptyLabel: "暂无成绩",
       unit: exams.average === null ? "" : "分",
       detail: exams.scoredCount
         ? `${exams.scoredCount} 场线上考试已公布成绩`
@@ -107,26 +124,69 @@ export function StudentHomeInsights({
   };
   return (
     <section aria-label="学习主页数据看板" className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 @min-[48rem]:grid-cols-4">
-        {metrics.map((m) => (
-          <article
-            key={m.label}
-            className="min-w-0 rounded-2xl border border-neutral-300 bg-neutral-100 px-4 py-3"
-          >
-            <h2 className="text-sm font-medium text-neutral-600">{m.label}</h2>
-            <p className="mt-0.5 text-3xl font-medium text-neutral-950 tabular-nums">
-              {m.value}
-              <span className="ms-1 text-lg font-normal">{m.unit}</span>
-            </p>
-            <p className="mt-1 text-xs leading-5 text-neutral-600">
-              {m.detail}
-            </p>
-            {m.note && (
-              <p className="mt-1 text-xs font-medium text-rose-700">{m.note}</p>
-            )}
-          </article>
-        ))}
-      </div>
+      <ul
+        aria-label="学习概览"
+        className="grid grid-cols-2 gap-3 @min-[48rem]:grid-cols-4"
+      >
+        {metrics.map(
+          ({
+            icon: Icon,
+            label,
+            href,
+            value,
+            unit,
+            detail,
+            note,
+            emptyLabel,
+          }) => (
+            <li key={label} className="min-w-0">
+              <StudentPageLink
+                href={href}
+                className={`group text-foreground hover:border-brand/65 border-border bg-card flex h-full min-w-0 flex-col gap-2 rounded-xl border p-3 transition-colors sm:px-4 ${FOCUS_RING}`}
+              >
+                <div className="flex min-w-0 items-start justify-between gap-1.5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span className="bg-brand/10 text-brand-strong grid size-7 shrink-0 place-items-center rounded-lg">
+                      <Icon aria-hidden="true" className="size-4" />
+                    </span>
+                    <h2 className="text-sm font-medium [overflow-wrap:anywhere]">
+                      {label}
+                    </h2>
+                  </div>
+                  <ArrowUpRight
+                    aria-hidden="true"
+                    className="text-muted-foreground group-hover:text-brand mt-1 size-4 shrink-0"
+                  />
+                </div>
+                <p className="flex min-h-8 flex-wrap items-baseline gap-x-1">
+                  {value === null ? (
+                    <span className="text-muted-foreground self-center text-sm font-semibold">
+                      {emptyLabel ?? "暂无数据"}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-2xl leading-8 font-semibold tabular-nums">
+                        {value}
+                      </span>
+                      {unit && (
+                        <span className="text-muted-foreground text-xs font-medium">
+                          {unit}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </p>
+                <p className="text-muted-foreground text-xs leading-5">
+                  {detail}
+                </p>
+                {note && (
+                  <p className="text-xs font-medium text-rose-700">{note}</p>
+                )}
+              </StudentPageLink>
+            </li>
+          ),
+        )}
+      </ul>
       <div className="grid gap-5 has-[details[open]]:items-start @min-[48rem]:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]">
         <div
           aria-label="考试安排与任务"
@@ -142,7 +202,7 @@ export function StudentHomeInsights({
         >
           <section
             aria-labelledby="home-knowledge-heading"
-            className="flex min-w-0 flex-1 flex-col rounded-[1.25rem] border border-neutral-300 bg-neutral-100 p-4 sm:p-5"
+            className="border-border bg-card flex min-w-0 flex-1 flex-col rounded-[1.25rem] border p-4 sm:p-5"
           >
             <header className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="home-knowledge-heading" className="text-xl font-semibold">
@@ -151,7 +211,7 @@ export function StudentHomeInsights({
               {selected && (
                 <StudentPageLink
                   href={`/student/courses/${selected.course.id}/learning-center?${new URLSearchParams({ classroomId: selected.classroom.id, tab: "knowledge" })}`}
-                  className="inline-flex min-h-10 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-sky-700"
+                  className={`inline-flex min-h-10 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline ${FOCUS_RING}`}
                 >
                   查看课程详情
                 </StudentPageLink>

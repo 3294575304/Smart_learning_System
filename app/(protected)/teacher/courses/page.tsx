@@ -1,8 +1,9 @@
-import { Role } from "@prisma/client";
+import { CourseStatus, Role } from "@prisma/client";
 import { BookOpenCheck, Plus } from "lucide-react";
 import { CourseForm } from "@/components/courses/course-form";
 import { TeacherCourseList } from "@/components/courses/teacher-course-list";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { readAllowedParam, readTextParam } from "@/lib/list-filter";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
   listTeacherQuestionCourseCategories,
@@ -10,13 +11,32 @@ import {
   listTeacherCourses,
 } from "@/services/courses/service";
 
-export default async function TeacherCoursesPage() {
+const COURSE_STATUS_VALUES = Object.values(CourseStatus);
+
+export default async function TeacherCoursesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    keyword?: string;
+    status?: string;
+    term?: string;
+  }>;
+}) {
   const teacher = await requirePageRole(Role.TEACHER);
+  const params = await searchParams;
   const [courses, templates, categories] = await Promise.all([
     listTeacherCourses(teacher.id),
     listTeacherCourseTemplates(teacher.id),
     listTeacherQuestionCourseCategories(teacher.id),
   ]);
+
+  // 筛选条件从链接读回，保证刷新和分享链接能还原同一份结果
+  const initialFilters = {
+    keyword: readTextParam(params.keyword),
+    status: readAllowedParam(params.status, COURSE_STATUS_VALUES),
+    term: readTextParam(params.term, 40),
+  };
+
   const defaultTemplateId =
     templates.find((template) => template.code === "python-programming-v1")
       ?.id ?? templates[0]?.id;
@@ -25,7 +45,7 @@ export default async function TeacherCoursesPage() {
       <header>
         <h1 className="text-2xl font-semibold">课程管理</h1>
         <p className="mt-1 text-sm text-slate-600">
-          管理课程与授课班级，进入课程继续日常教学。
+          管理课程与授课班级，进入课程继续日常教学。列表支持按课程名称、课程号、学期搜索，并按课程状态、学期筛选。
         </p>
       </header>
       <details className="group rounded-xl border bg-white" id="new-course">
@@ -85,7 +105,10 @@ export default async function TeacherCoursesPage() {
           )}
         </div>
       </details>
-      <TeacherCourseList initialCourses={courses} />
+      <TeacherCourseList
+        initialCourses={courses}
+        initialFilters={initialFilters}
+      />
     </section>
   );
 }

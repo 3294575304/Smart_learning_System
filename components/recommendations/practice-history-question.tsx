@@ -1,4 +1,6 @@
 import type { RecommendationDetailView } from "@/services/recommendations/types";
+import { QuestionText } from "@/components/assignments/question-text";
+import { PracticeChoiceReview } from "./practice-choice-review";
 import {
   practiceDraftFilled,
   type PracticeDraft,
@@ -59,39 +61,45 @@ export function PracticeHistoryQuestion({
           · 只读
         </span>
       </header>
-      <p className="[overflow-wrap:anywhere] break-words whitespace-pre-wrap">
-        {item.content || "未保存题目内容，暂时无法回看题干。"}
-      </p>
+      <QuestionText
+        text={item.content || "未保存题目内容，暂时无法回看题干。"}
+      />
       {item.options.length ? (
-        <ul className="space-y-2 text-sm">
-          {item.options.map((option) => (
-            <li
-              className="rounded-lg border p-3 [overflow-wrap:anywhere] break-words"
-              key={option.id}
-            >
-              {option.label}. {option.content}
-            </li>
-          ))}
-        </ul>
+        <PracticeChoiceReview
+          options={item.options}
+          feedback={answer?.choiceFeedback}
+        />
       ) : null}
-      <section className="rounded-lg bg-sky-50 p-4 text-sm">
-        <h3 className="font-medium">{showDraft ? "未提交草稿" : "你的答案"}</h3>
-        <p className="mt-2 [overflow-wrap:anywhere] break-words whitespace-pre-wrap">
-          {draftText ?? ownAnswer ?? "未作答，未保存答案。"}
-        </p>
-      </section>
+      {answer?.choiceFeedback && (
+        <div className="border-s-2 border-cyan-800 ps-3 text-sm">
+          <h3 className="font-semibold">答案解析</h3>
+          <QuestionText text={answer.explanation || "未保存解析"} />
+        </div>
+      )}
+      {!answer?.choiceFeedback && (
+        <section className="rounded-lg bg-sky-50 p-4 text-sm">
+          <h3 className="font-medium">
+            {showDraft ? "未提交草稿" : "你的答案"}
+          </h3>
+          <p className="mt-2 [overflow-wrap:anywhere] break-words whitespace-pre-wrap">
+            {draftText ?? ownAnswer ?? "未作答，未保存答案。"}
+          </p>
+        </section>
+      )}
       {answer ? (
         <section className="space-y-2 rounded-lg bg-slate-50 p-4 text-sm">
           <h3 className="font-medium">已有反馈</h3>
           <p>
             本题得分 {answer.score}／{answer.maxScore}
           </p>
-          <p className="[overflow-wrap:anywhere] break-words whitespace-pre-wrap">
-            参考答案：{answer.correctAnswer || "未保存"}
-          </p>
-          <p className="[overflow-wrap:anywhere] break-words whitespace-pre-wrap">
-            {answer.explanation || "未保存解析"}
-          </p>
+          {!answer.choiceFeedback && (
+            <p className="[overflow-wrap:anywhere] break-words whitespace-pre-wrap">
+              参考答案：{answer.correctAnswer || "未保存"}
+            </p>
+          )}
+          {!answer.choiceFeedback && (
+            <QuestionText text={answer.explanation || "未保存解析"} />
+          )}
         </section>
       ) : (
         <p className="text-sm text-slate-500">
