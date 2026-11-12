@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sphericalGraphLayout } from "@/components/courses/knowledge-graph-sphere-layout";
-import { graphChapterColors } from "@/components/courses/knowledge-graph-presentation";
+import {
+  chapterGraphLayout,
+  graphChapterColors,
+} from "@/components/courses/knowledge-graph-presentation";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 
 function fixture(): KnowledgeGraphStructure {
@@ -51,6 +54,25 @@ function fixture(): KnowledgeGraphStructure {
   };
 }
 
+test("二维网图由中心课程、第二层章节向外扩展知识点，不包围章节", () => {
+  const graph = fixture();
+  const layout = chapterGraphLayout(graph);
+  assert.equal(layout.size, graph.nodes.length);
+  for (const position of layout.values()) assert.equal(position.z, 0);
+  for (const edge of graph.edges) {
+    const chapter = layout.get(edge.from);
+    const point = layout.get(edge.to);
+    assert.ok(chapter && point);
+    const radius = Math.hypot(chapter.x, chapter.y);
+    assert.ok(Math.hypot(point.x, point.y) > radius + 60);
+    assert.ok(
+      (point.x * chapter.x + point.y * chapter.y) / radius > radius,
+      "子点全部位于章节朝外一侧，不得向课程核心回绕",
+    );
+    assert.equal(point.color, chapter.color);
+  }
+});
+
 test("球形布局覆盖所有节点、保持身份和章节颜色，且不修改业务结构", () => {
   const graph = fixture(),
     original = structuredClone(graph);
@@ -85,8 +107,22 @@ test("球形布局覆盖所有节点、保持身份和章节颜色，且不修�
       parent.z - child.z,
     );
     assert.ok(
-      distance >= 80 && distance <= 150,
+      distance >= 60 && distance <= 100,
       "附属知识点保持在章节附近并保留组内间距",
+    );
+  }
+  const course = layout.get("course");
+  assert.ok(course);
+  for (let i = 1; i <= 11; i++) {
+    const chapter = layout.get(`CH-${i}`);
+    assert.ok(chapter);
+    assert.ok(
+      Math.hypot(
+        chapter.x - course.x,
+        chapter.y - course.y,
+        chapter.z - course.z,
+      ) <= 220,
+      "章节围绕课程核心紧凑排布，避免长距离空白连线",
     );
   }
 });

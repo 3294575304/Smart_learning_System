@@ -16,6 +16,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { ForceGraphMethods, ForceGraphProps } from "react-force-graph-3d";
 import * as THREE from "three";
+import type { TrackballControls } from "three/addons/controls/TrackballControls.js";
 import { sphericalGraphLayout } from "@/components/courses/knowledge-graph-sphere-layout";
 import { chapterGraphLayout } from "@/components/courses/knowledge-graph-presentation";
 import { KnowledgeGraphNodeVisual } from "@/components/courses/knowledge-graph-node-visual";
@@ -314,13 +315,28 @@ export function KnowledgeGraphCanvas3D({
   useEffect(() => {
     const fg = fgRef.current;
     if (!graphReady || !fg) return;
-    // 常规方向光塑造实体球的明暗，不使用自发光或后期光晕。
-    const key = new THREE.DirectionalLight("#ffffff", 2.5);
+    // 柔和主光与冷色轮廓光塑造釉面质感，避免高环境光抹平球体层次。
+    const key = new THREE.DirectionalLight("#fff5eb", 2.4);
     key.position.set(-600, 800, 1200);
-    const fill = new THREE.DirectionalLight("#93c5fd", 0.65);
+    const fill = new THREE.DirectionalLight("#93c5fd", 0.55);
     fill.position.set(700, -200, -800);
-    fg.lights([new THREE.AmbientLight("#ffffff", 1.25), key, fill]);
+    const rim = new THREE.DirectionalLight("#c4b5fd", 1.1);
+    rim.position.set(200, 500, -700);
+    fg.lights([new THREE.AmbientLight("#dbeafe", 0.8), key, fill, rim]);
   }, [graphReady]);
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!graphReady || !fg) return;
+    const controls = fg.controls() as TrackballControls;
+    const planar = layoutMode === "CHAPTER";
+    controls.noRotate = planar;
+    controls.panSpeed = planar ? 0.12 : 0.3;
+    // 平面阅读取消惯性滑行，松手即停，避免一次轻拖后画布继续漂移。
+    controls.staticMoving = planar;
+    controls.mouseButtons.LEFT = planar ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+    if (planar) fg.camera().up.set(0, 1, 0);
+    controls.update();
+  }, [graphReady, layoutMode]);
   useEffect(() => {
     const fg = fgRef.current;
     const container = containerRef.current;
@@ -415,10 +431,25 @@ export function KnowledgeGraphCanvas3D({
       fitView();
       return;
     }
-    // 采用官方示例的径向飞入和三秒过渡，距离按本图谱节点尺寸适配。
+    // 保留章节周围的阅读空间，不把镜头推到球体表面。
     const radius =
       node.type === "COURSE" ? 20 : node.type === "CHAPTER" ? 13 : 7;
-    const { position, target } = focusGraphNode(node, radius * 10);
+    const distance = Math.max(
+      node.type === "KNOWLEDGE_POINT" ? 180 : 260,
+      radius * 10,
+    );
+    const direction = fg
+      .camera()
+      .position.clone()
+      .sub((fg.controls() as TrackballControls).target);
+    // 二维章节总览的节点聚焦也保持正面，避免沿径向飞入后视角倾斜。
+    const { position, target } =
+      layoutMode === "CHAPTER"
+        ? {
+            position: new THREE.Vector3(node.x, node.y, node.z + distance),
+            target: new THREE.Vector3(node.x, node.y, node.z),
+          }
+        : focusGraphNode(node, distance, direction);
     fg.cameraPosition(
       position,
       target,
@@ -432,6 +463,7 @@ export function KnowledgeGraphCanvas3D({
     onlyRelated,
     fitNodes,
     fitView,
+    layoutMode,
   ]);
   function zoomBy(factor: number) {
     const fg = fgRef.current;
@@ -579,7 +611,8 @@ export function KnowledgeGraphCanvas3D({
       </div>
       <div
         style={{
-          backgroundImage: "url('/images/knowledge-graph-space.webp')",
+          backgroundImage:
+            "radial-gradient(ellipse at center, rgba(5,12,30,0.48), rgba(5,12,30,0.22) 65%, rgba(3,7,18,0.55)), linear-gradient(rgba(6,13,31,0.35), rgba(6,13,31,0.35)), url('/images/knowledge-graph-nebula.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
@@ -650,7 +683,7 @@ export function KnowledgeGraphCanvas3D({
                   <p className="text-xs font-medium text-slate-200">
                     {layoutMode === "SPHERE"
                       ? "探索知识之间的联系"
-                      : "按章节浏览课程结构"}
+                      : "从课程核心探索章节网络"}
                   </p>
                   <p className="mt-1.5 text-[11px] text-slate-400">
                     悬停查看关联 · 点击节点聚焦
@@ -675,6 +708,15 @@ export function KnowledgeGraphCanvas3D({
             没有匹配节点，请调整章节、类型或搜索条件。
           </p>
         ) : null}
+        <a
+          href="https://www.eso.org/public/images/eso1105a/"
+          target="_blank"
+          rel="noreferrer"
+          className="absolute right-3 bottom-2 rounded bg-slate-950/70 px-2 py-1 text-[10px] text-slate-300 hover:text-white focus-visible:outline-2 focus-visible:outline-sky-400"
+          title="M78 星云 · ESO/Igor Chekalin · CC BY 4.0；已裁切、压缩并叠加暗色遮罩"
+        >
+          背景：ESO/Igor Chekalin
+        </a>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 border-t border-slate-700/60 bg-[#111b2d] px-4 py-3 text-xs">
         <div
@@ -714,8 +756,10 @@ export function KnowledgeGraphCanvas3D({
         </div>
         <p className="w-full text-[11px] leading-5 text-slate-400">
           {nodeColorHelp ?? "同章节点同色，点击节点平滑飞入查看。"}
-          <span className="mx-2 text-slate-600">|</span>拖动节点移动 · 左键旋转
-          · 右键平移 · 滚轮缩放
+          <span className="mx-2 text-slate-600">|</span>
+          {layoutMode === "SPHERE"
+            ? "拖动节点移动 · 左键旋转 · 右键平移 · 滚轮缩放"
+            : "拖动节点移动 · 拖动画布平移 · 滚轮缩放 · 正面视角已锁定"}
         </p>
         {fullscreenError ? (
           <p role="status" className="text-xs text-amber-300">

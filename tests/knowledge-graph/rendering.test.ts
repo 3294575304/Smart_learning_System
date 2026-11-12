@@ -134,6 +134,15 @@ test("真实 SpriteText 的背景边距随字号缩放，深色画布上的长�
       assert.equal(label.backgroundColor, false, "名称不使用遮挡节点的厚底框");
       assert.equal(label.borderWidth, 0);
       assert.equal(label.fontWeight, "normal");
+      assert.equal(
+        label.material.depthTest,
+        false,
+        "球面标签始终绘制在实体球前方",
+      );
+      assert.equal(label.material.depthWrite, false);
+      assert.equal(label.renderOrder, 10);
+      assert.deepEqual(label.center.toArray(), [0.5, 0.5]);
+      assert.deepEqual(label.position.toArray(), [0, 0, 0]);
       assert.ok(visual.sphere.geometry.parameters.radius <= 20);
       visual.sphere.geometry.dispose();
       visual.sphere.material.dispose();
@@ -194,7 +203,34 @@ test("章节颜色与子知识点一致，重新排列输入或编辑名称不�
   const colors = graphChapterColors(graph);
   const positions = chapterGraphLayout(graph);
   assert.equal(new Set(colors.values()).size, 11);
+  const center = positions.get("COURSE");
+  assert.ok(center);
+  assert.equal(center.x, 0, "平面网状图的课程核心居中");
+  assert.equal(center.y, 0);
+  for (const position of positions.values()) assert.equal(position.z, 0);
+  const chapterPositions = chapters.map((chapter) => {
+    const position = positions.get(chapter.key);
+    assert.ok(position);
+    return position;
+  });
+  assert.equal(
+    new Set(
+      chapterPositions.map(
+        (position) => `${Math.sign(position.x)},${Math.sign(position.y)}`,
+      ),
+    ).size,
+    4,
+    "章节应围绕核心覆盖四周，不能退回单向树状结构",
+  );
   points.forEach((point, index) => {
+    const position = positions.get(point.key);
+    const chapter = chapterPositions[index];
+    assert.ok(position);
+    assert.ok(
+      Math.hypot(position.x - chapter.x, position.y - chapter.y) <
+        Math.hypot(position.x, position.y),
+      "知识点保留在所属章节附近",
+    );
     assert.equal(
       positions.get(point.key)?.color,
       colors.get(chapters[index].key),

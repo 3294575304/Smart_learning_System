@@ -76,8 +76,8 @@ export function KnowledgeGraphDirectory({
       <div
         className={
           compact
-            ? "mt-3 max-h-64 overflow-y-auto"
-            : "mt-3 max-h-80 overflow-y-auto"
+            ? "mt-3 max-h-64 overflow-y-auto lg:max-h-[640px]"
+            : "mt-3 max-h-80 overflow-y-auto lg:max-h-[720px]"
         }
       >
         <div
@@ -101,7 +101,7 @@ export function KnowledgeGraphDirectory({
             </button>
           ) : null}
           {groups.length ? (
-            <div className="mt-2 grid items-start gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+            <div className="mt-2 grid items-start gap-2">
               {groups.map((group) => (
                 <details
                   key={group.key}

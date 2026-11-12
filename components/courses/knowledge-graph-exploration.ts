@@ -1,16 +1,32 @@
 import * as THREE from "three";
 
-/** 与官方 click-to-focus 相同：从图谱中心沿节点方向向外观察。 */
+/** 延续当前视线聚焦；接近课程—节点轴线时偏转，避免中心球遮住所选节点。 */
 export function focusGraphNode(
   node: { x: number; y: number; z: number },
   distance: number,
+  viewDirection = new THREE.Vector3(0, 0, 1),
 ) {
   const target = new THREE.Vector3(node.x, node.y, node.z);
-  const direction = target.clone();
+  const direction = viewDirection.clone();
   if (direction.lengthSq() === 0) direction.set(0, 0, 1);
+  direction.normalize();
+  if (
+    target.lengthSq() &&
+    Math.abs(direction.dot(target.clone().normalize())) > 0.85
+  ) {
+    const side = new THREE.Vector3().crossVectors(
+      direction,
+      new THREE.Vector3(0, 1, 0),
+    );
+    if (side.lengthSq() < 0.001)
+      side.crossVectors(direction, new THREE.Vector3(1, 0, 0));
+    // 选取远离核心投影的一侧，避免斜向章节反而被偏转到轴线上。
+    if (side.dot(target) * direction.dot(target) > 0) side.negate();
+    direction.addScaledVector(side.normalize(), 0.8).normalize();
+  }
   return {
     target,
-    position: direction.normalize().multiplyScalar(distance).add(target),
+    position: direction.multiplyScalar(distance).add(target),
   };
 }
 

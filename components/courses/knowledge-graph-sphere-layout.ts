@@ -29,10 +29,10 @@ export function sphericalGraphLayout(graph: KnowledgeGraphStructure) {
         ).length,
     ),
   );
-  const clusterRadius = Math.max(100, Math.sqrt(largestCluster) * 36);
+  const clusterRadius = Math.max(78, Math.sqrt(largestCluster) * 29);
   const radius = Math.max(
-    300,
-    clusterRadius * Math.sqrt(Math.max(1, chapters.length)),
+    210,
+    clusterRadius * Math.sqrt(Math.max(1, chapters.length)) * 0.8,
   );
   const spherePoint = (index: number, count: number, distance: number) => {
     const y = 1 - (2 * (index + 0.5)) / Math.max(1, count);
@@ -66,7 +66,7 @@ export function sphericalGraphLayout(graph: KnowledgeGraphStructure) {
       const offset = spherePoint(
         pointIndex,
         points.length,
-        Math.max(90, Math.sqrt(points.length) * 36) *
+        Math.max(70, Math.sqrt(points.length) * 29) *
           (0.86 + (pointIndex % 3) * 0.14),
       );
       positions.set(point.key, {

@@ -7,17 +7,44 @@ import {
   graphNeighborhoods,
 } from "@/components/courses/knowledge-graph-exploration";
 
-test("点击节点沿图谱中心径向飞入，中心节点也具有有效观察位置", () => {
+test("节点聚焦延续当前视线并避开中心轴线，中心节点也具有有效观察位置", () => {
   for (const node of [
     { x: 30, y: -40, z: 50 },
+    { x: 0, y: 0, z: 200 },
+    { x: 0, y: 200, z: 0 },
+    { x: -80, y: 30, z: 200 },
+    { x: 80, y: -30, z: -200 },
     { x: 0, y: 0, z: 0 },
   ]) {
-    const { position, target } = focusGraphNode(node, 80);
-    assert.ok(Math.abs(position.distanceTo(target) - 80) < 0.001);
-    assert.deepEqual(target.toArray(), [node.x, node.y, node.z]);
-    if (target.lengthSq())
-      assert.ok(position.clone().cross(target).length() < 0.001);
-    else assert.deepEqual(position.toArray(), [0, 0, 80]);
+    for (const view of [
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(),
+    ]) {
+      const before = view.clone();
+      const { position, target } = focusGraphNode(node, 260, view);
+      assert.ok(Math.abs(position.distanceTo(target) - 260) < 0.001);
+      assert.deepEqual(target.toArray(), [node.x, node.y, node.z]);
+      assert.deepEqual(view, before, "聚焦计算不得修改当前相机方向输入");
+      const direction = position.clone().sub(target).normalize();
+      if (target.lengthSq()) {
+        assert.ok(
+          Math.abs(direction.dot(target.clone().normalize())) < 0.9,
+          "课程核心和所选节点不应投影在同一轴线上",
+        );
+      }
+      const originalDirection = view.lengthSq()
+        ? view.clone().normalize()
+        : new THREE.Vector3(0, 0, 1);
+      if (
+        !target.lengthSq() ||
+        Math.abs(originalDirection.dot(target.clone().normalize())) <= 0.85
+      )
+        assert.ok(
+          direction.distanceTo(originalDirection) < 0.001,
+          "无重叠风险时延续当前观察方向",
+        );
+    }
   }
 });
 

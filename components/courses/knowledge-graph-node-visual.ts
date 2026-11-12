@@ -41,7 +41,10 @@ function createLabel(node: VisualNode): GraphLabel {
   label.borderColor = "#334155";
   label.material.sizeAttenuation = false;
   label.material.depthWrite = false;
-  label.center.set(0.5, -0.15);
+  // 标签作为前景叠在球面中心，任何观察角度都不被实体球或连线遮挡。
+  label.material.depthTest = false;
+  label.renderOrder = 10;
+  label.center.set(0.5, 0.5);
   return label;
 }
 
@@ -64,12 +67,11 @@ export class KnowledgeGraphNodeVisual extends THREE.Group {
       node.type === "COURSE" ? "#38bdf8" : node.color,
     ).lerp(new THREE.Color("#ffffff"), 0.14);
     this.sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(radius, 20, 14),
+      new THREE.SphereGeometry(radius, 32, 24),
       new THREE.MeshPhongMaterial({
         color: this.baseColor,
-        transparent: true,
-        shininess: 24,
-        specular: "#475569",
+        shininess: 100,
+        specular: "#cbd5e1",
         emissive: "#000000",
       }),
     );
@@ -82,7 +84,7 @@ export class KnowledgeGraphNodeVisual extends THREE.Group {
     this.sphere.scale.setScalar(1);
     if (showLabel && !this.label) {
       this.label = this.labelFactory(this.node);
-      this.label.position.set(0, this.sphere.geometry.parameters.radius + 3, 0);
+      this.label.position.set(0, 0, 0);
       this.add(this.label);
     }
     if (!this.label) return;

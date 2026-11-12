@@ -148,7 +148,21 @@ export function KnowledgeGraphPublishedView({
         </span>
       </section>
 
-      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside
+          className="min-w-0 rounded-xl border border-slate-200 bg-white"
+          aria-label="章节与知识点目录"
+        >
+          <KnowledgeGraphDirectory
+            compact
+            counts={NO_QUESTION_COUNTS}
+            graph={graph}
+            nodes={nodes}
+            onSelect={handleSelectNode}
+            selectedKey={selectedKey}
+            showQuestionCounts={false}
+          />
+        </aside>
         <section className="min-w-0 space-y-3" aria-label="课程知识图谱浏览">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold text-slate-900">探索知识图谱</h2>
@@ -157,23 +171,6 @@ export function KnowledgeGraphPublishedView({
             </p>
           </div>
           <div className="min-w-0 space-y-3">
-            <details className="rounded-xl border border-slate-200 bg-white">
-              <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-slate-700">
-                章节与知识点目录
-                <span className="ml-2 text-xs font-normal text-slate-500">
-                  展开查找并定位节点
-                </span>
-              </summary>
-              <KnowledgeGraphDirectory
-                compact
-                counts={NO_QUESTION_COUNTS}
-                graph={graph}
-                nodes={nodes}
-                onSelect={handleSelectNode}
-                selectedKey={selectedKey}
-                showQuestionCounts={false}
-              />
-            </details>
             <KnowledgeGraphCanvas
               compact
               edges={edges}
@@ -191,7 +188,7 @@ export function KnowledgeGraphPublishedView({
           </p>
         </section>
         <aside
-          className="min-w-0 rounded-2xl border border-sky-100 bg-white shadow-sm xl:sticky xl:top-24"
+          className="min-w-0 rounded-2xl border border-sky-100 bg-white shadow-sm lg:col-span-2"
           aria-label="知识点学习与练习"
         >
           <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
