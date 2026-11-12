@@ -2,6 +2,7 @@ import React from "react";
 import { CalendarClock, History } from "lucide-react";
 import { StudentPageLink } from "./student-page-link";
 import { StudentExamCountdown } from "./student-exam-countdown";
+import { FOCUS_RING, FOCUS_RING_ON_DARK } from "./ui-focus";
 import { activityHref } from "@/services/student-experience/activity-query";
 import {
   studentTaskContext,
@@ -12,15 +13,18 @@ import type { StudentHomeExamResult } from "@/services/dashboard/student-class-a
 import { studentTaskHref } from "@/services/student-experience/task-scope";
 
 const card = "flex min-w-0 flex-col gap-3 rounded-[1.25rem] border p-4 sm:p-5";
-const recentCard = `${card} border-neutral-300 bg-neutral-100`;
+const recentCard = `${card} border-border bg-card`;
 const quietCard =
-  "flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[1.25rem] border border-dashed border-neutral-300 bg-white px-4 py-3";
+  "flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[1.25rem] border border-dashed border-border bg-card px-4 py-3";
 const quietHeading =
   "flex min-w-0 items-center gap-2 text-sm font-medium text-neutral-700";
-const action =
-  "inline-flex min-h-10 items-center rounded-xl bg-neutral-950 px-3.5 text-sm font-medium text-white hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
-const allExams =
-  "inline-flex min-h-10 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
+const action = `inline-flex min-h-10 items-center rounded-md bg-brand px-3.5 text-sm font-medium text-white hover:bg-brand-strong ${FOCUS_RING}`;
+const allExams = `inline-flex min-h-10 items-center rounded-md text-sm font-medium underline-offset-4 hover:underline ${FOCUS_RING}`;
+/**
+ * 深色考试卡内的次要链接：深底上白字下划线会和主按钮抢焦点，
+ * 降一档成 sky-100，hover 再回到白色；焦点环也必须换成白色，否则不可见。
+ */
+const allExamsOnDark = `inline-flex min-h-10 items-center rounded-md text-sm font-medium text-sky-100 underline-offset-4 hover:text-white hover:underline ${FOCUS_RING_ON_DARK}`;
 
 export function StudentHomeExams({
   next,
@@ -83,13 +87,13 @@ export function StudentHomeExams({
       {slot === "next" && next && (
         <section
           aria-labelledby="home-next-exam"
-          className={`${card} border-neutral-950 bg-neutral-950 text-white`}
+          className={`${card} border-brand-strong bg-brand-strong text-white`}
         >
           <h2 id="home-next-exam" className="text-xl font-semibold">
             {next.canEnter ? "正在进行的考试" : "下一场考试"}
           </h2>
           <div className="min-w-0">
-            <p className="text-base [overflow-wrap:anywhere] text-neutral-200">
+            <p className="text-base [overflow-wrap:anywhere] text-sky-100">
               <strong className="font-medium text-white">{next.title}</strong>
               {next.opensAt && (
                 <>
@@ -103,14 +107,14 @@ export function StudentHomeExams({
               {next.windowMinutes !== undefined &&
                 ` · 限时 ${next.windowMinutes} 分钟`}
             </p>
-            <p className="mt-1 text-xs [overflow-wrap:anywhere] text-neutral-400">
+            <p className="mt-1 text-xs [overflow-wrap:anywhere] text-sky-100">
               {studentTaskContext(next)}
             </p>
           </div>
           <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2">
             <StudentPageLink
               href={next.href}
-              className="inline-flex min-h-10 items-center rounded-xl bg-white px-3.5 text-sm font-semibold text-neutral-950 hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className={`bg-card hover:bg-muted inline-flex min-h-10 items-center rounded-md px-3.5 text-sm font-semibold text-neutral-950 ${FOCUS_RING_ON_DARK}`}
             >
               {next.action}
             </StudentPageLink>
@@ -124,7 +128,7 @@ export function StudentHomeExams({
             {upcomingCount > (next.canEnter ? 0 : 1) && (
               <StudentPageLink
                 href="/student/exams?status=UPCOMING"
-                className={allExams}
+                className={allExamsOnDark}
               >
                 查看待开考安排
               </StudentPageLink>
@@ -134,7 +138,7 @@ export function StudentHomeExams({
       )}
       {slot === "recent" && recent && (
         <section aria-labelledby="home-recent-exam" className={recentCard}>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-300 pb-2">
+          <div className="border-border flex flex-wrap items-center justify-between gap-2 border-b pb-2">
             <h2 id="home-recent-exam" className="text-xl font-semibold">
               最近考试
             </h2>
@@ -147,15 +151,15 @@ export function StudentHomeExams({
             </StudentPageLink>
           </div>
           <div className="min-w-0">
-            <p className="font-medium [overflow-wrap:anywhere] text-slate-950">
+            <p className="font-medium [overflow-wrap:anywhere] text-neutral-950">
               {recent.title}
             </p>
-            <p className="mt-1 text-sm [overflow-wrap:anywhere] text-slate-600">
+            <p className="mt-1 text-sm [overflow-wrap:anywhere] text-neutral-600">
               {studentTaskContext(recent)}
             </p>
           </div>
           {recent.resultState === "PUBLISHED" ? (
-            <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-700">
+            <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-neutral-700">
               <strong className="text-3xl font-medium text-neutral-950 tabular-nums">
                 {recent.percentage} 分
               </strong>
@@ -168,7 +172,7 @@ export function StudentHomeExams({
               </span>
             </p>
           ) : (
-            <p className="text-sm font-medium text-slate-700">
+            <p className="text-sm font-medium text-neutral-700">
               {recent.resultState === "AWAITING"
                 ? "成绩待公布"
                 : recent.resultState === "MISSED"

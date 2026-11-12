@@ -10,6 +10,7 @@ import {
 const positionKey = "zhixue:teacher-assistant:position:v1";
 export const ASSISTANT_SIZE = 52;
 const margin = 12;
+const dockDistance = 22;
 type Point = { x: number; y: number };
 type Viewport = { width: number; height: number; left: number; top: number };
 
@@ -40,6 +41,14 @@ function clamp(point: Point, view: Viewport): Point {
     x: Math.min(Math.max(point.x, box.left), box.left + box.width),
     y: Math.min(Math.max(point.y, box.top), box.top + box.height),
   };
+}
+
+function dockSide(point: Point, view: Viewport) {
+  const box = bounds(view);
+  const leftDistance = point.x - box.left;
+  const rightDistance = box.left + box.width - point.x;
+  if (leftDistance > dockDistance && rightDistance > dockDistance) return null;
+  return leftDistance < rightDistance ? "left" : "right";
 }
 
 export function useAssistantPosition() {
@@ -146,13 +155,28 @@ export function useAssistantPosition() {
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
     setDragging(false);
-    if (moved) commit(latest.current);
+    if (moved) {
+      const next = latest.current;
+      const side = dockSide(next, view.current);
+      const box = bounds(view.current);
+      commit({
+        x:
+          side === "left"
+            ? box.left
+            : side === "right"
+              ? box.left + box.width
+              : next.x,
+        y: next.y,
+      });
+    }
     return touchTap;
   }
 
   return {
     layout,
     dragging,
+    dock:
+      layout && !dragging ? dockSide(layout.position, layout.viewport) : null,
     status,
     reset() {
       const box = bounds(view.current);

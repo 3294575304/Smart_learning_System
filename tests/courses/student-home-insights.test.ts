@@ -61,6 +61,12 @@ test("主页空看板不补造学习时长、成绩或知识评估", () => {
   assert.match(html, /学习主页数据看板/);
   assert.match(html, /暂无已开放任务/);
   assert.match(html, /暂无已公布的线上考试成绩/);
+  const summary = html.match(/<ul aria-label="学习概览"[\s\S]*?<\/ul>/u)?.[0];
+  assert.ok(summary);
+  for (const href of ["courses", "tasks", "analytics", "exams"]) {
+    assert.ok(summary.includes(`href="/student/${href}"`));
+  }
+  assert.match(summary, /暂无成绩/);
   assert.match(html, /暂无待办/);
   assert.doesNotMatch(html, /NaN|Infinity|学习时长|AI互动次数|累计登录/);
 });

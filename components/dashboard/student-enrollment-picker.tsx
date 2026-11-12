@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { FOCUS_RING } from "./ui-focus";
 import {
   studentEnrollmentLabel,
   studentEnrollmentStatus,
@@ -55,7 +56,7 @@ export function StudentEnrollmentPicker({
               `${action}?${new URLSearchParams({ classroomId: next })}`,
             );
           }}
-          className="min-h-11 w-full min-w-0 rounded-lg border border-sky-100 bg-sky-50/40 px-3 text-sm text-slate-700 focus-visible:outline-2 focus-visible:outline-sky-700"
+          className={`min-h-11 w-full min-w-0 rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-800 ${FOCUS_RING}`}
         >
           {contexts.map((item) => (
             <option key={item.classroom.id} value={item.classroom.id}>

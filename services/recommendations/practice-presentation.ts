@@ -61,11 +61,22 @@ export function practiceAnswerFeedback(
 ): RecommendationPracticeAnswerResultView | null {
   const answer = record.practiceAnswer;
   if (!answer) return null;
+  const isChoice =
+    record.question.type === QuestionType.SINGLE_CHOICE ||
+    record.question.type === QuestionType.MULTIPLE_CHOICE;
   return {
     questionId: record.question.id,
     title: record.question.title,
     studentAnswer: studentAnswer(record),
     correctAnswer: correctAnswer(record),
+    ...(isChoice && {
+      choiceFeedback: {
+        selectedOptionIds: answer.selectedOptionIds,
+        correctOptionIds: record.question.options
+          .filter((option) => option.isCorrect)
+          .map((option) => option.id),
+      },
+    }),
     explanation: record.question.explanation,
     recommendationReason: record.reason,
     isCorrect: answer.isCorrect,

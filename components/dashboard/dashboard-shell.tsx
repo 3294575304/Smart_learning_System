@@ -24,6 +24,7 @@ import { AdminDashboardCacheProvider } from "@/components/admin/dashboard/admin-
 import { SchoolIdentity } from "@/components/dashboard/school-identity";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
+import { studentJoinClassroomEvent } from "@/components/classrooms/student-join-classroom-button";
 import { buildBreadcrumbs } from "@/components/dashboard/breadcrumbs";
 import { FeedbackLink } from "@/components/dashboard/feedback-link";
 import {
@@ -250,6 +251,13 @@ export function DashboardShell({
   }, [pathname]);
 
   useEffect(() => {
+    if (user.role !== Role.STUDENT) return;
+    const open = () => setJoinClassroomDialogOpen(true);
+    window.addEventListener(studentJoinClassroomEvent, open);
+    return () => window.removeEventListener(studentJoinClassroomEvent, open);
+  }, [user.role]);
+
+  useEffect(() => {
     document.body.style.overflow =
       mobileMenuOpen || joinClassroomDialogOpen ? "hidden" : "";
     return () => {
@@ -328,15 +336,35 @@ export function DashboardShell({
 
   useEffect(() => {
     if (!joinClassroomDialogOpen) return;
+    const trigger = document.activeElement;
+    const dialog = document.querySelector('[aria-label="加入班级窗口"]');
+    const input = dialog?.querySelector("input");
+    input?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setJoinClassroomDialogOpen(false);
       }
+      if (event.key === "Tab") {
+        const controls = Array.from(
+          dialog?.querySelectorAll<HTMLElement>(
+            "input:not(:disabled), button:not(:disabled)",
+          ) ?? [],
+        );
+        const edge = event.shiftKey ? controls[0] : controls.at(-1);
+        if (edge && document.activeElement === edge) {
+          event.preventDefault();
+          (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
+        }
+      }
     }
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (trigger instanceof HTMLElement && trigger.isConnected)
+        trigger.focus();
+    };
   }, [joinClassroomDialogOpen]);
 
   return (
@@ -664,6 +692,7 @@ export function DashboardShell({
             </div>
             <div className="mt-5">
               <JoinClassroomForm
+                reloadOnSuccess={pathname === "/student/courses"}
                 compact
                 inputId="join-classroom-dialog-code"
                 onSuccess={() => setJoinClassroomDialogOpen(false)}

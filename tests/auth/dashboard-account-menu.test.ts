@@ -52,5 +52,7 @@ test("学生从个人中心菜单打开加入班级窗口", async () => {
   assert.match(shell, /<JoinClassroomForm/u);
   assert.doesNotMatch(studentHome, /JoinClassroomForm|加入班级/u);
   assert.doesNotMatch(studentCourses, /JoinClassroomForm/u);
-  assert.match(studentCourses, /从右上角个人中心输入教师提供的邀请码/u);
+  assert.match(studentCourses, /<StudentJoinClassroomButton\s*\/>/u);
+  assert.match(studentCourses, /<StudentJoinClassroomButton card\s*\/>/u);
+  assert.match(shell, /addEventListener\(studentJoinClassroomEvent, open\)/u);
 });

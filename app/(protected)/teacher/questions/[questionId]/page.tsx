@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import { QuestionActions } from "@/components/questions/question-actions";
 import { QuestionCourseObjectivePanel } from "@/components/questions/question-course-objective-panel";
 import { QuestionGraphBindingPanel } from "@/components/questions/question-graph-binding-panel";
+import { assignmentIdSchema } from "@/services/assignments/schemas";
+import { classroomIdSchema } from "@/services/classrooms/schemas";
 import { listTeacherBindingCourses } from "@/services/question-graph-bindings/service";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -18,7 +20,12 @@ import { listQuestionObjectiveCourses } from "@/services/question-objectives/edi
 
 interface QuestionDetailPageProps {
   params: Promise<{ questionId: string }>;
-  searchParams: Promise<{ courseId?: string }>;
+  searchParams: Promise<{
+    courseId?: string;
+    from?: string | string[];
+    assignmentId?: string | string[];
+    classroomId?: string | string[];
+  }>;
 }
 
 export default async function QuestionDetailPage({
@@ -44,12 +51,36 @@ export default async function QuestionDetailPage({
     teacher.id,
     question.id,
   );
-  const initialCourseId = (await searchParams).courseId;
+  const {
+    courseId: initialCourseId,
+    from,
+    assignmentId,
+    classroomId,
+  } = await searchParams;
+  const editId = assignmentIdSchema.safeParse(assignmentId);
+  const classroom = classroomIdSchema.safeParse(classroomId);
+  const createPreview = from === "assignment-create";
+  const editPreview = from === "assignment-edit" && editId.success;
+  const backHref = createPreview
+    ? `/teacher/assignments/new${classroom.success ? `?classroomId=${classroom.data}` : ""}#assignment-editor`
+    : editPreview
+      ? `/teacher/assignments/${editId.data}/edit`
+      : "/teacher/questions";
+  const backLabel = createPreview
+    ? "返回创建作业"
+    : editPreview
+      ? "返回编辑作业"
+      : "返回题库";
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <TeacherBackLink href="/teacher/questions">返回题库</TeacherBackLink>
+          <TeacherBackLink
+            href={backHref}
+            closePreviewTab={createPreview || editPreview}
+          >
+            {backLabel}
+          </TeacherBackLink>
           <h1 className="mt-2 text-2xl font-semibold">{question.title}</h1>
           <p className="mt-2 text-sm text-gray-500">
             {QUESTION_TYPE_LABELS[question.type]} · 通用分类{" "}

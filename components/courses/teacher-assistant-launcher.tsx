@@ -1,6 +1,12 @@
 "use client";
 
-import { CircleHelp, RotateCcw, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CircleHelp,
+  RotateCcw,
+  X,
+} from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { TeacherAssistantConversation } from "./teacher-assistant-conversation";
@@ -128,6 +134,14 @@ function AssistantPanel({
 
   if (!position.layout) return null;
   const { position: point, viewport } = position.layout;
+  const dock = open ? null : position.dock;
+  const tabWidth = 28;
+  const triggerX =
+    dock === "left"
+      ? viewport.left
+      : dock === "right"
+        ? viewport.left + viewport.width - tabWidth
+        : point.x;
   const panelWidth = Math.min(400, Math.max(0, viewport.width - 24));
   const fitsRight =
     point.x + ASSISTANT_SIZE + 12 + panelWidth <=
@@ -167,8 +181,8 @@ function AssistantPanel({
       <div
         className="fixed top-0 left-0 z-40"
         style={{
-          transform: `translate3d(${point.x}px, ${point.y}px, 0)`,
-          width: ASSISTANT_SIZE,
+          transform: `translate3d(${triggerX}px, ${point.y}px, 0)`,
+          width: dock ? tabWidth : ASSISTANT_SIZE,
           height: ASSISTANT_SIZE,
         }}
       >
@@ -181,8 +195,12 @@ function AssistantPanel({
           aria-expanded={open}
           aria-controls={panelId}
           aria-describedby={`${panelId}-movement`}
-          title="教师 AI 助手 · 点击提问，拖动换位置"
-          className={`flex size-[52px] touch-none items-center justify-center rounded-full border bg-white p-[3px] shadow-[0_5px_14px_#40305416] select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 ${position.dragging ? "cursor-grabbing border-violet-500 shadow-lg ring-4 ring-violet-200" : "cursor-grab border-[#e5deef] hover:bg-violet-50"}`}
+          title={
+            dock
+              ? "展开教师 AI 助手，也可拖出边缘"
+              : "教师 AI 助手 · 点击提问，拖动换位置"
+          }
+          className={`flex h-full w-full touch-none items-center justify-center border bg-white shadow-[0_5px_14px_#40305416] select-none focus-visible:outline-2 focus-visible:outline-violet-700 ${dock ? `cursor-pointer bg-violet-50 text-violet-800 hover:bg-violet-100 focus-visible:-outline-offset-2 ${dock === "left" ? "rounded-e-xl border-s-0" : "rounded-s-xl border-e-0"}` : `rounded-full p-[3px] focus-visible:outline-offset-2 ${position.dragging ? "cursor-grabbing border-violet-500 shadow-lg ring-4 ring-violet-200" : "cursor-grab border-[#e5deef] hover:bg-violet-50"}`}`}
           onPointerDown={position.onPointerDown}
           onPointerMove={position.onPointerMove}
           onPointerUp={(event) => {
@@ -200,12 +218,25 @@ function AssistantPanel({
             } else position.onKeyDown(event);
           }}
         >
-          <TeacherAssistantMascot greeting={open && intro} />
+          {dock ? (
+            <span className="flex flex-col items-center gap-0.5">
+              {dock === "left" ? (
+                <ChevronRight className="size-3.5" aria-hidden="true" />
+              ) : (
+                <ChevronLeft className="size-3.5" aria-hidden="true" />
+              )}
+              <span aria-hidden="true" className="text-[10px] font-semibold">
+                AI
+              </span>
+            </span>
+          ) : (
+            <TeacherAssistantMascot greeting={open && intro} />
+          )}
         </button>
       </div>
       <span id={`${panelId}-movement`} className="sr-only">
-        点击打开或收起助手，拖动改变位置。聚焦后可用方向键移动，按 Shift
-        加快移动。
+        点击打开或收起助手，拖到左右边缘可收成标签。聚焦后可用方向键移动，按
+        Shift 加快移动。
       </span>
       <div role="status" className="sr-only">
         {position.status}

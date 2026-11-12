@@ -9,6 +9,7 @@ import type { QuestionType } from "@prisma/client";
 import {
   ArrowDown,
   ArrowUp,
+  ExternalLink,
   ListOrdered,
   Loader2,
   Plus,
@@ -152,6 +153,14 @@ export function AssignmentForm({
   lastPublishedByClassroom,
 }: AssignmentFormProps) {
   const [confirmation, setConfirmation] = useState<PreparedAction | null>(null);
+  const questionPreviewSource = new URLSearchParams(
+    mode === "edit" && assignment
+      ? { from: "assignment-edit", assignmentId: assignment.id }
+      : {
+          from: "assignment-create",
+          ...(initialClassroomId ? { classroomId: initialClassroomId } : {}),
+        },
+  ).toString();
   const [retryAction, setRetryAction] = useState<PreparedAction | null>(null);
   const [switchTarget, setSwitchTarget] = useState<{
     courseId: string;
@@ -1305,13 +1314,26 @@ export function AssignmentForm({
                             );
                             return (
                               <div
-                                className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${added ? "border-sky-200 bg-sky-50/50" : "hover:border-sky-200"}`}
+                                className={`relative flex items-start justify-between gap-3 rounded-lg border p-3 focus-within:border-sky-300 hover:border-sky-300 hover:bg-sky-50/50 ${added ? "border-sky-200 bg-sky-50/50" : ""}`}
                                 key={question.id}
                               >
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm leading-6 font-medium break-words">
+                                  <Link
+                                    href={`/teacher/questions/${question.id}?${questionPreviewSource}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    prefetch={false}
+                                    className="text-sm leading-6 font-medium break-words text-sky-900 after:absolute after:inset-0 after:rounded-lg hover:underline focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-sky-700"
+                                  >
                                     {question.title}
-                                  </p>
+                                    <ExternalLink
+                                      aria-hidden="true"
+                                      className="ms-1 inline size-3 align-baseline text-sky-700"
+                                    />
+                                    <span className="sr-only">
+                                      （在新标签页查看题目详情）
+                                    </span>
+                                  </Link>
                                   <p className="mt-1 text-xs leading-5 text-slate-500">
                                     {question.questionCategory?.name ??
                                       "课程题库"}{" "}
@@ -1319,7 +1341,7 @@ export function AssignmentForm({
                                   </p>
                                 </div>
                                 <button
-                                  className="inline-flex h-9 w-16 shrink-0 items-center justify-center rounded-md border bg-white text-sm whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:text-slate-400"
+                                  className="relative z-10 inline-flex h-9 w-16 shrink-0 items-center justify-center rounded-md border bg-white text-sm whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:text-slate-400"
                                   disabled={added}
                                   onClick={() => addQuestion(question)}
                                   type="button"

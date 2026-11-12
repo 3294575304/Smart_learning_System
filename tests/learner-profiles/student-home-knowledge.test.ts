@@ -71,6 +71,21 @@ test("11章全部保留，缺少评估的多个知识点不合并，证据入口
   assert.match(html, /classroomId=k/);
   assert.doesNotMatch(html, /100\.0 分|NaN|Infinity/);
   assert.match(html, /画像版本：暂无/);
+  assert.doesNotMatch(html, /已掌握 0\/1/);
+  const dashboard = renderToStaticMarkup(
+    React.createElement(HomeKnowledgeMatrix, {
+      chapters,
+      dashboard: true,
+      profileHref: "/student/courses/c/profile?classroomId=k",
+      generatedAt: null,
+      profileRevision: null,
+    }),
+  );
+  assert.match(dashboard, /知识状态分布/);
+  assert.match(dashboard, /待进一步评估/);
+  assert.match(dashboard, /尚未评估/);
+  assert.match(dashboard, /第11章 测试章节/);
+  assert.doesNotMatch(dashboard, /章节预览|个待巩固/);
 });
 
 test("评分依据定位仅接受单个合法知识点ID，入口保留班级并携带定位锚点", () => {
