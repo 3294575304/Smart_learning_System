@@ -5,6 +5,7 @@ import { AssignmentOperationError } from "@/services/assignments/errors";
 export async function freezeAssignmentProgrammingConfigs(
   transaction: Prisma.TransactionClient,
   assignmentId: string,
+  { allowPointScaling = false }: { allowPointScaling?: boolean } = {},
 ) {
   const programmingQuestions = await transaction.assignmentQuestion.findMany({
     where: { assignmentId, typeSnapshot: QuestionType.PYTHON_PROGRAMMING },
@@ -23,7 +24,10 @@ export async function freezeAssignmentProgrammingConfigs(
         400,
       );
     }
-    if (!assignmentQuestion.points.equals(revision.totalPoints)) {
+    if (
+      !allowPointScaling &&
+      !assignmentQuestion.points.equals(revision.totalPoints)
+    ) {
       throw new AssignmentOperationError(
         `Python 编程题分值必须等于判题用例总分 ${revision.totalPoints.toFixed(2)}`,
         400,

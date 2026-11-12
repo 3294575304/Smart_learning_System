@@ -63,16 +63,47 @@ export default async function TeacherClassroomPage({
             <dd className="mt-1 font-medium">
               {CLASSROOM_STATUS_LABELS[classroom.status]}
             </dd>
+            {classroom.status === "COMPLETED" && (
+              <dd className="mt-1 text-sm text-slate-600">正常结课</dd>
+            )}
           </div>
           <div>
             <dt className="text-muted-foreground text-sm">加入码</dt>
-            <dd className="mt-1 font-medium">{classroom.joinCode}</dd>
+            <dd className="mt-1 font-medium">
+              {classroom.status === "ACTIVE" ? classroom.joinCode : "已停用"}
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground text-sm">学生人数</dt>
             <dd className="mt-1 font-medium">{classroom.studentCount}</dd>
           </div>
         </dl>
+        {classroom.status === "CLOSED" && (
+          <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950">
+            <h2 className="font-semibold">
+              {classroom.closureReason ? "由管理员关闭" : "班级已关闭"}
+            </h2>
+            {classroom.closedAt && (
+              <p className="mt-1">
+                关闭时间：
+                <time dateTime={classroom.closedAt.toISOString()}>
+                  {classroom.closedAt.toLocaleString("zh-CN", {
+                    timeZone: "Asia/Shanghai",
+                    hour12: false,
+                  })}
+                </time>
+              </p>
+            )}
+            <p className="mt-1 wrap-anywhere whitespace-pre-wrap">
+              {classroom.closureReason
+                ? `关闭原因：${classroom.closureReason}`
+                : "未记录关闭原因。"}
+            </p>
+            <p className="mt-2">
+              学生已停止作答，教师仍可处理符合条件的已有作业。
+            </p>
+          </section>
+        )}
         <details className="rounded-xl border bg-white p-5">
           <summary className="cursor-pointer font-semibold text-slate-800">
             班级设置与加入管理

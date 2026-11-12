@@ -517,7 +517,12 @@ async function projectJudgeResult(
   const attempt = await transaction.programmingAttempt.findUnique({
     where: { id: result.attemptId },
     include: {
-      studentAnswer: { select: { submissionId: true } },
+      studentAnswer: {
+        select: {
+          submissionId: true,
+          assignmentQuestion: { select: { points: true } },
+        },
+      },
       recommendation: {
         select: {
           id: true,
@@ -638,7 +643,13 @@ async function projectJudgeResult(
         attempt.sourceCode,
       ),
     );
-    if (attempt.studentAnswerId && attempt.studentAnswer)
+    if (attempt.studentAnswerId && attempt.studentAnswer) {
+      // Keep raw test-case scores in the judge record; the paper owns the answer's full score.
+      const maxScore = attempt.studentAnswer.assignmentQuestion.points;
+      const score = earned
+        .mul(maxScore)
+        .div(attempt.maxScore)
+        .toDecimalPlaces(2);
       await transaction.studentAnswer.update({
         where: { id: attempt.studentAnswerId },
         data: {
@@ -647,13 +658,14 @@ async function projectJudgeResult(
             : GradingStatus.AUTO_GRADED,
           graderId: null,
           teacherFeedback: null,
-          score: earned,
-          maxScore: attempt.maxScore,
+          score,
+          maxScore,
           isCorrect: earned.equals(attempt.maxScore),
           gradedAt: now,
           assessmentRevisionKey: attempt.id,
         },
       });
+    }
     if (attempt.studentAnswer)
       await recomputeSubmission(
         transaction,
@@ -804,13 +816,22 @@ export async function getStudentProgrammingAttempt(
     include: {
       ...attemptInclude,
       recommendation: { select: { cycleKey: true } },
+      studentAnswer: { select: { submission: { select: { status: true } } } },
       assignmentQuestion: {
-        select: { assignment: { select: { status: true } } },
+        select: {
+          assignment: { select: { status: true, examSessionId: true } },
+        },
       },
     },
   });
   if (!attempt) throw new ResourceNotFoundError("判题记录不存在");
   if (attempt.assignmentQuestion?.assignment.status === "REVOKED")
+    throw new ResourceNotFoundError("判题记录不存在");
+  if (
+    attempt.assignmentQuestion?.assignment.examSessionId &&
+    attempt.kind === ProgrammingAttemptKind.FORMAL_JUDGE &&
+    attempt.studentAnswer?.submission.status !== SubmissionStatus.PUBLISHED
+  )
     throw new ResourceNotFoundError("判题记录不存在");
   if (attempt.recommendation)
     await readPracticeManagement(studentId, attempt.recommendation.cycleKey);

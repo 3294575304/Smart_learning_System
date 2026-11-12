@@ -50,6 +50,7 @@ export interface ClassroomStudent {
 export interface TeacherClassroomDetail extends TeacherClassroomListItem {
   joinCodeExpiresAt: Date | null;
   closedAt: Date | null;
+  closureReason: string | null;
   completedAt: Date | null;
   students: ClassroomStudent[];
   studentPage?: { page: number; pageSize: number; totalPages: number };
@@ -127,6 +128,19 @@ export async function listTeacherClassrooms(
     ...classroom,
     studentCount: _count.memberships,
   }));
+}
+
+export function listTeacherHistoricalClassrooms(teacherId: string) {
+  return prisma.classroom.findMany({
+    where: { teacherId, status: ClassroomStatus.ARCHIVED },
+    orderBy: [{ dissolvedAt: { sort: "desc", nulls: "last" } }, { id: "desc" }],
+    select: {
+      id: true,
+      name: true,
+      dissolvedAt: true,
+      course: { select: { name: true } },
+    },
+  });
 }
 
 export interface ClassroomDissolutionResult {
@@ -325,6 +339,7 @@ export async function getTeacherClassroom(
       status: true,
       allowStudentLeave: true,
       closedAt: true,
+      closureReason: true,
       completedAt: true,
       createdAt: true,
       course: { select: { id: true, name: true } },

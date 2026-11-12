@@ -1,7 +1,12 @@
-import { CourseStatus, Role } from "@prisma/client";
-import { BookOpenCheck, Plus } from "lucide-react";
+import { Role } from "@prisma/client";
+import { BookOpenCheck } from "lucide-react";
 import { CourseForm } from "@/components/courses/course-form";
 import { TeacherCourseList } from "@/components/courses/teacher-course-list";
+import {
+  CreateEntry,
+  CreateEntryProvider,
+} from "@/components/dashboard/create-entry";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { readAllowedParam, readTextParam } from "@/lib/list-filter";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -11,7 +16,7 @@ import {
   listTeacherCourses,
 } from "@/services/courses/service";
 
-const COURSE_STATUS_VALUES = Object.values(CourseStatus);
+const COURSE_STATUS_VALUES = ["ACTIVE", "DRAFT"] as const;
 
 export default async function TeacherCoursesPage({
   searchParams,
@@ -40,75 +45,57 @@ export default async function TeacherCoursesPage({
   const defaultTemplateId =
     templates.find((template) => template.code === "python-programming-v1")
       ?.id ?? templates[0]?.id;
+  const canCreate = templates.length > 0 && categories.length > 0;
   return (
-    <section className="mx-auto max-w-6xl space-y-5">
-      <header>
-        <h1 className="text-2xl font-semibold">课程管理</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          管理课程与授课班级，进入课程继续日常教学。列表支持按课程名称、课程号、学期搜索，并按课程状态、学期筛选。
-        </p>
-      </header>
-      <details className="group rounded-xl border bg-white" id="new-course">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">
-          <span className="font-medium">
-            创建课程{" "}
-            <span className="ml-2 text-xs font-normal text-slate-500">
-              {templates.length} 个可用模板
-            </span>
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-lg bg-sky-700 px-3 py-2 text-white">
-            <Plus
-              aria-hidden="true"
-              className="size-4 transition-transform group-open:rotate-45"
+    <CreateEntryProvider
+      title="创建课程"
+      form={
+        canCreate ? (
+          <div className="space-y-4">
+            <CourseForm
+              defaultTemplateId={defaultTemplateId}
+              mode="create"
+              categories={categories}
+              templates={templates}
             />
-            <span className="group-open:hidden">展开</span>
-            <span className="hidden group-open:inline">收起</span>
-          </span>
-        </summary>
-        <div className="border-t px-4 py-4 sm:px-5">
-          <div className="max-w-3xl">
-            {templates.length ? (
-              <CourseForm
-                defaultTemplateId={defaultTemplateId}
-                mode="create"
-                categories={categories}
-                templates={templates}
-              />
-            ) : (
-              <EmptyState
-                compact
-                description="请联系管理员启用课程模板和课程分类。"
-                icon={BookOpenCheck}
-                title="暂无可用模板"
-              />
-            )}
-          </div>
-          {templates.length > 0 && (
-            <details className="mt-4 border-t pt-3">
-              <summary className="cursor-pointer text-xs text-sky-700">
+            <details className="border-t pt-3">
+              <summary className="cursor-pointer text-sm text-sky-800">
                 查看模板说明
               </summary>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <ul className="mt-2 space-y-2 text-sm text-slate-600">
                 {templates.map((template) => (
-                  <p
-                    key={template.id}
-                    className="rounded-lg bg-sky-50 p-3 text-xs leading-5 text-slate-600"
-                  >
-                    <strong className="text-slate-800">{template.name}</strong>{" "}
-                    · 版本 {template.version}
-                    <br />
-                    {template.description ?? "暂无说明"}
-                  </p>
+                  <li key={template.id} className="rounded-lg bg-sky-50 p-3">
+                    <strong className="text-slate-800">{template.name}</strong>
+                    {" · 版本 "}
+                    {template.version}
+                    {template.description && <p>{template.description}</p>}
+                  </li>
                 ))}
-              </div>
+              </ul>
             </details>
-          )}
-        </div>
-      </details>
-      <TeacherCourseList
-        initialCourses={courses}
-        initialFilters={initialFilters}
-      />
-    </section>
+          </div>
+        ) : (
+          <EmptyState
+            compact
+            description="请联系管理员启用课程模板和课程分类。"
+            icon={BookOpenCheck}
+            title={templates.length ? "暂无可用课程分类" : "暂无可用模板"}
+          />
+        )
+      }
+    >
+      <section className="mx-auto max-w-6xl space-y-6">
+        <PageHeader
+          title="课程管理"
+          description="管理课程与授课班级。可按课程名称、课程号搜索，或按学期筛选。"
+          actions={<CreateEntry />}
+        />
+        <TeacherCourseList
+          initialCourses={courses}
+          initialFilters={initialFilters}
+          createEntry={<CreateEntry card />}
+        />
+      </section>
+    </CreateEntryProvider>
   );
 }

@@ -10,6 +10,7 @@ import {
 import {
   getTeacherClassroom,
   listTeacherClassrooms,
+  listTeacherHistoricalClassrooms,
   completeClassroom,
   joinClassroom,
   updateClassroom,
@@ -105,6 +106,16 @@ async function main() {
   await assert.rejects(joinClassroom(student.id, empty.joinCode));
   assert.ok(
     !(await listTeacherClassrooms(teacher.id)).some((c) => c.id === empty.id),
+  );
+  const history = await listTeacherHistoricalClassrooms(teacher.id);
+  const archived = history.find((c) => c.id === empty.id);
+  assert.equal(archived?.name, "更名后的空班");
+  assert.equal(archived?.course?.name, course.name);
+  assert.ok(archived?.dissolvedAt instanceof Date);
+  assert.ok(
+    !(await listTeacherHistoricalClassrooms(other.id)).some(
+      (c) => c.id === empty.id,
+    ),
   );
 
   const used = await create("保留历史教学数据班");
@@ -413,6 +424,39 @@ async function main() {
       ).text();
       assert.match(list, /班级已删除，列表已更新/);
       assert.ok(!list.includes(`href="/teacher/classrooms/${httpClass.id}"`));
+      const historyPage = "/teacher/classrooms?view=history";
+      const ownerHistory = await (await req(historyPage, tc)).text();
+      assert.match(ownerHistory, /HTTP 删除验收空班/);
+      assert.doesNotMatch(ownerHistory, /创建新班级|邀请码|批量导入名单/);
+      assert.ok(
+        !ownerHistory.includes(`href="/teacher/classrooms/${httpClass.id}"`),
+      );
+      assert.doesNotMatch(
+        await (await req(historyPage, oc)).text(),
+        /HTTP 删除验收空班/,
+      );
+      assert.doesNotMatch(
+        await (await req(historyPage, sc)).text(),
+        /HTTP 删除验收空班/,
+      );
+
+      const closedClass = await create("关闭详情验收班");
+      await prisma.classroom.update({
+        where: { id: closedClass.id },
+        data: {
+          status: "CLOSED",
+          closedAt: new Date(),
+          closureReason: "测试关闭原因",
+        },
+      });
+      const closedPage = `/teacher/classrooms/${closedClass.id}`;
+      const closed = await (await req(closedPage, tc)).text();
+      assert.match(closed, /由管理员关闭/);
+      assert.match(closed, /测试关闭原因/);
+      assert.doesNotMatch(
+        await (await req(closedPage, oc)).text(),
+        /测试关闭原因/,
+      );
       const personalClass = await create("个人作答跳转验收班");
       const secondStudent = await prisma.user.findUniqueOrThrow({
         where: { email: "student2@example.com" },

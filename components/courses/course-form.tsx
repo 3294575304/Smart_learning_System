@@ -80,7 +80,7 @@ function CreateCourseForm({
     const result = await requestApi<{ id: string }>("/api/teacher/courses", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, description: input.description ?? "" }),
     });
 
     if (!result.success) {

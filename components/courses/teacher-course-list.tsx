@@ -44,11 +44,7 @@ const COURSE_STATUS_STYLES: Record<CourseStatus, string> = {
 };
 
 /** 筛选项顺序固定，避免随数据顺序跳动。 */
-const COURSE_STATUS_FILTER_ORDER: CourseStatus[] = [
-  "ACTIVE",
-  "DRAFT",
-  "ARCHIVED",
-];
+const COURSE_STATUS_FILTER_ORDER: CourseStatus[] = ["ACTIVE", "DRAFT"];
 
 export interface TeacherCourseFilters {
   keyword: string;
@@ -230,9 +226,11 @@ function CourseDeleteAction({
 export function TeacherCourseList({
   initialCourses,
   initialFilters = { keyword: "", status: "", term: "" },
+  createEntry,
 }: {
   initialCourses: TeacherCourseListItem[];
   initialFilters?: TeacherCourseFilters;
+  createEntry?: React.ReactNode;
 }) {
   const [courses, setCourses] = useState(initialCourses);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -250,8 +248,14 @@ export function TeacherCourseList({
 
   // 分享链接里的状态、学期可能已失效：不合法就当作未筛选，避免出现
   // 「下拉显示全部却一条也不显示」的死局
-  const effectiveStatus = COURSE_STATUS_FILTER_ORDER.includes(
-    status as CourseStatus,
+  const presentStatuses = new Set(courses.map((course) => course.status));
+  const statusOptions = presentStatuses.has("DRAFT")
+    ? COURSE_STATUS_FILTER_ORDER.filter((value) =>
+        presentStatuses.has(value),
+      ).map((value) => ({ value, label: COURSE_STATUS_LABELS[value] }))
+    : [];
+  const effectiveStatus = statusOptions.some(
+    (option) => option.value === status,
   )
     ? status
     : "";
@@ -329,26 +333,29 @@ export function TeacherCourseList({
       ) : null}
 
       {courses.length === 0 ? (
-        <EmptyState
-          description="先基于课程模板创建一门课程，再在课程建设中创建班级。"
-          icon={School}
-          title="暂无课程"
-        />
+        createEntry ? null : (
+          <EmptyState
+            description="先基于课程模板创建一门课程，再在课程建设中创建班级。"
+            icon={School}
+            title="暂无课程"
+          />
+        )
       ) : (
         <>
           <ListFilterBar
             filters={[
-              {
-                key: "status",
-                label: "课程状态",
-                value: effectiveStatus,
-                allLabel: "全部状态",
-                options: COURSE_STATUS_FILTER_ORDER.map((value) => ({
-                  value,
-                  label: COURSE_STATUS_LABELS[value],
-                })),
-                onChange: setStatus,
-              },
+              ...(statusOptions.length
+                ? [
+                    {
+                      key: "status",
+                      label: "课程状态",
+                      value: effectiveStatus,
+                      allLabel: "全部状态",
+                      options: statusOptions,
+                      onChange: setStatus,
+                    },
+                  ]
+                : []),
               {
                 key: "term",
                 label: "学期",
@@ -384,7 +391,7 @@ export function TeacherCourseList({
               title="没有匹配的课程"
             />
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               {visibleCourses.map((course) => (
                 <article
                   key={course.id}
@@ -454,9 +461,13 @@ export function TeacherCourseList({
                   </div>
                 </article>
               ))}
+              {createEntry}
             </div>
           )}
         </>
+      )}
+      {visibleCourses.length === 0 && createEntry && (
+        <div className="grid gap-4 md:grid-cols-2">{createEntry}</div>
       )}
     </section>
   );

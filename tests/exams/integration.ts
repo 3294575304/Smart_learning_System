@@ -61,6 +61,11 @@ import {
   listQuestionObjectiveCourses,
 } from "@/services/question-objectives/editing";
 import { publishExamTestSyllabus } from "./syllabus-fixture";
+import {
+  completeProgrammingJob,
+  getStudentProgrammingAttempt,
+} from "@/services/programming-attempts/service";
+import { createProgrammingConfigInTransaction } from "@/services/programming-questions/service";
 
 async function main() {
   const teacher = await prisma.user.findUniqueOrThrow({
@@ -1241,6 +1246,173 @@ async function main() {
     assert.equal(partial.analysis?.overview.publishedClassrooms, 1);
     assert.equal(partial.analysis?.overview.average, 75);
   }
+  const programmingQuestion = await prisma.question.create({
+    data: {
+      creatorId: teacher.id,
+      questionCategoryId: category.id,
+      title: "考试编程题分值折算",
+      content: "读取一个整数并原样输出。",
+      type: "PYTHON_PROGRAMMING",
+      explanation: "使用 input 与 print。",
+    },
+  });
+  const config = await prisma.$transaction((tx) =>
+    createProgrammingConfigInTransaction(
+      tx,
+      teacher.id,
+      programmingQuestion.id,
+      {
+        standardCode: "print(input())",
+        starterCode: "",
+        totalPoints: 10,
+        limits: {
+          cpuTimeMs: 1000,
+          wallTimeMs: 3000,
+          memoryBytes: 67108864,
+          outputBytes: 8192,
+          processCount: 2,
+        },
+        testCases: [
+          {
+            visibility: "PUBLIC",
+            name: "公开用例",
+            stdin: "4",
+            expectedOutput: "4",
+            points: 4,
+            sortOrder: 1,
+          },
+          {
+            visibility: "HIDDEN",
+            name: "隐藏用例",
+            stdin: "9",
+            expectedOutput: "9",
+            points: 6,
+            sortOrder: 2,
+          },
+        ],
+      },
+      audit,
+    ),
+  );
+  const programmingExam = await createExamSession(teacher.id, {
+    ...input,
+    requestId: randomUUID(),
+    title: "编程题分值折算验收",
+    classroomIds: [first.id],
+    startsAt: new Date(Date.now() - 30_000),
+    endsAt: new Date(Date.now() + 3_600_000),
+    questions: [{ questionId: programmingQuestion.id, points: 12.34 }],
+  });
+  const programmingAssignment = programmingExam.assignments[0];
+  const frozen = await prisma.assignmentQuestion.findFirstOrThrow({
+    where: {
+      assignmentId: programmingAssignment.id,
+      questionId: programmingQuestion.id,
+    },
+  });
+  const frozenConfig =
+    await prisma.assignmentProgrammingConfigSnapshot.findUniqueOrThrow({
+      where: { assignmentQuestionId: frozen.id },
+    });
+  assert.equal(frozen.points.toNumber(), 12.34);
+  assert.equal(frozenConfig.configRevisionId, config.id);
+  const programmingSubmission = await startOrResumeAttempt(
+    student.id,
+    programmingAssignment.id,
+    randomUUID(),
+  );
+  await saveStudentAnswers(student.id, programmingSubmission.id, {
+    version: 0,
+    answers: [
+      { assignmentQuestionId: frozen.id, kind: "CODE", value: "print(4)" },
+    ],
+  });
+  await submitStudentAssignment(student.id, programmingSubmission.id);
+  const judge = await prisma.programmingAttempt.findFirstOrThrow({
+    where: {
+      assignmentQuestionId: frozen.id,
+      studentId: student.id,
+      kind: "FORMAL_JUDGE",
+    },
+  });
+  assert.ok(judge.backgroundJobId);
+  const claimed = await claimBackgroundJobById(judge.backgroundJobId, {
+    acceptedTypes: ["PYTHON_JUDGE"],
+    workerId: "exam-score-test",
+    executorVersion: "test",
+    leaseDurationMs: 30_000,
+  });
+  const leaseId = claimed?.attempts[0]?.leaseId;
+  assert.ok(leaseId);
+  await completeProgrammingJob(judge.backgroundJobId, {
+    leaseId,
+    result: {
+      attemptId: judge.id,
+      cases: config.testCases.map((testCase) => ({
+        testCaseId: testCase.id,
+        passed: testCase.visibility === "PUBLIC",
+        errorType: "NONE",
+        stdout: "4",
+        stderr: "",
+        resourceUsage: null,
+      })),
+    },
+  });
+  const gradedProgramming = await prisma.submission.findUniqueOrThrow({
+    where: { id: programmingSubmission.id },
+    include: { answers: true },
+  });
+  assert.equal(gradedProgramming.score?.toNumber(), 4.94);
+  assert.equal(gradedProgramming.maxScore?.toNumber(), 12.34);
+  assert.equal(gradedProgramming.answers[0].score?.toNumber(), 4.94);
+  assert.equal(gradedProgramming.answers[0].maxScore.toNumber(), 12.34);
+  assert.equal(gradedProgramming.answers[0].isCorrect, false);
+  const rawJudge = await prisma.programmingAttempt.findUniqueOrThrow({
+    where: { id: judge.id },
+  });
+  assert.equal(rawJudge.score?.toNumber(), 4);
+  assert.equal(rawJudge.maxScore.toNumber(), 10);
+  await assert.rejects(
+    getStudentProgrammingAttempt(student.id, judge.id),
+    /判题记录不存在/,
+  );
+  assert.deepEqual(
+    (await getStudentSubmissionResult(student.id, programmingSubmission.id))
+      .programmingAttempts,
+    [],
+  );
+  const programmingCutoff = new Date(Date.now() - 1000);
+  await prisma.$transaction([
+    prisma.examSession.update({
+      where: { id: programmingExam.id },
+      data: { endsAt: programmingCutoff },
+    }),
+    prisma.assignment.update({
+      where: { id: programmingAssignment.id },
+      data: { dueAt: programmingCutoff },
+    }),
+  ]);
+  await setExamResultPublication(
+    teacher.id,
+    programmingAssignment.id,
+    { mode: "WHEN_READY" },
+    audit,
+  );
+  assert.equal(await publishDueExamResults(), 1);
+  const publishedProgramming = await getStudentSubmissionResult(
+    student.id,
+    programmingSubmission.id,
+  );
+  assert.equal(publishedProgramming.isPublished, true);
+  assert.equal(publishedProgramming.answers[0].score, 4.94);
+  assert.equal(publishedProgramming.answers[0].maxScore, 12.34);
+  assert.equal(
+    (await getStudentProgrammingAttempt(student.id, judge.id)).score,
+    4,
+  );
+  console.log(
+    "Exam programming question: publication, frozen config, prorated partial score and result visibility passed",
+  );
   console.log("Exam integration passed");
 }
 main()

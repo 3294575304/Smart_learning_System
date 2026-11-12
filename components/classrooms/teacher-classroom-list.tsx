@@ -21,12 +21,9 @@ import {
 } from "@/lib/list-filter";
 
 /** 教师端班级列表不返回归档班级，所以这里只列出实际可能出现的状态。 */
-const CLASSROOM_FILTER_STATUSES: ClassroomStatus[] = [
-  "ACTIVE",
-  "COMPLETED",
-  "CLOSED",
-  "ARCHIVED",
-];
+const CLASSROOM_STATUS_OPTIONS = (
+  ["ACTIVE", "COMPLETED", "CLOSED"] as const
+).map((value) => ({ value, label: CLASSROOM_STATUS_LABELS[value] }));
 
 export interface TeacherClassroomFilters {
   keyword: string;
@@ -62,9 +59,11 @@ export function filterTeacherClassrooms(
 export function TeacherClassroomList({
   initialClassrooms,
   initialFilters = { keyword: "", status: "", courseId: "" },
+  createEntry,
 }: {
   initialClassrooms: TeacherClassroomListItem[];
   initialFilters?: TeacherClassroomFilters;
+  createEntry?: React.ReactNode;
 }) {
   const [classrooms, setClassrooms] = useState(initialClassrooms);
   const [keyword, setKeyword] = useState(initialFilters.keyword);
@@ -85,17 +84,9 @@ export function TeacherClassroomList({
       .map(([value, label]) => ({ value, label }));
   }, [classrooms]);
 
-  const statusOptions = useMemo<ListFilterOption[]>(() => {
-    const present = new Set(classrooms.map((classroom) => classroom.status));
-    return CLASSROOM_FILTER_STATUSES.filter(
-      // 归档班级默认不出现在列表里，只有确实存在时才提供该选项
-      (value) => value !== "ARCHIVED" || present.has(value),
-    ).map((value) => ({ value, label: CLASSROOM_STATUS_LABELS[value] }));
-  }, [classrooms]);
-
   // 分享链接里的课程可能已被删除、状态可能已失效：不合法就当作未筛选，
   // 否则会出现「下拉显示全部课程却一条也不显示」的死局
-  const effectiveStatus = statusOptions.some(
+  const effectiveStatus = CLASSROOM_STATUS_OPTIONS.some(
     (option) => option.value === status,
   )
     ? status
@@ -167,11 +158,13 @@ export function TeacherClassroomList({
       </div>
 
       {classrooms.length === 0 ? (
-        <EmptyState
-          description="使用右侧表单创建第一个班级，之后即可邀请学生加入。"
-          icon={School}
-          title="暂无班级"
-        />
+        createEntry ? null : (
+          <EmptyState
+            description="创建第一个班级后即可邀请学生加入。"
+            icon={School}
+            title="暂无班级"
+          />
+        )
       ) : (
         <>
           <div className="mb-4">
@@ -182,7 +175,7 @@ export function TeacherClassroomList({
                   label: "班级状态",
                   value: effectiveStatus,
                   allLabel: "全部状态",
-                  options: statusOptions,
+                  options: CLASSROOM_STATUS_OPTIONS,
                   onChange: setStatus,
                 },
                 {
@@ -221,7 +214,7 @@ export function TeacherClassroomList({
               title="没有匹配的班级"
             />
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {visibleClassrooms.map((classroom) => (
                 <article
                   className="bg-card rounded-xl border p-5 transition-colors hover:bg-sky-50/70"
@@ -285,9 +278,15 @@ export function TeacherClassroomList({
                   </Link>
                 </article>
               ))}
+              {createEntry}
             </div>
           )}
         </>
+      )}
+      {visibleClassrooms.length === 0 && createEntry && (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {createEntry}
+        </div>
       )}
     </section>
   );

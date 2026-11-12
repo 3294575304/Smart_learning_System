@@ -50,7 +50,7 @@ export function ClassroomForm({
     const result = await requestApi<{ id: string }>(endpoint, {
       method: mode === "create" ? "POST" : "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, description: input.description ?? "" }),
     });
 
     if (!result.success) {
@@ -72,7 +72,11 @@ export function ClassroomForm({
 
   return (
     <form
-      className="bg-card space-y-4 rounded-xl border p-5"
+      className={
+        mode === "create"
+          ? "space-y-4"
+          : "bg-card space-y-4 rounded-xl border p-5"
+      }
       onSubmit={onSubmit}
       noValidate
     >

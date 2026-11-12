@@ -1,13 +1,88 @@
-import { ClassroomStatus, Role } from "@prisma/client";
+import { Role } from "@prisma/client";
+import { Archive } from "lucide-react";
+import Link from "next/link";
 
 import { ClassroomForm } from "@/components/classrooms/classroom-form";
 import { TeacherClassroomList } from "@/components/classrooms/teacher-classroom-list";
+import {
+  CreateEntry,
+  CreateEntryProvider,
+} from "@/components/dashboard/create-entry";
+import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { readAllowedParam, readTextParam } from "@/lib/list-filter";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { listTeacherClassrooms } from "@/services/classrooms/service";
+import {
+  listTeacherClassrooms,
+  listTeacherHistoricalClassrooms,
+} from "@/services/classrooms/service";
 
-const CLASSROOM_STATUS_VALUES = Object.values(ClassroomStatus);
+const CLASSROOM_STATUS_VALUES = ["ACTIVE", "COMPLETED", "CLOSED"] as const;
+const CLASSROOM_VIEWS = [
+  { history: false, href: "/teacher/classrooms", label: "班级列表" },
+  {
+    history: true,
+    href: "/teacher/classrooms?view=history",
+    label: "历史班级",
+  },
+];
+
+async function HistoricalClassrooms({ teacherId }: { teacherId: string }) {
+  const classrooms = await listTeacherHistoricalClassrooms(teacherId);
+  if (classrooms.length === 0)
+    return (
+      <EmptyState
+        description="删除或解散后保留的班级记录会显示在这里。"
+        icon={Archive}
+        title="暂无历史班级"
+      />
+    );
+
+  return (
+    <div className="bg-card overflow-x-auto rounded-xl border">
+      <table className="w-full table-fixed text-left text-sm">
+        <caption className="sr-only">历史班级记录</caption>
+        <thead className="bg-slate-50 text-slate-600">
+          <tr>
+            <th className="px-4 py-3 font-medium" scope="col">
+              班级名称
+            </th>
+            <th className="px-4 py-3 font-medium" scope="col">
+              关联课程
+            </th>
+            <th className="px-4 py-3 font-medium" scope="col">
+              移除时间
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {classrooms.map((classroom) => (
+            <tr className="border-t" key={classroom.id}>
+              <th className="px-4 py-3 font-medium wrap-anywhere" scope="row">
+                {classroom.name}
+              </th>
+              <td className="px-4 py-3 wrap-anywhere">
+                {classroom.course?.name ?? "无关联课程"}
+              </td>
+              <td className="px-4 py-3">
+                {classroom.dissolvedAt ? (
+                  <time dateTime={classroom.dissolvedAt.toISOString()}>
+                    {classroom.dissolvedAt.toLocaleString("zh-CN", {
+                      timeZone: "Asia/Shanghai",
+                      hour12: false,
+                    })}
+                  </time>
+                ) : (
+                  "未记录"
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default async function TeacherClassroomsPage({
   searchParams,
@@ -17,12 +92,13 @@ export default async function TeacherClassroomsPage({
     keyword?: string;
     status?: string;
     courseId?: string;
+    view?: string;
   }>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
   const params = await searchParams;
-  const classrooms = await listTeacherClassrooms(teacher.id);
-  const deleted = params.deleted === "1";
+  const history = params.view === "history";
+  const deleted = !history && params.deleted === "1";
 
   // 筛选条件从链接读回，保证刷新和分享链接能还原同一份结果
   const initialFilters = {
@@ -31,8 +107,8 @@ export default async function TeacherClassroomsPage({
     courseId: readTextParam(params.courseId, 64),
   };
 
-  return (
-    <section className="space-y-7">
+  const page = (
+    <section className="mx-auto max-w-6xl space-y-6">
       {deleted && (
         <p
           role="status"
@@ -42,26 +118,46 @@ export default async function TeacherClassroomsPage({
         </p>
       )}
       <PageHeader
-        description="查看班级状态、学生人数和邀请码，并进入班级详情管理成员。列表支持按名称、邀请码、关联课程搜索，并按班级状态筛选。"
+        description={
+          history
+            ? "查看已删除或解散的班级记录。"
+            : "查看班级、管理成员及入班邀请。"
+        }
         title="班级管理"
+        actions={history ? undefined : <CreateEntry />}
       />
+      <nav aria-label="班级管理视图" className="flex gap-1 border-b">
+        {CLASSROOM_VIEWS.map((view) => (
+          <Link
+            aria-current={view.history === history ? "page" : undefined}
+            className="border-b-2 border-transparent px-4 py-3 text-sm text-slate-600 hover:text-sky-800 focus-visible:outline-2 focus-visible:outline-sky-700 aria-[current=page]:border-sky-700 aria-[current=page]:font-medium aria-[current=page]:text-sky-800"
+            href={view.href}
+            key={view.href}
+          >
+            {view.label}
+          </Link>
+        ))}
+      </nav>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      {history ? (
+        <HistoricalClassrooms teacherId={teacher.id} />
+      ) : (
         <TeacherClassroomList
-          initialClassrooms={classrooms}
+          initialClassrooms={await listTeacherClassrooms(teacher.id)}
           initialFilters={initialFilters}
+          createEntry={<CreateEntry card />}
         />
-
-        <aside className="scroll-mt-24" id="new-classroom">
-          <div className="bg-card rounded-xl border p-5 sm:p-6">
-            <h2 className="font-semibold">创建新班级</h2>
-            <p className="text-muted-foreground mt-1 mb-5 text-sm">
-              创建成功后会自动生成学生邀请码。
-            </p>
-            <ClassroomForm mode="create" />
-          </div>
-        </aside>
-      </div>
+      )}
     </section>
+  );
+  return history ? (
+    page
+  ) : (
+    <CreateEntryProvider
+      title="创建班级"
+      form={<ClassroomForm mode="create" />}
+    >
+      {page}
+    </CreateEntryProvider>
   );
 }

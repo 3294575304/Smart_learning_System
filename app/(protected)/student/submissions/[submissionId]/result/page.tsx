@@ -161,6 +161,9 @@ export default async function ResultPage({ params, searchParams }: Props) {
               <ProgrammingAttemptStatus
                 assignmentQuestionId={attempt.assignmentQuestionId}
                 attemptId={attempt.id}
+                displayMaxScore={
+                  grades.get(attempt.assignmentQuestionId)?.maxScore
+                }
                 key={attempt.id}
               />
             ))}

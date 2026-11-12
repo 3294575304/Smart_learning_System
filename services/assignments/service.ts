@@ -958,7 +958,9 @@ export async function publishInTransaction(
     assignmentId,
     assignment.classroom.courseId,
   );
-  await freezeAssignmentProgrammingConfigs(transaction, assignmentId);
+  await freezeAssignmentProgrammingConfigs(transaction, assignmentId, {
+    allowPointScaling: assignment.examSessionId !== null,
+  });
   await transaction.assignment.update({
     where: { id: assignmentId },
     data: { status: AssignmentStatus.PUBLISHED, totalPoints },
@@ -1908,13 +1910,16 @@ export async function getStudentSubmissionResult(
     attachments: submission.assignment.classroom.memberships.length
       ? submission.attachments
       : [],
-    programmingAttempts: submission.answers.flatMap((answer) =>
-      answer.programmingAttempts.flatMap((attempt) =>
-        attempt.assignmentQuestionId
-          ? [attempt as typeof attempt & { assignmentQuestionId: string }]
-          : [],
-      ),
-    ),
+    programmingAttempts:
+      submission.assignment.examSessionId && !isPublished
+        ? []
+        : submission.answers.flatMap((answer) =>
+            answer.programmingAttempts.flatMap((attempt) =>
+              attempt.assignmentQuestionId
+                ? [attempt as typeof attempt & { assignmentQuestionId: string }]
+                : [],
+            ),
+          ),
     answers: isPublished
       ? submission.answers.map((answer) => ({
           id: answer.id,

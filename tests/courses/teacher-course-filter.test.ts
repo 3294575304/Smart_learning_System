@@ -182,10 +182,22 @@ test("课程列表渲染搜索框、状态与学期筛选以及结果摘要", ()
   assert.match(markup, /共 3 门课程/u);
   assert.match(markup, /<option value="ACTIVE">启用<\/option>/u);
   assert.match(markup, /<option value="DRAFT">草稿<\/option>/u);
-  assert.match(markup, /<option value="ARCHIVED">归档<\/option>/u);
+  assert.doesNotMatch(markup, /<option value="ARCHIVED">/u);
   // 学期选项来自真实数据
   assert.match(markup, /<option value="2026-2027-1">2026-2027-1<\/option>/u);
   assert.match(markup, /disabled=""/u);
+});
+
+test("只有启用课程时隐藏状态筛选，并忽略旧草稿筛选链接", () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(TeacherCourseList, {
+      initialCourses: [activePython],
+      initialFilters: { keyword: "", status: CourseStatus.DRAFT, term: "" },
+    }),
+  );
+  assert.doesNotMatch(markup, /全部状态/u);
+  assert.match(markup, /全部学期/u);
+  assert.match(markup, /共 1 门课程/u);
 });
 
 test("无课程时不显示筛选工具栏，仍保留创建引导", () => {
