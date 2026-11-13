@@ -7,8 +7,7 @@ import {
 } from "./history";
 
 import { prisma } from "@/lib/prisma";
-import { hasActiveExamAttempt } from "@/services/exams/assistant-policy";
-import { AuthorizationError } from "@/services/auth/policy";
+import { assertLearningAssistantAvailable } from "@/services/exams/assistant-policy";
 import { createAIProvider } from "@/services/ai/provider-factory";
 import { listStudentPracticeCourses } from "@/services/course-recommendations/service";
 import { getStudentPublishedKnowledgeGraph } from "@/services/knowledge-graph/service";
@@ -53,11 +52,13 @@ export async function askCourseLearningAssistant(
     request,
     requestId,
   );
-  if (conversation.repeated && conversation.record)
+  if (conversation.repeated && conversation.record) {
+    await assertLearningAssistantAvailable(studentId);
     return {
       ...conversation.repeated.reply,
       conversationId: conversation.record.id,
     };
+  }
   if (conversation.record)
     request.history = conversation.turns
       .filter((turn) => turn.reply.deliveryStatus !== "ABORTED")
@@ -243,8 +244,10 @@ export async function askCourseLearningAssistant(
     });
     options.signal.throwIfAborted();
     const saved = await save(abortedReply("", "PENDING"));
-    if (saved.reply.deliveryStatus !== "PENDING")
+    if (saved.reply.deliveryStatus !== "PENDING") {
+      await assertLearningAssistantAvailable(studentId);
       return { ...saved.reply, conversationId: saved.id };
+    }
     const replace = (reply: LearningAssistantReply) =>
       replaceStreamingLearningReply(
         studentId,
@@ -267,6 +270,7 @@ export async function askCourseLearningAssistant(
           let response: Awaited<ReturnType<typeof answerLearningQuestion>>;
           let promptVersion = LEARNING_ASSISTANT_STREAM_PROMPT_VERSION;
           try {
+            await assertLearningAssistantAvailable(studentId);
             response = await readLearningAnswerStream(
               streamQuestion,
               input,
@@ -279,6 +283,7 @@ export async function askCourseLearningAssistant(
                 if (!safe || safe === published) return;
                 await replace(abortedReply(safe, "PENDING"));
                 published = safe;
+                await assertLearningAssistantAvailable(studentId);
                 if (!signal.aborted) emit({ type: "preview", text: safe });
               },
             );
@@ -323,10 +328,6 @@ export async function askCourseLearningAssistant(
   const saved = await save(
     buildReply(response, LEARNING_ASSISTANT_PROMPT_VERSION),
   );
+  await assertLearningAssistantAvailable(studentId);
   return { ...saved.reply, conversationId: saved.id };
-}
-
-async function assertLearningAssistantAvailable(studentId: string) {
-  if (await hasActiveExamAttempt(studentId))
-    throw new AuthorizationError("考试作答期间，课程答疑暂不可用。");
 }

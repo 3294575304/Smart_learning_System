@@ -33,6 +33,10 @@ async function main(): Promise<void> {
     DATABASE_URL: isolatedDatabaseUrl(baseUrl, schema),
     HTTP_INTEGRATION_SCHEMA: schema,
     AI_PROVIDER: "mock",
+    // The seed requires an explicit credential; it exists only in this test schema.
+    SEED_SUPER_ADMIN_PASSWORD:
+      process.env.SEED_SUPER_ADMIN_PASSWORD ??
+      `Test-${randomBytes(24).toString("base64url")}-Aa1!`,
   };
   const prismaCli = resolve("node_modules/prisma/build/index.js");
   const testFiles = [

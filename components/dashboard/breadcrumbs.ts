@@ -41,9 +41,12 @@ export function buildBreadcrumbs(
           )) ||
           (index === 2 &&
             segments[0] === "student" &&
-            ["assignments", "recommendations", "wrong-questions"].includes(
-              segments[1],
-            )) ||
+            [
+              "assignments",
+              "recommendations",
+              "wrong-questions",
+              "exams",
+            ].includes(segments[1])) ||
           (index === 4 &&
             segments[0] === "teacher" &&
             segments[1] === "courses" &&
@@ -75,9 +78,11 @@ export function buildBreadcrumbs(
               "/teacher/assignments?view=STUDENTS")
             : isStudentVirtualRoot
               ? segment === "submissions"
-                ? pathname.endsWith("/result")
-                  ? "/student/assignments?view=records"
-                  : "/student/assignments"
+                ? context?.source === "exam" && pathname.endsWith("/result")
+                  ? "/student/exams"
+                  : pathname.endsWith("/result")
+                    ? "/student/assignments?view=records"
+                    : "/student/assignments"
                 : segment === "question-favorites"
                   ? "/student/wrong-questions?view=favorites"
                   : "/student/recommendations"
@@ -140,7 +145,7 @@ export function buildBreadcrumbs(
       (item, index, items) =>
         !(
           segments[0] === "student" &&
-          segments[1] === "submissions" &&
+          ["submissions", "exams"].includes(segments[1]) &&
           index === 2
         ) && !items.slice(index + 1).some((next) => next.href === item.href),
     );

@@ -15,7 +15,7 @@ async function sourceFiles(directory: string): Promise<string[]> {
   return nested.flat();
 }
 
-test("全系统使用浅蓝浅绿主题且不再使用黑色主界面背景", async () => {
+test("工作区采用深蓝交互与稳定浅底，保留登录品牌背景且不使用黑色主界面", async () => {
   const [globals, shell, files] = await Promise.all([
     readFile(new URL("../../app/globals.css", import.meta.url), "utf8"),
     readFile(
@@ -30,11 +30,10 @@ test("全系统使用浅蓝浅绿主题且不再使用黑色主界面背景", as
     ),
   ]);
 
-  assert.match(globals, /--primary: oklch\(0\.59 0\.16 235\)/u);
+  assert.match(globals, /--primary: var\(--brand\)/u);
   assert.match(globals, /--secondary: oklch\(0\.955 0\.035 175\)/u);
-  assert.match(shell, /from-sky-50\/80/u);
-  assert.match(shell, /via-background/u);
-  assert.match(shell, /to-emerald-50\/60/u);
+  assert.match(shell, /bg-background min-h-screen/u);
+  assert.match(shell, /bg-brand-soft text-brand-strong/u);
   assert.match(shell, /from-sky-500 to-emerald-500/u);
 
   const forbiddenBackground =

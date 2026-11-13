@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import type { AuthenticatedUser } from "@/services/auth/types";
 
 interface DashboardShellProps {
+  headerAction?: ReactNode;
   user: AuthenticatedUser;
   title: string;
   platformName: string;
@@ -195,19 +196,17 @@ function SidebarNavigation({
                   className={cn(
                     "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:outline-none",
                     active
-                      ? student
-                        ? "bg-sky-50 text-sky-800"
-                        : "bg-gradient-to-r from-sky-500 to-emerald-500 text-white shadow-sm"
-                      : "text-gray-600 hover:bg-sky-50 hover:text-sky-800",
+                      ? "bg-brand-soft text-brand-strong"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                   href={item.href}
                   key={item.href}
                   onClick={onNavigate}
                 >
-                  {student && active ? (
+                  {active ? (
                     <span
                       aria-hidden="true"
-                      className="absolute inset-y-2.5 left-0 w-0.5 rounded-full bg-sky-600"
+                      className="bg-brand absolute inset-y-2.5 left-0 w-0.5 rounded-full"
                     />
                   ) : null}
                   <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
@@ -228,6 +227,7 @@ export function DashboardShell({
   platformName,
   platformAnnouncement = "",
   children,
+  headerAction,
 }: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -368,7 +368,7 @@ export function DashboardShell({
   }, [joinClassroomDialogOpen]);
 
   return (
-    <div className="via-background min-h-screen bg-gradient-to-br from-sky-50/80 to-emerald-50/60">
+    <div className="bg-background min-h-screen">
       {/* 键盘用户可直接跳过整组侧栏导航，不必每页 Tab 穿过全部入口。 */}
       <a
         href="#dashboard-main"
@@ -515,9 +515,9 @@ export function DashboardShell({
         </div>
       ) : null}
 
-      <div className="lg:pl-64">
-        <header className="bg-background/95 sticky top-0 z-20 border-b backdrop-blur">
-          <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+      <div className="[--dashboard-header-height:calc(4rem+1px)] lg:pl-64">
+        <header className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur">
+          <div className="flex h-[calc(var(--dashboard-header-height)-1px)] items-center gap-3 px-4 sm:px-6 lg:px-8">
             <button
               ref={menuOpenButtonRef}
               aria-expanded={mobileMenuOpen}
@@ -551,6 +551,7 @@ export function DashboardShell({
               </Suspense>
             </div>
             <div className="ml-auto flex items-center gap-2">
+              {headerAction}
               <NotificationIndicator />
               <div className="relative hidden sm:block" ref={accountMenuRef}>
                 <button

@@ -8,7 +8,7 @@
   --card-foreground: oklch(0.25 0.035 235);
   --popover: oklch(0.997 0.006 205);
   --popover-foreground: oklch(0.25 0.035 235);
-  --primary: oklch(0.59 0.16 235);
+  --primary: var(--brand);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.955 0.035 175);
   --secondary-foreground: oklch(0.32 0.08 180);
@@ -30,6 +30,12 @@
    */
   --brand: #0369a1;
   --brand-strong: #075985;
+  --brand-soft: #e0f2fe;
+  --success: #166534;
+  --success-soft: #f0fdf4;
+  --warning: #92400e;
+  --warning-soft: #fffbeb;
+  --danger-soft: #fff1f2;
   --progress-track: #e5e5e5;
   --mark-muted: #737373;
   --mark-danger: #be123c;
@@ -47,6 +53,42 @@
    * 实测：页面底 98.2 < 外卡 97.4 < 卡片 99.7。
    */
   --surface: oklch(0.974 0.013 220);
+
+  /*
+   * 考试与作业界面重设计的语义层令牌。
+   *
+   * 与上面的 --brand 家族并存，不替换它们：老页面继续用 brand/success 等，
+   * 新页面统一用 ink / line / page / ok / warn / bad 这一层。
+   * 这样重设计可以逐页推进，不会一次性改动全部既有视觉。
+   *
+   * 命名规则：
+   *   ink-*    文字层级（靠明度区分，不靠字号堆叠）
+   *   line-*   描边
+   *   page     页面底色
+   *   ok/warn/bad + -soft  状态色（必须与文字标签同时出现，不能只靠颜色）
+   *   ai       AI 建议专用色，与品牌蓝明确区分
+   */
+  --ink: #10243a;
+  --ink-body: #2a4356;
+  --ink-soft: #4a6376;
+  --ink-muted: #9aaebd;
+  --line: #e3edf5;
+  --line-soft: #eef4f9;
+  --page: #f4f8fb;
+  --ai: #6d4fd1;
+  --ai-soft: #f4f1fe;
+  --ok: #047857;
+  --ok-soft: #ecfdf5;
+  --warn: #b45309;
+  --warn-soft: #fff7ed;
+  --bad: #be123c;
+  --bad-soft: #fff1f2;
+
+  /* 两级高度：一级用于列表项，二级用于主卡与浮层。色值取深蓝而不是纯黑。 */
+  --shadow-card:
+    0 1px 2px rgb(10 30 46 / 0.04), 0 12px 32px -14px rgb(10 30 46 / 0.06);
+  --shadow-raised:
+    0 2px 4px rgb(10 30 46 / 0.05), 0 18px 40px -16px rgb(10 30 46 / 0.14);
 }
 
 @theme inline {
@@ -70,7 +112,28 @@
   --color-ring: var(--ring);
   --color-brand: var(--brand);
   --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger-soft: var(--danger-soft);
   --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-body: var(--ink-body);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-page: var(--page);
+  --color-ai: var(--ai);
+  --color-ai-soft: var(--ai-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -84,18 +147,24 @@
 body {
   @apply bg-background text-foreground antialiased;
   min-height: 100vh;
-  background-image:
-    radial-gradient(
-      circle at 8% 0%,
-      oklch(0.94 0.045 225 / 0.62),
-      transparent 30rem
-    ),
-    radial-gradient(
-      circle at 96% 8%,
-      oklch(0.95 0.055 165 / 0.48),
-      transparent 32rem
-    );
-  background-attachment: fixed;
+  /* Auth layouts own their decorative backgrounds; workspaces stay quiet. */
+  scroll-padding-top: 5rem;
+}
+
+html {
+  scroll-padding-top: 5rem;
+}
+.workspace-page {
+  --panel-padding: 1.5rem;
+}
+.workspace-page[data-density="compact"] {
+  --panel-padding: 1rem;
+}
+.workspace-panel {
+  padding: var(--panel-padding, 1rem);
+}
+.workspace-page [id] {
+  scroll-margin-top: 5rem;
 }
 
 ::selection {
@@ -300,11 +369,13 @@ body {
   padding-top: 1.25rem;
   padding-bottom: 1.5rem;
 }
-#dashboard-main[data-workspace-role="TEACHER"] :where(h1) {
+#dashboard-main[data-workspace-role="TEACHER"]:not(:has(.workspace-page))
+  :where(h1) {
   font-size: 1.625rem;
   line-height: 1.35;
 }
-#dashboard-main[data-workspace-role="TEACHER"] :where(h2) {
+#dashboard-main[data-workspace-role="TEACHER"]:not(:has(.workspace-page))
+  :where(h2) {
   font-size: 1rem;
   line-height: 1.5;
 }
@@ -335,11 +406,11 @@ body {
   outline: 2px solid var(--primary);
   outline-offset: 3px;
 }
-#dashboard-main[data-workspace-role="TEACHER"]
+#dashboard-main[data-workspace-role="TEACHER"]:not(:has(.workspace-page))
   :where(.bg-card.p-5, .bg-card.p-6) {
   padding: 1rem;
 }
-#dashboard-main[data-workspace-role="TEACHER"] > section {
+#dashboard-main[data-workspace-role="TEACHER"] > section:not(.workspace-page) {
   row-gap: 1rem;
 }
 #dashboard-main[data-workspace-role="TEACHER"]

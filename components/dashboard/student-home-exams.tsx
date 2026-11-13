@@ -3,7 +3,6 @@ import { CalendarClock, History } from "lucide-react";
 import { StudentPageLink } from "./student-page-link";
 import { StudentExamCountdown } from "./student-exam-countdown";
 import { FOCUS_RING, FOCUS_RING_ON_DARK } from "./ui-focus";
-import { activityHref } from "@/services/student-experience/activity-query";
 import {
   studentTaskContext,
   studentTaskDate,
@@ -192,7 +191,7 @@ export function StudentHomeExams({
                 {recent.publishedSubmissionId && (
                   <StudentPageLink
                     href={studentTaskHref(
-                      `/student/submissions/${recent.publishedSubmissionId}/result`,
+                      `/student/submissions/${recent.publishedSubmissionId}/result?source=exam`,
                       scope,
                     )}
                     className={allExams}
@@ -209,10 +208,10 @@ export function StudentHomeExams({
               </>
             ) : (
               <StudentPageLink
-                href={activityHref("exams", {
-                  ...scope,
-                  focus: recent.assignmentId,
-                })}
+                href={studentTaskHref(
+                  `/student/exams/${recent.examId}/record`,
+                  scope,
+                )}
                 className={action}
               >
                 查看考试记录

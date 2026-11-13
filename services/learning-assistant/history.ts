@@ -4,6 +4,7 @@ import {
   Prisma,
   type StudentLearningConversation,
 } from "@prisma/client";
+import { assertLearningAssistantAvailable } from "@/services/exams/assistant-policy";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { RecommendationOperationError } from "@/services/recommendations/errors";
@@ -81,6 +82,7 @@ export async function listLearningConversations(
   courseId: string,
   page: number,
 ): Promise<LearningConversationList> {
+  await assertLearningAssistantAvailable(studentId);
   await assertHistoryCourse(studentId, courseId);
   const records = await prisma.studentLearningConversation.findMany({
     where: { studentId, courseId, deletedAt: null, revision: { gt: 0 } },
@@ -97,6 +99,7 @@ export async function listLearningConversations(
     skip: (page - 1) * 20,
     take: 21,
   });
+  await assertLearningAssistantAvailable(studentId);
   return {
     items: records.slice(0, 20).map(summary),
     nextPage: records.length > 20 ? page + 1 : null,
@@ -107,11 +110,13 @@ export async function getLearningConversation(
   courseId: string,
   id: string,
 ): Promise<LearningConversationDetail> {
+  await assertLearningAssistantAvailable(studentId);
   await assertHistoryCourse(studentId, courseId);
   const record = await prisma.studentLearningConversation.findFirst({
     where: { id, studentId, courseId, deletedAt: null },
   });
   if (!record) throw new ResourceNotFoundError("对话不存在");
+  await assertLearningAssistantAvailable(studentId);
   return {
     ...summary(record),
     turns: readTurns(record.turns),

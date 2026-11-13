@@ -5,6 +5,7 @@ interface PageHeaderProps {
   description: string;
   actions?: ReactNode;
   eyebrow?: string;
+  variant?: "default" | "student";
 }
 
 export function PageHeader({
@@ -12,16 +13,19 @@ export function PageHeader({
   description,
   actions,
   eyebrow,
+  variant = "default",
 }: PageHeaderProps) {
   return (
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <header
+      className={`flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between ${variant === "student" ? "border-b pb-3" : ""}`}
+    >
       <div className="min-w-0">
         {eyebrow ? (
-          <p className="text-xs font-medium tracking-wide text-sky-700 uppercase">
+          <p className="text-brand-strong text-xs font-medium tracking-wide">
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+        <h1 className="text-foreground text-2xl leading-tight font-semibold tracking-tight [overflow-wrap:anywhere] sm:text-[26px]">
           {title}
         </h1>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-6">
@@ -29,7 +33,9 @@ export function PageHeader({
         </p>
       </div>
       {actions ? (
-        <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {actions}
+        </div>
       ) : null}
     </header>
   );

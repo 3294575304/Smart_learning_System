@@ -1,4 +1,5 @@
 import { StudentPageLink } from "./student-page-link";
+import { PageContainer } from "@/components/ui/workspace";
 import React, { type ReactNode } from "react";
 import { StudentHomeTasks } from "./student-home-tasks";
 import { FOCUS_RING } from "./ui-focus";
@@ -14,7 +15,7 @@ export function StudentHomeView({
   insights?: ReactNode;
 }) {
   return (
-    <section className="text-foreground border-border bg-surface @container mx-auto max-w-7xl min-w-0 rounded-[1.25rem] border p-4 sm:p-7 xl:px-9 xl:py-7">
+    <PageContainer className="text-foreground border-border bg-surface @container rounded-xl border p-4 sm:p-6">
       {/*
         页头补一行副标题：原先标题下直接是两个等权按钮，
         学生进门第一眼看到的是"自主练习/我的题库"两个入口，
@@ -51,6 +52,6 @@ export function StudentHomeView({
         </div>
       </header>
       {insights ?? <StudentHomeTasks overview={overview} />}
-    </section>
+    </PageContainer>
   );
 }

@@ -1,7 +1,6 @@
 import {
   StudentActivityFilters,
   StudentActivityPagination,
-  activityCardClass,
 } from "@/components/dashboard/student-activity-list";
 import { activityHref } from "@/services/student-experience/activity-query";
 import {
@@ -11,7 +10,8 @@ import {
 import { loadActivityAssignments } from "@/services/student-experience/activity-service";
 import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
-import { studentScoreLabel } from "@/services/recommendations/scoring";
+import { hundredPointScore } from "@/services/assignments/presentation";
+import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
 import { StudentTaskScope } from "@/components/dashboard/student-task-scope";
 import {
   studentTaskScopeSchema,
@@ -24,7 +24,15 @@ import { listStudentResults } from "@/services/dashboard/student-dashboard";
 import { studentResultsQuerySchema } from "@/services/assignments/schemas";
 import { studentAssignmentState } from "@/services/student-experience/task-policy";
 import { Role } from "@prisma/client";
-import { ArrowRight, ClipboardList } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  Lock,
+  PencilLine,
+  PlayCircle,
+} from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -48,6 +56,48 @@ const STATE_LABELS: Record<ReturnType<typeof assignmentState>, string> = {
   SUBMITTED: "已提交",
   EXPIRED: "已截止",
 };
+
+type AssignmentState = ReturnType<typeof assignmentState>;
+
+/**
+ * 状态取色与图标集中在一处，保证列表 / 答题卡 / 反馈页三处对同一状态用同一种视觉。
+ * 主色（brand）只表示「可继续操作」，其余状态一律走中性或语义色。
+ */
+const stateTone: Record<AssignmentState, StatusChipTone> = {
+  PENDING: "brand",
+  IN_PROGRESS: "brand",
+  SUBMITTED: "neutral",
+  EXPIRED: "neutral",
+};
+
+const stateIcon: Record<AssignmentState, typeof PlayCircle> = {
+  PENDING: PlayCircle,
+  IN_PROGRESS: PencilLine,
+  SUBMITTED: CheckCircle2,
+  EXPIRED: Lock,
+};
+
+const toneTile: Record<StatusChipTone, string> = {
+  brand: "bg-brand-soft text-brand",
+  ok: "bg-ok-soft text-ok",
+  warn: "bg-warn-soft text-warn",
+  bad: "bg-bad-soft text-bad",
+  neutral: "bg-muted text-ink-soft",
+  ai: "bg-ai-soft text-ai",
+};
+
+/**
+ * 截止倒计时只做「天 / 小时」两级，不做到秒：
+ * 服务端渲染与客户端水合之间不会跳动，也不会制造焦虑感。
+ */
+function remainingLabel(dueAt: Date, now: Date): string | null {
+  const diff = dueAt.getTime() - now.getTime();
+  if (diff <= 0) return "已截止";
+  const days = Math.floor(diff / 86_400_000);
+  if (days >= 1) return `剩余 ${days} 天`;
+  const hours = Math.floor(diff / 3_600_000);
+  return hours >= 1 ? `剩余 ${hours} 小时` : "剩余不足 1 小时";
+}
 
 export default async function StudentAssignmentsPage({ searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
@@ -134,6 +184,19 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
   );
   const { items: pageItems, pagination } = result;
 
+  // 主视觉只放「还能继续做」的那一条；其余任务退成行，避免所有卡片等权重。
+  const featured =
+    pageItems.find(
+      (assignment) => assignmentState(assignment, now) === "IN_PROGRESS",
+    ) ??
+    pageItems.find(
+      (assignment) => assignmentState(assignment, now) === "PENDING",
+    ) ??
+    null;
+  const listItems = featured
+    ? pageItems.filter((assignment) => assignment.id !== featured.id)
+    : pageItems;
+
   return (
     <section className="space-y-4">
       <PageHeader
@@ -194,73 +257,129 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
           title={course && classroomId ? "本班暂无作业" : "暂无作业"}
         />
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-          {pageItems.map((assignment) => {
-            const state = assignmentState(assignment, now);
-            return (
-              <Link
-                className={`${activityCardClass} transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600`}
-                href={studentTaskHref(
-                  state === "SUBMITTED" && assignment.latestSubmissionId
-                    ? `/student/submissions/${assignment.latestSubmissionId}/result`
-                    : `/student/assignments/${assignment.id}`,
-                  scopeResult.data,
-                )}
-                key={assignment.id}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className="min-w-0 font-semibold break-words">
-                    {assignment.title}
-                  </h2>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${
-                      state === "PENDING" || state === "IN_PROGRESS"
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-gray-100 text-gray-600"
-                    }`}
+        <div className="space-y-3">
+          {featured
+            ? (() => {
+                const remaining = remainingLabel(featured.dueAt, now);
+                return (
+                  <Link
+                    className="border-line bg-card focus-visible:outline-brand relative flex min-w-0 flex-wrap items-center gap-4 overflow-hidden rounded-2xl border py-4 pr-5 pl-6 shadow-[var(--shadow-card)] transition-colors hover:border-sky-200 focus-visible:outline-2 focus-visible:outline-offset-2 sm:py-5 sm:pr-6 sm:pl-7"
+                    href={studentTaskHref(
+                      `/student/assignments/${featured.id}`,
+                      scopeResult.data,
+                    )}
+                    key={featured.id}
                   >
-                    {STATE_LABELS[state]}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  {assignment.classroomName} · {assignment.questionCount} 题 ·{" "}
-                  百分制展示 · 原始满分 {assignment.totalPoints} 分
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  发布：{assignment.publishedAt.toLocaleString("zh-CN")}
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  截止：{assignment.dueAt.toLocaleString("zh-CN")}
-                </p>
-                {assignment.historyOnly ? (
-                  <p className="mt-3 text-xs text-slate-500">
-                    历史作业 · 仅查看本人提交记录
-                  </p>
-                ) : null}
-                {assignment.latestSubmissionStatus ? (
-                  <p className="mt-3 text-sm font-medium text-slate-700">
-                    {assignment.latestSubmissionStatus === "PUBLISHED"
-                      ? `已发布成绩：${studentScoreLabel(assignment.latestPublishedScore ?? null, assignment.totalPoints)}`
-                      : assignment.latestSubmissionStatus === "GRADED"
-                        ? "批改完成 · 成绩待发布"
-                        : assignment.latestSubmissionStatus === "PENDING_REVIEW"
-                          ? "已提交 · 待教师批改或复核"
-                          : "已提交 · 等待批改"}
-                  </p>
-                ) : null}
-                <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-700">
-                  {state === "IN_PROGRESS"
-                    ? "继续作答"
-                    : state === "SUBMITTED"
-                      ? "查看提交与成绩"
-                      : state === "EXPIRED"
-                        ? "查看详情"
-                        : "开始作业"}
-                  <ArrowRight aria-hidden="true" className="size-4" />
-                </span>
-              </Link>
-            );
-          })}
+                    <span
+                      aria-hidden="true"
+                      className="bg-brand absolute inset-y-0 left-0 w-1"
+                    />
+                    <span className="bg-brand-soft flex size-11 shrink-0 items-center justify-center rounded-xl">
+                      <PencilLine
+                        aria-hidden="true"
+                        className="text-brand size-5"
+                      />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-ink min-w-0 text-base font-semibold break-words">
+                          {featured.title}
+                        </h2>
+                        <StatusChip tone="brand">
+                          {STATE_LABELS[assignmentState(featured, now)]}
+                        </StatusChip>
+                        {featured.historyOnly ? (
+                          <StatusChip tone="neutral">历史作业</StatusChip>
+                        ) : null}
+                      </div>
+                      <p className="text-ink-soft mt-1.5 text-xs">
+                        {featured.classroomName} · {featured.questionCount} 题 ·
+                        原始满分 {featured.totalPoints} 分
+                      </p>
+                      <p className="text-ink-muted mt-1 text-xs">
+                        截止 {featured.dueAt.toLocaleString("zh-CN")}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+                      {remaining ? (
+                        <span className="text-warn inline-flex items-center gap-1 text-xs font-medium">
+                          <Clock3 aria-hidden="true" className="size-3.5" />
+                          {remaining}
+                        </span>
+                      ) : null}
+                      <span className="bg-brand inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-4 text-[13px] font-semibold text-white">
+                        继续作答
+                        <ArrowRight aria-hidden="true" className="size-4" />
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })()
+            : null}
+
+          <ul className="space-y-2.5">
+            {listItems.map((assignment) => {
+              const state = assignmentState(assignment, now);
+              const status = assignment.latestSubmissionStatus;
+              const chip: { tone: StatusChipTone; label: string } | null =
+                status
+                  ? status === "PUBLISHED"
+                    ? {
+                        tone: "ok",
+                        label: (() => {
+                          const percent = hundredPointScore(
+                            assignment.latestPublishedScore ?? null,
+                            assignment.totalPoints,
+                          );
+                          return percent === null
+                            ? "成绩已发布"
+                            : `成绩已发布 · ${percent} 分`;
+                        })(),
+                      }
+                    : status === "GRADED"
+                      ? { tone: "warn", label: "批改完成 · 待发布" }
+                      : { tone: "warn", label: "已提交 · 待批改" }
+                  : null;
+              const Icon = stateIcon[state];
+              return (
+                <li key={assignment.id}>
+                  <Link
+                    className="border-line bg-card focus-visible:outline-brand flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3.5 transition-colors hover:border-sky-200 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-offset-2"
+                    href={studentTaskHref(
+                      state === "SUBMITTED" && assignment.latestSubmissionId
+                        ? `/student/submissions/${assignment.latestSubmissionId}/result`
+                        : `/student/assignments/${assignment.id}`,
+                      scopeResult.data,
+                    )}
+                  >
+                    <span
+                      className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${toneTile[chip?.tone ?? stateTone[state]]}`}
+                    >
+                      <Icon aria-hidden="true" className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-ink text-[15px] font-semibold break-words">
+                        {assignment.title}
+                      </p>
+                      <p className="text-ink-soft mt-1 text-xs">
+                        {assignment.classroomName} · {assignment.questionCount}{" "}
+                        题 · 原始满分 {assignment.totalPoints} 分 · 截止{" "}
+                        {assignment.dueAt.toLocaleString("zh-CN")}
+                      </p>
+                      {assignment.historyOnly ? (
+                        <p className="text-ink-muted mt-1 text-xs">
+                          历史作业 · 仅可查看本人提交记录
+                        </p>
+                      ) : null}
+                    </div>
+                    <StatusChip tone={chip?.tone ?? stateTone[state]}>
+                      {chip?.label ?? STATE_LABELS[state]}
+                    </StatusChip>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

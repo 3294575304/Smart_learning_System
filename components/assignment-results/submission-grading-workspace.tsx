@@ -5,6 +5,7 @@ import { AssignmentCategoryBadge } from "@/components/assignments/category-badge
 import { AssignmentStateRefresh } from "@/components/assignments/state-refresh";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { QuestionText } from "@/components/assignments/question-text";
+import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
 import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { ManualGradeForm } from "./manual-grade-form";
 import { CompleteGradingButton } from "./complete-grading-button";
@@ -81,7 +82,7 @@ export function SubmissionGradingWorkspace({
         judging={count("PENDING_JUDGE") > 0}
       />
       <TeacherBackLink href={back.href}>{back.label}</TeacherBackLink>
-      <header className="min-w-0 rounded-xl border bg-white p-5 sm:p-6">
+      <header className="border-line bg-card min-w-0 rounded-xl border p-5 shadow-[var(--shadow-card)] sm:p-6">
         <div className="grid min-w-0 gap-5 sm:grid-cols-[minmax(0,1fr)_11.5rem]">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-slate-900">
@@ -130,19 +131,21 @@ export function SubmissionGradingWorkspace({
             <AssignmentCategoryBadge
               category={submission.assignment.category ?? "PRACTICE"}
             />
-            <div className="min-w-0 rounded-lg bg-sky-50 px-4 py-3 sm:w-full">
-              <p className="text-xs text-sky-800">总成绩 · 百分制</p>
-              <p className="mt-1 text-3xl font-bold text-sky-900 tabular-nums">
+            <div className="bg-brand-soft min-w-0 rounded-lg border border-sky-100 px-4 py-3 sm:w-full">
+              <p className="text-brand-strong text-xs">总成绩 · 百分制</p>
+              <p className="text-brand mt-1 text-3xl font-bold tabular-nums">
                 {percentage === null
                   ? finished
                     ? "—"
                     : "待评分"
                   : percentage.toFixed(2)}
                 {percentage !== null && (
-                  <span className="ms-1 text-sm font-normal">/ 100</span>
+                  <span className="text-ink-muted ms-1 text-sm font-normal">
+                    / 100
+                  </span>
                 )}
               </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
+              <p className="text-ink-soft mt-1 text-xs leading-5">
                 {finished && submission.score !== null
                   ? `原始得分 ${submission.score} / ${submission.maxScore}`
                   : `满分 ${submission.maxScore}；未评分不记零`}
@@ -299,26 +302,42 @@ export function SubmissionGradingWorkspace({
               : ["WRONG", "PARTIAL"].includes(q.outcome)
                 ? "border-orange-200 bg-orange-50 text-orange-900"
                 : "border-slate-200 bg-slate-50 text-slate-700";
+          const outcomeTone: StatusChipTone =
+            q.outcome === "CORRECT"
+              ? "ok"
+              : q.outcome === "WRONG"
+                ? "bad"
+                : q.outcome === "PARTIAL"
+                  ? "warn"
+                  : "neutral";
           return (
             <article
               key={q.id}
               id={`question-${q.id}`}
-              className="min-w-0 scroll-mt-4 rounded-xl border bg-white p-4 sm:p-5"
+              className="border-line bg-card min-w-0 scroll-mt-4 rounded-xl border p-5 shadow-[var(--shadow-card)] sm:p-6"
             >
               <div className="flex items-start justify-between gap-3">
-                <h2 className="min-w-0 font-semibold [overflow-wrap:anywhere] whitespace-pre-wrap">
-                  {q.sortOrder}. {q.title}
-                </h2>
-                <div className="shrink-0 text-right text-sm">
-                  <p className="font-semibold tabular-nums">
-                    {settled ? answer?.finalScore : "—"} / {q.maxScore}
-                  </p>
+                <div className="flex min-w-0 items-start gap-3">
                   <span
-                    className={`mt-1 inline-block rounded-full border px-2 py-1 text-xs ${color}`}
+                    aria-hidden="true"
+                    className="bg-brand-soft text-brand mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-[13px] font-semibold tabular-nums"
                   >
-                    {outcomeLabels[q.outcome]}
+                    {q.sortOrder}
                   </span>
+                  <div className="min-w-0">
+                    <h2 className="text-ink text-[15px] font-semibold [overflow-wrap:anywhere] whitespace-pre-wrap">
+                      {q.title}
+                    </h2>
+                    <div className="mt-1.5">
+                      <StatusChip tone={outcomeTone}>
+                        {outcomeLabels[q.outcome]}
+                      </StatusChip>
+                    </div>
+                  </div>
                 </div>
+                <p className="text-ink-body shrink-0 text-[13px] font-semibold tabular-nums">
+                  {settled ? answer?.finalScore : "—"} / {q.maxScore}
+                </p>
               </div>
               <div className="mt-3">
                 <QuestionText text={q.content} />
@@ -401,7 +420,7 @@ export function SubmissionGradingWorkspace({
       </div>
       {submission.status === "PENDING_REVIEW" &&
         submission.canManageGrading && (
-          <footer className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white p-5">
+          <footer className="border-line bg-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-5 shadow-[var(--shadow-card)]">
             <div>
               <p className="font-medium">完成整份批改</p>
               <p className="mt-1 text-sm text-slate-500">

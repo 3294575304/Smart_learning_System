@@ -5,6 +5,11 @@ import { QualityReportTemplatePicker } from "./quality-report-template-picker";
 import { courseSummaryCoverage } from "@/services/quality-reports/summary-coverage";
 import type { TemplateSelection } from "@/services/quality-reports/template-schema";
 import { withClassroomQuery } from "@/lib/course-classroom";
+import { ScopeSummary, SectionPanel } from "@/components/ui/workspace";
+import { WorkflowNavigation } from "@/components/ui/workflow-navigation";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { REPORT_WORKFLOW_STEPS, reportWorkflowStage } from "./workflow";
 
 interface GradebookOption {
   id: string;
@@ -171,6 +176,7 @@ function ReviewEditor({
   const qualityAudit = qualityAuditValue(report.narrativeSnapshotJson);
   const [draft, setDraft] = useState<Narrative | null>(initial);
   const [reviewComment, setReviewComment] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!draft)
@@ -185,15 +191,6 @@ function ReviewEditor({
   ) =>
     setDraft((current) => (current ? { ...current, [field]: value } : current));
   async function approve() {
-    const auditNotice = qualityAudit?.counts.errors
-      ? `自动审查仍有 ${qualityAudit.counts.errors} 项严重数据缺口。确认不会补造缺失数据，正式报告仍会保留对应说明。\n\n`
-      : "";
-    if (
-      !window.confirm(
-        `${auditNotice}确认已核对所有统计、分析文字和改进措施？确认后将生成不可变的正式 DOCX。`,
-      )
-    )
-      return;
     setBusy(true);
     setError(null);
     try {
@@ -208,6 +205,7 @@ function ReviewEditor({
       const payload = (await response.json()) as ApiEnvelope<unknown>;
       if (!response.ok || !payload.success)
         throw new Error(payload.error ?? "报告审核失败");
+      setConfirmOpen(false);
       await onApproved();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "报告审核失败");
@@ -368,12 +366,39 @@ function ReviewEditor({
         <button
           className="rounded-md bg-sky-700 px-3 py-2 text-sm text-white disabled:opacity-50"
           disabled={busy}
-          onClick={() => void approve()}
+          onClick={() => {
+            setError(null);
+            setConfirmOpen(true);
+          }}
           type="button"
         >
           {busy ? "正在生成正式版…" : "确认审核并生成正式 DOCX"}
         </button>
       </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        title={`核对并确认报告 v${report.versionNumber}`}
+        confirmLabel="确认并生成正式 DOCX"
+        busy={busy}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => void approve()}
+      >
+        <p>
+          请确认已核对所有统计、分析文字和改进措施。确认后将生成不可变的正式
+          DOCX，审核意见、签字和日期仍留给平台外审查。
+        </p>
+        {qualityAudit?.counts.errors ? (
+          <p className="text-warning">
+            自动审查仍有 {qualityAudit.counts.errors}{" "}
+            项严重数据缺口。确认不会补造缺失数据，正式报告仍会保留对应说明。
+          </p>
+        ) : null}
+        {error ? (
+          <p role="alert" className="text-destructive">
+            {error}
+          </p>
+        ) : null}
+      </ConfirmDialog>
     </div>
   );
 }
@@ -604,7 +629,13 @@ export function QualityReportWorkspace({
   }, [hasFocusedReport, focusedReportId]);
   if (!workspace && !error)
     return (
-      <div className="rounded-xl border bg-white p-6">正在加载报告工作区…</div>
+      <div
+        role="status"
+        aria-busy="true"
+        className="bg-card rounded-xl border p-6"
+      >
+        正在加载报告工作区…
+      </div>
     );
   if (!workspace)
     return (
@@ -626,9 +657,26 @@ export function QualityReportWorkspace({
     );
   return (
     <div className="space-y-6">
+      <WorkflowNavigation
+        steps={REPORT_WORKFLOW_STEPS}
+        current={reportWorkflowStage(
+          [...filteredReports]
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .find((item) => item.id === focusedReportId) ??
+            [...filteredReports].sort((a, b) =>
+              b.createdAt.localeCompare(a.createdAt),
+            )[0],
+        )}
+      />
+      <ScopeSummary
+        label="报告数据边界"
+        description="步骤提示对应当前记录范围内的最新或指定报告；阶段链接只定位页面，不清空当前填写内容。"
+      >
+        平台数据使用正式发布版本；上传数据仅用于本次报告，不写入成绩台账。
+      </ScopeSummary>
       <form
         id="quality-report-create"
-        className="space-y-6 rounded-2xl border bg-white p-5 shadow-sm sm:p-6"
+        className="workspace-panel bg-card scroll-mt-20 space-y-6 rounded-xl border p-4 sm:p-6"
         onSubmit={(event) => {
           event.preventDefault();
           void submit(event.currentTarget);
@@ -643,7 +691,7 @@ export function QualityReportWorkspace({
               选择样式与成绩来源，生成后核对分析内容并下载。
             </p>
           </div>
-          <span className="rounded-full bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700">
+          <span className="bg-brand-soft text-brand-strong rounded-md px-3 py-1.5 text-xs font-medium">
             生成审核稿 → 教师核对 → 下载正式报告
           </span>
         </div>
@@ -934,12 +982,18 @@ export function QualityReportWorkspace({
           </div>
         </details>
         {error ? (
-          <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <p
+            role="alert"
+            className="bg-danger-soft text-destructive rounded-md p-3 text-sm"
+          >
             {error}
           </p>
         ) : null}
         {message ? (
-          <p className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">
+          <p
+            role="status"
+            className="bg-success-soft text-success rounded-md p-3 text-sm"
+          >
             {message}
           </p>
         ) : null}
@@ -961,7 +1015,11 @@ export function QualityReportWorkspace({
           点击生成会采用当前模板设置，固定保存本次数据；审核通过后才提供正式报告。
         </p>
       </form>
-      <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
+
+      <section
+        id="quality-report-review"
+        className="workspace-panel bg-card scroll-mt-20 rounded-xl border p-4 sm:p-6"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">生成记录</h2>
@@ -1064,6 +1122,26 @@ export function QualityReportWorkspace({
                           ? "平台数据"
                           : "上传数据"}
                       </p>
+                      <StatusBadge
+                        tone={
+                          report.status === "FAILED"
+                            ? "danger"
+                            : report.reviewStatus === "APPROVED" &&
+                                report.status === "SUCCEEDED"
+                              ? "success"
+                              : "info"
+                        }
+                      >
+                        {report.status === "QUEUED"
+                          ? "等待生成"
+                          : report.status === "PROCESSING"
+                            ? "正在生成"
+                            : report.status === "FAILED"
+                              ? "生成失败"
+                              : report.reviewStatus === "APPROVED"
+                                ? "已审核"
+                                : "待教师核对"}
+                      </StatusBadge>
                       <p className="mt-1 text-sm font-medium text-sky-800">
                         {report.classroom?.id
                           ? report.classroom.name
@@ -1186,6 +1264,20 @@ export function QualityReportWorkspace({
           </div>
         )}
       </section>
+      <SectionPanel id="quality-report-download" label="正式文件下载指引">
+        <h2 className="text-base font-semibold">下载正式报告</h2>
+        <p className="text-muted-foreground mt-2 text-sm leading-6">
+          生成成功后，先在记录中逐项核对审核稿。教师确认后，该记录才会提供正式
+          DOCX；成绩工作簿也从对应记录下载。
+        </p>
+        <button
+          type="button"
+          onClick={() => setReportFilter("DONE")}
+          className="text-brand-strong mt-3 min-h-11 rounded-lg border px-4 text-sm font-medium"
+        >
+          查看已审核记录
+        </button>
+      </SectionPanel>
     </div>
   );
 }

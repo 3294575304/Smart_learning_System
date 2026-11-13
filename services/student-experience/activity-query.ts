@@ -108,6 +108,33 @@ export function activityHref(
 
 export const activityPageSize = 8;
 
+export function examListReturn(value: unknown, scope: Partial<ActivityQuery>) {
+  const anchor = scope.focus ? `#exam-${scope.focus}` : "";
+  const fallback = activityHref("exams", scope) + anchor;
+  if (
+    typeof value !== "string" ||
+    value.length > 1000 ||
+    (value !== "/student/exams" && !value.startsWith("/student/exams?"))
+  )
+    return fallback;
+  const url = new URL(value, "http://localhost");
+  if (url.pathname !== "/student/exams") return fallback;
+  const query = activityQuerySchema("exams").safeParse(
+    Object.fromEntries(url.searchParams),
+  );
+  if (
+    !query.success ||
+    (query.data.courseId && query.data.courseId !== scope.courseId) ||
+    (query.data.classroomId && query.data.classroomId !== scope.classroomId)
+  )
+    return fallback;
+  const focus = scope.focus ?? query.data.focus;
+  return (
+    activityHref("exams", { ...query.data, focus }) +
+    (focus ? `#exam-${focus}` : "")
+  );
+}
+
 export function activityPage<T>(items: T[], requestedPage: number) {
   const pageSize = activityPageSize;
   const total = items.length;

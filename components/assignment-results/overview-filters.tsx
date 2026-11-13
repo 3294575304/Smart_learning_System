@@ -44,12 +44,12 @@ export function TeacherResultsFilters({
       (!query.courseId || classroom.courseId === query.courseId) &&
       reportingClassroomMatches(classroom, query.section),
   );
-  const control = "h-10 w-full min-w-0 rounded-lg border bg-white px-3 text-sm";
+  const control = "h-10 w-full min-w-0 rounded-lg border bg-card px-3 text-sm";
   return (
     <div className="space-y-2">
       <form
         aria-label="成绩统计筛选"
-        className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,18rem)_8rem_minmax(10rem,16rem)_auto] lg:items-end"
+        className="bg-card grid gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,18rem)_8rem_minmax(10rem,16rem)_auto] lg:items-end"
         onChange={(event) => {
           const form = event.currentTarget;
           const course = form.elements.namedItem("courseId");
@@ -135,7 +135,7 @@ export function TeacherResultsFilters({
         <div className="flex items-end gap-2">
           <button
             type="submit"
-            className="h-10 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800"
+            className="bg-brand hover:bg-brand-strong h-10 rounded-lg px-4 text-sm font-medium text-white"
           >
             查看
           </button>
@@ -148,7 +148,7 @@ export function TeacherResultsFilters({
         </div>
       </form>
       {scopeChanged && (
-        <p role="status" className="text-sm text-sky-800">
+        <p role="status" className="text-brand-strong text-sm">
           原班级不属于新的课程或教学范围，已切换为该范围的全部班级。
         </p>
       )}

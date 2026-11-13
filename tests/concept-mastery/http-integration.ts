@@ -188,6 +188,11 @@ async function createPublishedGraphFixture(
       structureJson: {},
     },
   });
+  // 课程以指针字段判定「当前正式大纲」，只建已发布记录而不回填指针会被判定为未发布。
+  await prisma.course.update({
+    where: { id: courseId },
+    data: { currentPublishedSyllabusStructureId: publishedSyllabus.id },
+  });
   const graphDraft = await prisma.knowledgeGraphDraft.create({
     data: {
       courseId,
