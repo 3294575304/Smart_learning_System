@@ -1,5 +1,6 @@
 "use client";
 
+import { examClassroomHref } from "@/services/exams/classroom-navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
@@ -23,9 +24,11 @@ const time = (value: string | null) =>
     : "—";
 
 export function ExamMonitorPanel({
+  examId,
   initial,
   endpoint,
 }: {
+  examId: string;
   initial: Monitor;
   endpoint: string;
 }) {
@@ -184,7 +187,7 @@ export function ExamMonitorPanel({
                     {row.submissionId ? (
                       <Link
                         className="font-medium text-sky-800 hover:underline"
-                        href={`/teacher/assignments/${monitor.assignmentId}/submissions/${row.submissionId}`}
+                        href={`${examClassroomHref(examId, monitor.assignmentId)}/submissions/${row.submissionId}`}
                       >
                         查看答卷
                       </Link>

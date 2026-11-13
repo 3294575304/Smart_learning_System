@@ -26,6 +26,22 @@ export function buildBreadcrumbs(
   return segments
     .map((segment, index) => {
       const href = `/${segments.slice(0, index + 1).join("/")}`;
+      if (
+        segments[0] === "teacher" &&
+        segments[1] === "exams" &&
+        segments[3] === "classes" &&
+        index >= 4
+      ) {
+        const label =
+          index === 4
+            ? "班级试卷"
+            : index === 6
+              ? "个人答卷详情"
+              : segment === "results"
+                ? "成绩统计"
+                : "答卷与批改";
+        return { href, label, linkable: index < segments.length - 1 };
+      }
       const isTeacherCourseDetail =
         index === 2 &&
         segments[0] === "teacher" &&
@@ -144,9 +160,16 @@ export function buildBreadcrumbs(
     .filter(
       (item, index, items) =>
         !(
+          segments[0] === "teacher" &&
+          segments[1] === "exams" &&
+          segments[3] === "classes" &&
+          index === 3
+        ) &&
+        !(
           segments[0] === "student" &&
           ["submissions", "exams"].includes(segments[1]) &&
           index === 2
-        ) && !items.slice(index + 1).some((next) => next.href === item.href),
+        ) &&
+        !items.slice(index + 1).some((next) => next.href === item.href),
     );
 }

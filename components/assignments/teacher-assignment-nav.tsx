@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
 
 export function TeacherAssignmentNav({
   assignmentId,
@@ -9,6 +10,9 @@ export function TeacherAssignmentNav({
   active: "content" | "submissions" | "results";
   examSessionId?: string | null;
 }) {
+  const base = teacherAssessmentHref(assignmentId, examSessionId);
+  // Match the exam classroom entry: use browser navigation for all exam tabs.
+  const TabLink = examSessionId ? "a" : Link;
   return (
     <nav
       aria-label={examSessionId ? "当前考试导航" : "当前作业导航"}
@@ -16,33 +20,23 @@ export function TeacherAssignmentNav({
     >
       {(
         [
-          [
-            "content",
-            examSessionId ? "查看试卷" : "作业内容",
-            `/teacher/assignments/${assignmentId}`,
-          ],
+          ["content", examSessionId ? "查看试卷" : "作业内容", base],
           [
             "submissions",
-            "提交与批改",
-            `/teacher/assignments/${assignmentId}/submissions`,
+            examSessionId ? "答卷与批改" : "提交与批改",
+            `${base}/submissions`,
           ],
-          [
-            "results",
-            "成绩统计",
-            `/teacher/assignments/${assignmentId}/results`,
-          ],
+          ["results", "成绩统计", `${base}/results`],
         ] as const
       ).map(([key, label, href]) => (
-        <Link
+        <TabLink
           key={key}
-          href={
-            examSessionId ? `${href}?source=exam&examId=${examSessionId}` : href
-          }
+          href={href}
           aria-current={key === active ? "page" : undefined}
           className={`rounded-lg px-4 py-2 text-sm font-medium ${key === active ? "bg-sky-50 text-sky-800" : "text-slate-600 hover:bg-slate-50"}`}
         >
           {label}
-        </Link>
+        </TabLink>
       ))}
     </nav>
   );

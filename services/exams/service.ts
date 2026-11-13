@@ -444,7 +444,12 @@ export async function getTeacherExamIdForAssignment(
   assignmentId: string,
 ) {
   const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, teacherId },
+    where: {
+      id: assignmentId,
+      teacherId,
+      deletedAt: null,
+      examSession: { teacherId },
+    },
     select: { examSessionId: true },
   });
   return assignment?.examSessionId ?? null;

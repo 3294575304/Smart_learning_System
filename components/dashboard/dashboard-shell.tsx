@@ -627,11 +627,9 @@ export function DashboardShell({
           data-workspace-role={user.role}
           className={cn(
             "mx-auto w-full min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8",
-            user.role === Role.STUDENT
-              ? "max-w-7xl"
-              : user.role === Role.TEACHER && pathname === "/teacher"
-                ? "max-w-none lg:py-5"
-                : "max-w-7xl",
+            user.role === Role.TEACHER && pathname === "/teacher"
+              ? "max-w-none lg:py-5"
+              : "max-w-7xl",
           )}
         >
           {platformAnnouncement ? (

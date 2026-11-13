@@ -83,7 +83,7 @@ export interface ExamAnalysisSnapshot {
   unmappedQuestions: number;
 }
 
-const examSelect = Prisma.validator<Prisma.ExamSessionSelect>()({
+const examHeaderFields = {
   id: true,
   teacherId: true,
   courseId: true,
@@ -93,6 +93,10 @@ const examSelect = Prisma.validator<Prisma.ExamSessionSelect>()({
   endsAt: true,
   allowedSwitches: true,
   cancelledAt: true,
+} as const satisfies Prisma.ExamSessionSelect;
+
+const examSelect = Prisma.validator<Prisma.ExamSessionSelect>()({
+  ...examHeaderFields,
   questionUses: {
     select: {
       questionId: true,
@@ -596,6 +600,25 @@ async function calculate(exam: ExamRecord, thresholds: ExamThresholds) {
     unmappedQuestions,
   };
   return snapshot;
+}
+
+export async function getTeacherExamHeader(teacherId: string, examId: string) {
+  const exam = await prisma.examSession.findFirst({
+    where: { id: examId, teacherId },
+    select: {
+      ...examHeaderFields,
+      assignments: {
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          classroomId: true,
+          classroom: { select: { name: true } },
+        },
+      },
+    },
+  });
+  if (!exam) throw new ResourceNotFoundError("考试不存在");
+  return exam;
 }
 
 export async function getTeacherExamDetails(teacherId: string, examId: string) {

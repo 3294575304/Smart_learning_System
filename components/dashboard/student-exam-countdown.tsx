@@ -31,7 +31,7 @@ export function StudentExamCountdown({
     <p
       role="timer"
       aria-live="off"
-      className="text-sm font-medium text-sky-100 tabular-nums"
+      className="text-brand-strong text-sm font-medium tabular-nums"
     >
       {canEnter ? "距截止" : "距开考"}{" "}
       <span className="whitespace-nowrap">

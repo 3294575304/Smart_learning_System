@@ -1,5 +1,6 @@
 "use client";
 
+import { examClassroomHref } from "@/services/exams/classroom-navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -26,11 +27,13 @@ const button =
   "min-h-10 rounded-lg border px-3 text-sm font-medium text-sky-800 hover:bg-sky-50 disabled:opacity-50";
 
 export function ExamResultManagement({
+  examId,
   assignmentId,
   endpoint,
   data,
   canConfigure,
 }: {
+  examId: string;
   assignmentId: string;
   endpoint: string;
   data: Management;
@@ -107,7 +110,7 @@ export function ExamResultManagement({
           )}
           <Link
             className="font-medium text-sky-800 hover:underline"
-            href={`/teacher/assignments/${assignmentId}/results`}
+            href={`${examClassroomHref(examId, assignmentId)}/results`}
           >
             查看本班成绩与答卷
           </Link>
@@ -210,7 +213,7 @@ export function ExamResultManagement({
                   </span>
                   <Link
                     className="text-sky-800 hover:underline"
-                    href={`/teacher/assignments/${assignmentId}/submissions/${review.submission.id}`}
+                    href={`${examClassroomHref(examId, assignmentId)}/submissions/${review.submission.id}`}
                   >
                     核对原答卷
                   </Link>

@@ -12,6 +12,7 @@ import { CompleteGradingButton } from "./complete-grading-button";
 import { ProgrammingAttemptActions } from "./programming-attempt-actions";
 import { hundredPointScore } from "@/services/assignments/presentation";
 import { personalWorkHref } from "@/services/assignments/personal-work-navigation";
+import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
 import {
   answerOutcome,
   outcomeLabels,
@@ -29,10 +30,12 @@ export function SubmissionGradingWorkspace({
   initialSubmission,
   filter: selectedFilter,
   back,
+  examId,
 }: {
   initialSubmission: TeacherSubmissionDetail;
   filter: "ALL" | "WRONG";
   back: { href: string; label: string };
+  examId?: string | null;
 }) {
   const [updated, setUpdated] = useState<TeacherSubmissionDetail | null>(null);
   const [mutationBusy, setMutationBusy] = useState(false);
@@ -86,7 +89,7 @@ export function SubmissionGradingWorkspace({
         <div className="grid min-w-0 gap-5 sm:grid-cols-[minmax(0,1fr)_11.5rem]">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-slate-900">
-              个人作答详情
+              {examId ? "个人答卷详情" : "个人作答详情"}
             </h1>
             <p className="mt-2 text-sm leading-6 [overflow-wrap:anywhere] text-slate-600">
               {submission.assignment.title}
@@ -128,9 +131,11 @@ export function SubmissionGradingWorkspace({
             </dl>
           </div>
           <aside className="flex flex-wrap items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start">
-            <AssignmentCategoryBadge
-              category={submission.assignment.category ?? "PRACTICE"}
-            />
+            {!examId && (
+              <AssignmentCategoryBadge
+                category={submission.assignment.category ?? "PRACTICE"}
+              />
+            )}
             <div className="bg-brand-soft min-w-0 rounded-lg border border-sky-100 px-4 py-3 sm:w-full">
               <p className="text-brand-strong text-xs">总成绩 · 百分制</p>
               <p className="text-brand mt-1 text-3xl font-bold tabular-nums">
@@ -209,9 +214,9 @@ export function SubmissionGradingWorkspace({
           </p>
           <a
             className="inline-flex min-h-10 shrink-0 items-center rounded-lg border border-sky-200 px-3 text-sm font-medium text-sky-800 transition-colors duration-150 hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
-            href={`/teacher/assignments/${submission.assignment.id}/results`}
+            href={`${teacherAssessmentHref(submission.assignment.id, examId)}/results`}
           >
-            作业成绩与公布
+            {examId ? "考试成绩与公布" : "作业成绩与公布"}
           </a>
         </div>
       </header>
@@ -228,6 +233,7 @@ export function SubmissionGradingWorkspace({
                   attempt.id,
                   back.href,
                   selectedFilter,
+                  examId,
                 )}
               >
                 第 {attempt.attemptNumber} 次 · {i === 0 ? "最新有效" : "历史"}
@@ -254,6 +260,7 @@ export function SubmissionGradingWorkspace({
                 submission.id,
                 back.href,
                 filter,
+                examId,
               )}
             >
               {label} {total}
@@ -265,7 +272,9 @@ export function SubmissionGradingWorkspace({
         <div className="rounded-xl border border-dashed bg-white p-8 text-center text-sm text-slate-500">
           {questions.length
             ? "当前筛选下没有题目。"
-            : "该作业没有可显示的冻结题目。"}
+            : examId
+              ? "该试卷没有可显示的冻结题目。"
+              : "该作业没有可显示的冻结题目。"}
           {questions.length > 0 && (
             <a
               className="ml-2 text-sky-700 underline"
@@ -273,6 +282,8 @@ export function SubmissionGradingWorkspace({
                 submission.assignment.id,
                 submission.id,
                 back.href,
+                "ALL",
+                examId,
               )}
             >
               查看全部

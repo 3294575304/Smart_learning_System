@@ -15,26 +15,29 @@ export function StudentHomeView({
   insights?: ReactNode;
 }) {
   return (
-    <PageContainer className="text-foreground border-border bg-surface @container rounded-xl border p-4 sm:p-6">
+    <PageContainer
+      width="wide"
+      className="student-home-dashboard text-foreground @container space-y-3"
+    >
       {/*
         页头补一行副标题：原先标题下直接是两个等权按钮，
         学生进门第一眼看到的是"自主练习/我的题库"两个入口，
         而不是"我还有几件事"。副标题把待办总量翻到标题下方，
         两个入口用同色系的描边与实底区分主次。
       */}
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="min-w-0 text-[26px] leading-tight font-semibold [overflow-wrap:anywhere]">
             {name}，你好
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
             {overview.total > 0
-              ? `共 ${overview.total} 项待办待处理，先做临近截止的`
+              ? `还有 ${overview.total} 项待办`
               : "当前没有待办，可以按自己的节奏练习"}
           </p>
         </div>
         <p className="sr-only">
-          先处理近期任务，再查看学习进展。首页最多展示 5 项待办。
+          先处理近期任务，再查看学习进展。待办较多时，可在列表内滚动。
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <StudentPageLink

@@ -68,6 +68,9 @@ test("主页空看板不补造学习时长、成绩或知识评估", () => {
   }
   assert.match(summary, /暂无成绩/);
   assert.match(html, /暂无待办/);
+  assert.match(html, /暂无考试安排和记录/u);
+  assert.match(html, /课程知识掌握/u);
+  assert.match(html, /作业提交进度/u);
   assert.doesNotMatch(html, /NaN|Infinity|学习时长|AI互动次数|累计登录/);
 });
 test("同名课程分别展示，结课记录不混入当前汇总，待办分布使用完整聚合", () => {
@@ -80,25 +83,25 @@ test("同名课程分别展示，结课记录不混入当前汇总，待办分�
     React.createElement(StudentHomeInsights, {
       classes,
       selected: classes[1],
-      overview: {
-        ...overview,
-        total: 4,
-        counts: {
-          exam: 0,
-          examUpcoming: 0,
-          assignment: 2,
-          attendance: 1,
-          survey: 1,
-        },
-      },
+      overview,
     }),
   );
   assert.match(html, /75%/);
   assert.match(html, /已交 3\/4 项/);
   assert.doesNotMatch(html, /含已结束考试/);
-  assert.match(html, /作业 2/);
-  assert.match(html, /签到 1/);
-  assert.match(html, /问卷 1/);
+  const tasksHtml = renderToStaticMarkup(
+    React.createElement(StudentHomeInsights, {
+      classes,
+      overview: {
+        ...overview,
+        total: 4,
+        counts: { ...overview.counts, assignment: 2, attendance: 1, survey: 1 },
+      },
+    }),
+  );
+  assert.match(tasksHtml, /作业 2/);
+  assert.match(tasksHtml, /签到 1/);
+  assert.match(tasksHtml, /问卷 1/);
   assert.ok(html.includes('value="one"'));
   assert.ok(html.includes('value="two" selected=""'));
   assert.match(html, /Python · 班级one/);
