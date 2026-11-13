@@ -95,6 +95,22 @@ export const changeInitialPasswordSchema = z
     path: ["confirmPassword"],
   });
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string()
+      .min(1, "请输入当前密码")
+      .max(72, "当前密码长度不能超过 72 个字符")
+      .refine(fitsBcryptLimit, "当前密码的 UTF-8 长度不能超过 72 字节"),
+    password: strongPasswordSchema,
+    confirmPassword: z.string().min(1, "请再次输入新密码"),
+  })
+  .strict("密码信息包含不允许的字段")
+  .refine((input) => input.password === input.confirmPassword, {
+    message: "两次输入的新密码不一致",
+    path: ["confirmPassword"],
+  });
+
 export const classroomIdSchema = z.string().cuid("班级 ID 格式无效");
 
 export type LoginInput = z.input<typeof loginSchema>;
@@ -107,3 +123,5 @@ export type ChangeInitialPasswordInput = z.input<
 export type ChangeInitialPasswordData = z.output<
   typeof changeInitialPasswordSchema
 >;
+export type ChangePasswordInput = z.input<typeof changePasswordSchema>;
+export type ChangePasswordData = z.output<typeof changePasswordSchema>;

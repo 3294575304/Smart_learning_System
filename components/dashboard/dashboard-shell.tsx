@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   GraduationCap,
+  KeyRound,
   Menu,
   Users,
   UserPlus,
@@ -22,6 +23,7 @@ import {
 } from "@/components/dashboard/navigation-memory";
 import { AdminDashboardCacheProvider } from "@/components/admin/dashboard/admin-dashboard-cache";
 import { SchoolIdentity } from "@/components/dashboard/school-identity";
+import { ChangePasswordDialog } from "@/components/auth/change-password-dialog";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
 import { buildBreadcrumbs } from "@/components/dashboard/breadcrumbs";
@@ -232,6 +234,8 @@ export function DashboardShell({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [joinClassroomDialogOpen, setJoinClassroomDialogOpen] = useState(false);
+  const [passwordChangeDialogOpen, setPasswordChangeDialogOpen] =
+    useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const menuDialogRef = useRef<HTMLDivElement>(null);
   const menuOpenButtonRef = useRef<HTMLButtonElement>(null);
@@ -247,15 +251,18 @@ export function DashboardShell({
     setMobileMenuOpen(false);
     setAccountMenuOpen(false);
     setJoinClassroomDialogOpen(false);
+    setPasswordChangeDialogOpen(false);
   }, [pathname]);
 
   useEffect(() => {
     document.body.style.overflow =
-      mobileMenuOpen || joinClassroomDialogOpen ? "hidden" : "";
+      mobileMenuOpen || joinClassroomDialogOpen || passwordChangeDialogOpen
+        ? "hidden"
+        : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [joinClassroomDialogOpen, mobileMenuOpen]);
+  }, [joinClassroomDialogOpen, mobileMenuOpen, passwordChangeDialogOpen]);
 
   // 移动端导航抽屉：Esc 关闭、焦点移入并在抽屉内循环，关闭后归还给触发按钮。
   // 没有这一段时，Tab 会跑到遮罩之后的正文，Esc 也关不掉。
@@ -481,7 +488,20 @@ export function DashboardShell({
                   加入班级
                 </button>
               ) : null}
-              <LogoutButton />
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  className="flex items-center gap-2 rounded-md border border-sky-200 px-3 py-2 text-sm font-medium text-sky-800 transition hover:bg-sky-50"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setPasswordChangeDialogOpen(true);
+                  }}
+                  type="button"
+                >
+                  <KeyRound aria-hidden="true" className="h-4 w-4" />
+                  修改密码
+                </button>
+                <LogoutButton />
+              </div>
             </div>
           </aside>
         </div>
@@ -583,7 +603,18 @@ export function DashboardShell({
                         加入班级
                       </button>
                     ) : null}
-                    <div className="pt-3">
+                    <div className="flex items-center justify-between gap-2 border-t border-sky-100 pt-3">
+                      <button
+                        className="flex items-center gap-2 rounded-md border border-sky-200 px-3 py-2 text-sm font-medium text-sky-800 transition hover:bg-sky-50"
+                        onClick={() => {
+                          setAccountMenuOpen(false);
+                          setPasswordChangeDialogOpen(true);
+                        }}
+                        type="button"
+                      >
+                        <KeyRound aria-hidden="true" className="h-4 w-4" />
+                        修改密码
+                      </button>
                       <LogoutButton />
                     </div>
                   </div>
@@ -672,6 +703,10 @@ export function DashboardShell({
           </section>
         </div>
       ) : null}
+      <ChangePasswordDialog
+        open={passwordChangeDialogOpen}
+        onClose={() => setPasswordChangeDialogOpen(false)}
+      />
     </div>
   );
 }

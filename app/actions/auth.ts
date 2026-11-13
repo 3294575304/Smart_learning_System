@@ -16,6 +16,7 @@ import {
 } from "@/services/auth/registration";
 import {
   adminLoginSchema,
+  changePasswordSchema,
   changeInitialPasswordSchema,
   loginSchema,
   registerSchema,
@@ -27,11 +28,14 @@ import {
 } from "@/services/auth/session";
 import type {
   AdminLoginInput,
+  ChangePasswordInput,
   ChangeInitialPasswordInput,
   LoginInput,
   RegisterInput,
 } from "@/services/auth/schemas";
 import {
+  changePassword,
+  ChangePasswordError,
   changeInitialPassword,
   ChangeInitialPasswordError,
 } from "@/services/auth/change-password";
@@ -304,6 +308,51 @@ export async function changeInitialPasswordAction(
     const status = getErrorStatus(error);
     if (status >= 500) {
       console.error("Failed to change initial password", error);
+    }
+    return {
+      success: false,
+      error: getSafeErrorMessage(error),
+      status,
+    };
+  }
+}
+
+export async function changePasswordAction(
+  input: ChangePasswordInput,
+): Promise<ActionResult<{ changed: boolean }>> {
+  const parsed = changePasswordSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "请检查密码信息",
+      status: 400,
+      fieldErrors: fieldErrors(parsed.error.flatten().fieldErrors),
+    };
+  }
+
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    await destroyCurrentSession();
+    return { success: false, error: "请先登录", status: 401 };
+  }
+
+  try {
+    await changePassword(currentUser.id, parsed.data);
+    await createSession(currentUser.id);
+    return { success: true, data: { changed: true } };
+  } catch (error: unknown) {
+    if (error instanceof ChangePasswordError) {
+      return {
+        success: false,
+        error: error.message,
+        status: error.status,
+        fieldErrors: error.fieldErrors,
+      };
+    }
+    const status = getErrorStatus(error);
+    if (status >= 500) {
+      console.error("Failed to change password", error);
     }
     return {
       success: false,
