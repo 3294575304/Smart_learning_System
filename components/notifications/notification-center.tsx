@@ -3,6 +3,7 @@
 import { NotificationPriority, NotificationType } from "@prisma/client";
 import {
   AlarmClock,
+  CalendarCheck2,
   BarChart3,
   Bell,
   Check,
@@ -29,12 +30,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorDialog } from "@/components/assignments/editor-dialog";
 import type { NotificationDismissRequest } from "@/services/notifications/schemas";
 import { NotificationLink } from "@/components/notifications/notification-link";
+import { notificationDetailsHref } from "@/components/notifications/presenters";
 
 import { NOTIFICATIONS_CHANGED_EVENT } from "@/components/notifications/notification-indicator";
 import { requestNotificationApi } from "@/components/notifications/request-api";
 import type { NotificationListResult } from "@/services/notifications/types";
 
 const TYPE_LABELS: Record<NotificationType, string> = {
+  ATTENDANCE_PUBLISHED: "课堂签到",
   ASSIGNMENT_PUBLISHED: "作业发布",
   ASSIGNMENT_REVOKED: "作业撤销",
   ASSIGNMENT_DUE_SOON: "截止提醒",
@@ -62,6 +65,11 @@ const TYPE_STYLES: Record<
   NotificationType,
   { icon: LucideIcon; accent: string; pill: string }
 > = {
+  ATTENDANCE_PUBLISHED: {
+    icon: CalendarCheck2,
+    accent: "bg-cyan-50 text-cyan-600 ring-cyan-100",
+    pill: "bg-cyan-50 text-cyan-700 ring-cyan-200/70",
+  },
   ASSIGNMENT_PUBLISHED: {
     icon: FilePlus,
     accent: "bg-sky-50 text-sky-600 ring-sky-100",
@@ -180,11 +188,14 @@ export function NotificationCenter({
   const load = useCallback(async function load(
     page: number,
     nextFilters: Filters,
+    background = false,
   ) {
     const version = ++requestVersion.current;
-    setLoading(true);
-    setSelectedIds([]);
-    setError(null);
+    if (!background) {
+      setLoading(true);
+      setSelectedIds([]);
+      setError(null);
+    }
     const params = new URLSearchParams({ page: String(page), pageSize: "20" });
     if (nextFilters.status) params.set("status", nextFilters.status);
     if (nextFilters.type) params.set("type", nextFilters.type);
@@ -194,13 +205,17 @@ export function NotificationCenter({
       { cache: "no-store" },
     );
     if (version !== requestVersion.current) return;
-    setLoading(false);
+    if (!background) setLoading(false);
     if (!response.success) {
-      setError(response.error);
+      if (!background) setError(response.error);
       return;
     }
     if (page > 1 && response.data.items.length === 0) {
-      await load(Math.max(1, response.data.pagination.totalPages), nextFilters);
+      await load(
+        Math.max(1, response.data.pagination.totalPages),
+        nextFilters,
+        background,
+      );
       return;
     }
     setResult(response.data);
@@ -209,6 +224,33 @@ export function NotificationCenter({
   useEffect(() => {
     void load(1, { status: "", type: "", priority: "" });
   }, [load]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (
+        document.visibilityState === "visible" &&
+        !loading &&
+        !mutating &&
+        !removal &&
+        selectedIds.length === 0
+      )
+        void load(result.pagination.page, filters, true);
+    };
+    const timer = window.setInterval(refresh, 15_000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [
+    filters,
+    load,
+    loading,
+    mutating,
+    removal,
+    result.pagination.page,
+    selectedIds.length,
+  ]);
 
   function applyFilter<Key extends keyof Filters>(
     key: Key,
@@ -220,6 +262,8 @@ export function NotificationCenter({
   }
 
   async function markOneRead(notificationId: string) {
+    requestVersion.current += 1;
+    setLoading(false);
     setError(null);
     setPendingReadId(notificationId);
     const response = await requestNotificationApi<{ readAt: Date }>(
@@ -247,6 +291,8 @@ export function NotificationCenter({
 
   async function markAllRead() {
     if (mutating) return;
+    requestVersion.current += 1;
+    setLoading(false);
     setMarkingAll(true);
     setError(null);
     setMessage(null);
@@ -267,6 +313,8 @@ export function NotificationCenter({
 
   async function confirmRemoval() {
     if (!removal || removalInFlight.current) return;
+    requestVersion.current += 1;
+    setLoading(false);
     removalInFlight.current = true;
     setRemoving(true);
     setRemovalError(null);
@@ -566,6 +614,7 @@ export function NotificationCenter({
       ) : (
         <div className="space-y-2.5">
           {result.items.map((item) => {
+            const detailsHref = notificationDetailsHref(item);
             const unread = item.readAt === null;
             const typeStyle = TYPE_STYLES[item.type];
             const TypeIcon = typeStyle.icon;
@@ -658,11 +707,27 @@ export function NotificationCenter({
                     </div>
                   </div>
                   <div className="col-span-2 flex w-full flex-wrap items-center gap-2 sm:col-span-1 sm:w-[14.5rem] sm:flex-nowrap sm:justify-end sm:self-center">
-                    <NotificationLink
-                      href={`/notifications/${encodeURIComponent(item.id)}`}
-                      label="查看详情"
-                      className={ACTION_LINK}
-                    />
+                    {detailsHref ? (
+                      <NotificationLink
+                        href={detailsHref}
+                        label="查看详情"
+                        className={ACTION_LINK}
+                        onClick={
+                          item.type === "ATTENDANCE_PUBLISHED" && unread
+                            ? () => void markOneRead(item.id)
+                            : undefined
+                        }
+                      />
+                    ) : (
+                      <span
+                        aria-disabled="true"
+                        aria-label={item.actionMessage ?? "签到暂不可查看"}
+                        title={item.actionMessage}
+                        className={`${ACTION_BUTTON} cursor-not-allowed opacity-50`}
+                      >
+                        签到不可用
+                      </span>
+                    )}
                     {unread ? (
                       <button
                         aria-label={`将“${item.title}”标记为已读`}

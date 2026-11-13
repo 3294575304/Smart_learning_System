@@ -33,13 +33,22 @@ export function graphChapterColors(graph: KnowledgeGraphStructure) {
 
 export function chineseGraphLabel(name: string, maxLineLength = 10) {
   const chars = Array.from(name.trim());
-  if (chars.length <= maxLineLength) return name.trim();
-  const first = chars.slice(0, maxLineLength).join("");
-  const second = chars.slice(maxLineLength, maxLineLength * 2).join("");
-  return `${first}\n${second}${chars.length > maxLineLength * 2 ? "…" : ""}`;
+  const lines = [""];
+  let width = 0;
+  for (const char of chars) {
+    const charWidth = /[\u0020-\u007e]/u.test(char) ? 0.55 : 1;
+    if (width + charWidth > maxLineLength) {
+      if (lines.length === 2) return `${lines.join("\n").trimEnd()}…`;
+      lines.push("");
+      width = 0;
+    }
+    lines[lines.length - 1] += char;
+    width += charWidth;
+  }
+  return lines.map((line) => line.trim()).join("\n");
 }
 
-/** 章节按教学顺序排列，知识点留在所属章节附近，阅读时不再持续漂移。 */
+/** 课程居中、章节作为第二层，知识点沿各章外侧扇区扩展的稳定平面网络。 */
 export function chapterGraphLayout(graph: KnowledgeGraphStructure) {
   const ordered = [...graph.nodes].sort(
     (a, b) =>
@@ -61,41 +70,35 @@ export function chapterGraphLayout(graph: KnowledgeGraphStructure) {
     string,
     { x: number; y: number; z: number; color: string }
   >();
-  // 每行最多三章，按顺序分区；避免放射状布局把章节标题挤在中心。
-  const columns = Math.min(
-    3,
-    Math.max(1, Math.ceil(Math.sqrt(chapters.length))),
+  const radius = Math.max(180, chapters.length * 16);
+  const sectorAngle = (Math.PI * 2) / Math.max(3, chapters.length);
+  const largestPointRows = Math.max(
+    1,
+    ...[...pointsByChapter.values()].map((points) =>
+      Math.ceil(points.length / 3),
+    ),
   );
-  const rowHeights = Array.from(
-    { length: Math.ceil(chapters.length / columns) },
-    (_, row) => {
-      const pointRows = chapters
-        .slice(row * columns, (row + 1) * columns)
-        .map((chapter) =>
-          Math.ceil((pointsByChapter.get(chapter.key)?.length ?? 0) / 3),
-        );
-      return Math.max(260, 180 + Math.max(0, ...pointRows) * 95);
-    },
-  );
-  const top = rowHeights.reduce((total, height) => total + height, 0) / 2;
   ordered
     .filter((node) => node.type === "COURSE")
     .forEach((node, index) =>
       positions.set(node.key, {
-        x: index * 180,
-        y: top + 150,
+        x: index * 60,
+        y: 0,
         z: 0,
         color: "#0f172a",
       }),
     );
   chapters.forEach((chapter, index) => {
-    const chapterRow = Math.floor(index / columns);
-    const x = ((index % columns) - (columns - 1) / 2) * 440;
-    const y =
-      top -
-      rowHeights
-        .slice(0, chapterRow)
-        .reduce((total, height) => total + height, 0);
+    const angle =
+      Math.PI / 2 -
+      (index * Math.PI * 2) / chapters.length +
+      Math.sin(index * 2.4) * sectorAngle * 0.16;
+    // 固定错层和横向展开打破圆环感；仍按顺序分区，筛选不会重新洗牌。
+    const distance = radius * (0.85 + (index % 3) * 0.13);
+    const x = Math.cos(angle) * distance * 1.22;
+    const y = Math.sin(angle) * distance * 0.9;
+    const chapterDistance = Math.hypot(x, y);
+    const outward = { x: x / chapterDistance, y: y / chapterDistance };
     const color = colors.get(chapter.key) ?? "#0369a1";
     positions.set(chapter.key, {
       x,
@@ -107,19 +110,25 @@ export function chapterGraphLayout(graph: KnowledgeGraphStructure) {
     points.forEach((node, pointIndex) => {
       const row = Math.floor(pointIndex / 3);
       const rowSize = Math.min(3, points.length - row * 3);
+      // 子点沿章节向外生长，深度与横向偏移错开，避免形成规则同心圆。
+      const depth = 78 + row * 47 + (pointIndex % 3) * 11 + (index % 2) * 8;
+      const lateral =
+        ((pointIndex % 3) - (rowSize - 1) / 2) * (42 + row * 8) +
+        Math.sin((index + 1) * (pointIndex + 1) * 1.7) * 12;
       positions.set(node.key, {
-        x: x + ((pointIndex % 3) - (rowSize - 1) / 2) * 110,
-        y: y - 105 - row * 95,
-        z: ((pointIndex % 3) - 1) * 20,
+        x: x + outward.x * depth - outward.y * lateral,
+        y: y + outward.y * depth + outward.x * lateral,
+        z: 0,
         color,
       });
     });
   });
   const remaining = ordered.filter((node) => !positions.has(node.key));
   remaining.forEach((node, index) => {
+    const angle = Math.PI / 2 - (index * Math.PI * 2) / remaining.length;
     positions.set(node.key, {
-      x: ((index % 3) - 1) * 180,
-      y: -top - 100 - Math.floor(index / 3) * 100,
+      x: Math.cos(angle) * (radius + 140 + largestPointRows * 56),
+      y: Math.sin(angle) * (radius + 140 + largestPointRows * 56),
       z: 0,
       color: "#047857",
     });

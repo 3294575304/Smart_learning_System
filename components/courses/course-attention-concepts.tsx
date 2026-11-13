@@ -14,7 +14,7 @@ function ConceptRow({ concept }: { concept: CourseAttentionConceptSummary }) {
         </span>
       </div>
       <p className="mt-1 text-xs leading-5 text-slate-500">
-        {concept.code} · {concept.studentCount} 名学生可评估 ·{" "}
+        {concept.code} · {concept.studentCount} 名学生已评估 ·{" "}
         {concept.attentionStudentCount} 名低于 60%
       </p>
       <div

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Candidate {
   id: string;
@@ -10,6 +10,16 @@ interface Candidate {
 
 export function RandomStudentPicker({ students }: { students: Candidate[] }) {
   const [pickedIds, setPickedIds] = useState<string[]>([]);
+  const [rollingStudent, setRollingStudent] = useState<Candidate | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawing = useRef(false);
+  const isDrawing = rollingStudent !== null;
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    },
+    [],
+  );
   const pickedSet = new Set(pickedIds);
   const remaining = students.filter((student) => !pickedSet.has(student.id));
   const selected = students.find(
@@ -17,14 +27,45 @@ export function RandomStudentPicker({ students }: { students: Candidate[] }) {
   );
 
   function draw() {
+    if (drawing.current) return;
     const pool = remaining.length ? remaining : students;
     if (pool.length === 0) return;
+    drawing.current = true;
     const index = Math.floor(Math.random() * pool.length);
     const chosenId = pool[index].id;
-    setPickedIds((ids) =>
-      remaining.length === 0 ? [chosenId] : [...ids, chosenId],
-    );
+    // 只抽取一次最终结果；跳动姓名只是展示，不提前消耗本轮名额。
+    const finish = () => {
+      timer.current = null;
+      drawing.current = false;
+      setPickedIds((ids) =>
+        remaining.length === 0 ? [chosenId] : [...ids, chosenId],
+      );
+      setRollingStudent(null);
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setRollingStudent(pool[index]);
+      timer.current = setTimeout(finish, 300);
+      return;
+    }
+    let frame = 0;
+    let displayIndex = Math.floor(Math.random() * pool.length);
+    const roll = () => {
+      if (frame === 24) {
+        finish();
+        return;
+      }
+      if (pool.length > 1)
+        displayIndex =
+          (displayIndex + 1 + Math.floor(Math.random() * (pool.length - 1))) %
+          pool.length;
+      setRollingStudent(pool[displayIndex]);
+      frame++;
+      timer.current = setTimeout(roll, 45 + Math.pow(frame / 24, 3) * 200);
+    };
+    roll();
   }
+
+  const displayedStudent = rollingStudent ?? selected;
 
   return (
     <div className="rounded-xl border bg-white p-6 sm:p-8">
@@ -32,18 +73,23 @@ export function RandomStudentPicker({ students }: { students: Candidate[] }) {
         共 {students.length} 名在读学生 · 本轮还可抽取 {remaining.length} 人
       </p>
       <div
-        aria-live="polite"
-        className="mt-5 flex min-h-36 flex-col items-center justify-center rounded-xl border border-sky-200 bg-sky-50 p-6 text-center"
+        aria-live={isDrawing ? "off" : "polite"}
+        aria-busy={isDrawing}
+        className={`mt-5 flex min-h-36 flex-col items-center justify-center rounded-xl border p-6 text-center transition-colors ${isDrawing ? "border-sky-300 bg-gradient-to-br from-sky-50 via-cyan-50 to-indigo-50" : "border-sky-200 bg-sky-50"}`}
       >
-        {selected ? (
+        {displayedStudent ? (
           <>
-            <p className="text-xs text-sky-700">本次抽中</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">
-              {selected.name}
+            <p className="text-xs text-sky-700">
+              {isDrawing ? "正在抽取…" : "本次抽中"}
             </p>
-            {selected.studentNo && (
+            <p
+              className={`mt-2 text-3xl font-semibold ${isDrawing ? "text-sky-700 motion-safe:animate-pulse" : "text-slate-900"}`}
+            >
+              {displayedStudent.name}
+            </p>
+            {displayedStudent.studentNo && (
               <p className="mt-1 text-sm text-slate-600">
-                学号 {selected.studentNo}
+                学号 {displayedStudent.studentNo}
               </p>
             )}
           </>
@@ -55,15 +101,20 @@ export function RandomStudentPicker({ students }: { students: Candidate[] }) {
         <button
           type="button"
           onClick={draw}
-          disabled={students.length === 0}
-          className="rounded-lg bg-sky-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2"
+          disabled={students.length === 0 || isDrawing}
+          className="rounded-lg bg-sky-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
         >
-          {remaining.length === 0 ? "开始新一轮" : "随机选人"}
+          {isDrawing
+            ? "抽取中…"
+            : remaining.length === 0
+              ? "开始新一轮"
+              : "随机选人"}
         </button>
         <button
           type="button"
           onClick={() => setPickedIds([])}
-          className="rounded-lg border px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2"
+          disabled={isDrawing}
+          className="rounded-lg border px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-50"
         >
           重置本轮
         </button>

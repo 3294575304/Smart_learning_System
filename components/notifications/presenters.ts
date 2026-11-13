@@ -1,4 +1,15 @@
 import { NotificationType } from "@prisma/client";
+import type { NotificationListItem } from "@/services/notifications/types";
+
+export function notificationDetailsHref(
+  item: Pick<NotificationListItem, "id" | "type" | "action">,
+): string | null {
+  if (item.type === NotificationType.ATTENDANCE_PUBLISHED)
+    return item.action?.kind === "LINK"
+      ? resolveNotificationDestination(item.type, item.action.href)
+      : null;
+  return `/notifications/${encodeURIComponent(item.id)}`;
+}
 
 export function formatUnreadBadge(count: number): string | null {
   const safeCount = Math.max(0, Math.trunc(count));

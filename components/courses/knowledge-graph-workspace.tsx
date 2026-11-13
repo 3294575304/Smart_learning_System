@@ -707,8 +707,11 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
               </select>
             </div>
           </details>
-          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-            <div className="grid min-w-0 gap-3 lg:grid-cols-[180px_minmax(0,1fr)]">
+          <div className="mt-4 grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+            <aside
+              className="min-w-0 rounded-xl border border-slate-200 bg-white"
+              aria-label="章节与知识点目录"
+            >
               <KnowledgeGraphDirectory
                 graph={graph}
                 nodes={nodes}
@@ -716,16 +719,19 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
                 counts={questionCountByPoint}
                 onSelect={handleSelectNode}
               />
+            </aside>
+            <div className="min-w-0 space-y-3">
               <KnowledgeGraphCanvas
                 structure={graph}
                 edges={edges}
                 nodes={nodes}
                 onSelect={handleSelectNode}
+                onClearSelection={() => setSelectedKey(null)}
                 questionCountByPoint={questionCountByPoint}
                 selectedKey={selectedKey}
               />
             </div>
-            <aside className="min-w-0 rounded-lg border p-4">
+            <aside className="min-w-0 rounded-2xl border bg-white p-4 shadow-sm lg:col-span-2">
               <h4 className="font-medium">节点详情与审核</h4>
               {selectedNode ? (
                 <div className="mt-3 space-y-3 text-sm">

@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { RegisterForm } from "@/components/auth/register-form";
+import { SpaceAuthLayout } from "@/components/auth/space-auth-layout";
+import styles from "@/components/auth/login-space.module.css";
 import { roleHomePath } from "@/services/auth/authorization";
 import { getCurrentUser } from "@/services/auth/session";
 import { getPublicSystemConfig } from "@/services/system-config/service";
@@ -23,25 +26,29 @@ export default async function RegisterPage() {
   if (config.maintenanceMode) redirect("/maintenance");
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-100/70 via-white to-emerald-100/60 px-6 py-12">
-      <section className="bg-card w-full max-w-md rounded-2xl border border-sky-100 p-8 shadow-xl shadow-sky-100/70">
-        <p className="text-sm font-medium text-sky-700">
-          AI Smart Learning Platform
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
-          {config.platformName}学生注册
-        </h1>
-        <p className="text-muted-foreground mt-2 text-sm">
-          学生账号仅限已导入名单中的学生注册。请使用教师提供的学号，并填写与名单一致的姓名。
-        </p>
-        {config.allowSelfRegistration ? (
-          <RegisterForm schools={schools} />
-        ) : (
-          <div className="mt-8 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+    <SpaceAuthLayout
+      platformName={config.platformName}
+      title="创建学生账号"
+      description="选择学校，使用名单中的学号与姓名认领账号，开启你的学习旅程。"
+      entryLabel="学生账号注册"
+      announcement={config.platformAnnouncement}
+      welcomeLabel="START YOUR JOURNEY"
+      wide
+    >
+      {config.allowSelfRegistration ? (
+        <RegisterForm schools={schools} />
+      ) : (
+        <>
+          <div className={styles.announcement} role="status">
             系统当前未开放自主注册，请联系管理员创建账号。
           </div>
-        )}
-      </section>
-    </main>
+          <p className={styles.adminEntry}>
+            <Link className={styles.adminLink} href="/login">
+              返回登录
+            </Link>
+          </p>
+        </>
+      )}
+    </SpaceAuthLayout>
   );
 }

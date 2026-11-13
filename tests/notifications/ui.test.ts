@@ -4,8 +4,44 @@ import { NotificationType } from "@prisma/client";
 
 import {
   formatUnreadBadge,
+  notificationDetailsHref,
   resolveNotificationDestination,
 } from "../../components/notifications/presenters";
+
+test("签到通知的查看详情使用已校验的单场签到地址，失效时不回退到通知详情", () => {
+  assert.equal(
+    notificationDetailsHref({
+      id: "notice",
+      type: "ATTENDANCE_PUBLISHED",
+      action: {
+        kind: "LINK",
+        href: "/student/attendance/session-id?classroomId=classroom-id",
+        label: "前往签到",
+      },
+    }),
+    "/student/attendance/session-id?classroomId=classroom-id",
+  );
+  assert.equal(
+    notificationDetailsHref({
+      id: "notice",
+      type: "ATTENDANCE_PUBLISHED",
+      action: null,
+    }),
+    null,
+  );
+  assert.equal(
+    notificationDetailsHref({
+      id: "notice",
+      type: "ATTENDANCE_PUBLISHED",
+      action: { kind: "LINK", href: "//external.example", label: "前往签到" },
+    }),
+    null,
+  );
+  assert.equal(
+    notificationDetailsHref({ id: "notice", type: "SYSTEM_ANNOUNCEMENT" }),
+    "/notifications/notice",
+  );
+});
 
 test("导航未读徽标隐藏零值并把大数量限制为 99+", () => {
   assert.equal(formatUnreadBadge(0), null);

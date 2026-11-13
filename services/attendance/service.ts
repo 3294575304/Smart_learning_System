@@ -1,5 +1,6 @@
 import { getStudentClassroomContext } from "@/services/courses/student-access";
 import {
+  AttendanceSignInMethod,
   AttendanceRecordSource,
   AttendanceSessionStatus,
   AttendanceStatus,
@@ -8,6 +9,7 @@ import {
   MembershipStatus,
   Prisma,
 } from "@prisma/client";
+import { compare, hash } from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
@@ -15,7 +17,74 @@ import type { AuditRequestContext } from "@/services/audit/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { calculateAttendanceRate } from "@/services/attendance/calculation";
 import { AttendanceOperationError } from "@/services/attendance/errors";
+import type { StudentAttendanceSignInInput } from "@/services/attendance/schemas";
 import { getStudentCourseContext } from "@/services/courses/student-access";
+import { notifyAttendancePublished } from "@/services/notifications/events/attendance";
+
+const MAX_CHALLENGE_ATTEMPTS = 5;
+const CHALLENGE_HASH_ROUNDS = 12;
+
+export type AttendanceChallenge =
+  | { method: typeof AttendanceSignInMethod.CODE; code: string }
+  | { method: typeof AttendanceSignInMethod.GRAPHIC; pattern: number[] };
+
+function challengeHash(
+  sessionId: string,
+  method:
+    typeof AttendanceSignInMethod.CODE | typeof AttendanceSignInMethod.GRAPHIC,
+  value: string,
+) {
+  return hash(`${sessionId}:${method}:${value}`, CHALLENGE_HASH_ROUNDS);
+}
+
+async function buildChallenge(
+  sessionId: string,
+  method: AttendanceSignInMethod,
+  code?: string,
+  pattern?: number[],
+): Promise<{ challenge: AttendanceChallenge; hash: string } | null> {
+  if (method === AttendanceSignInMethod.CODE && code) {
+    const normalizedCode = code.toUpperCase();
+    return {
+      challenge: { method, code: normalizedCode },
+      hash: await challengeHash(sessionId, method, normalizedCode),
+    };
+  }
+  if (method === AttendanceSignInMethod.GRAPHIC && pattern) {
+    return {
+      challenge: { method, pattern },
+      hash: await challengeHash(sessionId, method, pattern.join(",")),
+    };
+  }
+  return null;
+}
+
+function matchesChallenge(
+  sessionId: string,
+  method:
+    typeof AttendanceSignInMethod.CODE | typeof AttendanceSignInMethod.GRAPHIC,
+  value: string,
+  expectedHash: string | null,
+) {
+  if (!expectedHash) return Promise.resolve(false);
+  return compare(`${sessionId}:${method}:${value}`, expectedHash);
+}
+
+function distanceInMeters(
+  first: { latitude: number; longitude: number },
+  second: { latitude: number; longitude: number },
+) {
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const earthRadiusMeters = 6_371_000;
+  const latitudeDelta = radians(second.latitude - first.latitude);
+  const longitudeDelta = radians(second.longitude - first.longitude);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(radians(first.latitude)) *
+      Math.cos(radians(second.latitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return 2 * earthRadiusMeters * Math.asin(Math.sqrt(haversine));
+}
 
 async function ownedCourse(
   teacherId: string,
@@ -108,6 +177,12 @@ export async function createTeacherAttendanceSession(
   input: {
     classroomId: string;
     title: string;
+    signInMethod?: AttendanceSignInMethod;
+    signInCode?: string;
+    signInPattern?: number[];
+    locationLatitude?: number;
+    locationLongitude?: number;
+    locationRadiusMeters?: number;
     startsAt: Date;
     signInOpensAt: Date;
     lateAfter: Date;
@@ -117,7 +192,34 @@ export async function createTeacherAttendanceSession(
 ) {
   return prisma.$transaction(
     async (transaction) => {
-      await ownedCourse(teacherId, courseId, transaction);
+      const signInMethod = input.signInMethod ?? AttendanceSignInMethod.DIRECT;
+      if (
+        signInMethod === AttendanceSignInMethod.LOCATION &&
+        (input.locationLatitude === undefined ||
+          input.locationLongitude === undefined ||
+          input.locationRadiusMeters === undefined)
+      )
+        throw new AttendanceOperationError(
+          "位置签到需要设置发布者位置和签到距离。",
+          400,
+        );
+      if (
+        signInMethod === AttendanceSignInMethod.CODE &&
+        input.signInCode === undefined
+      )
+        throw new AttendanceOperationError(
+          "签到码签到需要由发布者设置签到码。",
+          400,
+        );
+      if (
+        signInMethod === AttendanceSignInMethod.GRAPHIC &&
+        input.signInPattern === undefined
+      )
+        throw new AttendanceOperationError(
+          "图形签到需要由发布者设置九点阵图形。",
+          400,
+        );
+      const course = await ownedCourse(teacherId, courseId, transaction);
       const classroom = await transaction.classroom.findFirst({
         where: { id: input.classroomId, courseId, teacherId, status: "ACTIVE" },
         select: { id: true, name: true },
@@ -136,6 +238,14 @@ export async function createTeacherAttendanceSession(
           classroomId: input.classroomId,
           teacherId,
           title: input.title,
+          signInMethod,
+          ...(signInMethod === AttendanceSignInMethod.LOCATION
+            ? {
+                locationLatitude: input.locationLatitude,
+                locationLongitude: input.locationLongitude,
+                locationRadiusMeters: input.locationRadiusMeters,
+              }
+            : {}),
           startsAt: input.startsAt,
           signInOpensAt: input.signInOpensAt,
           lateAfter: input.lateAfter,
@@ -145,6 +255,26 @@ export async function createTeacherAttendanceSession(
           },
         },
       });
+      const initialChallenge = await buildChallenge(
+        session.id,
+        signInMethod,
+        input.signInCode,
+        input.signInPattern,
+      );
+      if (
+        (signInMethod === AttendanceSignInMethod.CODE ||
+          signInMethod === AttendanceSignInMethod.GRAPHIC) &&
+        !initialChallenge
+      )
+        throw new AttendanceOperationError(
+          "签到口令设置无效，请重新设置。",
+          400,
+        );
+      if (initialChallenge)
+        await transaction.attendanceSession.update({
+          where: { id: session.id },
+          data: { challengeHash: initialChallenge.hash },
+        });
       await writeGovernanceAuditLog(transaction, {
         actorId: teacherId,
         action: AuditAction.ATTENDANCE_SESSION_CREATED,
@@ -156,13 +286,31 @@ export async function createTeacherAttendanceSession(
           courseId,
           classroomId: input.classroomId,
           memberCount: members.length,
+          signInMethod,
+          ...(signInMethod === AttendanceSignInMethod.LOCATION
+            ? { locationRadiusMeters: input.locationRadiusMeters }
+            : {}),
           signInOpensAt: input.signInOpensAt.toISOString(),
           lateAfter: input.lateAfter.toISOString(),
           signInClosesAt: input.signInClosesAt.toISOString(),
         },
         context,
       });
-      return session;
+      await notifyAttendancePublished(
+        {
+          sessionId: session.id,
+          courseId,
+          classroomId: classroom.id,
+          courseName: course.name,
+          classroomName: classroom.name,
+          title: session.title,
+          opensAt: session.signInOpensAt,
+          closesAt: session.signInClosesAt,
+          recipientIds: members.map((member) => member.studentId),
+        },
+        transaction,
+      );
+      return { id: session.id, revision: session.revision };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
@@ -171,7 +319,12 @@ export async function createTeacherAttendanceSession(
 export async function updateTeacherAttendanceSession(
   teacherId: string,
   sessionId: string,
-  input: { action: "OPEN" | "CLOSE" | "CANCEL"; expectedRevision: number },
+  input: {
+    action: "OPEN" | "CLOSE" | "CANCEL" | "ROTATE_CHALLENGE";
+    expectedRevision: number;
+    signInCode?: string;
+    signInPattern?: number[];
+  },
   context: AuditRequestContext,
   now = new Date(),
 ) {
@@ -193,23 +346,68 @@ export async function updateTeacherAttendanceSession(
           "已结束或取消的签到场次不能再次修改。",
           409,
         );
+      if (
+        input.action === "OPEN" &&
+        session.status !== AttendanceSessionStatus.SCHEDULED
+      )
+        throw new AttendanceOperationError("当前签到场次不能重复开放。", 409);
       if (input.action === "OPEN" && session.classroom.status !== "ACTIVE")
         throw new AttendanceOperationError(
           "已结课或已关闭的班级不能开放签到。",
           409,
+        );
+      if (
+        input.action === "ROTATE_CHALLENGE" &&
+        (![
+          AttendanceSessionStatus.SCHEDULED,
+          AttendanceSessionStatus.OPEN,
+        ].includes(session.status) ||
+          (session.signInMethod !== AttendanceSignInMethod.CODE &&
+            session.signInMethod !== AttendanceSignInMethod.GRAPHIC))
+      )
+        throw new AttendanceOperationError(
+          "只有待开放或正在进行的签到码、图形签到可以更换口令。",
+          409,
+        );
+      const replacementChallenge =
+        input.action === "ROTATE_CHALLENGE"
+          ? await buildChallenge(
+              session.id,
+              session.signInMethod,
+              input.signInCode,
+              input.signInPattern,
+            )
+          : null;
+      if (input.action === "ROTATE_CHALLENGE" && !replacementChallenge)
+        throw new AttendanceOperationError(
+          session.signInMethod === AttendanceSignInMethod.CODE
+            ? "请设置 4 至 12 位字母或数字签到码。"
+            : "请绘制至少 4 个点的九点阵图形。",
         );
       const next =
         input.action === "OPEN"
           ? AttendanceSessionStatus.OPEN
           : input.action === "CLOSE"
             ? AttendanceSessionStatus.CLOSED
-            : AttendanceSessionStatus.CANCELLED;
+            : input.action === "CANCEL"
+              ? AttendanceSessionStatus.CANCELLED
+              : session.status;
       if (
         input.action === "OPEN" &&
         (now < session.signInOpensAt || now > session.signInClosesAt)
       )
         throw new AttendanceOperationError(
           "当前不在签到开放时间窗口内。",
+          409,
+          "ATTENDANCE_WINDOW_CLOSED",
+        );
+      if (
+        input.action === "ROTATE_CHALLENGE" &&
+        session.status === AttendanceSessionStatus.OPEN &&
+        (now < session.signInOpensAt || now > session.signInClosesAt)
+      )
+        throw new AttendanceOperationError(
+          "签到已不在有效时间内，不能更换口令。",
           409,
           "ATTENDANCE_WINDOW_CLOSED",
         );
@@ -232,23 +430,73 @@ export async function updateTeacherAttendanceSession(
         data: {
           status: next,
           revision: { increment: 1 },
+          ...(replacementChallenge
+            ? { challengeHash: replacementChallenge.hash }
+            : {}),
           ...(next === AttendanceSessionStatus.CLOSED ? { endedAt: now } : {}),
           ...(next === AttendanceSessionStatus.CANCELLED
             ? { cancelledAt: now }
             : {}),
         },
       });
+      if (replacementChallenge)
+        await transaction.attendanceRecord.updateMany({
+          where: { sessionId },
+          data: { challengeAttempts: 0, challengeLockedUntil: null },
+        });
+      if (input.action === "OPEN") {
+        const recipients = await transaction.attendanceRecord.findMany({
+          where: {
+            sessionId,
+            student: {
+              classMemberships: {
+                some: {
+                  classroomId: session.classroomId,
+                  status: MembershipStatus.ACTIVE,
+                },
+              },
+            },
+          },
+          select: { studentId: true },
+        });
+        await notifyAttendancePublished(
+          {
+            sessionId,
+            courseId: session.courseId,
+            classroomId: session.classroomId,
+            courseName: session.course.name,
+            classroomName: session.classroom.name,
+            title: session.title,
+            opensAt: session.signInOpensAt,
+            closesAt: session.signInClosesAt,
+            recipientIds: recipients.map((record) => record.studentId),
+          },
+          transaction,
+        );
+      }
       await writeGovernanceAuditLog(transaction, {
         actorId: teacherId,
         action: AuditAction.ATTENDANCE_SESSION_UPDATED,
         targetType: AuditTargetType.ATTENDANCE_SESSION,
         targetId: sessionId,
-        summary: `更新签到场次状态：${next}`,
+        summary:
+          input.action === "ROTATE_CHALLENGE"
+            ? "更换签到口令"
+            : `更新签到场次状态：${next}`,
         beforeData: { status: session.status, revision: session.revision },
-        afterData: { status: next, revision: updated.revision },
+        afterData: {
+          status: next,
+          revision: updated.revision,
+          signInMethod: session.signInMethod,
+          challengeRotated: Boolean(replacementChallenge),
+        },
         context,
       });
-      return updated;
+      const { challengeHash: _challengeHash, ...safeUpdated } = updated;
+      return {
+        ...safeUpdated,
+        challenge: replacementChallenge?.challenge ?? null,
+      };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
@@ -257,10 +505,11 @@ export async function updateTeacherAttendanceSession(
 export async function signStudentAttendance(
   studentId: string,
   sessionId: string,
+  input: StudentAttendanceSignInInput,
   context: AuditRequestContext,
   now = new Date(),
 ) {
-  return prisma.$transaction(async (transaction) => {
+  const outcome = await prisma.$transaction(async (transaction) => {
     const session = await transaction.attendanceSession.findUnique({
       where: { id: sessionId },
       include: {
@@ -273,7 +522,11 @@ export async function signStudentAttendance(
             },
           },
         },
-        records: { where: { studentId }, take: 1 },
+        records: {
+          where: { studentId },
+          select: { id: true },
+          take: 1,
+        },
       },
     });
     if (!session || session.records.length === 0)
@@ -293,12 +546,97 @@ export async function signStudentAttendance(
         409,
         "ATTENDANCE_WINDOW_CLOSED",
       );
+    const recordId = session.records[0]!.id;
+    await transaction.$queryRaw`SELECT "id" FROM "AttendanceRecord" WHERE "id" = ${recordId} FOR UPDATE`;
+    const record = await transaction.attendanceRecord.findUniqueOrThrow({
+      where: { id: recordId },
+    });
+    if (record.currentStatus !== AttendanceStatus.PENDING)
+      return { kind: "signed" as const, record, reused: true };
+    if (input.method !== session.signInMethod)
+      throw new AttendanceOperationError(
+        "签到方式与本场设置不一致，请刷新页面后重试。",
+        400,
+        "ATTENDANCE_METHOD_MISMATCH",
+      );
+    if (input.method === AttendanceSignInMethod.LOCATION) {
+      if (
+        session.locationLatitude === null ||
+        session.locationLongitude === null ||
+        session.locationRadiusMeters === null
+      )
+        throw new AttendanceOperationError(
+          "本场位置签到设置无效，请联系教师。",
+          409,
+        );
+      if (input.accuracyMeters > Math.min(100, session.locationRadiusMeters))
+        throw new AttendanceOperationError(
+          "定位精度不足以满足当前签到距离，请开启精确定位后重试。",
+          400,
+          "ATTENDANCE_LOCATION_INACCURATE",
+        );
+      const distance = distanceInMeters(
+        {
+          latitude: input.latitude,
+          longitude: input.longitude,
+        },
+        {
+          latitude: session.locationLatitude,
+          longitude: session.locationLongitude,
+        },
+      );
+      if (distance > session.locationRadiusMeters)
+        throw new AttendanceOperationError(
+          `当前位置超出签到距离（${session.locationRadiusMeters} 米）。`,
+          403,
+          "ATTENDANCE_LOCATION_OUT_OF_RANGE",
+        );
+    }
+    if (
+      input.method === AttendanceSignInMethod.CODE ||
+      input.method === AttendanceSignInMethod.GRAPHIC
+    ) {
+      if (
+        record.challengeAttempts >= MAX_CHALLENGE_ATTEMPTS ||
+        (record.challengeLockedUntil && now < record.challengeLockedUntil)
+      )
+        return { kind: "locked" as const };
+      const proof =
+        input.method === AttendanceSignInMethod.CODE
+          ? input.code.toUpperCase()
+          : input.pattern.join(",");
+      if (
+        !(await matchesChallenge(
+          session.id,
+          input.method,
+          proof,
+          session.challengeHash,
+        ))
+      ) {
+        const attempts = record.challengeAttempts + 1;
+        await transaction.attendanceRecord.update({
+          where: { id: record.id },
+          data: {
+            challengeAttempts: attempts,
+            ...(attempts >= MAX_CHALLENGE_ATTEMPTS
+              ? { challengeLockedUntil: session.signInClosesAt }
+              : {}),
+          },
+        });
+        return {
+          kind:
+            attempts >= MAX_CHALLENGE_ATTEMPTS
+              ? ("locked" as const)
+              : ("invalid" as const),
+        };
+      }
+    }
     const status =
       now <= session.lateAfter
         ? AttendanceStatus.PRESENT
         : AttendanceStatus.LATE;
     const result = await appendRevision(transaction, {
-      recordId: session.records[0]!.id,
+      recordId,
       status,
       source: AttendanceRecordSource.STUDENT_SIGN_IN,
       actorId: studentId,
@@ -309,14 +647,35 @@ export async function signStudentAttendance(
         actorId: studentId,
         action: AuditAction.ATTENDANCE_SIGNED,
         targetType: AuditTargetType.ATTENDANCE_RECORD,
-        targetId: session.records[0]!.id,
-        summary: "学生课堂签到",
+        targetId: recordId,
+        summary: `学生课堂签到（${session.signInMethod}）`,
         beforeData: { status: AttendanceStatus.PENDING },
-        afterData: { status, signedAt: now.toISOString() },
+        afterData: {
+          status,
+          signInMethod: session.signInMethod,
+          signedAt: now.toISOString(),
+        },
         context,
       });
-    return result;
+    return {
+      kind: "signed" as const,
+      record: result.record,
+      reused: result.reused,
+    };
   });
+  if (outcome.kind === "invalid")
+    throw new AttendanceOperationError(
+      "签到口令或图形不正确，请核对后重试。",
+      400,
+      "ATTENDANCE_CHALLENGE_INVALID",
+    );
+  if (outcome.kind === "locked")
+    throw new AttendanceOperationError(
+      "错误次数过多，本次签到已锁定，请联系教师处理。",
+      429,
+      "ATTENDANCE_CHALLENGE_LOCKED",
+    );
+  return { record: outcome.record, reused: outcome.reused };
 }
 
 export async function correctTeacherAttendanceRecord(
@@ -419,12 +778,64 @@ export async function getTeacherCourseAttendance(
       byStudent.set(record.studentId, current);
     }
   return {
-    sessions,
+    sessions: sessions.map(
+      ({
+        challengeHash: _challengeHash,
+        locationLatitude: _locationLatitude,
+        locationLongitude: _locationLongitude,
+        ...session
+      }) => session,
+    ),
     summaries: [...byStudent.values()].map((student) => ({
       ...student,
       ...calculateAttendanceRate(student.statuses),
     })),
   };
+}
+
+const studentAttendanceRecordInclude =
+  Prisma.validator<Prisma.AttendanceRecordInclude>()({
+    session: {
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        signInMethod: true,
+        locationRadiusMeters: true,
+        startsAt: true,
+        signInOpensAt: true,
+        signInClosesAt: true,
+        lateAfter: true,
+        course: { select: { id: true, name: true, courseNo: true } },
+        classroom: { select: { id: true, name: true, status: true } },
+      },
+    },
+    revisions: { orderBy: { revisionNumber: "desc" } },
+  });
+
+export async function getStudentAttendanceSession(
+  studentId: string,
+  sessionId: string,
+) {
+  const record = await prisma.attendanceRecord.findFirst({
+    where: {
+      studentId,
+      sessionId,
+      session: {
+        classroom: {
+          memberships: { some: { studentId, status: MembershipStatus.ACTIVE } },
+        },
+      },
+    },
+    include: studentAttendanceRecordInclude,
+  });
+  if (!record) throw new ResourceNotFoundError("签到场次不存在。");
+  await getStudentClassroomContext(
+    studentId,
+    record.session.classroom.id,
+    record.session.course.id,
+  );
+  return record;
 }
 
 export async function getStudentAttendance(
@@ -449,22 +860,17 @@ export async function getStudentAttendance(
       },
     },
     orderBy: { session: { startsAt: "desc" } },
-    include: {
-      session: {
-        include: {
-          course: { select: { id: true, name: true, courseNo: true } },
-          classroom: { select: { id: true, name: true, status: true } },
-        },
-      },
-      revisions: { orderBy: { revisionNumber: "desc" } },
-    },
+    include: studentAttendanceRecordInclude,
   });
   const closed = records.filter(
     (record) => record.session.status === AttendanceSessionStatus.CLOSED,
   );
   return {
     ...(course ? { course } : {}),
-    records,
+    records: records.map(({ session, ...record }) => ({
+      ...record,
+      session,
+    })),
     summary: calculateAttendanceRate(
       closed.map((record) => record.currentStatus),
     ),

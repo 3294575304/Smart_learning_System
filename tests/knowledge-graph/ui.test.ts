@@ -47,6 +47,7 @@ test("教师图谱提供可平移缩放的图形视图和文字图例", async ()
   assert.match(source, /重置图谱视图/u);
   assert.match(source, /PREREQUISITE/u);
   assert.match(source, /RELATED/u);
+  assert.match(source, /linkCurvature=\{0\}/u, "所有关系保持直线");
 });
 
 test("学生只查看有成员权限课程的正式图谱并复用图谱画布", async () => {

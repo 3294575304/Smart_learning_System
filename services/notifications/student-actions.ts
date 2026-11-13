@@ -1,7 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { studentAssignmentActionContexts } from "@/services/assignments/student-list";
-import { studentAssignmentState } from "@/services/student-experience/task-policy";
+import {
+  attendanceSignInState,
+  studentAssignmentState,
+} from "@/services/student-experience/task-policy";
 import { studentTaskHref } from "@/services/student-experience/task-scope";
 import { courseSurveyAvailability } from "@/services/course-surveys/availability";
 import { notificationActionUrlSchema, notificationIdSchema } from "./schemas";
@@ -31,7 +34,8 @@ export async function withStudentNotificationActions<
     });
   const submissionIds = ids("SUBMISSION");
   const surveyIds = ids("COURSE_SURVEY");
-  const [submissions, surveys] = await Promise.all([
+  const attendanceIds = ids("ATTENDANCE_SESSION");
+  const [submissions, surveys, attendance] = await Promise.all([
     submissionIds.length
       ? prisma.submission.findMany({
           where: {
@@ -75,6 +79,32 @@ export async function withStudentNotificationActions<
           },
         })
       : Promise.resolve([]),
+    attendanceIds.length
+      ? prisma.attendanceSession.findMany({
+          where: {
+            id: { in: attendanceIds },
+            records: { some: { studentId: recipientId } },
+            classroom: {
+              memberships: {
+                some: { studentId: recipientId, status: "ACTIVE" },
+              },
+            },
+          },
+          select: {
+            id: true,
+            courseId: true,
+            classroomId: true,
+            status: true,
+            signInOpensAt: true,
+            signInClosesAt: true,
+            classroom: { select: { courseId: true } },
+            records: {
+              where: { studentId: recipientId },
+              select: { currentStatus: true },
+            },
+          },
+        })
+      : Promise.resolve([]),
   ]);
   const assignments = await studentAssignmentActionContexts(
     recipientId,
@@ -93,6 +123,9 @@ export async function withStudentNotificationActions<
     submissions.map((submission) => [submission.id, submission]),
   );
   const bySurvey = new Map(surveys.map((survey) => [survey.id, survey]));
+  const byAttendance = new Map(
+    attendance.map((session) => [session.id, session]),
+  );
   return items.map((item) => {
     const resolved = (
       action: StudentNotificationAction | null,
@@ -100,6 +133,30 @@ export async function withStudentNotificationActions<
     ) => ({ ...item, action, actionMessage });
     if (item.expiresAt && new Date(item.expiresAt) <= now)
       return resolved(null, "通知已过期，请从课程记录查看最新状态。");
+    if (item.type === "ATTENDANCE_PUBLISHED") {
+      const session =
+        item.sourceType === "ATTENDANCE_SESSION"
+          ? byAttendance.get(item.sourceId ?? "")
+          : undefined;
+      if (!session || session.courseId !== session.classroom.courseId)
+        return resolved(
+          null,
+          "相关签到当前不可查看，请从课程记录查看最新状态。",
+        );
+      if (session.status === "CANCELLED")
+        return resolved(null, "教师已取消本次签到。");
+      const canSign =
+        session.records[0]?.currentStatus === "PENDING" &&
+        attendanceSignInState(session, now) === "AVAILABLE";
+      return resolved({
+        kind: "LINK",
+        href: studentTaskHref(`/student/attendance/${session.id}`, {
+          courseId: session.courseId,
+          classroomId: session.classroomId,
+        }),
+        label: canSign ? "前往签到" : "查看签到记录",
+      });
+    }
     if (
       item.type === "ASSIGNMENT_PUBLISHED" ||
       item.type === "ASSIGNMENT_DUE_SOON" ||
