@@ -1,5 +1,6 @@
 "use client";
 
+import { Play } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
@@ -101,18 +102,11 @@ export function ProgrammingQuestionInput({
   }
 
   return (
-    <div className="mt-4 space-y-3">
-      <textarea
-        aria-label="Python 代码"
-        className="min-h-72 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900 disabled:opacity-60"
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
-        value={code}
-      />
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="space-y-3">
+      <div className="flex min-h-10 flex-wrap items-center justify-between gap-2">
+        <h3 className="text-ink text-sm font-semibold">你的作答</h3>
         <button
-          className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
+          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-sky-700 disabled:opacity-50"
           disabled={
             disabled ||
             starting ||
@@ -121,9 +115,28 @@ export function ProgrammingQuestionInput({
           onClick={() => void run()}
           type="button"
         >
+          <Play className="size-4" aria-hidden="true" />
           {starting ? "正在创建运行…" : "运行公开样例"}
         </button>
-        {attempt && !terminal.has(attempt.status) ? (
+      </div>
+      <div className="overflow-hidden rounded-xl border border-slate-800 bg-[#0e1c2b]">
+        <div className="flex items-center justify-between gap-2 bg-[#162a3e] px-4 py-2.5 font-mono text-xs text-slate-200">
+          <span>main.py</span>
+          <span>Python</span>
+        </div>
+        <textarea
+          aria-label="Python 代码"
+          className="block min-h-72 w-full resize-y bg-transparent px-4 py-3 font-mono text-sm leading-6 text-slate-100 caret-sky-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-400 disabled:opacity-60 xl:min-h-96"
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          value={code}
+        />
+      </div>
+      {attempt && !terminal.has(attempt.status) && (
+        <div className="flex flex-wrap items-center gap-3">
           <button
             className="rounded-md border border-red-200 px-4 py-2 text-sm text-red-700"
             onClick={() => void cancel()}
@@ -131,15 +144,13 @@ export function ProgrammingQuestionInput({
           >
             取消运行
           </button>
-        ) : null}
-        {attempt && !terminal.has(attempt.status) ? (
-          <span className="text-sm text-gray-500">
+          <span role="status" className="text-sm text-gray-500">
             {error
               ? "状态查询中断，请重试查询"
               : `执行中 · ${attempt.progress}%`}
           </span>
-        ) : null}
-      </div>
+        </div>
+      )}
       {error ? (
         <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
           {error}{" "}

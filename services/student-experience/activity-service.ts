@@ -136,7 +136,12 @@ export async function loadActivityExams(
       const href =
         status === "UPCOMING"
           ? `${activityHref("exams", query)}#exam-${assignment.id}`
-          : studentTaskHref(`/student/assignments/${assignment.id}`, scope);
+          : studentTaskHref(
+              status === "TODO"
+                ? `/student/assignments/${assignment.id}`
+                : `/student/exams/${exam.id}/record`,
+              scope,
+            );
       return [
         {
           id: assignment.id,

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { AuthorizationError } from "@/services/auth/policy";
 import { prisma } from "@/lib/prisma";
 
 export async function hasActiveExamAttempt(
@@ -25,4 +26,9 @@ export async function hasActiveExamAttempt(
     select: { id: true },
   });
   return attempt !== null;
+}
+
+export async function assertLearningAssistantAvailable(studentId: string) {
+  if (await hasActiveExamAttempt(studentId))
+    throw new AuthorizationError("考试作答期间，课程答疑暂不可用。");
 }

@@ -296,7 +296,7 @@ test("课程答疑先保存通过校验的段落，完成和中断均可恢复",
       status: "PUBLISHED",
     },
   });
-  await prisma.submission.create({
+  const examAttempt = await prisma.submission.create({
     data: {
       studentId: student.id,
       assignmentId: assignment.id,
@@ -307,11 +307,16 @@ test("课程答疑先保存通过校验的段落，完成和中断均可恢复",
   finish();
   assert.equal((await interruptedByExam.next()).type, "error");
   assert.equal((await interruptedByExam.events.next()).done, true);
+  await assert.rejects(interruptedByExam.history, /考试作答期间/u);
+  await assert.rejects(() => ask(question()), /考试作答期间/u);
+  await prisma.submission.update({
+    where: { id: examAttempt.id },
+    data: { status: "SUBMITTED", submittedAt: new Date() },
+  });
   assert.equal(
     (await interruptedByExam.history()).turns[0].reply.deliveryStatus,
     "ABORTED",
   );
-  await assert.rejects(() => ask(question()), /考试作答期间/u);
   await assert.rejects(() => ask(question(), outsider.id), /不存在/u);
   assert.equal(calls, 4);
 });

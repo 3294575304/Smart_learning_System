@@ -8,7 +8,7 @@ import {
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { QuestionType, SubmissionStatus } from "@prisma/client";
 import Image from "next/image";
-import { Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutGrid } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -18,6 +18,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+
+import { AnswerSheetPanel } from "@/components/assignments/answer-sheet-panel";
+import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
 
 import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { EditorDialog } from "@/components/assignments/editor-dialog";
@@ -196,6 +199,7 @@ export function AnswerSheet({
   const questionPanel = useRef<HTMLElement>(null);
   const [finalAction, setFinalAction] = useState<FinalAction | null>(null);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<AssignmentLocalDraft | null>(
     null,
   );
@@ -501,10 +505,21 @@ export function AnswerSheet({
     setAnswers(updated);
   }
 
+  function focusQuestion() {
+    window.requestAnimationFrame(() => {
+      const panel = questionPanel.current;
+      if (!panel) return;
+      panel.scrollIntoView({ block: "start" });
+      panel.focus({ preventScroll: true });
+    });
+  }
+
   function selectQuestion(nextIndex: number) {
     if (attachmentPending || finalActionRef.current) return;
     const nextQuestion = submission.questions[nextIndex];
-    if (!nextQuestion || nextIndex === activeQuestionIndex) return;
+    if (!nextQuestion) return;
+    focusQuestion();
+    if (nextIndex === activeQuestionIndex) return;
     timingTracker.activate(nextQuestion.id);
     setActiveQuestionIndex(nextIndex);
     void persist();
@@ -521,6 +536,90 @@ export function AnswerSheet({
   const editingDisabled =
     examLocked || !ready || Boolean(pendingDraft) || Boolean(finalAction);
 
+  const question = submission.questions[activeQuestionIndex];
+  const answer = question ? answers[question.id] : undefined;
+  const programming = question?.type === QuestionType.PYTHON_PROGRAMMING;
+  const repeatedTitle =
+    question &&
+    !hasQuestionNavigation &&
+    question.title.trim() === submission.assignmentTitle.trim();
+  const totalQuestions = submission.questions.length;
+  const totalPoints = useMemo(
+    () =>
+      submission.questions.reduce((sum, question) => sum + question.points, 0),
+    [submission.questions],
+  );
+  const primaryDisabled = editingDisabled || attachmentPending;
+  const answeredText = `已答 ${answeredCount}/${totalQuestions}`;
+
+  // 顶栏只放「当前保存态」一个标记，详细文案仍在下一行，避免状态信息两处重复。
+  const headerChip: { tone: StatusChipTone; label: string } = examLocked
+    ? { tone: "neutral", label: "只读答卷" }
+    : !ready
+      ? { tone: "neutral", label: "正在恢复" }
+      : saveState === "failed"
+        ? { tone: "bad", label: "保存失败" }
+        : attachmentPending
+          ? { tone: "warn", label: "处理附件中" }
+          : saveState === "saving"
+            ? { tone: "brand", label: "正在保存" }
+            : saveState === "saved"
+              ? {
+                  tone: "ok",
+                  label: lastSavedAt
+                    ? `已保存 ${lastSavedAt.toLocaleTimeString("zh-CN", {
+                        hour12: false,
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}`
+                    : "已保存",
+                }
+              : pendingDraft
+                ? { tone: "warn", label: "待选择草稿" }
+                : { tone: "neutral", label: "自动保存" };
+
+  const sheetActions = (
+    <>
+      <button
+        className="bg-brand hover:bg-brand-strong focus-visible:outline-brand min-h-11 w-full rounded-lg px-4 text-sm font-semibold text-white shadow-[0_4px_10px_-2px_rgb(1_105_161_/_0.22)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+        disabled={primaryDisabled}
+        onClick={() => {
+          if (exam) setExamConfirmation(true);
+          else void finish("submit");
+        }}
+        type="button"
+      >
+        {finalAction === "submit"
+          ? exam
+            ? "正在交卷…"
+            : "提交中…"
+          : exam
+            ? "交卷"
+            : "提交作业"}
+      </button>
+      <button
+        className="text-brand-strong focus-visible:outline-brand min-h-10 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+        disabled={primaryDisabled}
+        onClick={() => void finish("exit")}
+        type="button"
+      >
+        {finalAction === "exit" ? "正在保存…" : "保存并退出"}
+      </button>
+    </>
+  );
+
+  const answerCard = {
+    activeIndex: activeQuestionIndex,
+    answeredCount,
+    disabled: editingDisabled,
+    isAnswered: (questionId: string) => !isBlankAnswer(answers[questionId]),
+    questions: submission.questions,
+    totalPoints,
+  };
+  const submitNote = exam
+    ? "交卷后答卷将锁定，不能再修改。"
+    : "提交后本次答案不能修改。";
+
   function resolveDraft(useLocal: boolean) {
     if (useLocal && pendingDraft) {
       latestAnswersRef.current = pendingDraft.answers;
@@ -536,7 +635,7 @@ export function AnswerSheet({
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-4">
       {pendingDraft && !examLocked && (
         <section
           aria-labelledby="assignment-recovery-title"
@@ -583,41 +682,27 @@ export function AnswerSheet({
             : "连接恢复后会重试保存。"}
         </p>
       )}
-      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white/95 p-4 shadow-sm backdrop-blur">
-        {banner}
+      <div className="border-line bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 sm:px-5">
         <div className="min-w-0 flex-1 basis-56">
-          <h1 className="font-semibold break-words">
+          <h1 className="text-ink font-semibold break-words">
             {submission.assignmentTitle}
           </h1>
-          <p className="text-sm text-gray-500">
-            第 {submission.attemptNumber} 次作答 · 已答 {answeredCount}/
-            {submission.questions.length} · 截止{" "}
+          <p className="text-ink-soft mt-1 text-xs">
+            第 {submission.attemptNumber} 次作答 · {answeredText} · 截止{" "}
             {submission.dueAt
               ? new Date(submission.dueAt).toLocaleString("zh-CN")
               : "未设置"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
-            disabled={editingDisabled || attachmentPending}
-            onClick={() => void finish("exit")}
-            type="button"
-          >
-            <Save aria-hidden="true" className="size-4" />
-            {finalAction === "exit" ? "正在保存…" : "保存并退出"}
-          </button>
-          <button
-            className="min-h-10 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
-            disabled={editingDisabled || attachmentPending}
-            onClick={() => {
-              if (exam) setExamConfirmation(true);
-              else void finish("submit");
-            }}
-            type="button"
-          >
-            {finalAction === "submit" ? "提交中…" : exam ? "交卷" : "提交作业"}
-          </button>
+          <StatusChip tone={headerChip.tone}>{headerChip.label}</StatusChip>
+          {exam && lastSavedAt && (
+            <StatusChip tone="neutral">
+              账号最近保存{" "}
+              {lastSavedAt.toLocaleTimeString("zh-CN", { hour12: false })}
+            </StatusChip>
+          )}
+          {examLocked ? <StatusChip tone="warn">已锁定</StatusChip> : null}
         </div>
         <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-slate-600">
           <p role="status">
@@ -637,12 +722,6 @@ export function AnswerSheet({
                           ? "选择恢复方式后可继续作答。"
                           : "修改后会自动保存，也可以保存并退出。"}
           </p>
-          {exam && lastSavedAt && (
-            <p>
-              账号最近保存{" "}
-              {lastSavedAt.toLocaleTimeString("zh-CN", { hour12: false })}
-            </p>
-          )}
           {saveState === "failed" && (
             <>
               <p role="alert" className="text-red-700">
@@ -677,6 +756,12 @@ export function AnswerSheet({
         </div>
       </div>
 
+      {banner && (
+        <div className="sticky top-(--dashboard-header-height) z-10">
+          {banner}
+        </div>
+      )}
+
       {exam && (
         <EditorDialog
           open={examConfirmation && !examLocked}
@@ -701,9 +786,6 @@ export function AnswerSheet({
                     onClick={() => {
                       setExamConfirmation(false);
                       selectQuestion(index);
-                      window.requestAnimationFrame(() =>
-                        questionPanel.current?.focus(),
-                      );
                     }}
                     className="min-h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm text-amber-950 hover:bg-amber-100"
                   >
@@ -742,73 +824,125 @@ export function AnswerSheet({
         </EditorDialog>
       )}
 
-      <div className="space-y-6" inert={Boolean(finalAction)}>
-        {hasQuestionNavigation && (
-          <nav
-            aria-label="题目导航"
-            className="flex max-w-full flex-wrap gap-2 rounded-xl border bg-white p-4"
+      <div
+        className={
+          programming
+            ? "min-w-0"
+            : "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_304px]"
+        }
+        inert={Boolean(finalAction)}
+      >
+        <div className="min-w-0 space-y-4">
+          <div
+            className={
+              programming
+                ? "flex flex-wrap items-center justify-between gap-3"
+                : "flex flex-wrap items-center justify-between gap-3 lg:hidden"
+            }
           >
-            {submission.questions.map((question, index) => (
-              <button
-                aria-current={
-                  index === activeQuestionIndex ? "step" : undefined
-                }
-                className={`min-w-10 rounded-md border px-3 py-2 text-sm ${
-                  index === activeQuestionIndex
-                    ? "border-sky-600 bg-sky-700 text-white"
-                    : "bg-white hover:bg-sky-50/70"
-                }`}
-                key={question.id}
-                disabled={editingDisabled}
-                onClick={() => selectQuestion(index)}
-                type="button"
-              >
-                {question.sortOrder}
-              </button>
-            ))}
-          </nav>
-        )}
+            <p className="text-ink-soft text-sm font-medium">{answeredText}</p>
+            <button
+              aria-expanded={sheetOpen}
+              aria-haspopup="dialog"
+              className="border-line text-brand-strong bg-card focus-visible:outline-brand inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2"
+              onClick={() => setSheetOpen(true)}
+              type="button"
+            >
+              <LayoutGrid aria-hidden="true" className="size-4" />
+              答题卡
+            </button>
+          </div>
 
-        {submission.questions[activeQuestionIndex]
-          ? (() => {
-              const question = submission.questions[activeQuestionIndex];
-              const answer = answers[question.id];
-              const repeatedTitle =
-                !hasQuestionNavigation &&
-                question.title.trim() === submission.assignmentTitle.trim();
-              return (
-                <article
-                  ref={exam ? questionPanel : undefined}
-                  tabIndex={exam ? -1 : undefined}
-                  className="min-w-0 scroll-mt-48 rounded-xl border bg-white p-4 sm:p-5"
-                  key={question.id}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      {repeatedTitle ? (
-                        <h2 className="font-medium">任务要求</h2>
-                      ) : (
-                        <h2 className="font-medium [overflow-wrap:anywhere]">
-                          {hasQuestionNavigation && `${question.sortOrder}. `}
-                          {question.title}
-                        </h2>
-                      )}
-                      {!repeatedTitle && (
-                        <p className="mt-1 text-sm text-gray-500">
+          {question && (
+            <article
+              ref={questionPanel}
+              tabIndex={-1}
+              className="border-line bg-card min-w-0 scroll-mt-14 rounded-xl border p-4 shadow-[var(--shadow-card)] sm:p-6"
+              key={question.id}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  {hasQuestionNavigation ? (
+                    <span
+                      aria-hidden="true"
+                      className="bg-brand-soft text-brand mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-[15px] font-semibold tabular-nums"
+                    >
+                      {question.sortOrder}
+                    </span>
+                  ) : null}
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!repeatedTitle ? (
+                        <StatusChip tone="neutral">
                           {QUESTION_TYPE_LABELS[question.type]}
-                        </p>
-                      )}
+                        </StatusChip>
+                      ) : null}
+                      {hasQuestionNavigation ? (
+                        <span className="text-ink-muted text-xs tabular-nums">
+                          第 {activeQuestionIndex + 1} 题 / 共 {totalQuestions}{" "}
+                          题
+                        </span>
+                      ) : null}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <FavoriteButton
-                        source={{ kind: "ASSIGNMENT", id: question.id }}
-                      />
-                      <span className="text-sm text-gray-500">
-                        {question.points} 分
-                      </span>
-                    </div>
+                    {repeatedTitle ? (
+                      <h2 className="text-ink mt-2 text-lg font-semibold">
+                        任务要求
+                      </h2>
+                    ) : (
+                      <h2 className="text-ink mt-2 text-xl leading-7 font-bold [overflow-wrap:anywhere]">
+                        {question.title}
+                      </h2>
+                    )}
                   </div>
-                  <div className="mt-4 min-w-0">
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-ink-body text-[13px] font-semibold tabular-nums">
+                    {question.points} 分
+                  </span>
+                  <FavoriteButton
+                    source={{ kind: "ASSIGNMENT", id: question.id }}
+                  />
+                </div>
+              </div>
+
+              {programming && answer?.kind === "CODE" ? (
+                <div className="border-line-soft mt-4 grid min-w-0 gap-4 border-t pt-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                  <section
+                    aria-label="题目说明"
+                    className="border-line bg-page min-w-0 rounded-xl border p-4 focus-visible:outline-2 focus-visible:outline-sky-700 xl:col-start-2 xl:row-start-1 xl:max-h-[34rem] xl:overflow-auto"
+                    tabIndex={0}
+                  >
+                    <h3 className="text-ink mb-3 text-sm font-semibold">
+                      题目说明
+                    </h3>
+                    <QuestionText text={question.content} />
+                    {question.images?.map((image) => (
+                      <Image
+                        alt={`第 ${question.sortOrder} 题附图`}
+                        className="mt-3 max-h-[32rem] max-w-full rounded border object-contain"
+                        key={image.id}
+                        src={image.url}
+                        width={800}
+                        height={600}
+                        unoptimized
+                      />
+                    ))}
+                  </section>
+                  <div className="min-w-0 xl:col-start-1 xl:row-start-1">
+                    <ProgrammingQuestionInput
+                      assignmentQuestionId={question.id}
+                      disabled={editingDisabled}
+                      code={answer.value}
+                      onChange={(code) =>
+                        changeAnswer(question.id, { kind: "CODE", value: code })
+                      }
+                      submissionId={submission.id}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="border-line-soft mt-4 min-w-0 border-t pt-5">
                     <QuestionText text={question.content} />
                   </div>
                   {question.images?.map((image) => (
@@ -822,18 +956,8 @@ export function AnswerSheet({
                       unoptimized
                     />
                   ))}
-                  {answer?.kind === "CODE" &&
-                  question.type === QuestionType.PYTHON_PROGRAMMING ? (
-                    <ProgrammingQuestionInput
-                      assignmentQuestionId={question.id}
-                      disabled={editingDisabled}
-                      code={answer.value}
-                      onChange={(code) =>
-                        changeAnswer(question.id, { kind: "CODE", value: code })
-                      }
-                      submissionId={submission.id}
-                    />
-                  ) : answer ? (
+
+                  {answer && (
                     <QuestionAnswerInput
                       answer={answer}
                       disabled={editingDisabled}
@@ -846,7 +970,7 @@ export function AnswerSheet({
                         question.type === QuestionType.SHORT_ANSWER
                       }
                     />
-                  ) : null}
+                  )}
                   {submission.allowAttachments &&
                     question.type === QuestionType.SHORT_ANSWER && (
                       <SubmissionAttachments
@@ -859,44 +983,96 @@ export function AnswerSheet({
                         }
                       />
                     )}
-                </article>
-              );
-            })()
-          : null}
+                </>
+              )}
+            </article>
+          )}
 
-        {hasQuestionNavigation && (
-          <div className="flex items-center justify-between gap-3">
-            <button
-              className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
-              disabled={
-                attachmentPending ||
-                editingDisabled ||
-                activeQuestionIndex === 0
-              }
-              onClick={() => selectQuestion(activeQuestionIndex - 1)}
-              type="button"
-            >
-              上一题
-            </button>
-            <span className="text-sm text-gray-500">
-              {submission.questions.length === 0 ? 0 : activeQuestionIndex + 1}{" "}
-              / {submission.questions.length}
-            </span>
-            <button
-              className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
-              disabled={
-                attachmentPending ||
-                editingDisabled ||
-                activeQuestionIndex >= submission.questions.length - 1
-              }
-              onClick={() => selectQuestion(activeQuestionIndex + 1)}
-              type="button"
-            >
-              下一题
-            </button>
+          {hasQuestionNavigation && (
+            <div className="border-line bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2.5 shadow-[var(--shadow-card)]">
+              <button
+                className="border-line text-ink-body focus-visible:outline-brand inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-[13px] font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                disabled={
+                  attachmentPending ||
+                  editingDisabled ||
+                  activeQuestionIndex === 0
+                }
+                onClick={() => selectQuestion(activeQuestionIndex - 1)}
+                type="button"
+              >
+                <ChevronLeft aria-hidden="true" className="size-4" />
+                上一题
+              </button>
+              <span className="text-ink-muted text-xs tabular-nums">
+                第 {totalQuestions === 0 ? 0 : activeQuestionIndex + 1} /{" "}
+                {totalQuestions} 题
+              </span>
+              <button
+                className="border-line text-ink-body focus-visible:outline-brand inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-[13px] font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                disabled={
+                  attachmentPending ||
+                  editingDisabled ||
+                  activeQuestionIndex >= totalQuestions - 1
+                }
+                onClick={() => selectQuestion(activeQuestionIndex + 1)}
+                type="button"
+              >
+                下一题
+                <ChevronRight aria-hidden="true" className="size-4" />
+              </button>
+            </div>
+          )}
+
+          <div
+            className={
+              programming
+                ? "border-line bg-card rounded-xl border p-4"
+                : "border-line bg-card rounded-xl border p-4 lg:hidden"
+            }
+          >
+            <div className="flex flex-wrap justify-end gap-2 sm:[&>button]:w-auto">
+              {sheetActions}
+            </div>
+            <p className="text-ink-soft mt-2 text-xs sm:text-right">
+              {submitNote}
+            </p>
           </div>
+        </div>
+
+        {!programming && (
+          <aside className="hidden lg:sticky lg:top-[calc(var(--dashboard-header-height)+4rem)] lg:block lg:max-h-[calc(100dvh-var(--dashboard-header-height)-5rem)] lg:overflow-y-auto">
+            <AnswerSheetPanel
+              {...answerCard}
+              footer={
+                <>
+                  {sheetActions}
+                  <p className="text-ink-soft text-xs">{submitNote}</p>
+                </>
+              }
+              onSelect={selectQuestion}
+            />
+          </aside>
         )}
       </div>
+
+      <EditorDialog
+        open={sheetOpen}
+        title="答题卡"
+        onClose={() => setSheetOpen(false)}
+        showCloseButton
+      >
+        {sheetOpen && (
+          <AnswerSheetPanel
+            {...answerCard}
+            showTitle={false}
+            className="mt-3"
+            onSelect={(index) => {
+              selectQuestion(index);
+              setSheetOpen(false);
+            }}
+          />
+        )}
+      </EditorDialog>
     </section>
   );
 }

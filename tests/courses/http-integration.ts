@@ -1479,6 +1479,7 @@ async function main(): Promise<void> {
         email: "iteration-one-existing@example.test",
         passwordHash: preservedPasswordHash,
         role: "STUDENT",
+        schoolId: teacher.schoolId,
         mustChangePassword: false,
         profile: {
           create: {

@@ -184,15 +184,32 @@ async function main(): Promise<void> {
       first.response.headers.get("X-Learning-Analysis-Generated-At") ?? "",
     ),
   );
-  assert.deepEqual(Object.keys(first.body.data ?? {}).sort(), [
+  // recommendedDifficulty 在 services/ai/schemas.ts 中是可选字段，mock 未产出时不应计入必含键；
+  // 这里只断言契约中的必含字段，避免把可选字段写死。
+  const analysisKeys = Object.keys(first.body.data ?? {});
+  for (const requiredKey of [
     "confidence",
     "errorPatterns",
     "masteredKnowledgePoints",
     "overallLevel",
-    "recommendedDifficulty",
     "suggestions",
     "weakKnowledgePoints",
-  ]);
+  ]) {
+    assert.ok(analysisKeys.includes(requiredKey), `缺少字段 ${requiredKey}`);
+  }
+  assert.deepEqual(
+    analysisKeys
+      .filter((key) => !["recommendedDifficulty"].includes(key))
+      .sort(),
+    [
+      "confidence",
+      "errorPatterns",
+      "masteredKnowledgePoints",
+      "overallLevel",
+      "suggestions",
+      "weakKnowledgePoints",
+    ],
+  );
 
   const countAfterFirst = await prisma.aIAnalysis.count({
     where: { studentId: student.id },

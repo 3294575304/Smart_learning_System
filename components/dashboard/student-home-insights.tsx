@@ -1,4 +1,5 @@
 import { StudentHomeExams } from "./student-home-exams";
+import { ScopeSummary } from "@/components/ui/workspace";
 import { StudentPageLink } from "./student-page-link";
 import React, { type ReactNode } from "react";
 import {
@@ -124,6 +125,12 @@ export function StudentHomeInsights({
   };
   return (
     <section aria-label="学习主页数据看板" className="space-y-6">
+      <ScopeSummary
+        label="学习概览范围"
+        description="各项指标沿用卡片说明中的统计口径；下方课程选择仅切换课程知识掌握。"
+      >
+        全部课程 · 不受下方课程选择影响
+      </ScopeSummary>
       <ul
         aria-label="学习概览"
         className="grid grid-cols-2 gap-3 @min-[48rem]:grid-cols-4"
@@ -219,6 +226,9 @@ export function StudentHomeInsights({
             </header>
             {selected && (
               <div className="mt-3">
+                <p className="text-muted-foreground mb-2 text-xs leading-5">
+                  仅查看所选课程的知识掌握与证据，不改变上方全部课程指标。
+                </p>
                 <StudentEnrollmentPicker
                   contexts={classes.map((item) => ({
                     course: item.course,

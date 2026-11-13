@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useStudentAssistantAvailability } from "@/components/student-assistant/use-availability";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LearningConversationHistory } from "./learning-conversation-history";
@@ -25,17 +26,37 @@ interface Turn {
   reply: LearningAssistantReply;
 }
 
-export function LearningAssistantPanel({
-  courses,
-  initialCourseId,
-  initialConceptId,
-  reflectionHistory,
-}: {
+export function LearningAssistantPanel(props: LearningAssistantPanelProps) {
+  const available = useStudentAssistantAvailability(
+    true,
+    props.initialAvailable,
+  );
+  if (!available)
+    return (
+      <p
+        role="status"
+        className="bg-card rounded-xl border p-4 text-sm text-slate-600"
+      >
+        课程答疑暂不可用。考试交卷或网络恢复后会自动重新检查。
+      </p>
+    );
+  return <LearningAssistantContent {...props} />;
+}
+
+interface LearningAssistantPanelProps {
   courses: CourseOption[];
   initialCourseId?: string;
   initialConceptId?: string;
   reflectionHistory?: ReactNode;
-}) {
+  initialAvailable: boolean;
+}
+
+function LearningAssistantContent({
+  courses,
+  initialCourseId,
+  initialConceptId,
+  reflectionHistory,
+}: LearningAssistantPanelProps) {
   const router = useRouter();
   const [courseId, setCourseId] = useState(
     courses.find((item) => item.courseId === initialCourseId)?.courseId ??
