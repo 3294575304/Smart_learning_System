@@ -122,87 +122,98 @@ export function StudentHomeInsights({
     upcomingCount: overview.counts.examUpcoming,
     now,
   };
-  return (
-    <section aria-label="学习主页数据看板" className="space-y-6">
-      <ul
-        aria-label="学习概览"
-        className="grid grid-cols-2 gap-3 @min-[48rem]:grid-cols-4"
-      >
-        {metrics.map(
-          ({
-            icon: Icon,
-            label,
-            href,
-            value,
-            unit,
-            detail,
-            note,
-            emptyLabel,
-          }) => (
-            <li key={label} className="min-w-0">
-              <StudentPageLink
-                href={href}
-                className={`group text-foreground hover:border-brand/65 border-border bg-card flex h-full min-w-0 flex-col gap-2 rounded-xl border p-3 transition-colors sm:px-4 ${FOCUS_RING}`}
-              >
-                <div className="flex min-w-0 items-start justify-between gap-1.5">
-                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                    <span className="bg-brand/10 text-brand-strong grid size-7 shrink-0 place-items-center rounded-lg">
-                      <Icon aria-hidden="true" className="size-4" />
-                    </span>
-                    <h2 className="text-sm font-medium [overflow-wrap:anywhere]">
-                      {label}
-                    </h2>
-                  </div>
-                  <ArrowUpRight
-                    aria-hidden="true"
-                    className="text-muted-foreground group-hover:text-brand mt-1 size-4 shrink-0"
-                  />
+  const metricsView = (
+    <ul
+      aria-label="学习概览"
+      className="workspace-metrics grid grid-cols-2 gap-3 @min-[48rem]:grid-cols-4"
+    >
+      {metrics.map(
+        ({
+          icon: Icon,
+          label,
+          href,
+          value,
+          unit,
+          detail,
+          note,
+          emptyLabel,
+        }) => (
+          <li key={label} className="min-w-0">
+            <StudentPageLink
+              href={href}
+              className={`workspace-metric group text-foreground hover:border-brand/65 border-border bg-card flex h-full min-w-0 flex-col gap-2 rounded-xl border p-3 transition-colors sm:px-4 ${FOCUS_RING}`}
+            >
+              <div className="flex min-w-0 items-start justify-between gap-1.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="workspace-metric-icon bg-brand/10 text-brand-strong grid size-7 shrink-0 place-items-center rounded-lg">
+                    <Icon aria-hidden="true" className="size-4" />
+                  </span>
+                  <h2 className="text-sm font-medium [overflow-wrap:anywhere]">
+                    {label}
+                  </h2>
                 </div>
-                <p className="flex min-h-8 flex-wrap items-baseline gap-x-1">
-                  {value === null ? (
-                    <span className="text-muted-foreground self-center text-sm font-semibold">
-                      {emptyLabel ?? "暂无数据"}
+                <ArrowUpRight
+                  aria-hidden="true"
+                  className="workspace-metric-arrow text-muted-foreground group-hover:text-brand mt-1 size-4 shrink-0"
+                />
+              </div>
+              <p className="flex min-h-8 flex-wrap items-baseline gap-x-1">
+                {value === null ? (
+                  <span className="text-muted-foreground self-center text-sm font-semibold">
+                    {emptyLabel ?? "暂无数据"}
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-2xl leading-8 font-semibold tabular-nums">
+                      {value}
                     </span>
-                  ) : (
-                    <>
-                      <span className="text-2xl leading-8 font-semibold tabular-nums">
-                        {value}
+                    {unit && (
+                      <span className="text-muted-foreground text-xs font-medium">
+                        {unit}
                       </span>
-                      {unit && (
-                        <span className="text-muted-foreground text-xs font-medium">
-                          {unit}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </p>
-                <p className="text-muted-foreground text-xs leading-5">
-                  {detail}
-                </p>
-                {note && (
-                  <p className="text-xs font-medium text-rose-700">{note}</p>
+                    )}
+                  </>
                 )}
-              </StudentPageLink>
-            </li>
-          ),
-        )}
-      </ul>
-      <div className="grid gap-5 has-[details[open]]:items-start @min-[48rem]:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]">
+              </p>
+              <p className="text-muted-foreground text-xs leading-5">
+                {detail}
+              </p>
+              {note && (
+                <p className="text-xs font-medium text-rose-700">{note}</p>
+              )}
+            </StudentPageLink>
+          </li>
+        ),
+      )}
+    </ul>
+  );
+  return (
+    <section
+      aria-label="学习主页数据看板"
+      className="workspace-insights space-y-6"
+    >
+      <div className="workspace-home-columns grid gap-5 has-[details[open]]:items-start @min-[48rem]:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]">
         <div
           aria-label="考试安排与任务"
-          className="flex min-w-0 flex-col gap-5"
+          className="workspace-home-column flex min-w-0 flex-col gap-5"
         >
-          <StudentHomeExams {...examCards} slot="next" />
           <StudentHomeTasks overview={overview} dashboard />
+          {overview.nextExam && <StudentHomeExams {...examCards} slot="next" />}
+          <section aria-labelledby="home-overview-title">
+            <h2 id="home-overview-title" className="workspace-section-title">
+              学习概览
+            </h2>
+            {metricsView}
+          </section>
           <StudentAssignmentRings classes={current} dashboard />
         </div>
         <div
           aria-label="知识掌握与考试回顾"
-          className="flex min-w-0 flex-col gap-5"
+          className="workspace-home-column flex min-w-0 flex-col gap-5"
         >
           <section
             aria-labelledby="home-knowledge-heading"
-            className="border-border bg-card flex min-w-0 flex-1 flex-col rounded-[1.25rem] border p-4 sm:p-5"
+            className="workspace-panel border-border bg-card flex min-w-0 flex-1 flex-col rounded-[1.25rem] border p-4 sm:p-5"
           >
             <header className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="home-knowledge-heading" className="text-xl font-semibold">

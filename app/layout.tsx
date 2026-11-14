@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import "./globals.css";
+// 师生主题按角色隔离；共用控件最后加载，统一菜单和主行动状态。
+import "./teacher-theme.css";
+import "./student-theme.css";
+import "./workspace-controls.css";
+import "./workspace-design.css";
 
 export const metadata: Metadata = {
   title: "智学课堂",

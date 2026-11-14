@@ -149,7 +149,7 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
       <PageHeader
         actions={
           <Link
-            className="flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
+            className="tt-btn-cta flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
             href="/teacher/assignments/new"
           >
             <Plus className="h-4 w-4" />

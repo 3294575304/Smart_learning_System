@@ -80,7 +80,7 @@ export function StudentHomeTasks({
   return (
     <section
       aria-labelledby="pending-tasks-heading"
-      className="border-border bg-card flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5"
+      className="workspace-panel border-border bg-card flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2

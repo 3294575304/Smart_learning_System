@@ -14,14 +14,14 @@ export function StudentHomeView({
   insights?: ReactNode;
 }) {
   return (
-    <section className="text-foreground border-border bg-surface @container mx-auto max-w-7xl min-w-0 rounded-[1.25rem] border p-4 sm:p-7 xl:px-9 xl:py-7">
+    <section className="workspace-home text-foreground @container min-w-0">
       {/*
         页头补一行副标题：原先标题下直接是两个等权按钮，
         学生进门第一眼看到的是"自主练习/我的题库"两个入口，
         而不是"我还有几件事"。副标题把待办总量翻到标题下方，
         两个入口用同色系的描边与实底区分主次。
       */}
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <header className="workspace-page-header mb-6 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="min-w-0 text-[26px] leading-tight font-semibold [overflow-wrap:anywhere]">
             {name}，你好
@@ -44,7 +44,7 @@ export function StudentHomeView({
           </StudentPageLink>
           <StudentPageLink
             href="/student/recommendations"
-            className={`bg-brand hover:bg-brand-strong border-brand inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium text-white ${FOCUS_RING}`}
+            className={`st-btn-cta bg-brand hover:bg-brand-strong border-brand inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium text-white ${FOCUS_RING}`}
           >
             自主练习
           </StudentPageLink>

@@ -100,7 +100,10 @@ test("同名课程分别展示，结课记录不混入当前汇总，待办分�
   assert.match(html, /签到 1/);
   assert.match(html, /问卷 1/);
   assert.ok(html.includes('value="one"'));
-  assert.ok(html.includes('value="two" selected=""'));
+  assert.match(
+    html,
+    /<option(?=[^>]*\bvalue="two")(?=[^>]*\bselected="")[^>]*>/u,
+  );
   assert.match(html, /Python · 班级one/);
   assert.match(html, /Python · 班级two/);
 });

@@ -7,7 +7,7 @@ export function StudentPageHeader({
   eyebrow,
 }: ComponentProps<typeof PageHeader>) {
   return (
-    <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-sky-100 pb-3">
+    <header className="workspace-page-header flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-sky-100 pb-3">
       <div className="min-w-0">
         {eyebrow ? (
           <p className="text-xs font-medium text-sky-700">{eyebrow}</p>

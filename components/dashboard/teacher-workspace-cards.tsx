@@ -99,35 +99,35 @@ export function TeacherWorkspaceCards({
       description: "管理班级、成员与邀请码",
       href: "/teacher/classrooms",
       icon: School,
-      accent: "bg-violet-50 text-violet-700 ring-violet-100",
+      accent: "bg-sky-50 text-sky-700 ring-sky-100",
     },
     {
       label: "考试管理",
       description: "组卷、安排考试与查看详情",
       href: `/teacher/exams?courseId=${workspace.course.id}`,
       icon: FilePenLine,
-      accent: "bg-indigo-50 text-indigo-700 ring-indigo-100",
+      accent: "bg-sky-50 text-sky-700 ring-sky-100",
     },
     {
       label: "课程题库",
       description: "查看当前课程题目",
       href: `/teacher/questions?courseId=${workspace.course.id}`,
       icon: BookOpenCheck,
-      accent: "bg-teal-50 text-teal-700 ring-teal-100",
+      accent: "bg-sky-50 text-sky-700 ring-sky-100",
     },
     {
       label: "学情分析",
       description: "学情分析与课程评价",
       href: `/teacher/results?${resultsParams.toString()}`,
       icon: BarChart3,
-      accent: "bg-amber-50 text-amber-700 ring-amber-100",
+      accent: "bg-sky-50 text-sky-700 ring-sky-100",
     },
     {
       label: "课程通知",
       description: "发布通知与管理历史记录",
       href: `${base}/announcements`,
       icon: Megaphone,
-      accent: "bg-orange-50 text-orange-700 ring-orange-100",
+      accent: "bg-sky-50 text-sky-700 ring-sky-100",
     },
   ];
   const stats = [
@@ -169,12 +169,15 @@ export function TeacherWorkspaceCards({
       ? "sm:col-span-2"
       : "sm:col-span-3";
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:grid-rows-[auto_auto_auto]">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:grid-rows-[auto_20rem_auto]">
       <section
         aria-labelledby="quick-actions-title"
         className={`${styles.card} flex min-w-0 flex-col rounded-xl border bg-white p-4 xl:col-start-1 xl:row-start-1`}
       >
-        <h2 id="quick-actions-title" className={`${styles.heading} font-semibold`}>
+        <h2
+          id="quick-actions-title"
+          className={`${styles.heading} font-semibold`}
+        >
           快捷入口
         </h2>
         <div
@@ -211,7 +214,7 @@ export function TeacherWorkspaceCards({
       </section>
       <section
         aria-labelledby="teacher-next-actions"
-        className={`${styles.card} flex min-w-0 flex-col rounded-xl border bg-white p-4 xl:col-start-1 xl:row-start-2`}
+        className={`${styles.card} flex h-96 min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-white p-4 xl:col-start-1 xl:row-start-2 xl:h-80`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -271,7 +274,10 @@ export function TeacherWorkspaceCards({
           </div>
         ) : (
           <div
-            className={`${styles.scrollArea} mt-3 min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto`}
+            className={`${styles.scrollArea} mt-3 min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto focus-visible:outline-2 focus-visible:outline-sky-700`}
+            tabIndex={0}
+            role="region"
+            aria-label="当前待办列表，可在区域内滚动"
           >
             {todo.map((item) => (
               <Link

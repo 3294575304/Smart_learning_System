@@ -9,7 +9,6 @@ import {
   CreateEntryProvider,
 } from "@/components/dashboard/create-entry";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { PageHeader } from "@/components/dashboard/page-header";
 import { readAllowedParam, readTextParam } from "@/lib/list-filter";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
@@ -107,30 +106,53 @@ export default async function TeacherClassroomsPage({
     courseId: readTextParam(params.courseId, 64),
   };
 
+  const classrooms = history ? [] : await listTeacherClassrooms(teacher.id);
+  const activeClassrooms = classrooms.filter(
+    (classroom) => classroom.status === "ACTIVE",
+  ).length;
+  const totalStudents = classrooms.reduce(
+    (sum, classroom) => sum + classroom.studentCount,
+    0,
+  );
+
   const page = (
-    <section className="mx-auto max-w-6xl space-y-6">
+    <section className="mx-auto max-w-6xl space-y-5">
       {deleted && (
         <p
           role="status"
-          className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800"
+          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
         >
           班级已删除，列表已更新。学生账号及历史教学记录已保留。
         </p>
       )}
-      <PageHeader
-        description={
-          history
-            ? "查看已删除或解散的班级记录。"
-            : "查看班级、管理成员及入班邀请。"
-        }
-        title="班级管理"
-        actions={history ? undefined : <CreateEntry />}
-      />
-      <nav aria-label="班级管理视图" className="flex gap-1 border-b">
+      <header className="tt-phead">
+        <div className="min-w-0">
+          <h1 className="tt-h1">{history ? "历史班级" : "班级管理"}</h1>
+          <p className="tt-sub">
+            {history
+              ? "已删除或解散的班级记录，仅作追溯用途"
+              : `共 ${classrooms.length} 个班级 · ${activeClassrooms} 个进行中 · 合计 ${totalStudents} 名学生`}
+          </p>
+        </div>
+        <div className="tt-phead-act">
+          <Link
+            className="tt-btn-line"
+            href={
+              history
+                ? "/teacher/classrooms"
+                : "/teacher/classrooms?view=history"
+            }
+          >
+            {history ? "返回班级列表" : "历史班级"}
+          </Link>
+          {history ? null : <CreateEntry tone="cta" />}
+        </div>
+      </header>
+      <nav aria-label="班级管理视图" className="tt-tabs">
         {CLASSROOM_VIEWS.map((view) => (
           <Link
             aria-current={view.history === history ? "page" : undefined}
-            className="border-b-2 border-transparent px-4 py-3 text-sm text-slate-600 hover:text-sky-800 focus-visible:outline-2 focus-visible:outline-sky-700 aria-[current=page]:border-sky-700 aria-[current=page]:font-medium aria-[current=page]:text-sky-800"
+            className="tt-tab"
             href={view.href}
             key={view.href}
           >
@@ -143,7 +165,7 @@ export default async function TeacherClassroomsPage({
         <HistoricalClassrooms teacherId={teacher.id} />
       ) : (
         <TeacherClassroomList
-          initialClassrooms={await listTeacherClassrooms(teacher.id)}
+          initialClassrooms={classrooms}
           initialFilters={initialFilters}
           createEntry={<CreateEntry card />}
         />

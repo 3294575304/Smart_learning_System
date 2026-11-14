@@ -6,6 +6,8 @@ import {
   BookOpenCheck,
   CheckCircle2,
   LoaderCircle,
+  RotateCcw,
+  Search,
   School,
   SearchX,
   Trash2,
@@ -16,10 +18,6 @@ import React, { useMemo, useState } from "react";
 
 import { requestApi } from "@/components/courses/request-api";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import {
-  ListFilterBar,
-  type ListFilterOption,
-} from "@/components/dashboard/list-filter-bar";
 import { useListFilterUrlSync } from "@/components/dashboard/use-list-filter-url-sync";
 import {
   describeFilterSummary,
@@ -37,11 +35,21 @@ const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
   ARCHIVED: "归档",
 };
 
+/** 行内徽标：浅底深字，不用描边，靠底色区分状态 */
 const COURSE_STATUS_STYLES: Record<CourseStatus, string> = {
-  DRAFT: "bg-sky-100/70 text-gray-700",
-  ACTIVE: "bg-emerald-50 text-emerald-700",
-  ARCHIVED: "bg-sky-100/70 text-slate-600",
+  DRAFT: "tt-badge tt-badge-draft",
+  ACTIVE: "tt-badge tt-badge-ok",
+  ARCHIVED: "tt-badge tt-badge-line",
 };
+
+/** 排序方式：默认按最近更新，教师最关心「哪门课刚动过」 */
+const SORT_OPTIONS = [
+  { value: "recent", label: "按最近更新" },
+  { value: "name", label: "按课程名称" },
+  { value: "term", label: "按学期" },
+] as const;
+
+type CourseSortKey = (typeof SORT_OPTIONS)[number]["value"];
 
 /** 筛选项顺序固定，避免随数据顺序跳动。 */
 const COURSE_STATUS_FILTER_ORDER: CourseStatus[] = ["ACTIVE", "DRAFT"];
@@ -124,10 +132,11 @@ function CourseDeleteAction({
         aria-label={`删除课程“${course.name}”`}
         className="text-muted-foreground hover:bg-destructive/5 hover:text-destructive inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
         onClick={openDialog}
+        title={`删除课程“${course.name}”`}
         type="button"
       >
-        <Trash2 className="h-4 w-4" />
-        删除课程
+        <Trash2 className="h-3.5 w-3.5" />
+        <span className="hidden lg:inline">删除</span>
       </button>
 
       {dialogOpen ? (
@@ -237,9 +246,10 @@ export function TeacherCourseList({
   const [keyword, setKeyword] = useState(initialFilters.keyword);
   const [status, setStatus] = useState(initialFilters.status);
   const [term, setTerm] = useState(initialFilters.term);
+  const [sortBy, setSortBy] = useState<CourseSortKey>("recent");
 
   // 学期选项来自当前课程数据，最新学期排在前面
-  const termOptions = useMemo<ListFilterOption[]>(() => {
+  const termOptions = useMemo<{ value: string; label: string }[]>(() => {
     const terms = [...new Set(courses.map((course) => course.term))];
     return terms
       .sort((left, right) => right.localeCompare(left))
@@ -247,15 +257,9 @@ export function TeacherCourseList({
   }, [courses]);
 
   // 分享链接里的状态、学期可能已失效：不合法就当作未筛选，避免出现
-  // 「下拉显示全部却一条也不显示」的死局
-  const presentStatuses = new Set(courses.map((course) => course.status));
-  const statusOptions = presentStatuses.has("DRAFT")
-    ? COURSE_STATUS_FILTER_ORDER.filter((value) =>
-        presentStatuses.has(value),
-      ).map((value) => ({ value, label: COURSE_STATUS_LABELS[value] }))
-    : [];
-  const effectiveStatus = statusOptions.some(
-    (option) => option.value === status,
+  // 「tab 显示全部却一条也不显示」的死局
+  const effectiveStatus = COURSE_STATUS_FILTER_ORDER.includes(
+    status as CourseStatus,
   )
     ? status
     : "";
@@ -263,15 +267,43 @@ export function TeacherCourseList({
     ? term
     : "";
 
-  const visibleCourses = useMemo(
-    () =>
-      filterTeacherCourses(courses, {
-        keyword,
-        status: effectiveStatus,
-        term: effectiveTerm,
-      }),
-    [courses, effectiveStatus, effectiveTerm, keyword],
+  // tab 计数始终基于全部课程：切换 tab 时数字不应跟着变
+  const statusTabs = useMemo(
+    () => [
+      { value: "", label: "全部", count: courses.length },
+      ...COURSE_STATUS_FILTER_ORDER.map((value) => ({
+        value,
+        label: COURSE_STATUS_LABELS[value],
+        count: courses.filter((course) => course.status === value).length,
+      })),
+    ],
+    [courses],
   );
+
+  const visibleCourses = useMemo(() => {
+    const filtered = filterTeacherCourses(courses, {
+      keyword,
+      status: effectiveStatus,
+      term: effectiveTerm,
+    });
+    const sorted = [...filtered];
+    if (sortBy === "name") {
+      sorted.sort((left, right) =>
+        left.name.localeCompare(right.name, "zh-CN"),
+      );
+    } else if (sortBy === "term") {
+      sorted.sort(
+        (left, right) =>
+          right.term.localeCompare(left.term) ||
+          left.name.localeCompare(right.name, "zh-CN"),
+      );
+    } else {
+      sorted.sort(
+        (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
+      );
+    }
+    return sorted;
+  }, [courses, effectiveStatus, effectiveTerm, keyword, sortBy]);
 
   const isFiltered = hasActiveFilterCondition({
     keyword,
@@ -297,7 +329,7 @@ export function TeacherCourseList({
     totalCount: courses.length,
     unit: "门课程",
     conditions,
-    idleHint: "可按课程名称、课程号、学期、课程分类搜索与筛选",
+    idleHint: "可按课程名称、课程号或学期搜索",
   });
 
   function resetFilters() {
@@ -312,74 +344,120 @@ export function TeacherCourseList({
   }
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">我的课程</h2>
-        <span className="text-muted-foreground text-sm">
-          {isFiltered
-            ? `筛选出 ${visibleCourses.length} / ${courses.length} 门`
-            : `共 ${courses.length} 门`}
-        </span>
-      </div>
-
+    <section className="space-y-3">
       {successMessage ? (
         <div
           aria-live="polite"
-          className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700"
+          className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
         >
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="h-3.5 w-3.5" />
           {successMessage}
         </div>
       ) : null}
 
       {courses.length === 0 ? (
-        createEntry ? null : (
-          <EmptyState
-            description="先基于课程模板创建一门课程，再在课程建设中创建班级。"
-            icon={School}
-            title="暂无课程"
-          />
-        )
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {createEntry ?? (
+            <EmptyState
+              description="先基于课程模板创建一门课程，再在课程建设中创建班级。"
+              icon={School}
+              title="暂无课程"
+            />
+          )}
+        </div>
       ) : (
         <>
-          <ListFilterBar
-            filters={[
-              ...(statusOptions.length
-                ? [
-                    {
-                      key: "status",
-                      label: "课程状态",
-                      value: effectiveStatus,
-                      allLabel: "全部状态",
-                      options: statusOptions,
-                      onChange: setStatus,
-                    },
-                  ]
-                : []),
-              {
-                key: "term",
-                label: "学期",
-                value: effectiveTerm,
-                allLabel: "全部学期",
-                options: termOptions,
-                onChange: setTerm,
-              },
-            ]}
-            isFiltered={isFiltered}
-            keyword={keyword}
-            onKeywordChange={setKeyword}
-            onReset={resetFilters}
-            searchLabel="搜索课程"
-            searchPlaceholder="课程名称、课程号或学期"
-            searchScope="课程名称、课程号、学期、课程说明、课程分类、课程模板名称、课程状态；多个关键词用空格分隔，需同时命中"
-            summary={summary}
-          />
+          <div className="tt-fbar">
+            <div aria-label="课程状态" className="tt-tabs" role="tablist">
+              {statusTabs.map((tab) => (
+                <button
+                  aria-selected={effectiveStatus === tab.value}
+                  className="tt-tab"
+                  key={tab.value || "all"}
+                  onClick={() => setStatus(tab.value)}
+                  role="tab"
+                  type="button"
+                >
+                  {tab.label}
+                  <em>{tab.count}</em>
+                </button>
+              ))}
+            </div>
+
+            <div className="tt-search">
+              <Search
+                aria-hidden="true"
+                className="size-3.5 shrink-0 text-slate-400"
+              />
+              <input
+                aria-label="搜索课程"
+                autoComplete="off"
+                maxLength={80}
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder="搜索课程名称、课程号或学期"
+                type="search"
+                value={keyword}
+              />
+              {keyword.length > 0 ? (
+                <button
+                  aria-label="清除搜索关键词"
+                  className="shrink-0 rounded p-0.5 text-slate-400 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-sky-600"
+                  onClick={() => setKeyword("")}
+                  type="button"
+                >
+                  <X aria-hidden="true" className="size-3.5" />
+                </button>
+              ) : null}
+            </div>
+
+            <select
+              aria-label="按学期筛选"
+              onChange={(event) => setTerm(event.target.value)}
+              value={effectiveTerm}
+            >
+              <option value="">全部学期</option>
+              {termOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              aria-label="排序方式"
+              onChange={(event) =>
+                setSortBy(event.target.value as CourseSortKey)
+              }
+              value={sortBy}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            {isFiltered ? (
+              <button
+                className="tt-btn-ghost"
+                onClick={resetFilters}
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" className="size-3.5" />
+                重置
+              </button>
+            ) : null}
+          </div>
+
+          <p aria-live="polite" className="tt-hint">
+            {summary}
+          </p>
 
           {visibleCourses.length === 0 ? (
             <EmptyState
               action={
                 <button
-                  className="rounded-lg border bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                  className="tt-btn-line"
                   onClick={resetFilters}
                   type="button"
                 >
@@ -391,72 +469,75 @@ export function TeacherCourseList({
               title="没有匹配的课程"
             />
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {visibleCourses.map((course) => (
                 <article
+                  className="tt-course-card min-w-0 rounded-xl border border-slate-200 bg-white transition-colors hover:border-sky-300"
                   key={course.id}
-                  className="min-w-0 rounded-xl border bg-white p-4 transition hover:border-sky-300"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <Link
-                      className="flex min-w-0 items-center gap-2 rounded text-slate-950 hover:text-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600"
-                      href={`/teacher/courses/${course.id}`}
-                    >
-                      <BookOpenCheck
-                        aria-hidden="true"
-                        className="size-5 shrink-0 text-sky-600"
-                      />
-                      <h3 className="text-base font-semibold break-words">
-                        {course.name}
-                      </h3>
-                    </Link>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
-                    >
-                      {COURSE_STATUS_LABELS[course.status]}
-                    </span>
+                  <div className="tt-course-cover" aria-hidden="true">
+                    <span>{course.courseNo}</span>
                   </div>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    {course.courseNo} · {course.term}
-                  </p>
-                  {course.description && (
-                    <p className="mt-1 line-clamp-1 text-xs text-slate-500">
-                      {course.description}
+                  <div className="tt-course-body">
+                    <div className="flex items-start justify-between gap-3">
+                      <Link
+                        className="flex min-w-0 items-center gap-2 rounded text-slate-900 hover:text-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600"
+                        href={`/teacher/courses/${course.id}`}
+                      >
+                        <BookOpenCheck
+                          aria-hidden="true"
+                          className="size-4 shrink-0 text-sky-600"
+                        />
+                        <h3 className="text-[13.5px] font-semibold break-words">
+                          {course.name}
+                        </h3>
+                      </Link>
+                      <span className={COURSE_STATUS_STYLES[course.status]}>
+                        {COURSE_STATUS_LABELS[course.status]}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      {course.courseNo} · {course.term}
                     </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-sky-50/70 px-3 py-2 text-xs text-slate-600">
-                    <span>
-                      <strong className="text-slate-900">
-                        {course.classroomCount}
-                      </strong>{" "}
-                      个课程班级
-                    </span>
-                    <span>
-                      <strong className="text-slate-900">
-                        {course.activeClassroomCount}
-                      </strong>{" "}
-                      个开课班级
-                    </span>
-                    <span>
-                      <strong className="text-slate-900">
-                        {course.activeStudentCount}
-                      </strong>{" "}
-                      学生人次
-                    </span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Link
-                      className="inline-flex items-center gap-1 rounded-lg bg-sky-700 px-3 py-2 text-xs font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-sky-600"
-                      href={`/teacher/courses/${course.id}`}
-                    >
-                      进入课程
-                      <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                    </Link>
-                    <div className="ml-auto">
-                      <CourseDeleteAction
-                        course={course}
-                        onDeleted={handleDeleted}
-                      />
+                    {course.description && (
+                      <p className="mt-1 line-clamp-1 text-xs text-slate-500">
+                        {course.description}
+                      </p>
+                    )}
+                    <div className="tt-course-facts mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                      <span>
+                        <strong className="font-semibold text-slate-900">
+                          {course.classroomCount}
+                        </strong>{" "}
+                        个课程班级
+                      </span>
+                      <span>
+                        <strong className="font-semibold text-slate-900">
+                          {course.activeClassroomCount}
+                        </strong>{" "}
+                        个开课班级
+                      </span>
+                      <span>
+                        <strong className="font-semibold text-slate-900">
+                          {course.activeStudentCount}
+                        </strong>{" "}
+                        学生人次
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <Link
+                        className="tt-btn"
+                        href={`/teacher/courses/${course.id}`}
+                      >
+                        进入课程
+                        <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                      </Link>
+                      <div className="ml-auto">
+                        <CourseDeleteAction
+                          course={course}
+                          onDeleted={handleDeleted}
+                        />
+                      </div>
                     </div>
                   </div>
                 </article>
@@ -465,9 +546,6 @@ export function TeacherCourseList({
             </div>
           )}
         </>
-      )}
-      {visibleCourses.length === 0 && createEntry && (
-        <div className="grid gap-4 md:grid-cols-2">{createEntry}</div>
       )}
     </section>
   );

@@ -350,7 +350,7 @@ export function PracticeSetCenter({
                 </p>
               </div>
               <Link
-                className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
+                className="st-btn-cta rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
                 href={detailHref(item.entryId)}
               >
                 {item.status === "ACTIVE"

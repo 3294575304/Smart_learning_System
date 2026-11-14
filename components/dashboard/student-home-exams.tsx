@@ -12,10 +12,11 @@ import {
 import type { StudentHomeExamResult } from "@/services/dashboard/student-class-analytics";
 import { studentTaskHref } from "@/services/student-experience/task-scope";
 
-const card = "flex min-w-0 flex-col gap-3 rounded-[1.25rem] border p-4 sm:p-5";
+const card =
+  "workspace-panel flex min-w-0 flex-col gap-3 rounded-[1.25rem] border p-4 sm:p-5";
 const recentCard = `${card} border-border bg-card`;
 const quietCard =
-  "flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[1.25rem] border border-dashed border-border bg-card px-4 py-3";
+  "workspace-panel flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[1.25rem] border border-dashed border-border bg-card px-4 py-3";
 const quietHeading =
   "flex min-w-0 items-center gap-2 text-sm font-medium text-neutral-700";
 const action = `inline-flex min-h-10 items-center rounded-md bg-brand px-3.5 text-sm font-medium text-white hover:bg-brand-strong ${FOCUS_RING}`;

@@ -123,7 +123,7 @@ export default async function TeacherExamsPage({
             上传试卷
           </Link>
           <Link
-            className={`${actionClass} bg-sky-700 text-white hover:bg-sky-800 active:bg-sky-900`}
+            className={`tt-btn-cta ${actionClass} bg-sky-700 text-white hover:bg-sky-800 active:bg-sky-900`}
             href="/teacher/exams/new"
           >
             <Plus aria-hidden="true" className="size-4" />

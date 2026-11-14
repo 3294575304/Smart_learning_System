@@ -1,0 +1,864 @@
+/*
+ * 教师端皮肤 · B「全浅墨青」
+ * ---------------------------------------------------------------------------
+ * 目标：登录后教师端的整体配色与登录页统一，版式沿用对照稿第二种「V2 秩序」
+ *      —— 行优先、方角、1px 细线、无阴影、高密度。
+ *
+ * 做法：复用既有教师页面与组件。Tailwind v4 的实色工具类输出的是
+ *      `var(--color-sky-700)` 这类变量引用，因此在教师 shell 根节点上重定义
+ *      `--color-*` 即可整站换肤；再叠一层结构微调（圆角、阴影、导航选中态）。
+ *
+ * 作用域：`[data-shell-role="TEACHER"]`，学生端、管理员端、超级管理员端
+ *      以及登录页完全不受影响。要回退，删掉本文件的 @import 即可。
+ *
+ * 色值来源：components/auth/login-space.module.css 与 space-illustration.tsx
+ *      深空 #112B3C / 青绿 #328F96 #67D8D1 #7EE0D4 / 珊瑚 #D94B50
+ *      墨蓝 #152D3E / 奶油 #FFF8ED —— 未引入任何新色相。
+ */
+
+[data-shell-role="TEACHER"] {
+  /* --- 语义令牌：与登录页同一套 --- */
+  --tt-canvas: #f3f6f7;
+  --tt-ink: #152d3e;
+  --tt-ink-2: #3f5768;
+  --tt-ink-3: #84919b;
+  --tt-line: #dfe6e9;
+  --tt-line-2: #eff3f5;
+  --tt-brand: #328f96;
+  --tt-brand-ink: #26717a;
+  --tt-brand-soft: #eaf6f4;
+  --tt-cta: #cf4148;
+
+  /* --- shadcn 语义变量：底色、边框、主色、焦点环 --- */
+  --background: #ffffff;
+  --foreground: var(--tt-ink);
+  --card: #ffffff;
+  --card-foreground: var(--tt-ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--tt-ink);
+  --primary: var(--tt-brand-ink);
+  --primary-foreground: #ffffff;
+  --secondary: #f3f8f8;
+  --secondary-foreground: var(--tt-brand-ink);
+  --muted: #f3f6f7;
+  --muted-foreground: var(--tt-ink-3);
+  --accent: var(--tt-brand-soft);
+  --accent-foreground: var(--tt-brand-ink);
+  --border: var(--tt-line);
+  --input: var(--tt-line);
+  --ring: #5fc7c3;
+  --surface: #f8fafb;
+
+  /* --- sky：品牌色族，换成登录页青绿 --- */
+  --color-sky-50: #eaf6f4;
+  --color-sky-100: #dbefed;
+  --color-sky-200: #c4e3e0;
+  --color-sky-300: #9bcfcc;
+  --color-sky-400: #5fc7c3;
+  --color-sky-500: #328f96;
+  --color-sky-600: #2a7c83;
+  --color-sky-700: #26717a;
+  --color-sky-800: #1f5c64;
+  --color-sky-900: #183f46;
+  --color-sky-950: #0f2c32;
+
+  /* --- emerald：成功/达标 --- */
+  --color-emerald-50: #e7f4ed;
+  --color-emerald-100: #d6ede2;
+  --color-emerald-200: #b6ddc8;
+  --color-emerald-300: #8ac9ac;
+  --color-emerald-400: #5fb48d;
+  --color-emerald-500: #2c7a5b;
+  --color-emerald-600: #266c50;
+  --color-emerald-700: #215d45;
+  --color-emerald-800: #1c4e3a;
+  --color-emerald-900: #164030;
+
+  /* --- amber：提醒/待处理，压暖以贴合墨蓝 --- */
+  --color-amber-50: #fbf1de;
+  --color-amber-100: #f7e7c6;
+  --color-amber-200: #efd49b;
+  --color-amber-300: #e3bc6c;
+  --color-amber-400: #d2a24a;
+  --color-amber-500: #b5862b;
+  --color-amber-600: #9a6b1e;
+  --color-amber-700: #855a18;
+  --color-amber-800: #6f4a15;
+  --color-amber-900: #5b3c12;
+
+  /* --- rose：错误/不通过 --- */
+  --color-rose-50: #fbeaea;
+  --color-rose-100: #f7dcdc;
+  --color-rose-200: #efc0c1;
+  --color-rose-300: #e39a9c;
+  --color-rose-400: #d2717a;
+  --color-rose-500: #bd3b43;
+  --color-rose-600: #a83239;
+  --color-rose-700: #8e2a31;
+  --color-rose-800: #742329;
+  --color-rose-900: #5d1d22;
+
+  /* --- slate / gray：正文层级，统一到墨蓝灰 --- */
+  --color-slate-50: #f7fafb;
+  --color-slate-100: #eff3f5;
+  --color-slate-200: #dfe6e9;
+  --color-slate-300: #c7d3d9;
+  --color-slate-400: #a9bac6;
+  --color-slate-500: #84919b;
+  --color-slate-600: #63798a;
+  --color-slate-700: #4a6272;
+  --color-slate-800: #33495a;
+  --color-slate-900: #152d3e;
+  --color-slate-950: #0e2230;
+  --color-gray-50: #f7fafb;
+  --color-gray-100: #eff3f5;
+  --color-gray-200: #dfe6e9;
+  --color-gray-300: #c7d3d9;
+  --color-gray-400: #a9bac6;
+  --color-gray-500: #84919b;
+  --color-gray-600: #63798a;
+  --color-gray-700: #4a6272;
+  --color-gray-800: #33495a;
+  --color-gray-900: #152d3e;
+}
+
+/* ==========================================================================
+   1. 外壳底色：去掉青绿渐变，换成中性浅青灰画布
+   ========================================================================== */
+[data-shell-role="TEACHER"] {
+  background-color: var(--tt-canvas);
+  background-image: none;
+}
+
+/* ==========================================================================
+   2. 侧栏
+   ========================================================================== */
+[data-shell-role="TEACHER"] > aside {
+  background-color: #ffffff;
+  border-right-color: var(--tt-line);
+}
+
+/* 侧栏顶部模块名（教师工作台）：小字、宽字距，作为分组标题的上级 */
+[data-shell-role="TEACHER"] > aside > div > div > p.text-muted-foreground {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: #9da9b1;
+}
+
+/* 导航分组标题 */
+[data-shell-role="TEACHER"] aside nav p {
+  margin-bottom: 0.375rem;
+  padding-inline: 0.75rem;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: #9da9b1;
+}
+
+/* 导航项：行高收到 36px 左右，方角细边 */
+[data-shell-role="TEACHER"] aside nav a {
+  gap: 0.625rem;
+  padding-block: 0.45rem;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #576e7c;
+}
+
+/* 分组间距从 20px 收到 12px，整条导航更紧 */
+[data-shell-role="TEACHER"] aside nav > div + div {
+  margin-top: 0.75rem;
+}
+
+[data-shell-role="TEACHER"] aside nav a svg {
+  opacity: 0.62;
+}
+
+/*
+ * 选中态：原先是 sky→emerald 渐变 + 白字 + 阴影。
+ * 这里改回浅青绿底 + 青绿字 + 左侧 2px 竖条，并把阴影清零。
+ * aria-current="page" 由 dashboard-shell 现有的 active 判断写入，
+ * 因此不需要改动组件逻辑。
+ */
+[data-shell-role="TEACHER"] aside nav a[aria-current="page"] {
+  background-image: none;
+  background-color: var(--tt-brand-soft);
+  color: var(--tt-brand-ink);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+[data-shell-role="TEACHER"] aside nav a[aria-current="page"] svg {
+  opacity: 1;
+}
+
+[data-shell-role="TEACHER"] aside nav a[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--tt-brand);
+}
+
+/* ==========================================================================
+   3. 顶栏
+   ========================================================================== */
+[data-shell-role="TEACHER"] > div > header {
+  border-bottom-color: var(--tt-line);
+}
+
+/* 账号胶囊：去掉渐变头像，改实色青绿 */
+[data-shell-role="TEACHER"] header button > span.rounded-full {
+  background-image: none;
+  background-color: var(--tt-brand);
+}
+
+/* ==========================================================================
+   4. 结构：方角、无阴影（V2 秩序的核心识别）
+   ========================================================================== */
+[data-shell-role="TEACHER"] :where(.rounded-2xl) {
+  border-radius: 8px;
+}
+
+[data-shell-role="TEACHER"] :where(.rounded-xl) {
+  border-radius: 6px;
+}
+
+[data-shell-role="TEACHER"] :where(.rounded-lg) {
+  border-radius: 6px;
+}
+
+[data-shell-role="TEACHER"] :where(.rounded-md) {
+  border-radius: 5px;
+}
+
+/* 卡片不用投影，靠 1px 细线和底色差分层 */
+[data-shell-role="TEACHER"] :where(.shadow-sm, .shadow, .shadow-md) {
+  box-shadow: none;
+}
+
+[data-shell-role="TEACHER"] :where(.shadow-lg, .shadow-xl, .shadow-2xl) {
+  box-shadow: 0 10px 28px rgba(21, 45, 62, 0.1);
+}
+
+/* 渐变填充一律拍平成实色（仅限以 sky/emerald 实色起始的元素，如头像、徽标） */
+[data-shell-role="TEACHER"]
+  :where(.bg-gradient-to-r, .bg-gradient-to-br, .bg-gradient-to-b):where(
+    .from-sky-500,
+    .from-sky-600,
+    .from-sky-700
+  ) {
+  background-image: none;
+  background-color: var(--tt-brand);
+}
+
+/* ==========================================================================
+   5. 正文区密度与表格
+   ========================================================================== */
+#dashboard-main[data-workspace-role="TEACHER"] :where(h1, h2, h3) {
+  color: var(--tt-ink);
+  letter-spacing: -0.01em;
+}
+
+/* 页头字号收到 21px（对照稿 V2 的 h1），层级改由密度承担 */
+#dashboard-main[data-workspace-role="TEACHER"] :where(h1) {
+  font-size: 1.3125rem;
+  line-height: 1.3;
+}
+
+#dashboard-main[data-workspace-role="TEACHER"] :where(th) {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--tt-ink-3);
+}
+
+#dashboard-main[data-workspace-role="TEACHER"] :where(td) {
+  color: var(--tt-ink-2);
+}
+
+/* 老页面主按钮兜底：深青实心 → 青绿实心，hover 走深一档 */
+#dashboard-main[data-workspace-role="TEACHER"]
+  :where(a, button):where(.bg-sky-700, .bg-sky-800, .bg-sky-900) {
+  background-color: var(--tt-brand-ink);
+  color: #ffffff;
+}
+
+#dashboard-main[data-workspace-role="TEACHER"]
+  :where(a, button):where(.bg-sky-700, .bg-sky-800, .bg-sky-900):hover:not(
+    :disabled
+  ) {
+  background-color: var(--tt-brand-ink);
+}
+
+/* ==========================================================================
+   6. 控件层：按钮 / 输入框 / 选择框 / 分段控件
+   --------------------------------------------------------------------------
+   B 版（全浅墨青）的控件特征：32px 行高、5px 方角、1px 细边、无投影。
+   新页面直接用 .tt-* 类；老页面靠第 5 节的令牌与上面的兜底规则被动对齐。
+   ========================================================================== */
+
+/* 6.1 按钮：四种角色 */
+[data-shell-role="TEACHER"]
+  :where(.tt-btn, .tt-btn-cta, .tt-btn-line, .tt-btn-ghost) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding-inline: 13px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 12.2px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease-out,
+    border-color 0.15s ease-out,
+    color 0.15s ease-out;
+}
+
+[data-shell-role="TEACHER"]
+  :where(.tt-btn, .tt-btn-cta, .tt-btn-line, .tt-btn-ghost):focus-visible {
+  outline: 2px solid #5fc7c3;
+  outline-offset: 1px;
+}
+
+[data-shell-role="TEACHER"]
+  :where(.tt-btn, .tt-btn-cta, .tt-btn-line, .tt-btn-ghost):disabled,
+[data-shell-role="TEACHER"]
+  :where(
+    .tt-btn,
+    .tt-btn-cta,
+    .tt-btn-line,
+    .tt-btn-ghost
+  )[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 主按钮：青绿实心，用于「这一屏最该点的业务动作」 */
+[data-shell-role="TEACHER"] .tt-btn {
+  background-color: var(--tt-brand-ink);
+  border-color: var(--tt-brand-ink);
+  color: #ffffff;
+}
+
+[data-shell-role="TEACHER"] .tt-btn:hover:not(:disabled) {
+  background-color: var(--tt-brand-ink);
+  border-color: var(--tt-brand-ink);
+}
+
+/* 强调按钮：珊瑚红。每屏最多一个，对齐登录页唯一的「登录」 */
+[data-shell-role="TEACHER"] .tt-btn-cta {
+  background-color: var(--tt-cta);
+  border-color: var(--tt-cta);
+  color: #ffffff;
+}
+
+[data-shell-role="TEACHER"] .tt-btn-cta:hover:not(:disabled) {
+  background-color: #c73e44;
+  border-color: #c73e44;
+}
+
+/* 次按钮：白底细边，用于并排的次要动作 */
+[data-shell-role="TEACHER"] .tt-btn-line {
+  background-color: #ffffff;
+  border-color: var(--tt-line);
+  color: var(--tt-ink-2);
+}
+
+[data-shell-role="TEACHER"] .tt-btn-line:hover:not(:disabled) {
+  background-color: #f7fafb;
+  border-color: #c7d3d9;
+  color: var(--tt-ink);
+}
+
+/* 幽灵按钮：行内文字动作，例如「进入课程」「重置」 */
+[data-shell-role="TEACHER"] .tt-btn-ghost {
+  padding-inline: 6px;
+  background-color: transparent;
+  color: var(--tt-brand-ink);
+}
+
+[data-shell-role="TEACHER"] .tt-btn-ghost:hover:not(:disabled) {
+  background-color: var(--tt-brand-soft);
+}
+
+/* 6.2 输入框 / 选择框 / 文本域：白底、1px 细边、5px 方角 */
+[data-shell-role="TEACHER"]
+  :where(input, select, textarea):where(
+    :not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+        [type="file"]
+      ):not([type="color"]):not([type="submit"]):not([type="button"])
+  ) {
+  border: 1px solid var(--tt-line);
+  border-radius: 5px;
+  background-color: #ffffff;
+  color: var(--tt-ink);
+  font-size: 13px;
+  min-height: 32px;
+}
+
+[data-shell-role="TEACHER"]
+  :where(input, select, textarea):where(
+    :not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+        [type="file"]
+      ):not([type="color"]):not([type="submit"]):not([type="button"])
+  )::placeholder {
+  color: #a9bac6;
+}
+
+[data-shell-role="TEACHER"]
+  :where(input, select, textarea):where(
+    :not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+        [type="file"]
+      ):not([type="color"]):not([type="submit"]):not([type="button"])
+  ):focus {
+  border-color: var(--tt-brand);
+  outline: 2px solid rgb(50 143 150 / 20%);
+  outline-offset: 1px;
+}
+
+/* 选择框：去掉系统外观，换成 1px 细线里的下折箭头 */
+[data-shell-role="TEACHER"] select {
+  appearance: none;
+  padding-right: 1.85rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2384919b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.75 4.5 6 7.75l3.25-3.25'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 11px;
+  cursor: pointer;
+}
+
+/* 勾选框与单选框：统一到青绿，和导航选中态同一色相 */
+[data-shell-role="TEACHER"]
+  :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--tt-brand);
+}
+
+/* 6.3 分段控件（tabs）：灰底条 + 白底选中块 */
+[data-shell-role="TEACHER"] .tt-tabs {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--tt-line);
+  border-radius: 5px;
+  background-color: #f3f6f7;
+}
+
+[data-shell-role="TEACHER"] .tt-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding-inline: 11px;
+  border: 0;
+  border-radius: 4px;
+  background-color: transparent;
+  color: var(--tt-ink-3);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+[data-shell-role="TEACHER"] .tt-tab:hover {
+  color: var(--tt-ink-2);
+}
+
+[data-shell-role="TEACHER"] .tt-tab[aria-selected="true"],
+[data-shell-role="TEACHER"] .tt-tab[aria-current="page"] {
+  background-color: #ffffff;
+  color: var(--tt-brand-ink);
+  box-shadow: 0 1px 2px rgb(21 45 62 / 8%);
+}
+
+[data-shell-role="TEACHER"] .tt-tab:focus-visible {
+  outline: 2px solid #5fc7c3;
+  outline-offset: 1px;
+}
+
+[data-shell-role="TEACHER"] .tt-tab em {
+  font-style: normal;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.62;
+}
+
+/* 6.4 搜索框：图标内嵌，输入框本身不带边框 */
+[data-shell-role="TEACHER"] .tt-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 32px;
+  padding-inline: 10px;
+  border: 1px solid var(--tt-line);
+  border-radius: 5px;
+  background-color: #ffffff;
+}
+
+[data-shell-role="TEACHER"] .tt-search:focus-within {
+  border-color: var(--tt-brand);
+  outline: 2px solid rgb(50 143 150 / 20%);
+  outline-offset: 1px;
+}
+
+[data-shell-role="TEACHER"] .tt-search :where(input) {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  font-size: 12.5px;
+  outline: none;
+}
+
+[data-shell-role="TEACHER"] .tt-search :where(input):focus {
+  outline: none;
+}
+
+/* ==========================================================================
+   7. 页面样板：页头 / 筛选条 / 行优先列表
+   --------------------------------------------------------------------------
+   对照稿 V2 的识别点是「一行一件事」：列表用分隔线切行，不用卡片堆叠；
+   数字用等宽字形对齐；徽标只用浅底 + 深字，不做描边发光。
+   ========================================================================== */
+
+/* 7.1 页头 */
+[data-shell-role="TEACHER"] .tt-phead {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+[data-shell-role="TEACHER"] .tt-h1 {
+  margin: 0;
+  color: var(--tt-ink);
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  line-height: 1.25;
+}
+
+[data-shell-role="TEACHER"] .tt-sub {
+  margin: 6px 0 0;
+  color: var(--tt-ink-3);
+  font-size: 11.8px;
+  line-height: 1.6;
+}
+
+[data-shell-role="TEACHER"] .tt-sub :where(b, strong) {
+  color: var(--tt-ink-2);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-shell-role="TEACHER"] .tt-phead-act {
+  display: flex;
+  flex: none;
+  gap: 7px;
+  margin-left: auto;
+  padding-top: 1px;
+}
+
+/* 7.2 筛选条 */
+[data-shell-role="TEACHER"] .tt-fbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+
+[data-shell-role="TEACHER"] .tt-fbar :where(select) {
+  flex: none;
+  width: auto;
+  min-width: 7.5rem;
+  min-height: 32px;
+  padding-block: 0;
+  padding-left: 10px;
+  font-size: 12.2px;
+  font-weight: 500;
+  color: var(--tt-ink-2);
+}
+
+[data-shell-role="TEACHER"] .tt-hint {
+  margin: 0;
+  color: var(--tt-ink-3);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 7.3 行优先列表 */
+[data-shell-role="TEACHER"] .tt-rows {
+  border: 1px solid var(--tt-line);
+  border-radius: 6px;
+  background-color: #ffffff;
+  overflow: hidden;
+}
+
+[data-shell-role="TEACHER"] .tt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--tt-line-2);
+}
+
+[data-shell-role="TEACHER"] .tt-row:last-child {
+  border-bottom: 0;
+}
+
+[data-shell-role="TEACHER"] .tt-row:hover {
+  background-color: #f9fbfc;
+}
+
+/* 行首缩略块：用课程号前两位做记号，比图标更省空间 */
+[data-shell-role="TEACHER"] .tt-mini {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  background-color: var(--tt-brand-soft);
+  color: var(--tt-brand-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+[data-shell-role="TEACHER"] .tt-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-shell-role="TEACHER"] .tt-row-title {
+  display: block;
+  overflow: hidden;
+  color: var(--tt-ink);
+  font-size: 12.8px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-shell-role="TEACHER"] .tt-row-title:hover {
+  color: var(--tt-brand-ink);
+}
+
+[data-shell-role="TEACHER"] .tt-row-title:focus-visible {
+  outline: 2px solid #5fc7c3;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+[data-shell-role="TEACHER"] .tt-row-meta {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--tt-ink-3);
+  font-size: 10.8px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 行内数字列：等宽字形，右对齐，方便竖着扫 */
+[data-shell-role="TEACHER"] .tt-num {
+  flex: none;
+  min-width: 3.25rem;
+  color: var(--tt-ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+[data-shell-role="TEACHER"] .tt-num small {
+  display: block;
+  color: var(--tt-ink-3);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* 7.4 徽标：浅底深字，3px 方角 */
+[data-shell-role="TEACHER"] .tt-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+[data-shell-role="TEACHER"] .tt-badge-ok {
+  background-color: #e7f4ed;
+  color: #215d45;
+}
+
+[data-shell-role="TEACHER"] .tt-badge-draft {
+  background-color: var(--tt-brand-soft);
+  color: var(--tt-brand-ink);
+}
+
+[data-shell-role="TEACHER"] .tt-badge-line {
+  border: 1px solid var(--tt-line);
+  color: var(--tt-ink-3);
+}
+
+/* 7.5 旧版筛选卡（ListFilterBar）压平成单行工具条
+   --------------------------------------------------------------------------
+   组件本身不动：学生端、管理端继续用带字段名的双行栅格，这里只在教师作用域
+   内把字段名隐藏、栅格改 flex，使它与新页面的 .tt-fbar 视觉一致。
+   ========================================================================== */
+[data-shell-role="TEACHER"] section[aria-label="搜索与筛选"] {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+}
+
+[data-shell-role="TEACHER"] section[aria-label="搜索与筛选"] > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+
+[data-shell-role="TEACHER"] section[aria-label="搜索与筛选"] form {
+  flex: 1;
+  min-width: 13rem;
+}
+
+[data-shell-role="TEACHER"] section[aria-label="搜索与筛选"] label {
+  display: block;
+  width: auto;
+  flex: none;
+}
+
+/* 字段名（「搜索课程」「学期」）隐藏，靠 placeholder 与选项自解释 */
+[data-shell-role="TEACHER"]
+  section[aria-label="搜索与筛选"]
+  label
+  > span:first-child {
+  display: none;
+}
+
+[data-shell-role="TEACHER"]
+  section[aria-label="搜索与筛选"]
+  label
+  > span
+  + span {
+  margin-top: 0;
+}
+
+[data-shell-role="TEACHER"] section[aria-label="搜索与筛选"] select {
+  min-height: 32px;
+  padding-block: 0;
+  font-size: 12.2px;
+}
+
+[data-shell-role="TEACHER"] section[aria-label="搜索与筛选"] input {
+  min-height: 32px;
+  font-size: 12.5px;
+}
+
+/* 摘要保留（aria-live 播报结果数），「可搜索范围」这条长说明收起来 */
+[data-shell-role="TEACHER"] section[aria-label="搜索与筛选"] > p {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--tt-ink-3);
+}
+
+[data-shell-role="TEACHER"] section[aria-label="搜索与筛选"] > p + p {
+  display: none;
+}
+
+/* ==========================================================================
+   8. 通用 PageHeader：在教师端收成 B 版密度
+   --------------------------------------------------------------------------
+   29 个页面共用 PageHeader。改组件会影响学生端与管理端，所以这里只在教师
+   作用域内微调字号与间距：标题 21px、说明收到 11.8px、动作按钮 32px 高。
+   ========================================================================== */
+#dashboard-main[data-workspace-role="TEACHER"] :where(section) > header {
+  gap: 12px;
+  align-items: flex-start;
+}
+
+#dashboard-main[data-workspace-role="TEACHER"]
+  :where(section)
+  > header
+  :where(h1) {
+  font-size: 21px;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
+}
+
+#dashboard-main[data-workspace-role="TEACHER"]
+  :where(section)
+  > header
+  :where(h1)
+  + :where(p) {
+  margin-top: 6px;
+  max-width: 46rem;
+  color: var(--tt-ink-3);
+  font-size: 11.8px;
+  line-height: 1.65;
+}
+
+#dashboard-main[data-workspace-role="TEACHER"]
+  :where(section)
+  > header
+  > div:last-child
+  :where(button, a) {
+  min-height: 32px;
+  border-radius: 5px;
+  font-size: 12.2px;
+}
+/* 课程封面参考：窄幅网格 + 课程号，统计只呈现真实班级与学生数量。 */
+[data-shell-role="TEACHER"] .tt-course-card {
+  overflow: hidden;
+}
+[data-shell-role="TEACHER"] .tt-course-cover {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  height: 64px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #dfe6e9;
+  background-color: #e3eef0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 30px,
+    rgb(255 255 255 / 70%) 30px 31px
+  );
+}
+[data-shell-role="TEACHER"] .tt-course-cover span {
+  font:
+    600 10px ui-monospace,
+    Consolas,
+    monospace;
+  letter-spacing: 0.12em;
+  color: #476d76;
+}
+[data-shell-role="TEACHER"] .tt-course-body {
+  padding: 18px;
+}

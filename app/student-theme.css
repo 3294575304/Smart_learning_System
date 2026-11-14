@@ -1,0 +1,105 @@
+/* 学生端 · 全浅墨青。保留学习主页、课程、练习和答题页的既有布局。 */
+[data-shell-role="STUDENT"] {
+  --background: #f3f6f7;
+  --foreground: #152d3e;
+  --card: #fff;
+  --card-foreground: #152d3e;
+  --popover: #fff;
+  --popover-foreground: #152d3e;
+  --primary: #26717a;
+  --primary-foreground: #fff;
+  --secondary: #eaf6f4;
+  --secondary-foreground: #26717a;
+  --muted: #eff3f5;
+  --muted-foreground: #63798a;
+  --accent: #eaf6f4;
+  --accent-foreground: #26717a;
+  --border: #dfe6e9;
+  --input: #dfe6e9;
+  --ring: #328f96;
+  --surface: #edf2f3;
+  --brand: #26717a;
+  --brand-strong: #1f5c64;
+  --progress-track: #dfe6e9;
+  --color-sky-50: #eaf6f4;
+  --color-sky-100: #dbefed;
+  --color-sky-200: #c4e3e0;
+  --color-sky-300: #9bcfcc;
+  --color-sky-400: #5fc7c3;
+  --color-sky-500: #328f96;
+  --color-sky-600: #2a7c83;
+  --color-sky-700: #26717a;
+  --color-sky-800: #1f5c64;
+  --color-sky-900: #183f46;
+  --color-sky-950: #0f2c32;
+  --color-slate-50: #f7fafb;
+  --color-slate-100: #eff3f5;
+  --color-slate-200: #dfe6e9;
+  --color-slate-500: #63798a;
+  --color-slate-600: #4a6272;
+  --color-slate-700: #3f5768;
+  --color-slate-800: #33495a;
+  --color-slate-900: #152d3e;
+  background: #f3f6f7;
+  color: #152d3e;
+}
+[data-shell-role="STUDENT"] > aside {
+  background: #fff;
+  border-right-color: #dfe6e9;
+}
+[data-shell-role="STUDENT"] aside nav a {
+  color: #4a6272;
+  box-shadow: none;
+}
+[data-shell-role="STUDENT"] aside nav a[aria-current="page"] {
+  background: #eaf6f4;
+  color: #26717a;
+  box-shadow: inset 3px 0 #328f96;
+}
+[data-shell-role="STUDENT"] aside nav a:hover {
+  background-color: #f0f7f6;
+}
+[data-shell-role="STUDENT"] > div > header {
+  background: #fff;
+  border-bottom-color: #dfe6e9;
+}
+[data-shell-role="STUDENT"] header button > span.rounded-full {
+  background: #26717a;
+}
+[data-shell-role="STUDENT"] :where(.shadow-sm, .shadow-md) {
+  box-shadow: none;
+}
+[data-shell-role="STUDENT"] :where(input, textarea) {
+  border-color: #dfe6e9;
+  accent-color: #26717a;
+}
+[data-shell-role="STUDENT"] :where(input, textarea):focus-visible {
+  outline: 2px solid #26717a;
+  outline-offset: 2px;
+}
+[data-shell-role="STUDENT"]
+  :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: #26717a;
+}
+[data-shell-role="STUDENT"] :where(button, a).bg-brand:not(.st-btn-cta) {
+  background: #26717a;
+  color: #fff;
+}
+[data-shell-role="STUDENT"]
+  :where(button, a).bg-brand:not(.st-btn-cta):hover:not(:disabled) {
+  background: #1f5c64;
+}
+[data-shell-role="STUDENT"] .st-course-cover {
+  background-color: #e3eef0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 30px,
+    rgb(255 255 255 / 70%) 30px 31px
+  );
+  border-bottom-color: #dfe6e9;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-shell-role="STUDENT"] :where(button, a, select) {
+    transition: none;
+  }
+}

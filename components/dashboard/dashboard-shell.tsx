@@ -243,6 +243,11 @@ export function DashboardShell({
   const navigationGroups = NAVIGATION[user.role];
   const userName = displayUserName(user);
   const schoolName = user.schoolName?.trim() || platformName;
+  // 师生工作区使用对照稿的窄侧栏，管理员维持原有宽度。
+  const compactWorkspace =
+    user.role === Role.TEACHER || user.role === Role.STUDENT;
+  const railClass = compactWorkspace ? "w-56" : "w-64";
+  const railOffsetClass = compactWorkspace ? "lg:pl-56" : "lg:pl-64";
   const currentPageTitle = useMemo(
     () => getDashboardPageTitle(pathname, navigationGroups),
     [navigationGroups, pathname],
@@ -375,7 +380,11 @@ export function DashboardShell({
   }, [joinClassroomDialogOpen]);
 
   return (
-    <div className="via-background min-h-screen bg-gradient-to-br from-sky-50/80 to-emerald-50/60">
+    // 师生主题按角色隔离，管理员工作区继续使用自己的样式。
+    <div
+      className="via-background min-h-screen bg-gradient-to-br from-sky-50/80 to-emerald-50/60"
+      data-shell-role={user.role}
+    >
       {/* 键盘用户可直接跳过整组侧栏导航，不必每页 Tab 穿过全部入口。 */}
       <a
         href="#dashboard-main"
@@ -383,12 +392,17 @@ export function DashboardShell({
       >
         跳到正文
       </a>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-sky-100 bg-white/95 lg:flex lg:flex-col">
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-30 hidden border-r border-sky-100 bg-white/95 lg:flex lg:flex-col",
+          railClass,
+        )}
+      >
         <div
           className={
             user.role === Role.SUPER_ADMIN
               ? "flex h-16 items-center border-b px-6"
-              : "flex h-16 items-center justify-start border-b px-6"
+              : "workspace-brand-row flex h-16 items-center justify-start border-b px-6"
           }
         >
           {user.role === Role.SUPER_ADMIN ? (
@@ -535,8 +549,8 @@ export function DashboardShell({
         </div>
       ) : null}
 
-      <div className="lg:pl-64">
-        <header className="bg-background/95 sticky top-0 z-20 border-b backdrop-blur">
+      <div className={railOffsetClass}>
+        <header className="workspace-topbar bg-background/95 sticky top-0 z-20 border-b backdrop-blur">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
             <button
               ref={menuOpenButtonRef}

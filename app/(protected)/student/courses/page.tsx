@@ -153,7 +153,7 @@ export default async function StudentCoursesPage({
                 key={classroom.id}
                 className="group border-border bg-card hover:border-brand/55 relative isolate flex min-w-0 flex-col overflow-hidden rounded-lg border transition-colors"
               >
-                <div className="border-border bg-muted text-foreground flex min-h-14 flex-wrap items-end justify-between gap-x-3 gap-y-1 border-b px-3 py-2 text-xs">
+                <div className="st-course-cover border-border bg-muted text-foreground flex min-h-14 flex-wrap items-end justify-between gap-x-3 gap-y-1 border-b px-3 py-2 text-xs">
                   <span className="min-w-0 font-mono [overflow-wrap:anywhere]">
                     {course.courseNo
                       ? `课程号 ${course.courseNo}`

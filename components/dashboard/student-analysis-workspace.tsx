@@ -26,7 +26,7 @@ type Contexts = Awaited<
   ReturnType<typeof getStudentClassAnalytics>
 >["contexts"];
 const panel =
-  "min-w-0 rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/30";
+  "workspace-panel min-w-0 rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/30";
 const panelAction =
   "inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-sky-50 px-3 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
 const specialGradeLabels: Record<string, string> = {

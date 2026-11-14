@@ -809,7 +809,7 @@ export function RecommendationPracticeSet({
                   type="button"
                   className={
                     controlClass +
-                    " border-cyan-900 bg-cyan-900 text-white hover:bg-cyan-950"
+                    " st-btn-cta border-cyan-900 bg-cyan-900 text-white hover:bg-cyan-950"
                   }
                   disabled={
                     !draftsReady || working || busy || Boolean(draft.conflict)

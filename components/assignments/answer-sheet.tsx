@@ -608,7 +608,7 @@ export function AnswerSheet({
             {finalAction === "exit" ? "正在保存…" : "保存并退出"}
           </button>
           <button
-            className="min-h-10 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
+            className="st-btn-cta min-h-10 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
             disabled={editingDisabled || attachmentPending}
             onClick={() => {
               if (exam) setExamConfirmation(true);
@@ -734,7 +734,7 @@ export function AnswerSheet({
               type="button"
               disabled={Boolean(finalAction)}
               onClick={() => void finish("submit")}
-              className="min-h-10 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50"
+              className="st-btn-cta min-h-10 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50"
             >
               {finalAction ? "正在交卷…" : "确认交卷"}
             </button>
