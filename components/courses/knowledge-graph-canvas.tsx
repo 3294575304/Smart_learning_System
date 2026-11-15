@@ -22,6 +22,10 @@ import {
   sphereNodeVisible,
   wheelExpansion,
 } from "@/components/courses/knowledge-graph-expandable-layout";
+import {
+  hobermanMotion,
+  scissorPairPose,
+} from "@/components/courses/knowledge-graph-hoberman-motion";
 import { chapterGraphLayout } from "@/components/courses/knowledge-graph-presentation";
 import { KnowledgeGraphNodeVisual } from "@/components/courses/knowledge-graph-node-visual";
 import {
@@ -136,7 +140,12 @@ export function KnowledgeGraphCanvas3D({
   );
   const currentExpansion = useRef(0);
   const previousExpansion = useRef(0);
-  const strutGroup = useRef<THREE.Group | null>(null);
+  const scissorVisuals = useRef<{
+    group: THREE.Group;
+    rods: THREE.InstancedMesh;
+    pivots: THREE.InstancedMesh;
+    ends: THREE.InstancedMesh;
+  } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 720 });
   const [graphReady, setGraphReady] = useState(false);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
@@ -374,35 +383,70 @@ export function KnowledgeGraphCanvas3D({
   }, [layoutMode]);
   useEffect(() => {
     const fg = fgRef.current;
-    if (!graphReady || !fg || layoutMode !== "SPHERE") return;
+    if (
+      !graphReady ||
+      !fg ||
+      layoutMode !== "SPHERE" ||
+      !sphere.scissors.length
+    )
+      return;
     const group = new THREE.Group();
-    group.name = "Decorative expandable sphere frame";
-    const geometry = new THREE.CylinderGeometry(2.8, 2.8, 1, 6);
-    const materials = new Map<string, THREE.MeshPhongMaterial>();
-    for (const strut of sphere.struts) {
-      let material = materials.get(strut.color);
-      if (!material) {
-        material = new THREE.MeshPhongMaterial({
-          color: new THREE.Color(strut.color).lerp(
-            new THREE.Color("#ffffff"),
-            0.38,
-          ),
-          shininess: 85,
-          transparent: true,
-          opacity: 0.85,
-        });
-        materials.set(strut.color, material);
-      }
-      for (let segment = 0; segment < 4; segment++)
-        group.add(new THREE.Mesh(geometry, material));
-    }
+    group.name = "Decorative scissor sphere frame";
+    const rodGeometry = new THREE.CylinderGeometry(2.7, 2.7, 1, 7);
+    const pivotGeometry = new THREE.SphereGeometry(4.5, 10, 8);
+    const endGeometry = new THREE.SphereGeometry(3.1, 8, 6);
+    const rodMaterial = new THREE.MeshPhongMaterial({
+      color: "#ffffff",
+      shininess: 95,
+    });
+    const jointMaterial = new THREE.MeshPhongMaterial({
+      color: "#fb704b",
+      shininess: 80,
+    });
+    const rods = new THREE.InstancedMesh(
+      rodGeometry,
+      rodMaterial,
+      sphere.scissors.length * 4,
+    );
+    const pivots = new THREE.InstancedMesh(
+      pivotGeometry,
+      jointMaterial,
+      sphere.scissors.length,
+    );
+    const ends = new THREE.InstancedMesh(
+      endGeometry,
+      jointMaterial,
+      sphere.scissors.length * 4,
+    );
+    // Instance transforms move each frame; avoid stale bounds hiding the shell.
+    rods.frustumCulled = false;
+    pivots.frustumCulled = false;
+    ends.frustumCulled = false;
+    rods.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    pivots.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    ends.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    sphere.scissors.forEach((pair, index) => {
+      const color = new THREE.Color(pair.color).lerp(
+        new THREE.Color("#ffffff"),
+        0.38,
+      );
+      for (let arm = 0; arm < 4; arm++) rods.setColorAt(index * 4 + arm, color);
+    });
+    if (rods.instanceColor) rods.instanceColor.needsUpdate = true;
+    group.add(rods, pivots, ends);
     fg.scene().add(group);
-    strutGroup.current = group;
+    scissorVisuals.current = { group, rods, pivots, ends };
     return () => {
       fg.scene().remove(group);
-      strutGroup.current = null;
-      geometry.dispose();
-      for (const material of materials.values()) material.dispose();
+      scissorVisuals.current = null;
+      rods.dispose();
+      pivots.dispose();
+      ends.dispose();
+      rodGeometry.dispose();
+      pivotGeometry.dispose();
+      endGeometry.dispose();
+      rodMaterial.dispose();
+      jointMaterial.dispose();
     };
   }, [graphReady, layoutMode, sphere]);
   useEffect(() => {
@@ -412,6 +456,32 @@ export function KnowledgeGraphCanvas3D({
       "(prefers-reduced-motion: reduce)",
     ).matches;
     let frame = 0;
+    const dummy = new THREE.Object3D();
+    const up = new THREE.Vector3(0, 1, 0);
+    const putRod = (
+      rods: THREE.InstancedMesh,
+      index: number,
+      from: THREE.Vector3,
+      to: THREE.Vector3,
+    ) => {
+      const delta = to.clone().sub(from);
+      dummy.position.copy(from).add(to).multiplyScalar(0.5);
+      dummy.quaternion.setFromUnitVectors(up, delta.clone().normalize());
+      dummy.scale.set(1, delta.length(), 1);
+      dummy.updateMatrix();
+      rods.setMatrixAt(index, dummy.matrix);
+    };
+    const putJoint = (
+      mesh: THREE.InstancedMesh,
+      index: number,
+      position: THREE.Vector3,
+    ) => {
+      dummy.position.copy(position);
+      dummy.quaternion.identity();
+      dummy.scale.setScalar(1);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+    };
     const update = () => {
       const current = currentExpansion.current;
       const next =
@@ -419,48 +489,45 @@ export function KnowledgeGraphCanvas3D({
           ? expansion
           : current + (expansion - current) * 0.18;
       currentExpansion.current = next;
+      const motion = hobermanMotion(next);
       for (const node of graphData.nodes) {
         const start = sphere.collapsed.get(node.id);
         const end = sphere.expanded.get(node.id);
         if (!start || !end) continue;
-        node.x = node.fx = start.x + (end.x - start.x) * next;
-        node.y = node.fy = start.y + (end.y - start.y) * next;
-        node.z = node.fz = start.z + (end.z - start.z) * next;
+        node.x = node.fx = start.x + (end.x - start.x) * motion.radialFraction;
+        node.y = node.fy = start.y + (end.y - start.y) * motion.radialFraction;
+        node.z = node.fz = start.z + (end.z - start.z) * motion.radialFraction;
         const visual = nodeVisuals.current.get(node);
         if (visual && node.type === "KNOWLEDGE_POINT")
           visual.scale.setScalar(
             Math.max(0.001, Math.min(1, (next - 0.08) / 0.55)),
           );
       }
-      const group = strutGroup.current;
-      if (group) {
-        group.visible = graphData.nodes.length > 0;
-        sphere.struts.forEach((strut, index) => {
-          const a = sphere.shell.get(strut.from);
-          const b = sphere.shell.get(strut.to);
-          for (let segment = 0; segment < 4; segment++) {
-            const mesh = group.children[index * 4 + segment] as
-              THREE.Mesh | undefined;
-            if (!a || !b || !mesh) continue;
-            const radius = 110 + 145 * next;
-            const point = (fraction: number) =>
-              new THREE.Vector3(
-                a.x * (1 - fraction) + b.x * fraction,
-                a.y * (1 - fraction) + b.y * fraction,
-                a.z * (1 - fraction) + b.z * fraction,
-              )
-                .normalize()
-                .multiplyScalar(radius);
-            const from = point(segment / 4);
-            const to = point((segment + 1) / 4);
-            mesh.position.copy(from).add(to).multiplyScalar(0.5);
-            mesh.quaternion.setFromUnitVectors(
-              new THREE.Vector3(0, 1, 0),
-              to.clone().sub(from).normalize(),
-            );
-            mesh.scale.set(1, from.distanceTo(to), 1);
-          }
+      const visuals = scissorVisuals.current;
+      if (visuals) {
+        visuals.group.visible = graphData.nodes.length > 0;
+        sphere.scissors.forEach((pair, index) => {
+          const pose = scissorPairPose(pair, next);
+          const pivot = new THREE.Vector3(
+            pose.pivot.x,
+            pose.pivot.y,
+            pose.pivot.z,
+          );
+          const endpoints = pose.ends.map(
+            (end) => new THREE.Vector3(end.x, end.y, end.z),
+          );
+          putRod(visuals.rods, index * 4, endpoints[0], pivot);
+          putRod(visuals.rods, index * 4 + 1, pivot, endpoints[1]);
+          putRod(visuals.rods, index * 4 + 2, endpoints[2], pivot);
+          putRod(visuals.rods, index * 4 + 3, pivot, endpoints[3]);
+          putJoint(visuals.pivots, index, pivot);
+          endpoints.forEach((end, terminal) =>
+            putJoint(visuals.ends, index * 4 + terminal, end),
+          );
         });
+        visuals.rods.instanceMatrix.needsUpdate = true;
+        visuals.pivots.instanceMatrix.needsUpdate = true;
+        visuals.ends.instanceMatrix.needsUpdate = true;
       }
       fg.refresh();
       if (next !== expansion) frame = window.requestAnimationFrame(update);

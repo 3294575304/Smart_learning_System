@@ -5,6 +5,10 @@ import {
   sphereNodeVisible,
   wheelExpansion,
 } from "@/components/courses/knowledge-graph-expandable-layout";
+import {
+  hobermanMotion,
+  scissorPairPose,
+} from "@/components/courses/knowledge-graph-hoberman-motion";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 
 function fixture(): KnowledgeGraphStructure {
@@ -116,4 +120,42 @@ test("滚轮向上展开、向下收起并保持边界；收起仅显示章节",
   assert.equal(sphereNodeVisible("COURSE", 0), false);
   assert.equal(sphereNodeVisible("KNOWLEDGE_POINT", 0), false);
   assert.equal(sphereNodeVisible("KNOWLEDGE_POINT", 1), true);
+});
+
+test("剪式杆绕球面转轴开合，四根杆臂长度保持不变", () => {
+  const pair = expandableSphereLayout(fixture()).scissors[0];
+  assert.ok(pair);
+  const distance = (
+    a: { x: number; y: number; z: number },
+    b: { x: number; y: number; z: number },
+  ) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  const closed = scissorPairPose(pair, 0);
+  const open = scissorPairPose(pair, 1);
+  assert.ok(
+    distance(closed.ends[0], closed.ends[2]) >
+      distance(open.ends[0], open.ends[2]),
+  );
+  for (const progress of [0, 0.2, 0.5, 0.8, 1]) {
+    const pose = scissorPairPose(pair, progress);
+    const motion = hobermanMotion(progress);
+    assert.ok(
+      Math.abs(
+        motion.halfSpan / motion.radius -
+          hobermanMotion(0).halfSpan / hobermanMotion(0).radius,
+      ) < 1e-8,
+    );
+    assert.ok(
+      Math.abs(
+        Math.hypot(pose.pivot.x, pose.pivot.y, pose.pivot.z) -
+          motion.radius -
+          motion.pivotLift,
+      ) < 1e-8,
+    );
+    for (const end of pose.ends)
+      assert.ok(
+        Math.abs(distance(end, pose.pivot) - Math.hypot(50, 10)) < 1e-8,
+      );
+  }
+  assert.equal(hobermanMotion(0).radius, 110);
+  assert.equal(hobermanMotion(1).radius, 255);
 });

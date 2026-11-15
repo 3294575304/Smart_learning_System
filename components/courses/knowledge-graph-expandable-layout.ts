@@ -1,4 +1,5 @@
 import { graphChapterMembership } from "@/components/courses/knowledge-graph-filter";
+import { createScissorPairs } from "@/components/courses/knowledge-graph-hoberman-motion";
 import { graphChapterColors } from "@/components/courses/knowledge-graph-presentation";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
 
@@ -143,5 +144,11 @@ export function expandableSphereLayout(graph: KnowledgeGraphStructure) {
       });
     }
   });
-  return { collapsed, expanded, shell, struts };
+  return {
+    collapsed,
+    expanded,
+    shell,
+    struts,
+    scissors: createScissorPairs(shell, struts),
+  };
 }
