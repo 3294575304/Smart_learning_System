@@ -14,6 +14,13 @@ export const sessionLabels: Record<string, string> = {
   CANCELLED: "已取消",
 };
 
+export const attendanceMethodLabels: Record<string, string> = {
+  DIRECT: "普通签到",
+  LOCATION: "位置签到",
+  CODE: "签到码签到",
+  GRAPHIC: "图形签到",
+};
+
 export interface AttendanceRecordRow {
   id: string;
   studentId: string;
@@ -28,6 +35,8 @@ export interface AttendanceSessionRow {
   id: string;
   title: string;
   status: string;
+  signInMethod: "DIRECT" | "LOCATION" | "CODE" | "GRAPHIC";
+  locationRadiusMeters: number | null;
   revision: number;
   startsAt: string;
   signInOpensAt: string;

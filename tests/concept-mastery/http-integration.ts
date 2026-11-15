@@ -25,6 +25,7 @@ import { SESSION_COOKIE_NAME } from "@/services/auth/constants";
 import {
   completeSubmissionGrading,
   saveManualAnswerGrade,
+  publishAssignmentResults,
 } from "@/services/assignments/manual-grading";
 import {
   createDraftAssignment,
@@ -346,6 +347,7 @@ async function main(): Promise<void> {
         passwordHash: "integration-test-password-hash",
         role: Role.STUDENT,
         status: UserStatus.ACTIVE,
+        schoolId: teacher.schoolId,
         profile: { create: { displayName: "Recommendation student" } },
       },
     });
@@ -711,18 +713,16 @@ async function main(): Promise<void> {
       { score: 5, feedback: "Partial credit" },
     );
     const partialMasteryRevision =
-      await prisma.studentCourseConceptMasteryRevision.findFirstOrThrow({
+      await prisma.studentCourseConceptMasteryRevision.findFirst({
         where: { state: { studentId: student.id, courseId: course.id } },
         orderBy: { revisionNumber: "desc" },
         include: { entries: true },
       });
-    const partialPrimary = partialMasteryRevision.entries.find(
-      (entry) => entry.conceptId === concepts[0]!.id,
+    assert.equal(
+      partialMasteryRevision,
+      null,
+      "未公布的部分评分不能形成掌握度",
     );
-    assert.equal(partialPrimary?.earnedPoints.toNumber(), 15);
-    assert.equal(partialPrimary?.availablePoints.toNumber(), 20);
-    assert.equal(partialPrimary?.masteryScore.toNumber(), 75);
-    assert.equal(partialPrimary?.level, CourseConceptMasteryLevel.DEVELOPING);
     const revisionCountAfterPartial =
       await prisma.studentCourseConceptMasteryRevision.count({
         where: { state: { studentId: student.id, courseId: course.id } },
@@ -757,6 +757,14 @@ async function main(): Promise<void> {
       ),
     ]);
     await completeSubmissionGrading(teacher.id, draft.id, attempt.id, {
+      ipAddress: null,
+      userAgent: null,
+    });
+    await prisma.assignment.update({
+      where: { id: draft.id },
+      data: { dueAt: new Date(Date.now() - 1) },
+    });
+    await publishAssignmentResults(teacher.id, draft.id, {
       ipAddress: null,
       userAgent: null,
     });
@@ -816,7 +824,7 @@ async function main(): Promise<void> {
     assert.equal(mastery.data.currentGraphVersion?.id, graphV2.id);
     assert.equal(
       mastery.data.currentRevision?.calculationRuleVersion,
-      "concept-mastery-v1",
+      "concept-mastery-v2-published",
     );
     const masteryByConcept = new Map(
       mastery.data.concepts.map((item) => [item.conceptId, item]),

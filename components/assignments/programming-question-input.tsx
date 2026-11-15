@@ -4,6 +4,7 @@ import { Play } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
+import { PythonCodeEditor } from "./python-code-editor";
 
 interface AttemptDto {
   id: string;
@@ -119,22 +120,11 @@ export function ProgrammingQuestionInput({
           {starting ? "正在创建运行…" : "运行公开样例"}
         </button>
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-[#0e1c2b]">
-        <div className="flex items-center justify-between gap-2 bg-[#162a3e] px-4 py-2.5 font-mono text-xs text-slate-200">
-          <span>main.py</span>
-          <span>Python</span>
-        </div>
-        <textarea
-          aria-label="Python 代码"
-          className="block min-h-72 w-full resize-y bg-transparent px-4 py-3 font-mono text-sm leading-6 text-slate-100 caret-sky-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-400 disabled:opacity-60 xl:min-h-96"
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          value={code}
-        />
-      </div>
+      <PythonCodeEditor
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        value={code}
+      />
       {attempt && !terminal.has(attempt.status) && (
         <div className="flex flex-wrap items-center gap-3">
           <button

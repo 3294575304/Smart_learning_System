@@ -21,6 +21,7 @@ export async function readStudentWorkAccess(
   const assignment = await prisma.assignment.findFirst({
     where: {
       id: assignmentId,
+      deletedAt: null,
       classroom: { memberships: { some: { studentId, status: "ACTIVE" } } },
     },
     select: {

@@ -4,7 +4,7 @@ import test from "node:test";
 
 import { NAVIGATION } from "../../components/dashboard/navigation";
 
-test("学生课程学习中心复用正式图谱、画像、进度与学习事件", async () => {
+test("学生课程学习中心按全课程知识点和评分记录统计", async () => {
   const [service, page, view, analytics, courses] = await Promise.all([
     readFile(
       new URL(
@@ -45,18 +45,28 @@ test("学生课程学习中心复用正式图谱、画像、进度与学习事�
 
   assert.match(service, /getStudentPublishedKnowledgeGraph/u);
   assert.match(service, /getStudentLearnerProfile/u);
-  assert.match(service, /listStudentPracticeCourses/u);
+  assert.doesNotMatch(
+    service,
+    /listStudentPracticeCourses|courseTeachingProgressRevision|taughtConceptIds/u,
+  );
   assert.match(service, /prisma\.learningEvent\.findMany/u);
   assert.match(service, /supersededBy: null/u);
   assert.match(service, /courseCycle:[\s\S]*?classroomId/u);
-  assert.match(service, /const taught = orderedPointViews\.filter/u);
+  assert.match(service, /const evidenceConcepts = orderedPointViews\.filter/u);
   assert.match(service, /progressSteps:/u);
   assert.match(service, /trackableRecommendations/u);
   assert.match(service, /learningPriority/u);
   assert.match(service, /recentActivity: events/u);
   assert.match(page, /requirePageRole\(Role\.STUDENT\)/u);
   assert.match(page, /getStudentCourseLearningCenter/u);
-  assert.match(view, /四级口径逐层收窄/u);
+  // 四级漏斗已从 view 组件抽到共享展示组件，断言目标随迁移同步
+  const funnel = await readFile(
+    new URL("../../components/ui/stat-funnel.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(funnel, /md:grid-cols-3/u);
+  assert.doesNotMatch(funnel, /四级口径|逐层收窄/u);
+  assert.doesNotMatch(page, /课程已授范围|已授范围按当前教学班/u);
   const tabs = await readFile(
     new URL(
       "../../components/learner-profiles/course-workspace-tabs.tsx",

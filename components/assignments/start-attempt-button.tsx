@@ -5,6 +5,7 @@ import {
   type StudentTaskScope,
 } from "@/services/student-experience/task-scope";
 
+import { withAssignmentTaskReturn } from "@/services/student-experience/activity-query";
 import { useRef, useState } from "react";
 
 import { notifyStudentExamStarted } from "@/components/student-assistant/use-availability";
@@ -14,6 +15,7 @@ interface Props {
   assignmentId: string;
   disabled?: boolean;
   scope?: StudentTaskScope;
+  returnTo?: string;
   label?: string;
   className?: string;
 }
@@ -22,6 +24,7 @@ export function StartAttemptButton({
   assignmentId,
   disabled = false,
   scope = {},
+  returnTo,
   label = "开始作答",
   className,
 }: Props) {
@@ -52,7 +55,13 @@ export function StartAttemptButton({
     }
     if (response.data.examSessionId) notifyStudentExamStarted();
     window.location.assign(
-      studentTaskHref(`/student/submissions/${response.data.id}/answer`, scope),
+      withAssignmentTaskReturn(
+        studentTaskHref(
+          `/student/submissions/${response.data.id}/answer`,
+          scope,
+        ),
+        returnTo,
+      ),
     );
   }
 

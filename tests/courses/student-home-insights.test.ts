@@ -42,6 +42,8 @@ function item(
     publishedCount: 0,
     awaitingRelease: submitted,
     scoreHistory: [],
+    scoreHistoryByKind: { assignment: [], exam: [] },
+    practiceHistory: [],
     attendance: {
       total: 0,
       present: 0,
@@ -68,7 +70,8 @@ test("主页空看板不补造学习时长、成绩或知识评估", () => {
   }
   assert.match(summary, /暂无成绩/);
   assert.match(html, /暂无待办/);
-  assert.match(html, /暂无考试安排和记录/u);
+  assert.match(html, /暂无安排/u);
+  assert.match(html, /暂无考试记录/u);
   assert.match(html, /课程知识掌握/u);
   assert.match(html, /作业提交进度/u);
   assert.doesNotMatch(html, /NaN|Infinity|学习时长|AI互动次数|累计登录/);
@@ -103,7 +106,10 @@ test("同名课程分别展示，结课记录不混入当前汇总，待办分�
   assert.match(tasksHtml, /签到 1/);
   assert.match(tasksHtml, /问卷 1/);
   assert.ok(html.includes('value="one"'));
-  assert.ok(html.includes('value="two" selected=""'));
+  assert.match(
+    html,
+    /<option\b(?=[^>]*value="two")(?=[^>]*selected="")[^>]*>/u,
+  );
   assert.match(html, /Python · 班级one/);
   assert.match(html, /Python · 班级two/);
 });

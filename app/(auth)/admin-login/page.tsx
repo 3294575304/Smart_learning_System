@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
 
+import { SpaceAuthLayout } from "@/components/auth/space-auth-layout";
+import { getPublicSystemConfig } from "@/services/system-config/service";
+
 import { AdminLoginForm } from "@/components/auth/admin-login-form";
 import { roleHomePath } from "@/services/auth/authorization";
 import { getCurrentUser } from "@/services/auth/session";
@@ -14,18 +17,17 @@ export default async function AdminLoginPage() {
     );
   }
 
+  const config = await getPublicSystemConfig();
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-100/70 via-white to-emerald-100/60 px-6 py-12">
-      <section className="bg-card w-full max-w-md rounded-2xl border border-sky-100 p-8 shadow-xl shadow-sky-100/70">
-        <p className="text-sm font-medium text-sky-700">Administrator Access</p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
-          管理员登录
-        </h1>
-        <p className="text-muted-foreground mt-2 text-sm">
-          管理员与超级管理员统一从此入口登录。
-        </p>
-        <AdminLoginForm />
-      </section>
-    </main>
+    <SpaceAuthLayout
+      platformName={config.platformName}
+      title="管理员登录"
+      description="管理员与超级管理员统一从此入口登录。"
+      entryLabel="管理员 · 超级管理员入口"
+      announcement={config.platformAnnouncement}
+    >
+      <AdminLoginForm />
+    </SpaceAuthLayout>
   );
 }

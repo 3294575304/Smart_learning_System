@@ -22,18 +22,14 @@ type GraphLabel = THREE.Sprite & { text: string };
 function createLabel(node: VisualNode): GraphLabel {
   const isPoint = node.type === "KNOWLEDGE_POINT";
   const isChapter = node.type === "CHAPTER";
-  const textHeight = isPoint ? 0.012 : 0.016;
+  const textHeight = isPoint ? 0.013 : isChapter ? 0.015 : 0.018;
   // 先配置空标签，最后写入正文，避免反复绘制高分辨率长文本。
-  const label = new SpriteText("", textHeight, node.color);
-  label.fontSize = 40;
+  const label = new SpriteText("", textHeight, "#e2e8f0");
+  label.fontSize = 52;
   label.fontFace =
     '"Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
-  label.fontWeight = isPoint ? "normal" : "bold";
-  label.backgroundColor = isPoint
-    ? false
-    : new THREE.Color(node.color)
-        .lerp(new THREE.Color("#ffffff"), 0.85)
-        .getStyle();
+  label.fontWeight = "normal";
+  label.backgroundColor = false;
   // SpriteText 的边距、圆角、边框与 textHeight 使用相同的场景单位。
   // 必须随字号缩放，否则 0.1 的边距就会比 0.016 的文字大数倍。
   label.padding = [
@@ -41,19 +37,20 @@ function createLabel(node: VisualNode): GraphLabel {
     textHeight * (isChapter ? 0.12 : 0.08),
   ];
   label.borderRadius = textHeight * (isChapter ? 0.42 : 0.15);
-  label.borderWidth = isPoint ? 0 : textHeight * (isChapter ? 0.025 : 0.015);
-  label.borderColor = new THREE.Color(node.color)
-    .lerp(new THREE.Color("#ffffff"), isChapter ? 0.45 : 0.55)
-    .getStyle();
+  label.borderWidth = 0;
+  label.borderColor = "#334155";
   label.material.sizeAttenuation = false;
   label.material.depthWrite = false;
-  label.center.set(0.5, -0.15);
+  // 标签作为前景叠在球面中心，任何观察角度都不被实体球或连线遮挡。
+  label.material.depthTest = false;
+  label.renderOrder = 10;
+  label.center.set(0.5, 0.5);
   return label;
 }
 
 /** 交互只更新材质与可见性；几何体和文字纹理在节点存续期间复用。 */
 export class KnowledgeGraphNodeVisual extends THREE.Group {
-  readonly sphere: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  readonly sphere: THREE.Mesh<THREE.SphereGeometry, THREE.MeshPhongMaterial>;
   private readonly baseColor: THREE.Color;
   private label?: GraphLabel;
 
@@ -65,36 +62,34 @@ export class KnowledgeGraphNodeVisual extends THREE.Group {
   ) {
     super();
     const radius =
-      node.type === "COURSE" ? 11 : node.type === "CHAPTER" ? 8 : 4.5;
-    this.baseColor = new THREE.Color(node.color).lerp(
-      new THREE.Color("#ffffff"),
-      0.65,
-    );
+      node.type === "COURSE" ? 20 : node.type === "CHAPTER" ? 13 : 7;
+    this.baseColor = new THREE.Color(
+      node.type === "COURSE" ? "#38bdf8" : node.color,
+    ).lerp(new THREE.Color("#ffffff"), 0.14);
     this.sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(radius, 12, 8),
-      new THREE.MeshBasicMaterial({ color: this.baseColor, transparent: true }),
+      new THREE.SphereGeometry(radius, 32, 24),
+      new THREE.MeshPhongMaterial({
+        color: this.baseColor,
+        shininess: 100,
+        specular: "#cbd5e1",
+        emissive: "#000000",
+      }),
     );
     this.add(this.sphere);
   }
 
-  updateAppearance({
-    selected,
-    emphasized,
-    showLabel,
-    questionCount,
-  }: GraphNodeAppearance) {
-    if (selected) this.sphere.material.color.set("#fed7aa");
-    else this.sphere.material.color.copy(this.baseColor);
-    this.sphere.material.opacity = emphasized ? 1 : 0.25;
-    this.sphere.scale.setScalar(selected ? 1.15 : 1);
+  updateAppearance({ showLabel, questionCount }: GraphNodeAppearance) {
+    this.sphere.material.color.copy(this.baseColor);
+    this.sphere.material.opacity = 1;
+    this.sphere.scale.setScalar(1);
     if (showLabel && !this.label) {
       this.label = this.labelFactory(this.node);
-      this.label.position.set(0, this.sphere.geometry.parameters.radius + 3, 0);
+      this.label.position.set(0, 0, 0);
       this.add(this.label);
     }
     if (!this.label) return;
     this.label.visible = showLabel;
-    this.label.material.opacity = emphasized ? 1 : 0.4;
+    this.label.material.opacity = 1;
     if (!showLabel) return;
     const countText =
       this.node.type === "KNOWLEDGE_POINT" &&
@@ -102,7 +97,7 @@ export class KnowledgeGraphNodeVisual extends THREE.Group {
       questionCount > 0
         ? ` · ${questionCount}题`
         : "";
-    const text = `${chineseGraphLabel(this.node.name)}${countText}`;
+    const text = `${chineseGraphLabel(this.node.name, this.node.type === "COURSE" ? 16 : 12)}${countText}`;
     // SpriteText 的 setter 每次都会重画 canvas，只在内容变化时更新。
     if (this.label.text !== text) this.label.text = text;
   }

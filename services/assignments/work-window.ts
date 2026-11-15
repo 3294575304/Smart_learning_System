@@ -17,7 +17,7 @@ export function studentWorkWindow(
     assignment.status === "REVOKED"
       ? "该作业已撤销，无需提交"
       : assignment.classroom.status !== "ACTIVE"
-        ? "班级已结课或已关闭，不能继续作答；已保存内容仍保留"
+        ? "班级已结课或已关闭。可以查看已保存的作答。"
         : assignment.status !== "PUBLISHED" ||
             !assignment.publishedAt ||
             assignment.publishedAt > now
@@ -27,7 +27,7 @@ export function studentWorkWindow(
             : !assignment.dueAt
               ? "作业缺少截止时间，暂不能作答"
               : !grant && assignment.dueAt <= now
-                ? "作业已截止，不能继续保存或提交；请联系教师申请补交"
+                ? "作业已截止。可以查看已保存的作答，如需补交请联系老师。"
                 : null;
   return {
     canWrite: reason === null,

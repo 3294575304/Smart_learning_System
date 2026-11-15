@@ -2,10 +2,12 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  ArrowRight,
   Building2,
   IdCard,
   KeyRound,
   LockKeyhole,
+  LoaderCircle,
   Mail,
   UserRound,
 } from "lucide-react";
@@ -18,6 +20,7 @@ import { registerAction } from "@/app/actions/auth";
 import { registerSchema, type RegisterInput } from "@/services/auth/schemas";
 import { AuthField, AuthSelectField } from "@/components/auth/auth-field";
 import type { SchoolOption } from "@/services/schools/types";
+import styles from "./login-space.module.css";
 
 const registerFields = [
   "schoolId",
@@ -71,8 +74,14 @@ export function RegisterForm({ schools }: { schools: SchoolOption[] }) {
   });
 
   return (
-    <form className="mt-8 space-y-4" onSubmit={onSubmit} noValidate>
+    <form
+      className={`${styles.form} ${styles.registerForm}`}
+      onSubmit={onSubmit}
+      noValidate
+      aria-busy={isPending}
+    >
       <AuthSelectField
+        className={`${styles.field} ${styles.fullWidth}`}
         error={errors.schoolId?.message}
         icon={Building2}
         id="schoolId"
@@ -81,6 +90,7 @@ export function RegisterForm({ schools }: { schools: SchoolOption[] }) {
         registration={register("schoolId")}
       />
       <AuthField
+        className={styles.field}
         autoComplete="username"
         error={errors.studentNo?.message}
         icon={IdCard}
@@ -90,6 +100,7 @@ export function RegisterForm({ schools }: { schools: SchoolOption[] }) {
         registration={register("studentNo")}
       />
       <AuthField
+        className={styles.field}
         autoComplete="name"
         error={errors.displayName?.message}
         icon={UserRound}
@@ -99,6 +110,7 @@ export function RegisterForm({ schools }: { schools: SchoolOption[] }) {
         registration={register("displayName")}
       />
       <AuthField
+        className={`${styles.field} ${styles.fullWidth}`}
         autoComplete="email"
         error={errors.email?.message}
         icon={Mail}
@@ -109,6 +121,7 @@ export function RegisterForm({ schools }: { schools: SchoolOption[] }) {
         type="email"
       />
       <AuthField
+        className={styles.field}
         autoComplete="new-password"
         error={errors.password?.message}
         icon={KeyRound}
@@ -119,6 +132,7 @@ export function RegisterForm({ schools }: { schools: SchoolOption[] }) {
         type="password"
       />
       <AuthField
+        className={styles.field}
         autoComplete="new-password"
         error={errors.confirmPassword?.message}
         icon={LockKeyhole}
@@ -128,34 +142,43 @@ export function RegisterForm({ schools }: { schools: SchoolOption[] }) {
         registration={register("confirmPassword")}
         type="password"
       />
-      <p className="text-muted-foreground text-xs">
-        学生账号仅限已导入名单中的学生注册。请使用教师提供的学号，并填写与名单一致的姓名。
+      <p className={`${styles.registerHint} ${styles.fullWidth}`}>
+        密码至少 8 位，需包含大写字母、小写字母和数字。
       </p>
       {schools.length === 0 ? (
-        <p className="text-muted-foreground text-sm" role="status">
+        <p
+          className={`${styles.registerHint} ${styles.fullWidth}`}
+          role="status"
+        >
           当前没有可选学校，请联系管理员完成学校绑定。
         </p>
       ) : null}
       {serverError ? (
         <p
-          className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
+          className={`${styles.fullWidth} bg-destructive/10 text-destructive rounded-md p-3 text-sm`}
           role="alert"
         >
           {serverError}
         </p>
       ) : null}
       <button
-        className="bg-primary text-primary-foreground w-full rounded-md px-4 py-2 font-medium shadow-sm shadow-sky-200 transition hover:bg-sky-700 disabled:opacity-60"
+        className={`${styles.submit} ${styles.fullWidth}`}
         disabled={isPending || schools.length === 0}
         type="submit"
       >
         {isPending ? "正在注册…" : "注册学生账号"}
+        {isPending ? (
+          <LoaderCircle
+            aria-hidden="true"
+            className="motion-safe:animate-spin"
+            size={16}
+          />
+        ) : (
+          <ArrowRight aria-hidden="true" size={16} />
+        )}
       </button>
-      <p className="text-muted-foreground text-center text-sm">
-        已有账号？{" "}
-        <Link className="font-medium text-sky-700 underline" href="/login">
-          返回登录
-        </Link>
+      <p className={`${styles.registration} ${styles.fullWidth}`}>
+        已有账号？ <Link href="/login">返回登录</Link>
       </p>
     </form>
   );

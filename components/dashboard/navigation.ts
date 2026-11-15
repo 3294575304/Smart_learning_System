@@ -269,6 +269,7 @@ export function getStudentPageLabel(pathname: string): string | undefined {
   if (path !== "/student" && !path.startsWith("/student/")) return undefined;
   const detailRoutes: Array<[RegExp, string]> = [
     [/^\/student\/assignments\/[^/]+$/, "作业详情"],
+    [/^\/student\/attendance\/[^/]+$/, "签到详情"],
     [/^\/student\/exams\/[^/]+\/report$/, "我的考试报告"],
     [/^\/student\/exams\/[^/]+\/record$/, "考试记录"],
     [/^\/student\/surveys\/[^/]+$/, "问卷详情"],

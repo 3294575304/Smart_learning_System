@@ -1,16 +1,24 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2, IdCard, KeyRound } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  IdCard,
+  KeyRound,
+  LoaderCircle,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 
 import { loginAction } from "@/app/actions/auth";
 import { loginSchema, type LoginInput } from "@/services/auth/schemas";
 import { AuthField, AuthSelectField } from "@/components/auth/auth-field";
 import type { SchoolOption } from "@/services/schools/types";
+import styles from "./login-space.module.css";
+import { LoginCaptcha } from "./login-captcha";
 
 export function LoginForm({
   allowRegistration,
@@ -21,46 +29,82 @@ export function LoginForm({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [captchaRevision, setCaptchaRevision] = useState(0);
+  const [captchaReady, setCaptchaReady] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
     setError,
+    setValue,
+    clearErrors,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { schoolId: "", email: "", password: "" },
+    defaultValues: {
+      schoolId: "",
+      email: "",
+      password: "",
+      captchaId: "",
+      captchaAnswer: "",
+    },
   });
+
+  const onChallengeChange = useCallback(
+    (id: string) => {
+      setValue("captchaId", id);
+      setValue("captchaAnswer", "");
+      clearErrors(["captchaId", "captchaAnswer"]);
+      setCaptchaReady(Boolean(id));
+    },
+    [setValue, clearErrors],
+  );
 
   const onSubmit = handleSubmit((input) => {
     setServerError(null);
     startTransition(async () => {
-      const result = await loginAction(input);
+      try {
+        const result = await loginAction(input);
 
-      if (!result.success) {
-        setServerError(result.error);
-        for (const [field, messages] of Object.entries(
-          result.fieldErrors ?? {},
-        )) {
-          const message = messages[0];
-          if (
-            message &&
-            (field === "schoolId" || field === "email" || field === "password")
-          ) {
-            setError(field, { message });
+        if (!result.success) {
+          setServerError(result.error);
+          setCaptchaRevision((revision) => revision + 1);
+          for (const [field, messages] of Object.entries(
+            result.fieldErrors ?? {},
+          )) {
+            const message = messages[0];
+            if (
+              message &&
+              (field === "schoolId" ||
+                field === "email" ||
+                field === "password" ||
+                field === "captchaId" ||
+                field === "captchaAnswer")
+            ) {
+              setError(field, { message });
+            }
           }
+          return;
         }
-        return;
-      }
 
-      router.push(result.data.redirectTo);
-      router.refresh();
+        router.push(result.data.redirectTo);
+        router.refresh();
+      } catch {
+        setServerError("登录暂时失败，请稍后重试");
+        setCaptchaRevision((revision) => revision + 1);
+      }
     });
   });
 
   return (
-    <form className="mt-8 space-y-5" onSubmit={onSubmit} noValidate>
+    <form
+      className={styles.form}
+      onSubmit={onSubmit}
+      noValidate
+      aria-busy={isPending}
+    >
       <AuthSelectField
+        className={styles.field}
         error={errors.schoolId?.message}
         icon={Building2}
         id="schoolId"
@@ -69,6 +113,7 @@ export function LoginForm({
         registration={register("schoolId")}
       />
       <AuthField
+        className={styles.field}
         autoComplete="username"
         error={errors.email?.message}
         icon={IdCard}
@@ -78,6 +123,7 @@ export function LoginForm({
         registration={register("email")}
       />
       <AuthField
+        className={styles.field}
         autoComplete="current-password"
         error={errors.password?.message}
         icon={KeyRound}
@@ -92,6 +138,14 @@ export function LoginForm({
           当前没有可选学校，请联系管理员完成学校绑定。
         </p>
       ) : null}
+      <input type="hidden" {...register("captchaId")} />
+      <LoginCaptcha
+        registration={register("captchaAnswer")}
+        onChallengeChange={onChallengeChange}
+        resetKey={captchaRevision}
+        error={errors.captchaAnswer?.message ?? errors.captchaId?.message}
+        disabled={isPending}
+      />
       {serverError ? (
         <p
           className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
@@ -101,18 +155,24 @@ export function LoginForm({
         </p>
       ) : null}
       <button
-        className="bg-primary text-primary-foreground w-full rounded-md px-4 py-2 font-medium shadow-sm shadow-sky-200 transition hover:bg-sky-700 disabled:opacity-60"
-        disabled={isPending || schools.length === 0}
+        className={styles.submit}
+        disabled={isPending || !captchaReady || schools.length === 0}
         type="submit"
       >
         {isPending ? "正在登录…" : "登录"}
+        {isPending ? (
+          <LoaderCircle
+            aria-hidden="true"
+            className="motion-safe:animate-spin"
+            size={16}
+          />
+        ) : (
+          <ArrowRight aria-hidden="true" size={16} />
+        )}
       </button>
       {allowRegistration ? (
-        <p className="text-muted-foreground text-center text-sm">
-          还没有学生账号？{" "}
-          <Link className="font-medium text-sky-700 underline" href="/register">
-            注册
-          </Link>
+        <p className={styles.registration}>
+          还没有学生账号？ <Link href="/register">注册</Link>
         </p>
       ) : null}
     </form>

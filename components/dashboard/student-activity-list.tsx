@@ -7,6 +7,7 @@ import {
   activityKindLabels,
   activityStatusLabels,
   activityStatusOptions,
+  withAssignmentTaskReturn,
   type ActivityQuery,
   type ActivityView,
 } from "@/services/student-experience/activity-query";
@@ -23,11 +24,13 @@ export function StudentActivityFilters({
   query,
   classrooms,
   total,
+  returnTo,
 }: {
   view: ActivityView;
   query: ActivityQuery;
   classrooms: StudentClassroomOption[];
   total: number;
+  returnTo?: string;
 }) {
   const fixed = Boolean(query.courseId && query.classroomId);
   const classroom = classrooms.find(
@@ -40,10 +43,15 @@ export function StudentActivityFilters({
       aria-label="列表筛选"
       className={activityCardClass}
     >
+      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
       {query.courseId && (
         <input type="hidden" name="courseId" value={query.courseId} />
       )}
-      <div className="flex flex-wrap items-end gap-3">
+      {/*
+        筛选控件与计数同行：计数是弱信息，不该单独占一行、
+        也不该让筛选卡和内容卡同等高度。控件换行时计数自然落到下一行行尾。
+      */}
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
         {fixed ? (
           <div aria-label="当前教学班" className="min-w-0 flex-1 text-sm">
             <input type="hidden" name="classroomId" value={query.classroomId} />
@@ -106,27 +114,30 @@ export function StudentActivityFilters({
             ))}
           </AutoSubmitSelect>
         </label>
-        <noscript>
-          <button className={activityActionClass} type="submit">
-            应用筛选
-          </button>
-        </noscript>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
-        <p role="status">共 {total} 项</p>
-        {(query.status !== "ALL" ||
-          query.kind !== "ALL" ||
-          (query.classroomId && !fixed)) && (
-          <Link
-            className="rounded px-2 py-1 font-medium text-sky-800 hover:bg-sky-50 focus-visible:outline-2"
-            href={activityHref(view, {
-              courseId: query.courseId,
-              classroomId: fixed ? query.classroomId : undefined,
-            })}
-          >
-            重置筛选
-          </Link>
-        )}
+        <div className="ml-auto flex items-center gap-2 pb-2 text-sm text-neutral-600">
+          <p role="status">共 {total} 项</p>
+          {(query.status !== "ALL" ||
+            query.kind !== "ALL" ||
+            (query.classroomId && !fixed)) && (
+            <Link
+              className="rounded px-2 py-1 font-medium text-sky-800 hover:bg-sky-50 focus-visible:outline-2"
+              href={withAssignmentTaskReturn(
+                activityHref(view, {
+                  courseId: query.courseId,
+                  classroomId: fixed ? query.classroomId : undefined,
+                }),
+                returnTo,
+              )}
+            >
+              重置筛选
+            </Link>
+          )}
+          <noscript>
+            <button className={activityActionClass} type="submit">
+              应用筛选
+            </button>
+          </noscript>
+        </div>
       </div>
     </form>
   );
@@ -136,17 +147,22 @@ export function StudentActivityPagination({
   view,
   query,
   pagination,
+  returnTo,
 }: {
   view: ActivityView;
   query: ActivityQuery;
   pagination: { page: number; totalPages: number };
+  returnTo?: string;
 }) {
   return (
     <PageIndex
       {...pagination}
       ariaLabel="列表分页"
       hrefForPage={(page) =>
-        activityHref(view, { ...query, focus: undefined, page })
+        withAssignmentTaskReturn(
+          activityHref(view, { ...query, focus: undefined, page }),
+          returnTo,
+        )
       }
       nativeNavigation
     />

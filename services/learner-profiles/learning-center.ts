@@ -15,7 +15,7 @@ import {
 import { buildScoreTrend } from "./score-trend";
 
 import { prisma } from "@/lib/prisma";
-import { listStudentPracticeCourses } from "@/services/course-recommendations/service";
+import { CONCLUSIVE_EVIDENCE_COUNT } from "./constants";
 import { getStudentPublishedKnowledgeGraph } from "@/services/knowledge-graph/service";
 import { getStudentLearnerProfile } from "@/services/learner-profiles/service";
 
@@ -56,10 +56,9 @@ export async function getStudentCourseLearningCenter(
   const classroom = classroomId
     ? await getStudentClassroomContext(studentId, classroomId, courseId)
     : null;
-  const [graphResult, profile, practiceCourses] = await Promise.all([
+  const [graphResult, profile] = await Promise.all([
     getStudentPublishedKnowledgeGraph(studentId, courseId),
     getStudentLearnerProfile(studentId, courseId),
-    listStudentPracticeCourses(studentId),
   ]);
   const [
     events,
@@ -207,43 +206,6 @@ export async function getStudentCourseLearningCenter(
       concept.conceptId,
     ]) ?? [],
   );
-  const enrolledClassrooms = practiceCourses.filter(
-    (course) =>
-      course.courseId === courseId &&
-      (!classroomId || course.classroomId === classroomId),
-  );
-  const [classProgress, courseProgress] = await Promise.all([
-    prisma.courseTeachingProgressRevision.findMany({
-      where: {
-        courseId,
-        classroomId: {
-          in: enrolledClassrooms.map((course) => course.classroomId),
-        },
-      },
-      orderBy: { revisionNumber: "desc" },
-      select: { classroomId: true, concepts: { select: { conceptId: true } } },
-    }),
-    prisma.course.findUnique({
-      where: { id: courseId },
-      select: {
-        currentTeachingProgressRevision: {
-          select: { concepts: { select: { conceptId: true } } },
-        },
-      },
-    }),
-  ]);
-  // Teaching progress follows the selected enrollment; mastery remains course-level.
-  const taughtConceptIds = new Set(
-    enrolledClassrooms.flatMap((course) =>
-      (
-        classProgress.find(
-          (revision) => revision.classroomId === course.classroomId,
-        )?.concepts ??
-        courseProgress?.currentTeachingProgressRevision?.concepts ??
-        []
-      ).map((concept) => concept.conceptId),
-    ),
-  );
   const knowledgePoints =
     structure?.nodes
       .filter((node) => node.type === "KNOWLEDGE_POINT")
@@ -262,7 +224,6 @@ export async function getStudentCourseLearningCenter(
       name: node.name,
       isKeyTopic: node.isKeyTopic,
       isDifficultTopic: node.isDifficultTopic,
-      taught: conceptId ? taughtConceptIds.has(conceptId) : false,
       evidenceState:
         concept?.evidenceState ?? LearnerProfileEvidenceState.NO_EVIDENCE,
       evidenceCount: concept?.evidenceCount ?? 0,
@@ -343,17 +304,17 @@ export async function getStudentCourseLearningCenter(
     ...pointViews.filter((point) => !chapterPointKeys.has(point.key)),
   ];
 
-  // 学习中心的漏斗只统计已纳入教学进度的知识点，保证每一级都是上一级的子集。
-  const taught = orderedPointViews.filter((point) => point.taught);
-  const evidenceConcepts = taught.filter((point) => point.evidenceCount > 0);
+  const evidenceConcepts = orderedPointViews.filter(
+    (point) => point.evidenceCount > 0,
+  );
   const conclusive = evidenceConcepts.filter(
     (point) => point.evidenceState === LearnerProfileEvidenceState.CONCLUSIVE,
   );
   const mastered = conclusive.filter((point) => point.status === "MASTERED");
-  const needsSupport = taught.filter(
+  const needsSupport = orderedPointViews.filter(
     (point) => point.status === "NEEDS_SUPPORT",
   );
-  const insufficient = taught.filter(
+  const insufficient = orderedPointViews.filter(
     (point) => point.status === "INSUFFICIENT",
   );
   const masteryAverage = conclusive.length
@@ -429,11 +390,10 @@ export async function getStudentCourseLearningCenter(
     trackableRecommendations.length,
   );
   const attendanceRate = dimensionNumber(profile.dimensions.attendance, "rate");
-  const teachingProgress = ratioPercent(taught.length, pointViews.length);
 
   const prerequisiteGaps = new Map<string, string[]>();
-  for (const point of orderedPointViews.filter(
-    (item) => item.taught && item.status !== "MASTERED",
+  for (const point of evidenceConcepts.filter(
+    (item) => item.status !== "MASTERED",
   )) {
     const missing = (structure?.edges ?? [])
       .filter((edge) => edge.type === "PREREQUISITE" && edge.to === point.key)
@@ -446,7 +406,7 @@ export async function getStudentCourseLearningCenter(
     if (missing.length) prerequisiteGaps.set(point.key, missing);
   }
 
-  const currentLearningItems = taught
+  const currentLearningItems = evidenceConcepts
     .filter((point) => point.status !== "MASTERED")
     .sort(
       (left, right) =>
@@ -463,12 +423,12 @@ export async function getStudentCourseLearningCenter(
   const nextAction = currentFocus
     ? currentFocus.prerequisiteGaps.length
       ? `先复习“${currentFocus.prerequisiteGaps[0]}”，再巩固“${currentFocus.name}”。`
-      : `优先巩固“${currentFocus.name}”，完成练习后再查看掌握度变化。`
-    : taught.length === 0
-      ? "教师尚未设置已授教学进度，可以先查看课程知识图谱了解课程结构。"
-      : mastered.length === taught.length
-        ? "当前已授知识点均已掌握，可以预习后续内容或继续挑战推荐练习。"
-        : "继续完成带知识点的作业或练习，积累足够证据后再判断掌握状态。";
+      : `可以再练几道“${currentFocus.name}”的题，看看掌握得怎么样。`
+    : pointViews.length === 0
+      ? "教师发布课程知识图谱后，这里会显示可以学习的内容。"
+      : evidenceConcepts.length === 0
+        ? "完成作业或练习、拿到评分后，这里会显示你的掌握情况。"
+        : "目前有评分记录的知识点都已掌握，可以继续学习其他内容。";
 
   return {
     course: graphResult.course,
@@ -480,7 +440,6 @@ export async function getStudentCourseLearningCenter(
     nextAction,
     overview: {
       totalConcepts: pointViews.length,
-      taughtConcepts: taught.length,
       evidenceConcepts: evidenceConcepts.length,
       conclusiveConcepts: conclusive.length,
       masteredConcepts: mastered.length,
@@ -490,54 +449,43 @@ export async function getStudentCourseLearningCenter(
     },
     progressSteps: [
       {
-        key: "teaching-progress",
-        label: "教学进度",
-        numerator: taught.length,
+        key: "evidence-coverage",
+        label: "有评分记录",
+        numerator: evidenceConcepts.length,
         denominator: pointViews.length,
-        value: teachingProgress,
+        value: ratioPercent(evidenceConcepts.length, pointViews.length),
         detail:
           pointViews.length === 0
-            ? "等待教师发布课程图谱"
-            : `${taught.length}/${pointViews.length} 个知识点已授`,
-      },
-      {
-        key: "evidence-coverage",
-        label: "证据覆盖",
-        numerator: evidenceConcepts.length,
-        denominator: taught.length,
-        value: ratioPercent(evidenceConcepts.length, taught.length),
-        detail:
-          taught.length === 0
-            ? "尚无已授范围"
-            : `${evidenceConcepts.length}/${taught.length} 个已授知识点有证据`,
+            ? "教师发布课程知识图谱后就能查看"
+            : "包含作业、考试和练习的评分",
       },
       {
         key: "stable-conclusions",
-        label: "稳定结论",
+        label: "记录较充分",
         numerator: conclusive.length,
         denominator: evidenceConcepts.length,
         value: ratioPercent(conclusive.length, evidenceConcepts.length),
         detail:
           evidenceConcepts.length === 0
-            ? "需要继续完成练习"
-            : `${conclusive.length}/${evidenceConcepts.length} 个证据点达到门槛`,
+            ? "有了评分记录后，再看看掌握得怎样"
+            : `每个知识点至少有 ${CONCLUSIVE_EVIDENCE_COUNT} 条评分记录`,
       },
       {
         key: "mastered-concepts",
-        label: "达到掌握",
+        label: "已掌握",
         numerator: mastered.length,
         denominator: conclusive.length,
         value: ratioPercent(mastered.length, conclusive.length),
         detail:
           conclusive.length === 0
-            ? "尚无稳定结论"
-            : `${mastered.length}/${conclusive.length} 个稳定结论达到 80 分`,
+            ? "多做几道相关题后，再看掌握情况"
+            : "掌握度达到 80%",
       },
     ],
     referenceIndicators: [
       {
         key: "objective-mastery",
-        label: "稳定掌握均值",
+        label: "平均掌握度",
         value: masteryAverage,
         detail: `${conclusive.length} 个知识点参与计算`,
       },
@@ -587,17 +535,19 @@ export async function getStudentCourseLearningCenter(
       occurredAt: event.occurredAt,
       label:
         event.eventType === LearningEventType.ASSESSMENT_GRADED
-          ? "正式作业形成新证据"
-          : "推荐练习形成新证据",
+          ? "作业评分已更新"
+          : "练习结果已更新",
       conceptCount: event.concepts.length,
     })),
     heatmap: chapters,
     learningPath: {
-      mastered: taught
+      mastered: orderedPointViews
         .filter((point) => point.status === "MASTERED")
         .slice(0, 6),
       current: currentLearningItems.slice(0, 6),
-      next: orderedPointViews.filter((point) => !point.taught).slice(0, 6),
+      next: orderedPointViews
+        .filter((point) => point.evidenceCount === 0)
+        .slice(0, 6),
       needsSupport: needsSupport.slice(0, 6),
       insufficient: insufficient.slice(0, 6),
     },

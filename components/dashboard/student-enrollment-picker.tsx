@@ -59,15 +59,23 @@ export function StudentEnrollmentPicker({
           className={`min-h-11 w-full min-w-0 rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-800 ${FOCUS_RING}`}
         >
           {contexts.map((item) => (
-            <option key={item.classroom.id} value={item.classroom.id}>
-              {studentEnrollmentLabel(item)}（
-              {
-                studentEnrollmentStatus(
-                  item.course.status,
-                  item.classroom.status,
-                ).label
-              }
-              ）
+            <option
+              key={item.classroom.id}
+              value={item.classroom.id}
+              title={studentEnrollmentLabel(item)}
+            >
+              {item.course.name}
+              {contexts.filter(
+                (context) => context.course.name === item.course.name,
+              ).length > 1
+                ? ` · ${item.classroom.name}`
+                : ""}
+              {studentEnrollmentStatus(
+                item.course.status,
+                item.classroom.status,
+              ).readOnly
+                ? `（${studentEnrollmentStatus(item.course.status, item.classroom.status).label}）`
+                : ""}
             </option>
           ))}
         </select>

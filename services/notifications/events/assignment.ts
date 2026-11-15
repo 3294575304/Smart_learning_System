@@ -8,10 +8,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { notificationDeduplication } from "@/services/notifications/deduplication";
 import type { NotificationDatabaseClient } from "@/services/notifications/repository";
-import {
-  createNotification,
-  createNotifications,
-} from "@/services/notifications/service";
+import { createNotifications } from "@/services/notifications/service";
 import {
   assignmentDueSoonTemplate,
   assignmentGradedTemplate,
@@ -63,7 +60,7 @@ export async function notifyAssignmentsDueSoon(
     const ids = [...new Set(inputs.map((input) => input.assignmentId))];
     const live = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM "Assignment"
-      WHERE id IN (${Prisma.join(ids)}) AND status = 'PUBLISHED'
+      WHERE id IN (${Prisma.join(ids)}) AND status = 'PUBLISHED' AND "deletedAt" IS NULL
       ORDER BY id FOR SHARE`;
     const active = new Set(live.map(({ id }) => id));
     return createNotifications(
@@ -88,22 +85,62 @@ export async function notifyAssignmentsDueSoon(
   });
 }
 
-export async function notifyAssignmentGraded(input: {
+interface AssignmentGradeNotification {
   recipientId: string;
   submissionId: string;
   assignmentTitle: string;
-}) {
-  return createNotification({
-    recipientId: input.recipientId,
-    type: NotificationType.ASSIGNMENT_GRADED,
-    ...assignmentGradedTemplate(input),
-    priority: NotificationPriority.NORMAL,
-    actionUrl: `/student/submissions/${input.submissionId}/result`,
-    sourceType: NotificationSourceType.SUBMISSION,
-    sourceId: input.submissionId,
-    deduplicationKey: notificationDeduplication.assignmentGraded(
-      input.submissionId,
-    ),
-    expiresAt: null,
+}
+
+export async function notifyAssignmentGraded(
+  input: AssignmentGradeNotification,
+  database: NotificationDatabaseClient = prisma,
+) {
+  return notifyAssignmentGradesPublished([input], database);
+}
+
+export async function notifyAssignmentGradesPublished(
+  inputs: AssignmentGradeNotification[],
+  database: NotificationDatabaseClient = prisma,
+) {
+  return createNotifications(
+    inputs.map((input) => ({
+      recipientId: input.recipientId,
+      type: NotificationType.ASSIGNMENT_GRADED,
+      ...assignmentGradedTemplate(input),
+      priority: NotificationPriority.NORMAL,
+      actionUrl: `/student/submissions/${input.submissionId}/result`,
+      sourceType: NotificationSourceType.SUBMISSION,
+      sourceId: input.submissionId,
+      deduplicationKey: notificationDeduplication.assignmentGraded(
+        input.submissionId,
+      ),
+      expiresAt: null,
+    })),
+    database,
+  );
+}
+
+/** Repairs historical publication gaps, including after a worker restart. */
+export async function deliverMissingAssignmentGradeNotifications() {
+  return prisma.$transaction(async (tx) => {
+    const missing = await tx.$queryRaw<AssignmentGradeNotification[]>`
+      SELECT s.id AS "submissionId", s."studentId" AS "recipientId",
+             a.title AS "assignmentTitle"
+      FROM "Submission" s
+      JOIN "Assignment" a ON a.id = s."assignmentId"
+      JOIN "User" u ON u.id = s."studentId"
+      JOIN "ClassMembership" m ON m."classroomId" = a."classroomId"
+        AND m."studentId" = s."studentId"
+      WHERE s.status = 'PUBLISHED' AND a."deletedAt" IS NULL
+        AND a.status IN ('PUBLISHED', 'CLOSED')
+        AND u.status = 'ACTIVE' AND m.status = 'ACTIVE'
+        AND NOT EXISTS (
+          SELECT 1 FROM "Notification" n
+          WHERE n."recipientId" = s."studentId"
+            AND n."deduplicationKey" = 'assignment-graded:' || s.id
+        )
+      ORDER BY s."publishedAt" ASC, s.id ASC
+      LIMIT 100 FOR SHARE OF a, s, m`;
+    return notifyAssignmentGradesPublished(missing, tx);
   });
 }

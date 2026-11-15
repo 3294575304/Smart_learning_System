@@ -22,7 +22,7 @@ test("需关注知识点只展示前三项并呈现真实掌握度与证据人�
   );
   assert.equal([...html.matchAll(/<li\b/gu)].length, 3);
   assert.match(html, /需关注知识点/u);
-  assert.match(html, /3 名学生可评估 · 2 名低于 60%/u);
+  assert.match(html, /3 名学生已评估 · 2 名低于 60%/u);
   assert.match(html, /aria-valuenow="0"/u);
   assert.match(html, /width:0%/u);
   assert.doesNotMatch(html, /知识点3|<details/u);

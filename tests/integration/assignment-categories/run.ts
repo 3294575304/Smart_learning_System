@@ -15,6 +15,7 @@ async function main() {
     DATABASE_URL: isolatedDatabaseUrl(base, schema),
     ASSIGNMENT_CATEGORY_TEST_SCHEMA: schema,
     AI_PROVIDER: "mock",
+    SEED_SUPER_ADMIN_PASSWORD: `Test-${randomBytes(24).toString("base64url")}-Aa1!`,
     LOCAL_UPLOAD_ROOT: resolve(".data", "category-tests", schema),
   };
   const run = (args: string[]) => {

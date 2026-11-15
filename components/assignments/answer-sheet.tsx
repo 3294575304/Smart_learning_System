@@ -8,7 +8,14 @@ import {
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { QuestionType, SubmissionStatus } from "@prisma/client";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, LayoutGrid } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  LayoutGrid,
+  Save,
+  Send,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -19,6 +26,15 @@ import {
   type ReactNode,
 } from "react";
 
+import {
+  AnswerQuestionHeading,
+  ProgrammingAnswerLayout,
+  StudentAnswerFooter,
+  StudentAnswerWorkspace,
+  answerPrimaryButton,
+  answerQuestionCard,
+  answerSecondaryButton,
+} from "./student-answer-workspace";
 import { AnswerSheetPanel } from "@/components/assignments/answer-sheet-panel";
 import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
 
@@ -69,6 +85,7 @@ interface SavedAnswer {
 interface Props {
   autosaveDelayMs: number;
   scope?: StudentTaskScope;
+  exitHref?: string;
   exam?: boolean;
   examLocked?: boolean;
   banner?: ReactNode;
@@ -80,6 +97,9 @@ interface Props {
     status: SubmissionStatus;
     version: number;
     dueAt: Date | null;
+    canWrite?: boolean;
+    writeBlockedReason?: string | null;
+    serverNow?: Date;
     lastSavedAt?: Date | null;
     questions: DraftQuestion[];
     answers: SavedAnswer[];
@@ -180,10 +200,31 @@ export function AnswerSheet({
   autosaveDelayMs,
   submission,
   scope = {},
+  exitHref,
   exam = false,
   examLocked = false,
   banner,
 }: Props) {
+  const [deadlineReached, setDeadlineReached] = useState(false);
+  useEffect(() => {
+    if (exam || !submission.dueAt) return;
+    const remaining =
+      new Date(submission.dueAt).getTime() -
+      new Date(submission.serverNow ?? new Date()).getTime();
+    const started = performance.now();
+    const check = () =>
+      setDeadlineReached(performance.now() - started >= remaining);
+    check();
+    const timer = window.setInterval(check, 1_000);
+    return () => window.clearInterval(timer);
+  }, [exam, submission.dueAt, submission.serverNow]);
+  const workLocked =
+    examLocked || submission.canWrite === false || deadlineReached;
+  const blockedReason =
+    submission.writeBlockedReason ??
+    (deadlineReached
+      ? "作业已截止。可以查看已保存的作答，如需补交请联系老师。"
+      : "当前作答只供查看。");
   const router = useRouter();
   const storageKey = `assignment-draft:${submission.id}`;
   const [answers, setAnswers] = useState<AnswerMap>(() =>
@@ -213,11 +254,11 @@ export function AnswerSheet({
   const activeSaveRef = useRef<Promise<boolean> | null>(null);
   const firstUnsavedEditRef = useRef<number | null>(null);
   const queuedAutosaveRef = useRef(false);
-  const examLockedRef = useRef(examLocked);
+  const workLockedRef = useRef(workLocked);
   const saveConflictRef = useRef(false);
   useEffect(() => {
-    examLockedRef.current = examLocked;
-  }, [examLocked]);
+    workLockedRef.current = workLocked;
+  }, [workLocked]);
   const finalActionRef = useRef<FinalAction | null>(null);
   const leavingRef = useRef(false);
   const hydratedRef = useRef(false);
@@ -249,7 +290,7 @@ export function AnswerSheet({
 
   const persistLocalDraft = useCallback(
     (snapshot: AnswerMap, responseTimes: Record<string, number>) => {
-      if (draftDecisionRef.current) return;
+      if (draftDecisionRef.current || workLockedRef.current) return;
       try {
         localStorage.setItem(
           storageKey,
@@ -280,7 +321,7 @@ export function AnswerSheet({
     async (finalizing = false): Promise<boolean> => {
       while (activeSaveRef.current) await activeSaveRef.current;
       if (
-        examLockedRef.current ||
+        workLockedRef.current ||
         saveConflictRef.current ||
         draftDecisionRef.current ||
         (finalActionRef.current && !finalizing)
@@ -314,7 +355,8 @@ export function AnswerSheet({
           setSaveState("failed");
           setSaveError(response.error);
           setSaveConflict(response.status === 409);
-          saveConflictRef.current = exam && response.status === 409;
+          saveConflictRef.current = response.status === 409;
+          if (response.status === 409) router.refresh();
           return false;
         }
         versionRef.current = response.data.version;
@@ -334,12 +376,14 @@ export function AnswerSheet({
         activeSaveRef.current = null;
       }
     },
-    [clearLocalDraft, exam, persistLocalDraft, submission.id, timingTracker],
+    [clearLocalDraft, persistLocalDraft, router, submission.id, timingTracker],
   );
 
   useEffect(() => {
     try {
-      const local = localStorage.getItem(storageKey);
+      const local = workLockedRef.current
+        ? null
+        : localStorage.getItem(storageKey);
       if (local) {
         const draft = parseAssignmentLocalDraft(
           local,
@@ -364,7 +408,13 @@ export function AnswerSheet({
     }
     hydratedRef.current = true;
     setReady(true);
-  }, [clearLocalDraft, storageKey, submission.questions, timingTracker]);
+  }, [
+    clearLocalDraft,
+    storageKey,
+    submission.questions,
+    timingTracker,
+    workLocked,
+  ]);
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -383,7 +433,7 @@ export function AnswerSheet({
 
   useEffect(() => {
     const firstQuestion = submission.questions[0];
-    if (!firstQuestion) return;
+    if (!firstQuestion || workLocked) return;
     timingTracker.activate(firstQuestion.id);
     return bindQuestionTimingLifecycle(timingTracker, {
       documentTarget: document,
@@ -395,12 +445,12 @@ export function AnswerSheet({
           persistLocalDraft(latestAnswersRef.current, timingTracker.snapshot());
       },
     });
-  }, [persistLocalDraft, submission.questions, timingTracker]);
+  }, [persistLocalDraft, submission.questions, timingTracker, workLocked]);
 
   useEffect(() => {
     if (
       !hydratedRef.current ||
-      examLocked ||
+      workLocked ||
       finalActionRef.current ||
       draftDecisionRef.current
     )
@@ -432,16 +482,27 @@ export function AnswerSheet({
     answers,
     autosaveDelayMs,
     exam,
-    examLocked,
+    workLocked,
     persist,
     persistLocalDraft,
     timingTracker,
   ]);
 
   async function finish(action: FinalAction) {
+    if (action === "exit" && workLocked) {
+      leavingRef.current = true;
+      router.push(
+        exitHref ??
+          studentTaskHref(
+            exam ? "/student/exams" : "/student/assignments",
+            scope,
+          ),
+      );
+      return;
+    }
     if (
       !hydratedRef.current ||
-      examLocked ||
+      workLocked ||
       attachmentPending ||
       finalActionRef.current ||
       draftDecisionRef.current
@@ -461,10 +522,11 @@ export function AnswerSheet({
       if (action === "exit") {
         leavingRef.current = true;
         window.location.replace(
-          studentTaskHref(
-            exam ? "/student/exams" : "/student/assignments?status=TODO",
-            scope,
-          ),
+          exitHref ??
+            studentTaskHref(
+              exam ? "/student/exams" : "/student/assignments?status=TODO",
+              scope,
+            ),
         );
         return;
       }
@@ -494,7 +556,7 @@ export function AnswerSheet({
   }
 
   function changeAnswer(questionId: string, answer: QuestionAnswerState) {
-    if (examLocked || finalActionRef.current || draftDecisionRef.current)
+    if (workLocked || finalActionRef.current || draftDecisionRef.current)
       return;
     const updated = { ...latestAnswersRef.current, [questionId]: answer };
     latestAnswersRef.current = updated;
@@ -534,7 +596,7 @@ export function AnswerSheet({
       )
     : [];
   const editingDisabled =
-    examLocked || !ready || Boolean(pendingDraft) || Boolean(finalAction);
+    workLocked || !ready || Boolean(pendingDraft) || Boolean(finalAction);
 
   const question = submission.questions[activeQuestionIndex];
   const answer = question ? answers[question.id] : undefined;
@@ -553,7 +615,7 @@ export function AnswerSheet({
   const answeredText = `已答 ${answeredCount}/${totalQuestions}`;
 
   // 顶栏只放「当前保存态」一个标记，详细文案仍在下一行，避免状态信息两处重复。
-  const headerChip: { tone: StatusChipTone; label: string } = examLocked
+  const headerChip: { tone: StatusChipTone; label: string } = workLocked
     ? { tone: "neutral", label: "只读答卷" }
     : !ready
       ? { tone: "neutral", label: "正在恢复" }
@@ -599,11 +661,15 @@ export function AnswerSheet({
       </button>
       <button
         className="text-brand-strong focus-visible:outline-brand min-h-10 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-        disabled={primaryDisabled}
+        disabled={Boolean(finalAction) || attachmentPending}
         onClick={() => void finish("exit")}
         type="button"
       >
-        {finalAction === "exit" ? "正在保存…" : "保存并退出"}
+        {workLocked
+          ? "返回列表"
+          : finalAction === "exit"
+            ? "正在保存…"
+            : "保存并退出"}
       </button>
     </>
   );
@@ -611,7 +677,7 @@ export function AnswerSheet({
   const answerCard = {
     activeIndex: activeQuestionIndex,
     answeredCount,
-    disabled: editingDisabled,
+    disabled: !ready || Boolean(finalAction) || attachmentPending,
     isAnswered: (questionId: string) => !isBlankAnswer(answers[questionId]),
     questions: submission.questions,
     totalPoints,
@@ -634,9 +700,160 @@ export function AnswerSheet({
     if (useLocal) void persist();
   }
 
+  const saveNotice = (
+    <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-slate-600">
+      <p role="status">
+        {workLocked
+          ? "当前作答只读。"
+          : !ready
+            ? "正在恢复作答，请稍候…"
+            : attachmentPending
+              ? "正在处理附件，请稍等。"
+              : finalAction === "exit"
+                ? "正在保存草稿，保存成功后返回作业列表。"
+                : saveState === "saving"
+                  ? "正在保存草稿…"
+                  : saveState === "saved"
+                    ? "已保存到账号，仍可继续作答。"
+                    : pendingDraft
+                      ? "选择恢复方式后可继续作答。"
+                      : "修改后会自动保存，也可以保存并退出。"}
+      </p>
+      {saveState === "failed" && (
+        <>
+          <p role="alert" className="text-red-700">
+            {saveError}
+          </p>
+          <p className="text-slate-600">
+            {localDraftStored
+              ? "答案已暂存在此浏览器，尚未同步到账号。"
+              : "答案仍保留在本页，可重试保存。"}
+          </p>
+          {saveConflict && (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="min-h-9 rounded-md px-2 font-medium text-sky-800 underline focus-visible:outline-2 focus-visible:outline-sky-700"
+            >
+              重新载入账号作答
+            </button>
+          )}
+          <button
+            className="min-h-8 rounded-md px-2 font-medium text-sky-800 underline focus-visible:outline-2 focus-visible:outline-sky-700"
+            disabled={workLocked || saveConflict || Boolean(finalAction)}
+            onClick={() => void persist()}
+            type="button"
+          >
+            重试保存
+          </button>
+        </>
+      )}
+    </div>
+  );
+  const questionContent = question && (
+    <article
+      ref={questionPanel}
+      tabIndex={-1}
+      className={answerQuestionCard}
+      aria-label={`第 ${question.sortOrder} 题：${question.title}`}
+      key={question.id}
+    >
+      <AnswerQuestionHeading
+        type={repeatedTitle ? undefined : QUESTION_TYPE_LABELS[question.type]}
+        title={repeatedTitle ? "任务要求" : question.title}
+        points={question.points}
+        actions={
+          <FavoriteButton source={{ kind: "ASSIGNMENT", id: question.id }} />
+        }
+      />
+
+      {programming && answer?.kind === "CODE" ? (
+        <ProgrammingAnswerLayout
+          prompt={
+            <>
+              <QuestionText text={question.content} />
+              {question.images?.map((image) => (
+                <Image
+                  alt={`第 ${question.sortOrder} 题附图`}
+                  className="mt-3 max-h-[32rem] max-w-full rounded border object-contain"
+                  key={image.id}
+                  src={image.url}
+                  width={800}
+                  height={600}
+                  unoptimized
+                />
+              ))}
+            </>
+          }
+        >
+          <ProgrammingQuestionInput
+            assignmentQuestionId={question.id}
+            disabled={editingDisabled}
+            code={answer.value}
+            onChange={(code) =>
+              changeAnswer(question.id, { kind: "CODE", value: code })
+            }
+            submissionId={submission.id}
+          />
+        </ProgrammingAnswerLayout>
+      ) : (
+        <>
+          <div className="border-line-soft mt-4 min-w-0 border-t pt-5">
+            <QuestionText text={question.content} />
+          </div>
+          {question.images?.map((image) => (
+            <Image
+              alt={`第 ${question.sortOrder} 题附图`}
+              className="mt-3 max-h-[32rem] max-w-full rounded border object-contain"
+              key={image.id}
+              src={image.url}
+              width={800}
+              height={600}
+              unoptimized
+            />
+          ))}
+
+          {answer && (
+            <QuestionAnswerInput
+              answer={answer}
+              disabled={editingDisabled}
+              onChange={(nextAnswer) => changeAnswer(question.id, nextAnswer)}
+              question={question}
+              roomy={
+                !hasQuestionNavigation &&
+                question.type === QuestionType.SHORT_ANSWER
+              }
+            />
+          )}
+          {submission.allowAttachments &&
+            question.type === QuestionType.SHORT_ANSWER && (
+              <SubmissionAttachments
+                submissionId={submission.id}
+                questionId={question.id}
+                onPendingChange={setAttachmentPending}
+                editable={
+                  submission.status === SubmissionStatus.IN_PROGRESS &&
+                  !editingDisabled
+                }
+              />
+            )}
+        </>
+      )}
+    </article>
+  );
+
   return (
     <section className="space-y-4">
-      {pendingDraft && !examLocked && (
+      {workLocked && !exam && (
+        <p
+          role="status"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          {blockedReason}{" "}
+          以最近一次成功保存的内容为准，未同步的修改可在获准补交后恢复。
+        </p>
+      )}
+      {pendingDraft && !workLocked && (
         <section
           aria-labelledby="assignment-recovery-title"
           className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4"
@@ -677,84 +894,37 @@ export function AnswerSheet({
           {localDraftStored
             ? "答案已暂存在此浏览器，尚未保存到账号。"
             : "答案仍保留在本页，请保持页面打开。"}
-          {examLocked
-            ? "收卷以截止前同步到账号的答案为准。"
+          {workLocked
+            ? "请以已保存到账号的作答为准。"
             : "连接恢复后会重试保存。"}
         </p>
       )}
-      <div className="border-line bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 sm:px-5">
-        <div className="min-w-0 flex-1 basis-56">
-          <h1 className="text-ink font-semibold break-words">
-            {submission.assignmentTitle}
-          </h1>
-          <p className="text-ink-soft mt-1 text-xs">
-            第 {submission.attemptNumber} 次作答 · {answeredText} · 截止{" "}
-            {submission.dueAt
-              ? new Date(submission.dueAt).toLocaleString("zh-CN")
-              : "未设置"}
-          </p>
+      {exam && (
+        <div className="border-line bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 sm:px-5">
+          <div className="min-w-0 flex-1 basis-56">
+            <h1 className="text-ink font-semibold break-words">
+              {submission.assignmentTitle}
+            </h1>
+            <p className="text-ink-soft mt-1 text-xs">
+              第 {submission.attemptNumber} 次作答 · {answeredText} · 截止{" "}
+              {submission.dueAt
+                ? new Date(submission.dueAt).toLocaleString("zh-CN")
+                : "未设置"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusChip tone={headerChip.tone}>{headerChip.label}</StatusChip>
+            {exam && lastSavedAt && (
+              <StatusChip tone="neutral">
+                账号最近保存{" "}
+                {lastSavedAt.toLocaleTimeString("zh-CN", { hour12: false })}
+              </StatusChip>
+            )}
+            {workLocked ? <StatusChip tone="warn">已锁定</StatusChip> : null}
+          </div>
+          {saveNotice}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusChip tone={headerChip.tone}>{headerChip.label}</StatusChip>
-          {exam && lastSavedAt && (
-            <StatusChip tone="neutral">
-              账号最近保存{" "}
-              {lastSavedAt.toLocaleTimeString("zh-CN", { hour12: false })}
-            </StatusChip>
-          )}
-          {examLocked ? <StatusChip tone="warn">已锁定</StatusChip> : null}
-        </div>
-        <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-slate-600">
-          <p role="status">
-            {examLocked
-              ? "当前答卷只读。"
-              : !ready
-                ? "正在恢复作答，请稍候…"
-                : attachmentPending
-                  ? "正在处理附件，请稍等。"
-                  : finalAction === "exit"
-                    ? "正在保存草稿，保存成功后返回作业列表。"
-                    : saveState === "saving"
-                      ? "正在保存草稿…"
-                      : saveState === "saved"
-                        ? "已保存到账号，仍可继续作答。"
-                        : pendingDraft
-                          ? "选择恢复方式后可继续作答。"
-                          : "修改后会自动保存，也可以保存并退出。"}
-          </p>
-          {saveState === "failed" && (
-            <>
-              <p role="alert" className="text-red-700">
-                {saveError}
-              </p>
-              <p className="text-slate-600">
-                {localDraftStored
-                  ? "答案已暂存在此浏览器，尚未同步到账号。"
-                  : "答案仍保留在本页，可重试保存。"}
-              </p>
-              {saveConflict && (
-                <button
-                  type="button"
-                  onClick={() => window.location.reload()}
-                  className="min-h-9 rounded-md px-2 font-medium text-sky-800 underline focus-visible:outline-2 focus-visible:outline-sky-700"
-                >
-                  重新载入账号作答
-                </button>
-              )}
-              <button
-                className="min-h-8 rounded-md px-2 font-medium text-sky-800 underline focus-visible:outline-2 focus-visible:outline-sky-700"
-                disabled={
-                  examLocked || (exam && saveConflict) || Boolean(finalAction)
-                }
-                onClick={() => void persist()}
-                type="button"
-              >
-                重试保存
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      )}
 
       {banner && (
         <div className="sticky top-(--dashboard-header-height) z-10">
@@ -764,7 +934,7 @@ export function AnswerSheet({
 
       {exam && (
         <EditorDialog
-          open={examConfirmation && !examLocked}
+          open={examConfirmation && !workLocked}
           title="确认交卷"
           busy={Boolean(finalAction)}
           onClose={() => setExamConfirmation(false)}
@@ -824,255 +994,202 @@ export function AnswerSheet({
         </EditorDialog>
       )}
 
-      <div
-        className={
-          programming
-            ? "min-w-0"
-            : "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_304px]"
-        }
-        inert={Boolean(finalAction)}
-      >
-        <div className="min-w-0 space-y-4">
+      {exam ? (
+        <>
           <div
             className={
               programming
-                ? "flex flex-wrap items-center justify-between gap-3"
-                : "flex flex-wrap items-center justify-between gap-3 lg:hidden"
+                ? "min-w-0"
+                : "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_304px]"
             }
+            inert={Boolean(finalAction)}
           >
-            <p className="text-ink-soft text-sm font-medium">{answeredText}</p>
-            <button
-              aria-expanded={sheetOpen}
-              aria-haspopup="dialog"
-              className="border-line text-brand-strong bg-card focus-visible:outline-brand inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2"
-              onClick={() => setSheetOpen(true)}
-              type="button"
-            >
-              <LayoutGrid aria-hidden="true" className="size-4" />
-              答题卡
-            </button>
-          </div>
-
-          {question && (
-            <article
-              ref={questionPanel}
-              tabIndex={-1}
-              className="border-line bg-card min-w-0 scroll-mt-14 rounded-xl border p-4 shadow-[var(--shadow-card)] sm:p-6"
-              key={question.id}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  {hasQuestionNavigation ? (
-                    <span
-                      aria-hidden="true"
-                      className="bg-brand-soft text-brand mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-[15px] font-semibold tabular-nums"
-                    >
-                      {question.sortOrder}
-                    </span>
-                  ) : null}
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {!repeatedTitle ? (
-                        <StatusChip tone="neutral">
-                          {QUESTION_TYPE_LABELS[question.type]}
-                        </StatusChip>
-                      ) : null}
-                      {hasQuestionNavigation ? (
-                        <span className="text-ink-muted text-xs tabular-nums">
-                          第 {activeQuestionIndex + 1} 题 / 共 {totalQuestions}{" "}
-                          题
-                        </span>
-                      ) : null}
-                    </div>
-                    {repeatedTitle ? (
-                      <h2 className="text-ink mt-2 text-lg font-semibold">
-                        任务要求
-                      </h2>
-                    ) : (
-                      <h2 className="text-ink mt-2 text-xl leading-7 font-bold [overflow-wrap:anywhere]">
-                        {question.title}
-                      </h2>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-ink-body text-[13px] font-semibold tabular-nums">
-                    {question.points} 分
-                  </span>
-                  <FavoriteButton
-                    source={{ kind: "ASSIGNMENT", id: question.id }}
-                  />
-                </div>
+            <div className="min-w-0 space-y-4">
+              <div
+                className={
+                  programming
+                    ? "flex flex-wrap items-center justify-between gap-3"
+                    : "flex flex-wrap items-center justify-between gap-3 lg:hidden"
+                }
+              >
+                <p className="text-ink-soft text-sm font-medium">
+                  {answeredText}
+                </p>
+                <button
+                  aria-expanded={sheetOpen}
+                  aria-haspopup="dialog"
+                  className="border-line text-brand-strong bg-card focus-visible:outline-brand inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2"
+                  onClick={() => setSheetOpen(true)}
+                  type="button"
+                >
+                  <LayoutGrid aria-hidden="true" className="size-4" />
+                  答题卡
+                </button>
               </div>
 
-              {programming && answer?.kind === "CODE" ? (
-                <div className="border-line-soft mt-4 grid min-w-0 gap-4 border-t pt-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-                  <section
-                    aria-label="题目说明"
-                    className="border-line bg-page min-w-0 rounded-xl border p-4 focus-visible:outline-2 focus-visible:outline-sky-700 xl:col-start-2 xl:row-start-1 xl:max-h-[34rem] xl:overflow-auto"
-                    tabIndex={0}
+              {questionContent}
+
+              {hasQuestionNavigation && (
+                <div className="border-line bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2.5 shadow-[var(--shadow-card)]">
+                  <button
+                    className="border-line text-ink-body focus-visible:outline-brand inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-[13px] font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                    disabled={
+                      attachmentPending ||
+                      Boolean(finalAction) ||
+                      !ready ||
+                      activeQuestionIndex === 0
+                    }
+                    onClick={() => selectQuestion(activeQuestionIndex - 1)}
+                    type="button"
                   >
-                    <h3 className="text-ink mb-3 text-sm font-semibold">
-                      题目说明
-                    </h3>
-                    <QuestionText text={question.content} />
-                    {question.images?.map((image) => (
-                      <Image
-                        alt={`第 ${question.sortOrder} 题附图`}
-                        className="mt-3 max-h-[32rem] max-w-full rounded border object-contain"
-                        key={image.id}
-                        src={image.url}
-                        width={800}
-                        height={600}
-                        unoptimized
-                      />
-                    ))}
-                  </section>
-                  <div className="min-w-0 xl:col-start-1 xl:row-start-1">
-                    <ProgrammingQuestionInput
-                      assignmentQuestionId={question.id}
-                      disabled={editingDisabled}
-                      code={answer.value}
-                      onChange={(code) =>
-                        changeAnswer(question.id, { kind: "CODE", value: code })
-                      }
-                      submissionId={submission.id}
-                    />
-                  </div>
+                    <ChevronLeft aria-hidden="true" className="size-4" />
+                    上一题
+                  </button>
+                  <span className="text-ink-muted text-xs tabular-nums">
+                    第 {totalQuestions === 0 ? 0 : activeQuestionIndex + 1} /{" "}
+                    {totalQuestions} 题
+                  </span>
+                  <button
+                    className="border-line text-ink-body focus-visible:outline-brand inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-[13px] font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                    disabled={
+                      attachmentPending ||
+                      Boolean(finalAction) ||
+                      !ready ||
+                      activeQuestionIndex >= totalQuestions - 1
+                    }
+                    onClick={() => selectQuestion(activeQuestionIndex + 1)}
+                    type="button"
+                  >
+                    下一题
+                    <ChevronRight aria-hidden="true" className="size-4" />
+                  </button>
                 </div>
-              ) : (
-                <>
-                  <div className="border-line-soft mt-4 min-w-0 border-t pt-5">
-                    <QuestionText text={question.content} />
-                  </div>
-                  {question.images?.map((image) => (
-                    <Image
-                      alt={`第 ${question.sortOrder} 题附图`}
-                      className="mt-3 max-h-[32rem] max-w-full rounded border object-contain"
-                      key={image.id}
-                      src={image.url}
-                      width={800}
-                      height={600}
-                      unoptimized
-                    />
-                  ))}
-
-                  {answer && (
-                    <QuestionAnswerInput
-                      answer={answer}
-                      disabled={editingDisabled}
-                      onChange={(nextAnswer) =>
-                        changeAnswer(question.id, nextAnswer)
-                      }
-                      question={question}
-                      roomy={
-                        !hasQuestionNavigation &&
-                        question.type === QuestionType.SHORT_ANSWER
-                      }
-                    />
-                  )}
-                  {submission.allowAttachments &&
-                    question.type === QuestionType.SHORT_ANSWER && (
-                      <SubmissionAttachments
-                        submissionId={submission.id}
-                        questionId={question.id}
-                        onPendingChange={setAttachmentPending}
-                        editable={
-                          submission.status === SubmissionStatus.IN_PROGRESS &&
-                          !editingDisabled
-                        }
-                      />
-                    )}
-                </>
               )}
-            </article>
-          )}
 
-          {hasQuestionNavigation && (
-            <div className="border-line bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2.5 shadow-[var(--shadow-card)]">
-              <button
-                className="border-line text-ink-body focus-visible:outline-brand inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-[13px] font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-                disabled={
-                  attachmentPending ||
-                  editingDisabled ||
-                  activeQuestionIndex === 0
+              <div
+                className={
+                  programming
+                    ? "border-line bg-card rounded-xl border p-4"
+                    : "border-line bg-card rounded-xl border p-4 lg:hidden"
                 }
-                onClick={() => selectQuestion(activeQuestionIndex - 1)}
-                type="button"
               >
-                <ChevronLeft aria-hidden="true" className="size-4" />
-                上一题
-              </button>
-              <span className="text-ink-muted text-xs tabular-nums">
-                第 {totalQuestions === 0 ? 0 : activeQuestionIndex + 1} /{" "}
-                {totalQuestions} 题
-              </span>
-              <button
-                className="border-line text-ink-body focus-visible:outline-brand inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-[13px] font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-                disabled={
-                  attachmentPending ||
-                  editingDisabled ||
-                  activeQuestionIndex >= totalQuestions - 1
-                }
-                onClick={() => selectQuestion(activeQuestionIndex + 1)}
-                type="button"
-              >
-                下一题
-                <ChevronRight aria-hidden="true" className="size-4" />
-              </button>
-            </div>
-          )}
-
-          <div
-            className={
-              programming
-                ? "border-line bg-card rounded-xl border p-4"
-                : "border-line bg-card rounded-xl border p-4 lg:hidden"
-            }
-          >
-            <div className="flex flex-wrap justify-end gap-2 sm:[&>button]:w-auto">
-              {sheetActions}
-            </div>
-            <p className="text-ink-soft mt-2 text-xs sm:text-right">
-              {submitNote}
-            </p>
-          </div>
-        </div>
-
-        {!programming && (
-          <aside className="hidden lg:sticky lg:top-[calc(var(--dashboard-header-height)+4rem)] lg:block lg:max-h-[calc(100dvh-var(--dashboard-header-height)-5rem)] lg:overflow-y-auto">
-            <AnswerSheetPanel
-              {...answerCard}
-              footer={
-                <>
+                <div className="flex flex-wrap justify-end gap-2 sm:[&>button]:w-auto">
                   {sheetActions}
-                  <p className="text-ink-soft text-xs">{submitNote}</p>
-                </>
-              }
-              onSelect={selectQuestion}
-            />
-          </aside>
-        )}
-      </div>
+                </div>
+                <p className="text-ink-soft mt-2 text-xs sm:text-right">
+                  {submitNote}
+                </p>
+              </div>
+            </div>
 
-      <EditorDialog
-        open={sheetOpen}
-        title="答题卡"
-        onClose={() => setSheetOpen(false)}
-        showCloseButton
-      >
-        {sheetOpen && (
-          <AnswerSheetPanel
-            {...answerCard}
-            showTitle={false}
-            className="mt-3"
-            onSelect={(index) => {
-              selectQuestion(index);
-              setSheetOpen(false);
-            }}
+            {!programming && (
+              <aside className="hidden lg:sticky lg:top-[calc(var(--dashboard-header-height)+4rem)] lg:block lg:max-h-[calc(100dvh-var(--dashboard-header-height)-5rem)] lg:overflow-y-auto">
+                <AnswerSheetPanel
+                  {...answerCard}
+                  footer={
+                    <>
+                      {sheetActions}
+                      <p className="text-ink-soft text-xs">{submitNote}</p>
+                    </>
+                  }
+                  onSelect={selectQuestion}
+                />
+              </aside>
+            )}
+          </div>
+
+          <EditorDialog
+            open={sheetOpen}
+            title="答题卡"
+            onClose={() => setSheetOpen(false)}
+            showCloseButton
+          >
+            {sheetOpen && (
+              <AnswerSheetPanel
+                {...answerCard}
+                showTitle={false}
+                className="mt-3"
+                onSelect={(index) => {
+                  selectQuestion(index);
+                  setSheetOpen(false);
+                }}
+              />
+            )}
+          </EditorDialog>
+        </>
+      ) : (
+        <StudentAnswerWorkspace
+          busy={Boolean(finalAction)}
+          header={{
+            title: submission.assignmentTitle,
+            details: (
+              <>
+                第 {activeQuestionIndex + 1} / {totalQuestions} 题 ·{" "}
+                {answeredText} · 第 {submission.attemptNumber} 次作答
+                {submission.dueAt && (
+                  <>
+                    {" "}
+                    · 截止 {new Date(submission.dueAt).toLocaleString("zh-CN")}
+                  </>
+                )}
+              </>
+            ),
+            leading: (
+              <button
+                className={answerSecondaryButton}
+                disabled={Boolean(finalAction) || attachmentPending}
+                onClick={() => void finish("exit")}
+                type="button"
+              >
+                <ArrowLeft aria-hidden="true" className="size-4" />
+                {workLocked ? "返回列表" : "退出作答"}
+              </button>
+            ),
+            actions: (
+              <StatusChip tone={headerChip.tone}>{headerChip.label}</StatusChip>
+            ),
+            status: saveNotice,
+          }}
+          navigator={{
+            ...answerCard,
+            onSelect: selectQuestion,
+            progressLabel: "已作答",
+          }}
+        >
+          {questionContent}
+          <StudentAnswerFooter
+            current={activeQuestionIndex}
+            total={totalQuestions}
+            disabled={answerCard.disabled}
+            onSelect={selectQuestion}
+            note={workLocked ? undefined : submitNote}
+            actions={
+              !workLocked && (
+                <>
+                  <button
+                    className={answerSecondaryButton}
+                    disabled={Boolean(finalAction) || attachmentPending}
+                    onClick={() => void finish("exit")}
+                    type="button"
+                  >
+                    <Save aria-hidden="true" className="size-4" />
+                    {finalAction === "exit" ? "正在保存…" : "保存并退出"}
+                  </button>
+                  <button
+                    className={answerPrimaryButton}
+                    disabled={primaryDisabled}
+                    onClick={() => void finish("submit")}
+                    type="button"
+                  >
+                    <Send aria-hidden="true" className="size-4" />
+                    {finalAction === "submit" ? "提交中…" : "提交作业"}
+                  </button>
+                </>
+              )
+            }
           />
-        )}
-      </EditorDialog>
+        </StudentAnswerWorkspace>
+      )}
     </section>
   );
 }

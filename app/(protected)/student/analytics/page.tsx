@@ -51,11 +51,18 @@ export default async function StudentAnalyticsPage({
       </section>
     );
   // 课程学习中心仍提供课程级画像与正式知识图谱；本看板只显示当前教学班数据。
+  const initialChart =
+    raw.chart === "assignment" ||
+    raw.chart === "exam" ||
+    raw.chart === "practice"
+      ? raw.chart
+      : "all";
   return (
     <StudentAnalysisWorkspace
       selected={selected}
       contexts={data.contexts}
       updatedAt={data.updatedAt}
+      initialChart={initialChart}
     />
   );
 }

@@ -18,6 +18,12 @@ import {
   type QuestionAnswerState,
 } from "@/components/assignments/question-answer-input";
 import { ProgrammingAttemptStatus } from "@/components/assignments/programming-attempt-status";
+import { PythonCodeEditor } from "@/components/assignments/python-code-editor";
+import {
+  AnswerQuestionHeading,
+  ProgrammingAnswerLayout,
+  answerSecondaryButton,
+} from "@/components/assignments/student-answer-workspace";
 import { questionTypeLabel } from "@/components/recommendations/recommendation-presenters";
 import {
   submitRecommendationPracticeRequest,
@@ -322,8 +328,42 @@ export function RecommendationPractice({
     ? "min-w-0"
     : "min-w-0 rounded-xl border bg-white p-4 sm:p-6";
   const submitClass = embedded
-    ? "min-h-11 rounded-lg border border-sky-200 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-700 disabled:opacity-50"
+    ? answerSecondaryButton
     : "rounded-md bg-sky-700 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50";
+  const embeddedHeading = (
+    <AnswerQuestionHeading
+      title={recommendation.title}
+      type={questionTypeLabel(recommendation.type)}
+      points={recommendation.assignedPoints}
+      detail={
+        recommendation.knowledgePoints.length > 0 && (
+          <span className="[overflow-wrap:anywhere]">
+            知识点 ·{" "}
+            {recommendation.knowledgePoints
+              .map((point) => point.name)
+              .join("、")}
+          </span>
+        )
+      }
+      actions={favorite}
+    />
+  );
+  const codeEditor = (
+    <div className="space-y-3">
+      <h3 className="text-ink text-sm font-semibold">你的作答</h3>
+      <PythonCodeEditor
+        disabled={programmingPending || Boolean(programmingAttemptId)}
+        onChange={(event) => {
+          setCode(event.target.value);
+          onDraftChange?.(recommendation.id, {
+            kind: "CODE",
+            value: event.target.value,
+          });
+        }}
+        value={code}
+      />
+    </div>
+  );
   return (
     <section className="min-w-0 space-y-6" aria-busy={batchBusy}>
       {!embedded && (
@@ -353,28 +393,24 @@ export function RecommendationPractice({
       ) : recommendation.type === QuestionType.PYTHON_PROGRAMMING ? (
         <div className="space-y-5">
           <article className={questionClass}>
-            <div className="flex items-start justify-between gap-3">
-              <h2 className="min-w-0 font-semibold [overflow-wrap:anywhere]">
-                {recommendation.title}
-              </h2>
-              {embedded && <div className="shrink-0">{favorite}</div>}
-            </div>
-            <div className="mt-4">
-              <QuestionText text={recommendation.content} />
-            </div>
-            <textarea
-              aria-label="Python 代码"
-              className="mt-4 min-h-80 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900"
-              disabled={programmingPending || Boolean(programmingAttemptId)}
-              onChange={(event) => {
-                setCode(event.target.value);
-                onDraftChange?.(recommendation.id, {
-                  kind: "CODE",
-                  value: event.target.value,
-                });
-              }}
-              value={code}
-            />
+            {embedded ? (
+              <>
+                {embeddedHeading}
+                <ProgrammingAnswerLayout
+                  prompt={<QuestionText text={recommendation.content} />}
+                >
+                  {codeEditor}
+                </ProgrammingAnswerLayout>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <h2 className="font-semibold [overflow-wrap:anywhere]">
+                  {recommendation.title}
+                </h2>
+                <QuestionText text={recommendation.content} />
+                {codeEditor}
+              </div>
+            )}
           </article>
           {serverError ? (
             <p className="text-sm text-red-700" role="alert">
@@ -425,24 +461,24 @@ export function RecommendationPractice({
           onSubmit={form.handleSubmit(submit)}
         >
           <article className={questionClass}>
-            <div className="flex min-w-0 items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="font-semibold [overflow-wrap:anywhere]">
-                  {recommendation.title}
-                </h2>
-                <p className="mt-2 text-sm text-gray-500">
-                  {questionTypeLabel(recommendation.type)}
-                </p>
-              </div>
-              {embedded ? (
-                <div className="shrink-0">{favorite}</div>
-              ) : (
+            {embedded ? (
+              embeddedHeading
+            ) : (
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="font-semibold [overflow-wrap:anywhere]">
+                    {recommendation.title}
+                  </h2>
+                  <p className="mt-2 text-sm text-gray-500">
+                    {questionTypeLabel(recommendation.type)}
+                  </p>
+                </div>
                 <span className="w-fit shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
                   进行中
                 </span>
-              )}
-            </div>
-            <div className="mt-5">
+              </div>
+            )}
+            <div className="border-line-soft mt-4 min-w-0 border-t pt-5">
               <QuestionText text={recommendation.content} />
             </div>
             <QuestionAnswerInput

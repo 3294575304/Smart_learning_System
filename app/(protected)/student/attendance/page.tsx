@@ -54,8 +54,8 @@ export default async function StudentAttendancePage({
         title="签到与出勤"
         description={
           data.course
-            ? `查看「${data.course.name}」的课堂签到、教师纠正记录和课程出勤率。`
-            : "集中处理各门课程的课堂签到，并查看出勤记录、教师纠正记录和总体出勤率。"
+            ? `查看「${data.course.name}」的课堂签到与教师纠正记录。`
+            : "集中处理各门课程的课堂签到，并查看出勤记录与教师纠正记录。"
         }
         eyebrow={data.course?.name}
       />

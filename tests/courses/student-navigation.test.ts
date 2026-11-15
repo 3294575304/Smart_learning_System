@@ -164,6 +164,7 @@ test("作答和提交结果统一选中学习任务入口", () => {
 test("学生所有资源详情使用同一标题与面包屑命名，不暴露资源ID", () => {
   for (const [path, label] of [
     ["/student/assignments/a1", "作业详情"],
+    ["/student/attendance/session1", "签到详情"],
     ["/student/surveys/s1", "问卷详情"],
     ["/student/wrong-questions/w1", "错题详情"],
     ["/student/question-favorites/q1", "收藏题目详情"],

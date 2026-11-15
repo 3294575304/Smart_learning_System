@@ -22,17 +22,20 @@ export function NotificationLink({
   label,
   children,
   className,
+  onClick,
 }: {
   href: string;
   label: string;
   children?: ReactNode;
   className?: string;
+  onClick?: () => void;
 }) {
   return (
     <Link
       href={href}
       aria-label={label}
       prefetch={false}
+      onClick={onClick}
       className={
         className ??
         "inline-flex rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-sky-600"

@@ -7,6 +7,7 @@ import { useState } from "react";
 interface Props {
   courseId: string;
   data: {
+    readOnly?: boolean;
     classroomId?: string | null;
     inherited?: boolean;
     classrooms?: Array<{ id: string; name: string }>;
@@ -91,7 +92,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
     weaknessWeight: policy.weaknessWeight + policy.difficultyWeight,
   });
   async function save() {
-    if (!data.graphVersion) return;
+    if (!data.graphVersion || data.readOnly) return;
     setPending(true);
     setFeedback(null);
     try {
@@ -121,6 +122,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
     }
   }
   async function savePolicy() {
+    if (data.readOnly) return;
     setPending(true);
     setFeedback(null);
     try {
@@ -164,7 +166,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
             <div>
               <h1 className="text-2xl font-semibold">教学进度</h1>
               <p className="mt-2 text-sm text-slate-600">
-                按章节记录已授内容，学生练习将遵循所选班级的进度。
+                按章节记录已授内容，自动推荐遵循所选班级的进度；自主练习可选择未授章节。
               </p>
             </div>
             <span className="rounded-xl bg-white px-5 py-3 text-sm">
@@ -197,11 +199,13 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
             ))}
           </nav>
           <p className="mt-3 text-xs text-slate-500">
-            {data.classroomId
-              ? data.inherited
-                ? "该班级尚未单独设置，当前继承课程默认进度；保存后仅影响本班。"
-                : "当前编辑所选班级的独立进度。"
-              : "课程默认进度供尚未单独设置进度的班级使用。"}
+            {data.readOnly
+              ? "当前为历史班级教学进度，仅供查看。"
+              : data.classroomId
+                ? data.inherited
+                  ? "该班级尚未单独设置，当前继承课程默认进度；保存后仅影响本班。"
+                  : "当前编辑所选班级的独立进度。"
+                : "课程默认进度供尚未单独设置进度的班级使用。"}
           </p>
         </header>
         {!data.graphVersion ? (
@@ -252,7 +256,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
                   <div className="flex gap-3 text-sm">
                     <button
                       type="button"
-                      disabled={pending}
+                      disabled={pending || data.readOnly}
                       className="text-sky-700"
                       onClick={() =>
                         batch(
@@ -265,7 +269,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
                     </button>
                     <button
                       type="button"
-                      disabled={pending}
+                      disabled={pending || data.readOnly}
                       className="text-slate-600"
                       onClick={() =>
                         batch(
@@ -305,7 +309,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
                     >
                       <input
                         type="checkbox"
-                        disabled={pending}
+                        disabled={pending || data.readOnly}
                         checked={conceptIds.includes(node.conceptId)}
                         onChange={(e) =>
                           batch([node.conceptId], e.target.checked)
@@ -338,6 +342,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
               <label className="block text-sm">
                 进度备注
                 <textarea
+                  disabled={data.readOnly}
                   className="mt-2 min-h-20 w-full rounded-lg border bg-white p-3"
                   maxLength={500}
                   value={note}
@@ -356,7 +361,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
                 </span>
                 <button
                   className="shrink-0 rounded-lg bg-sky-700 px-5 py-2.5 text-sm text-white disabled:opacity-50"
-                  disabled={pending}
+                  disabled={pending || data.readOnly}
                   onClick={() => void save()}
                   type="button"
                 >
@@ -387,6 +392,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
             <label className="text-sm" key={key}>
               {label}
               <input
+                disabled={data.readOnly}
                 className="mt-1 w-full rounded-md border p-2"
                 min={0}
                 max={100}
@@ -413,7 +419,7 @@ export function TeachingProgressPanel({ courseId, data, policy }: Props) {
         </p>
         <button
           className="mt-4 rounded-md border px-4 py-2 text-sm disabled:opacity-50"
-          disabled={pending}
+          disabled={pending || data.readOnly}
           onClick={() => void savePolicy()}
           type="button"
         >

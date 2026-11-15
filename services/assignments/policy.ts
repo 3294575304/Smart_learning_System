@@ -47,11 +47,17 @@ export function assertAssignmentIsVisible(
     publishedAt: Date | null;
   },
   now: Date,
+  allowHistory = false,
 ): void {
   if (assignment.status === AssignmentStatus.REVOKED)
     throw new AssignmentRevokedError();
   if (
-    assignment.status !== AssignmentStatus.PUBLISHED ||
+    !(
+      assignment.status === AssignmentStatus.PUBLISHED ||
+      (allowHistory &&
+        (assignment.status === AssignmentStatus.CLOSED ||
+          assignment.status === AssignmentStatus.ARCHIVED))
+    ) ||
     !assignment.publishedAt ||
     assignment.publishedAt > now
   ) {

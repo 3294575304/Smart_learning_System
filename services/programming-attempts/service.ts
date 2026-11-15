@@ -632,7 +632,21 @@ async function projectJudgeResult(
         submission.assignmentId,
         attempt.studentId,
       );
-      if (access.reason) return;
+      if (access.reason) {
+        await transaction.programmingAttempt.update({
+          where: { id: attempt.id },
+          data: {
+            status: ProgrammingAttemptStatus.CANCELLED,
+            safeErrorSummary: `判题已完成，成绩未计入：${access.reason}`,
+          },
+        });
+        return {
+          attemptId: attempt.id,
+          score: null,
+          status: "CANCELLED",
+          reason: access.reason,
+        };
+      }
       await touchAssignmentLifecycle(transaction, submission.assignmentId);
     }
     const requiresScoreReview = rows.some((row) =>
@@ -819,13 +833,18 @@ export async function getStudentProgrammingAttempt(
       studentAnswer: { select: { submission: { select: { status: true } } } },
       assignmentQuestion: {
         select: {
-          assignment: { select: { status: true, examSessionId: true } },
+          assignment: {
+            select: { status: true, examSessionId: true, deletedAt: true },
+          },
         },
       },
     },
   });
   if (!attempt) throw new ResourceNotFoundError("判题记录不存在");
-  if (attempt.assignmentQuestion?.assignment.status === "REVOKED")
+  if (
+    attempt.assignmentQuestion?.assignment.status === "REVOKED" ||
+    attempt.assignmentQuestion?.assignment.deletedAt
+  )
     throw new ResourceNotFoundError("判题记录不存在");
   if (
     attempt.assignmentQuestion?.assignment.examSessionId &&

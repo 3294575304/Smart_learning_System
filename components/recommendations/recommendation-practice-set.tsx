@@ -6,15 +6,14 @@ import { canAnswerPractice } from "@/services/practice-sets/types";
 import { useSearchParams } from "next/navigation";
 import { practiceListReturnUrl } from "@/services/practice-sets/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
+import { ArrowLeft, Save, Send } from "lucide-react";
 import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Save,
-  Send,
-} from "lucide-react";
+  StudentAnswerWorkspace,
+  StudentAnswerFooter,
+  answerPrimaryButton,
+  answerQuestionCard,
+  answerSecondaryButton as secondaryClass,
+} from "@/components/assignments/student-answer-workspace";
 import { usePracticeAccountDraft } from "./use-practice-account-draft";
 import {
   missingPracticeAnswers,
@@ -33,41 +32,58 @@ import {
 import type { PracticeSet } from "@/services/practice-sets/types";
 import type { RecommendationDetailView } from "@/services/recommendations/types";
 
-const controlClass =
-  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-800 disabled:opacity-50";
-const secondaryClass = `${controlClass} border-slate-300 bg-white text-cyan-950 hover:bg-cyan-50`;
+const practiceStates = {
+  submitted: {
+    label: "已提交",
+    mark: "✓",
+    className: "bg-emerald-50 text-emerald-800",
+  },
+  pending: {
+    label: "待判",
+    mark: "…",
+    className: "bg-violet-50 text-violet-800",
+  },
+  error: {
+    label: "判题异常",
+    mark: "!",
+    className: "bg-amber-50 text-amber-900",
+  },
+  missing: {
+    label: "必答未填",
+    mark: "!",
+    className: "border-red-400 bg-red-50 text-red-800",
+  },
+  draft: { label: "草稿", mark: "✎", className: "bg-sky-50 text-sky-800" },
+  unanswered: {
+    label: "未答",
+    mark: "–",
+    className: "bg-white text-slate-700",
+  },
+} as const;
+const practiceLegend = [
+  practiceStates.unanswered,
+  practiceStates.draft,
+  practiceStates.pending,
+  practiceStates.submitted,
+  practiceStates.error,
+];
 
 function questionState(
   question: PracticeSet["questions"][number],
   draft: PracticeDraft | undefined,
   missing: boolean,
 ) {
-  if (question.status === "COMPLETED")
-    return {
-      label: "已提交",
-      mark: "✓",
-      color: "bg-emerald-50 text-emerald-800",
-    };
+  if (question.status === "COMPLETED") return practiceStates.submitted;
   if (
     question.judgingStatus === "PENDING" ||
     question.judgingStatus === "RUNNING"
   )
-    return { label: "待判", mark: "…", color: "bg-violet-50 text-violet-800" };
-  if (question.judgingStatus)
-    return {
-      label: "判题异常",
-      mark: "!",
-      color: "bg-amber-50 text-amber-900",
-    };
-  if (missing)
-    return {
-      label: "必答未填",
-      mark: "!",
-      color: "border-red-400 bg-red-50 text-red-800",
-    };
-  if (practiceDraftFilled(draft))
-    return { label: "草稿", mark: "✎", color: "bg-sky-50 text-sky-800" };
-  return { label: "未答", mark: "–", color: "bg-white text-slate-700" };
+    return practiceStates.pending;
+  if (question.judgingStatus) return practiceStates.error;
+  if (missing) return practiceStates.missing;
+  return practiceDraftFilled(draft)
+    ? practiceStates.draft
+    : practiceStates.unanswered;
 }
 export function RecommendationPracticeSet({
   set,
@@ -129,7 +145,6 @@ export function RecommendationPracticeSet({
   const [batchTotal, setBatchTotal] = useState(0);
   const [batchMessage, setBatchMessage] = useState("");
   const [missing, setMissing] = useState<string[]>([]);
-  const [navigatorOpen, setNavigatorOpen] = useState(false);
   const viewQuestions = questions.map((q) => {
     const detail = cache[q.id];
     const result = detail?.practiceResult;
@@ -360,21 +375,25 @@ export function RecommendationPracticeSet({
     (q) => q.status === "COMPLETED" || q.judgingStatus,
   ).length;
   const cachedCurrent = cache[current];
-  const questionHeading = useRef<HTMLHeadingElement>(null);
+  const questionPanel = useRef<HTMLElement>(null);
+  function focusQuestion() {
+    const panel = questionPanel.current;
+    panel?.scrollIntoView({ block: "start" });
+    panel?.focus({ preventScroll: true });
+  }
   const moveFocus = useRef(false);
   function goToQuestion(id: string) {
     if (id === current) {
-      questionHeading.current?.focus();
+      focusQuestion();
     } else {
       moveFocus.current = true;
       setCurrent(id);
     }
-    setNavigatorOpen(false);
   }
   useEffect(() => {
     if (!moveFocus.current) return;
     moveFocus.current = false;
-    questionHeading.current?.focus();
+    focusQuestion();
   }, [current]);
   useEffect(() => {
     if (!draftsReady) return;
@@ -422,410 +441,290 @@ export function RecommendationPracticeSet({
       alive = false;
     };
   }, [current, retry, cachedCurrent, draftsReady]);
+  const buttonDisabled = !draftsReady || working;
+  const overview = (
+    <div className="text-ink-soft flex flex-wrap gap-x-3 gap-y-1 text-xs leading-5">
+      {scoring.pendingCount > 0 && <span>待判 {scoring.pendingCount}</span>}
+      {scoring.errorCount > 0 && (
+        <span className="text-amber-900">判题异常 {scoring.errorCount}</span>
+      )}
+      {scoring.gradedCount > 0 && (
+        <span aria-live="polite" className="font-medium text-slate-900">
+          {scoring.complete && scoring.percentage !== null
+            ? "整组成绩 " + scoring.percentage + " 分"
+            : "已评 " + scoring.gradedScore + " 分"}
+        </span>
+      )}
+      {readOnly && scoring.gradedCount === 0 && <span>暂无已评成绩</span>}
+      <span>
+        {scoring.frozen
+          ? "总分 " + scoring.totalPoints + " 分"
+          : "保留原始分值"}
+      </span>
+      <span>不计课程成绩</span>
+    </div>
+  );
   return (
-    <section className="@container mx-auto max-w-7xl min-w-0 rounded-xl border border-slate-200 bg-slate-100">
-      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-slate-200 bg-white px-3 py-3 sm:px-5">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
-          {readOnly ? (
-            <a href={returnTo} className={secondaryClass}>
-              <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
-              返回自主练习
-            </a>
-          ) : (
+    <StudentAnswerWorkspace
+      header={{
+        title: set.title,
+        details: (
+          <>
+            <p>
+              {set.courseName} · 第 {index + 1} / {questions.length} 题 · 已提交{" "}
+              {submitted}/{questions.length}
+              {readOnly && (
+                <>
+                  {set.management?.trashedAt
+                    ? " · 回收站 · 只读回看"
+                    : " · 练习记录 · 只读回看"}
+                </>
+              )}
+            </p>
+            {overview}
+          </>
+        ),
+        leading: readOnly ? (
+          <a href={returnTo} className={secondaryClass}>
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            返回自主练习
+          </a>
+        ) : (
+          <button
+            type="button"
+            className={secondaryClass}
+            disabled={buttonDisabled || Boolean(draft.conflict)}
+            onClick={() => void draft.saveAndExit(saveSnapshot)}
+          >
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            {draft.saving ? "保存中…" : "退出练习"}
+          </button>
+        ),
+        actions: (
+          <div inert={working}>
+            <PracticeManagementActions
+              id={initialRecommendation.id}
+              title={set.title}
+              management={set.management}
+              active={!readOnly}
+              menuLabel="更多"
+              onChange={(action) => {
+                if (action === "PURGE")
+                  window.location.replace(
+                    returnTo === "/student/recommendations"
+                      ? "/student/recommendations?view=recommended&section=TRASH"
+                      : returnTo,
+                  );
+                else window.location.reload();
+              }}
+            />
+          </div>
+        ),
+      }}
+      navigator={{
+        questions: viewQuestions.map(({ id }, i) => ({ id, sortOrder: i + 1 })),
+        activeIndex: index,
+        answeredCount: submitted,
+        totalPoints: scoring.totalPoints ?? undefined,
+        progressLabel: "已提交",
+        disabled: buttonDisabled,
+        legendItems: practiceLegend,
+        questionState: (i) => {
+          const question = viewQuestions[i];
+          return questionState(
+            question,
+            drafts[question.id],
+            missing.includes(question.id),
+          );
+        },
+        onSelect: (i) => goToQuestion(questions[i].id),
+      }}
+      busy={working}
+    >
+      <article
+        ref={questionPanel}
+        tabIndex={-1}
+        aria-label={`第 ${index + 1} / ${questions.length} 题`}
+        className={answerQuestionCard}
+      >
+        {((!readOnly && !draftsReady) || busy) && (
+          <p role="status" className="py-4 text-sm text-slate-600">
+            正在加载题目…
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="py-4 text-sm text-red-700">
+            {error}{" "}
             <button
               type="button"
               className={secondaryClass}
-              disabled={!draftsReady || working || Boolean(draft.conflict)}
-              onClick={() => void draft.saveAndExit(saveSnapshot)}
+              onClick={() => setRetry((value) => value + 1)}
             >
-              <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
-              {draft.saving ? "保存中…" : "退出练习"}
+              重试
+            </button>
+          </p>
+        )}
+        {(draftsReady || readOnly) &&
+          Object.values(cache).map((item) => (
+            <div
+              key={
+                item.id +
+                ":" +
+                item.status +
+                ":" +
+                (item.programmingAttempt?.id ?? "") +
+                ":" +
+                draft.inputVersion
+              }
+              hidden={item.id !== current || busy || Boolean(error)}
+            >
+              <fieldset
+                className="min-w-0"
+                disabled={batchBusy || draft.saving || Boolean(draft.conflict)}
+              >
+                {!readOnly && item.status === "STARTED" && !item.readOnly ? (
+                  <RecommendationPractice
+                    embedded
+                    recommendation={item}
+                    initialAnswer={drafts[item.id]}
+                    onDraftChange={onDraftChange}
+                    onSubmissionStateChange={onSubmissionStateChange}
+                    onProgrammingQueued={(id, attempt) =>
+                      setCache((previous) =>
+                        previous[id]
+                          ? {
+                              ...previous,
+                              [id]: {
+                                ...previous[id],
+                                programmingAttempt: attempt,
+                              },
+                            }
+                          : previous,
+                      )
+                    }
+                    batchBusy={batchBusy}
+                    onCompleted={(id) => {
+                      setQuestions((previous) =>
+                        previous.map((q) =>
+                          q.id === id ? { ...q, status: "COMPLETED" } : q,
+                        ),
+                      );
+                      void requestApi<RecommendationDetailView>(
+                        recommendationDetailApiPath(id),
+                        { method: "GET" },
+                      ).then((response) => {
+                        if (response.success)
+                          setCache((previous) => ({
+                            ...previous,
+                            [id]: response.data,
+                          }));
+                      });
+                    }}
+                  />
+                ) : (
+                  <PracticeHistoryQuestion
+                    item={item}
+                    draft={drafts[item.id]}
+                    embedded
+                  />
+                )}
+              </fieldset>
+            </div>
+          ))}
+      </article>
+      {(draft.error || draft.message || batchMessage) && (
+        <div className="space-y-2 rounded-xl border bg-white px-4 py-3 text-sm">
+          {batchMessage && (
+            <p role="status" className="text-slate-700">
+              {batchMessage}
+            </p>
+          )}
+          {draft.error ? (
+            <>
+              <p role="alert" className="text-red-700">
+                {draft.error}
+              </p>
+              {!readOnly && (
+                <p className="text-slate-600">
+                  答案仍保留在本页，可直接重试保存。
+                </p>
+              )}
+            </>
+          ) : (
+            <p role="status" className="text-slate-600">
+              {draft.message}
+            </p>
+          )}
+          {draft.conflict && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={working}
+                className={secondaryClass}
+                onClick={() => {
+                  draft.useServerDraft();
+                  setMissing([]);
+                }}
+              >
+                载入账号草稿
+              </button>
+              <button
+                type="button"
+                disabled={working || !pending.length}
+                className={secondaryClass}
+                onClick={() => {
+                  if (window.confirm("用当前答案覆盖账号草稿并退出？"))
+                    void draft.saveAndExit(saveSnapshot, true);
+                }}
+              >
+                覆盖并保存退出
+              </button>
+            </div>
+          )}
+          {readOnly && draft.error && (
+            <button
+              type="button"
+              className={secondaryClass}
+              onClick={() => window.location.reload()}
+            >
+              重试读取
             </button>
           )}
-          <div className="max-w-56 min-w-0 flex-[1_1_10rem]">
-            <p className="text-xs text-slate-700 tabular-nums">
-              第 {index + 1} / {questions.length} 题 · 已提交 {submitted}/
-              {questions.length}
-            </p>
-            {!readOnly && (
-              <progress
-                aria-label="练习提交进度"
-                max={questions.length}
-                value={submitted}
-                className="mt-1 block h-1.5 w-full appearance-none overflow-hidden rounded-full bg-slate-200 [&::-moz-progress-bar]:bg-cyan-900 [&::-webkit-progress-bar]:bg-slate-200 [&::-webkit-progress-value]:bg-cyan-900"
-              />
-            )}
-          </div>
-          <div className="min-w-0 flex-1 basis-48">
-            <p className="text-xs [overflow-wrap:anywhere] text-slate-600">
-              {set.courseName}
-            </p>
-            <h1 className="text-lg leading-7 font-semibold [overflow-wrap:anywhere] text-slate-950">
-              {set.title}
-            </h1>
-            {readOnly && (
-              <p className="text-xs text-slate-600">
-                {set.management?.trashedAt
-                  ? "回收站 · 只读回看"
-                  : "练习记录 · 只读回看"}
-              </p>
-            )}
-          </div>
         </div>
-        <div inert={working}>
-          <PracticeManagementActions
-            id={initialRecommendation.id}
-            title={set.title}
-            management={set.management}
-            active={!readOnly}
-            menuLabel="更多"
-            onChange={(action) => {
-              if (action === "PURGE")
-                window.location.replace(
-                  returnTo === "/student/recommendations"
-                    ? "/student/recommendations?view=recommended&section=TRASH"
-                    : returnTo,
-                );
-              else window.location.reload();
-            }}
-          />
-        </div>
-      </header>
+      )}
 
-      <div className="grid min-w-0 @min-[48rem]:grid-cols-[minmax(0,1fr)_14rem]">
-        <aside
-          aria-labelledby="practice-progress"
-          className="min-w-0 border-b border-slate-200 bg-white p-3 sm:p-4 @min-[48rem]:sticky @min-[48rem]:top-20 @min-[48rem]:col-start-2 @min-[48rem]:row-start-1 @min-[48rem]:border-s @min-[48rem]:border-b-0"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <h2
-              id="practice-progress"
-              className="text-sm font-semibold text-slate-950"
-            >
-              答题卡
-            </h2>
-            <p className="text-xs text-slate-600 tabular-nums">
-              已提交 {submitted}/{questions.length}
-            </p>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-slate-600">
-            {scoring.pendingCount > 0 && (
-              <span>待判 {scoring.pendingCount}</span>
-            )}
-            {scoring.errorCount > 0 && (
-              <span className="text-amber-900">
-                判题异常 {scoring.errorCount}
-              </span>
-            )}
-            {scoring.gradedCount > 0 && (
-              <span aria-live="polite" className="font-medium text-slate-900">
-                {scoring.complete && scoring.percentage !== null
-                  ? "整组成绩 " + scoring.percentage + " 分"
-                  : "已评 " + scoring.gradedScore + " 分"}
-              </span>
-            )}
-            {readOnly && scoring.gradedCount === 0 && <span>暂无已评成绩</span>}
-            <span>
-              {scoring.frozen
-                ? "总分 " + scoring.totalPoints + " 分"
-                : "保留原始分值"}
-            </span>
-            <span>不计课程成绩</span>
-          </div>
-          <button
-            type="button"
-            aria-expanded={navigatorOpen}
-            aria-controls="practice-question-navigator"
-            className={
-              secondaryClass +
-              " mt-3 w-full justify-between @min-[48rem]:hidden"
-            }
-            onClick={() => setNavigatorOpen((open) => !open)}
-          >
-            {navigatorOpen ? "收起题号" : "展开题号"}
-            <ChevronDown
-              aria-hidden="true"
-              className={"size-4 " + (navigatorOpen ? "rotate-180" : "")}
-            />
-          </button>
-          <nav
-            id="practice-question-navigator"
-            aria-label="题号导航"
-            className={
-              (navigatorOpen ? "block" : "hidden") +
-              " mt-3 border-t pt-3 @min-[48rem]:block"
-            }
-          >
-            <div className="grid max-h-64 grid-cols-5 gap-1.5 overflow-y-auto px-1 py-1 sm:grid-cols-8 @min-[48rem]:grid-cols-4">
-              {viewQuestions.map((question, i) => {
-                const state = questionState(
-                  question,
-                  drafts[question.id],
-                  missing.includes(question.id),
-                );
-                const selected = question.id === current;
-                return (
-                  <button
-                    key={question.id}
-                    type="button"
-                    disabled={working || !draftsReady}
-                    aria-label={"第 " + (i + 1) + " 题，" + state.label}
-                    aria-current={selected ? "step" : undefined}
-                    title={state.label}
-                    onClick={() => goToQuestion(question.id)}
-                    className={
-                      "min-h-11 rounded-lg border text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-700 disabled:opacity-60 " +
-                      (selected
-                        ? "border-cyan-950 bg-cyan-900 text-white"
-                        : state.color)
-                    }
-                  >
-                    {i + 1} <span aria-hidden="true">{state.mark}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <p
-              aria-hidden="true"
-              className="mt-2 text-xs leading-5 text-slate-600"
-            >
-              – 未答　✎ 草稿　… 待判　✓ 已提交　! 需查看
-            </p>
-          </nav>
-        </aside>
-
-        <div className="min-w-0 space-y-3 p-3 sm:p-5 @min-[48rem]:col-start-1 @min-[48rem]:row-start-1">
-          <div className="mx-auto max-w-3xl min-w-0 rounded-lg p-1 sm:p-3">
-            <h2
-              ref={questionHeading}
-              tabIndex={-1}
-              className="mb-2 scroll-mt-24 rounded text-sm font-semibold text-cyan-950 focus-visible:outline-2 focus-visible:outline-cyan-800"
-            >
-              第 {index + 1} / {questions.length} 题
-            </h2>
-            {cachedCurrent && (
-              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                <span className="rounded bg-cyan-100 px-2 py-1 font-medium text-cyan-950">
-                  {QUESTION_TYPE_LABELS[cachedCurrent.type]}
-                </span>
-                {cachedCurrent.assignedPoints != null && (
-                  <span>{cachedCurrent.assignedPoints} 分</span>
-                )}
-                {cachedCurrent.knowledgePoints.length > 0 && (
-                  <span className="[overflow-wrap:anywhere]">
-                    知识点 ·{" "}
-                    {cachedCurrent.knowledgePoints
-                      .map((point) => point.name)
-                      .join("、")}
-                  </span>
-                )}
-              </div>
-            )}
-            {((!readOnly && !draftsReady) || busy) && (
-              <p role="status" className="py-4 text-sm text-slate-600">
-                正在加载题目…
-              </p>
-            )}
-            {error && (
-              <p role="alert" className="py-4 text-sm text-red-700">
-                {error}{" "}
-                <button
-                  type="button"
-                  className={secondaryClass}
-                  onClick={() => setRetry((value) => value + 1)}
-                >
-                  重试
-                </button>
-              </p>
-            )}
-            {(draftsReady || readOnly) &&
-              Object.values(cache).map((item) => (
-                <div
-                  key={
-                    item.id +
-                    ":" +
-                    item.status +
-                    ":" +
-                    (item.programmingAttempt?.id ?? "") +
-                    ":" +
-                    draft.inputVersion
-                  }
-                  hidden={item.id !== current || busy || Boolean(error)}
-                >
-                  <fieldset
-                    className="min-w-0"
-                    disabled={
-                      batchBusy || draft.saving || Boolean(draft.conflict)
-                    }
-                  >
-                    {!readOnly &&
-                    item.status === "STARTED" &&
-                    !item.readOnly ? (
-                      <RecommendationPractice
-                        embedded
-                        recommendation={item}
-                        initialAnswer={drafts[item.id]}
-                        onDraftChange={onDraftChange}
-                        onSubmissionStateChange={onSubmissionStateChange}
-                        onProgrammingQueued={(id, attempt) =>
-                          setCache((previous) =>
-                            previous[id]
-                              ? {
-                                  ...previous,
-                                  [id]: {
-                                    ...previous[id],
-                                    programmingAttempt: attempt,
-                                  },
-                                }
-                              : previous,
-                          )
-                        }
-                        batchBusy={batchBusy}
-                        onCompleted={(id) => {
-                          setQuestions((previous) =>
-                            previous.map((q) =>
-                              q.id === id ? { ...q, status: "COMPLETED" } : q,
-                            ),
-                          );
-                          void requestApi<RecommendationDetailView>(
-                            recommendationDetailApiPath(id),
-                            { method: "GET" },
-                          ).then((response) => {
-                            if (response.success)
-                              setCache((previous) => ({
-                                ...previous,
-                                [id]: response.data,
-                              }));
-                          });
-                        }}
-                      />
-                    ) : (
-                      <PracticeHistoryQuestion
-                        item={item}
-                        draft={drafts[item.id]}
-                        embedded
-                      />
-                    )}
-                  </fieldset>
-                </div>
-              ))}
-          </div>
-
-          {(draft.error || draft.message || batchMessage) && (
-            <div className="space-y-2 rounded-xl border bg-white px-4 py-3 text-sm">
-              {batchMessage && (
-                <p role="status" className="text-slate-700">
-                  {batchMessage}
-                </p>
-              )}
-              {draft.error ? (
-                <>
-                  <p role="alert" className="text-red-700">
-                    {draft.error}
-                  </p>
-                  {!readOnly && (
-                    <p className="text-slate-600">
-                      答案仍保留在本页，可直接重试保存。
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p role="status" className="text-slate-600">
-                  {draft.message}
-                </p>
-              )}
-              {draft.conflict && (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={working}
-                    className={secondaryClass}
-                    onClick={() => {
-                      draft.useServerDraft();
-                      setMissing([]);
-                    }}
-                  >
-                    载入账号草稿
-                  </button>
-                  <button
-                    type="button"
-                    disabled={working || !pending.length}
-                    className={secondaryClass}
-                    onClick={() => {
-                      if (window.confirm("用当前答案覆盖账号草稿并退出？"))
-                        void draft.saveAndExit(saveSnapshot, true);
-                    }}
-                  >
-                    覆盖并保存退出
-                  </button>
-                </div>
-              )}
-              {readOnly && draft.error && (
-                <button
-                  type="button"
-                  className={secondaryClass}
-                  onClick={() => window.location.reload()}
-                >
-                  重试读取
-                </button>
-              )}
-            </div>
-          )}
-          <footer className="sticky bottom-0 z-10 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border bg-white p-2 shadow-sm sm:p-3">
-            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+      <StudentAnswerFooter
+        current={index}
+        total={questions.length}
+        disabled={buttonDisabled}
+        onSelect={(i) => goToQuestion(questions[i].id)}
+        actions={
+          !readOnly && pending.length > 0 ? (
+            <>
               <button
                 type="button"
                 className={secondaryClass}
-                disabled={!draftsReady || working || index <= 0}
-                onClick={() => goToQuestion(questions[index - 1].id)}
+                disabled={buttonDisabled || Boolean(draft.conflict)}
+                onClick={() => void draft.saveAndExit(saveSnapshot)}
               >
-                <ChevronLeft aria-hidden="true" className="size-4 shrink-0" />
-                上一题
+                <Save aria-hidden="true" className="size-4" />
+                {draft.saving ? "保存中…" : "保存并退出"}
               </button>
               <button
                 type="button"
-                className={secondaryClass}
-                disabled={
-                  !draftsReady || working || index >= questions.length - 1
-                }
-                onClick={() => goToQuestion(questions[index + 1].id)}
+                className={answerPrimaryButton}
+                disabled={buttonDisabled || busy || Boolean(draft.conflict)}
+                onClick={() => void submitAll()}
               >
-                下一题
-                <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
+                <Send aria-hidden="true" className="size-4" />
+                {batchBusy
+                  ? "提交 " + batchProgress + "/" + batchTotal
+                  : "提交练习"}
               </button>
-            </div>
-            {!readOnly && pending.length > 0 && (
-              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-                <button
-                  type="button"
-                  className={secondaryClass}
-                  disabled={!draftsReady || working || Boolean(draft.conflict)}
-                  onClick={() => void draft.saveAndExit(saveSnapshot)}
-                >
-                  <Save aria-hidden="true" className="size-4 shrink-0" />
-                  {draft.saving ? "保存中…" : "保存并退出"}
-                </button>
-                <button
-                  type="button"
-                  className={
-                    controlClass +
-                    " border-cyan-900 bg-cyan-900 text-white hover:bg-cyan-950"
-                  }
-                  disabled={
-                    !draftsReady || working || busy || Boolean(draft.conflict)
-                  }
-                  onClick={() => void submitAll()}
-                >
-                  <Send aria-hidden="true" className="size-4 shrink-0" />
-                  {batchBusy
-                    ? "提交 " + batchProgress + "/" + batchTotal
-                    : "提交练习"}
-                </button>
-              </div>
-            )}
-          </footer>
-        </div>
-      </div>
-    </section>
+            </>
+          ) : undefined
+        }
+      />
+    </StudentAnswerWorkspace>
   );
 }

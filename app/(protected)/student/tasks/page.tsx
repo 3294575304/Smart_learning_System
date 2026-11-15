@@ -20,7 +20,10 @@ import {
   studentTaskContext,
   studentTaskDate,
 } from "@/services/dashboard/student-task-overview";
-import { activityHref } from "@/services/student-experience/activity-query";
+import {
+  activityHref,
+  withAssignmentTaskReturn,
+} from "@/services/student-experience/activity-query";
 import {
   readActivityPage,
   readActivityPageQuery,
@@ -45,7 +48,17 @@ export default async function StudentTasksPage({
     readActivityPage(() => loadActivityTasks(student.id, query)),
     listStudentTaskClassrooms(student.id, query.courseId),
   ]);
-  const pending = overview.items.filter((item) => item.status === "TODO");
+  const returnTo = activityHref("tasks", {
+    ...query,
+    page: overview.pagination.page,
+  });
+  const pending = overview.items
+    .filter((item) => item.status === "TODO")
+    .map((item) =>
+      item.kind === "assignment"
+        ? { ...item, href: withAssignmentTaskReturn(item.href, returnTo) }
+        : item,
+    );
   const upcoming = overview.items.filter((item) => item.status === "UPCOMING");
   return (
     <section className="space-y-4">
@@ -81,9 +94,12 @@ export default async function StudentTasksPage({
             >
               <h2
                 id="student-pending-tasks"
-                className="mb-3 text-lg font-semibold"
+                className="mb-3 flex items-center gap-2 text-base font-semibold"
               >
                 我的待办
+                <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-xs font-medium">
+                  {pending.length}
+                </span>
               </h2>
               <StudentTaskList
                 items={pending}
@@ -101,9 +117,12 @@ export default async function StudentTasksPage({
             >
               <h2
                 id="student-upcoming-tasks"
-                className="mb-3 text-lg font-semibold"
+                className="mb-3 flex items-center gap-2 text-base font-semibold"
               >
                 待开放安排
+                <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-xs font-medium">
+                  {upcoming.length}
+                </span>
               </h2>
               <ul className="divide-y divide-slate-100">
                 {upcoming.map((item) => (
@@ -139,7 +158,7 @@ export default async function StudentTasksPage({
           className={activityCardClass}
           aria-labelledby="student-task-records"
         >
-          <h2 id="student-task-records" className="font-semibold">
+          <h2 id="student-task-records" className="text-base font-semibold">
             课程任务入口
           </h2>
           <ul className="mt-2 divide-y divide-slate-100">
@@ -149,13 +168,17 @@ export default async function StudentTasksPage({
                 icon: Icon,
                 color,
               } = STUDENT_TASK_PRESENTATION[kind];
+              const count = overview.counts[kind];
               return (
                 <li key={kind} id={kind} className="scroll-mt-24 py-1">
                   <Link
-                    href={activityHref(view, {
-                      courseId: query.courseId,
-                      classroomId: query.classroomId,
-                    })}
+                    href={withAssignmentTaskReturn(
+                      activityHref(view, {
+                        courseId: query.courseId,
+                        classroomId: query.classroomId,
+                      }),
+                      kind === "assignment" ? returnTo : undefined,
+                    )}
                     className="flex min-h-12 items-center gap-3 rounded-lg px-1 py-2 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-700"
                   >
                     <span
@@ -165,8 +188,18 @@ export default async function StudentTasksPage({
                     </span>
                     <span className="min-w-0 flex-1 text-sm">
                       <span className="block font-medium">{label}</span>
-                      <span className="block text-xs text-slate-600">
-                        {overview.counts[kind]} 项待办
+                      {/*
+                        计数承担状态：有待办的入口用品牌色强调，
+                        没有待办的退为弱文本，避免四个入口看起来完全同权重。
+                      */}
+                      <span
+                        className={
+                          count > 0
+                            ? "text-brand-strong block text-xs font-medium"
+                            : "block text-xs text-neutral-500"
+                        }
+                      >
+                        {count > 0 ? `${count} 项待办` : "暂无待办"}
                       </span>
                     </span>
                     <ArrowRight

@@ -148,7 +148,21 @@ export function KnowledgeGraphPublishedView({
         </span>
       </section>
 
-      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside
+          className="min-w-0 rounded-xl border border-slate-200 bg-white"
+          aria-label="章节与知识点目录"
+        >
+          <KnowledgeGraphDirectory
+            compact
+            counts={NO_QUESTION_COUNTS}
+            graph={graph}
+            nodes={nodes}
+            onSelect={handleSelectNode}
+            selectedKey={selectedKey}
+            showQuestionCounts={false}
+          />
+        </aside>
         <section className="min-w-0 space-y-3" aria-label="课程知识图谱浏览">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold text-slate-900">探索知识图谱</h2>
@@ -156,16 +170,7 @@ export function KnowledgeGraphPublishedView({
               当前显示 {nodes.length} 个节点 · {edges.length} 条关系
             </p>
           </div>
-          <div className="grid min-w-0 gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
-            <KnowledgeGraphDirectory
-              compact
-              counts={NO_QUESTION_COUNTS}
-              graph={graph}
-              nodes={nodes}
-              onSelect={handleSelectNode}
-              selectedKey={selectedKey}
-              showQuestionCounts={false}
-            />
+          <div className="min-w-0 space-y-3">
             <KnowledgeGraphCanvas
               compact
               edges={edges}
@@ -173,6 +178,7 @@ export function KnowledgeGraphPublishedView({
               nodeColorHelp="知识点球颜色表示我的掌握度；课程与章节仍按结构着色"
               nodes={nodes}
               onSelect={handleSelectNode}
+              onClearSelection={() => setSelectedKey(null)}
               selectedKey={selectedKey}
               structure={graph}
             />
@@ -182,7 +188,7 @@ export function KnowledgeGraphPublishedView({
           </p>
         </section>
         <aside
-          className="min-w-0 rounded-2xl border border-sky-100 bg-white shadow-sm xl:sticky xl:top-24"
+          className="min-w-0 rounded-2xl border border-sky-100 bg-white shadow-sm lg:col-span-2"
           aria-label="知识点学习与练习"
         >
           <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">

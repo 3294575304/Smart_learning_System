@@ -2,7 +2,11 @@ import {
   StudentActivityFilters,
   StudentActivityPagination,
 } from "@/components/dashboard/student-activity-list";
-import { activityHref } from "@/services/student-experience/activity-query";
+import {
+  activityHref,
+  assignmentTaskReturn,
+  withAssignmentTaskReturn,
+} from "@/services/student-experience/activity-query";
 import {
   readActivityPage,
   readActivityPageQuery,
@@ -108,6 +112,10 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
   });
   if (!scopeResult.success) notFound();
   const { courseId, classroomId } = scopeResult.data;
+  const returnTo = assignmentTaskReturn(raw.returnTo, scopeResult.data);
+  const taskReturnLink = returnTo ? (
+    <StudentBackLink href={returnTo}>返回学习任务</StudentBackLink>
+  ) : null;
   let course: Awaited<ReturnType<typeof getStudentCourseContext>> | null = null;
   if (courseId) {
     try {
@@ -144,7 +152,8 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
           description="统一查看提交记录、批改进度与正式成绩；历史班级保留本人记录，未发布成绩不提前显示。"
           eyebrow={course?.name}
           actions={
-            course && classroomId ? (
+            taskReturnLink ??
+            (course && classroomId ? (
               <StudentCourseReturnLink
                 courseId={course.id}
                 classroomId={classroomId}
@@ -154,7 +163,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
               <StudentBackLink href="/student/results?view=course">
                 查看课程总评
               </StudentBackLink>
-            )
+            ))
           }
         />
         <StudentTaskScope
@@ -165,6 +174,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
         />
         <StudentAssignmentTabs
           view="records"
+          returnTo={returnTo}
           courseId={course?.id}
           classroomId={classroomId}
         />
@@ -201,7 +211,8 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
     <section className="space-y-4">
       <PageHeader
         actions={
-          course ? (
+          taskReturnLink ??
+          (course ? (
             <StudentCourseReturnLink
               courseId={course.id}
               classroomId={classroomId}
@@ -211,7 +222,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
             <StudentBackLink href="/student/tasks">
               返回学习任务
             </StudentBackLink>
-          )
+          ))
         }
         description={
           course
@@ -224,12 +235,14 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
 
       <StudentActivityFilters
         view="assignments"
+        returnTo={returnTo}
         query={query}
         classrooms={classrooms}
         total={pagination.total}
       />
       <StudentAssignmentTabs
         view="work"
+        returnTo={returnTo}
         courseId={course?.id}
         classroomId={classroomId}
       />
@@ -240,7 +253,10 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
             query.status === "ALL" ? null : (
               <Link
                 className="text-sm font-medium underline"
-                href={activityHref("assignments", { courseId, classroomId })}
+                href={withAssignmentTaskReturn(
+                  activityHref("assignments", { courseId, classroomId }),
+                  returnTo,
+                )}
               >
                 查看全部作业
               </Link>
@@ -264,9 +280,12 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
                 return (
                   <Link
                     className="border-line bg-card focus-visible:outline-brand relative flex min-w-0 flex-wrap items-center gap-4 overflow-hidden rounded-2xl border py-4 pr-5 pl-6 shadow-[var(--shadow-card)] transition-colors hover:border-sky-200 focus-visible:outline-2 focus-visible:outline-offset-2 sm:py-5 sm:pr-6 sm:pl-7"
-                    href={studentTaskHref(
-                      `/student/assignments/${featured.id}`,
-                      scopeResult.data,
+                    href={withAssignmentTaskReturn(
+                      studentTaskHref(
+                        `/student/assignments/${featured.id}`,
+                        scopeResult.data,
+                      ),
+                      returnTo,
                     )}
                     key={featured.id}
                   >
@@ -345,11 +364,14 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
                 <li key={assignment.id}>
                   <Link
                     className="border-line bg-card focus-visible:outline-brand flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3.5 transition-colors hover:border-sky-200 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-offset-2"
-                    href={studentTaskHref(
-                      state === "SUBMITTED" && assignment.latestSubmissionId
-                        ? `/student/submissions/${assignment.latestSubmissionId}/result`
-                        : `/student/assignments/${assignment.id}`,
-                      scopeResult.data,
+                    href={withAssignmentTaskReturn(
+                      studentTaskHref(
+                        state === "SUBMITTED" && assignment.latestSubmissionId
+                          ? `/student/submissions/${assignment.latestSubmissionId}/result`
+                          : `/student/assignments/${assignment.id}`,
+                        scopeResult.data,
+                      ),
+                      state === "SUBMITTED" ? undefined : returnTo,
                     )}
                   >
                     <span
@@ -385,6 +407,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
 
       <StudentActivityPagination
         view="assignments"
+        returnTo={returnTo}
         query={query}
         pagination={pagination}
       />

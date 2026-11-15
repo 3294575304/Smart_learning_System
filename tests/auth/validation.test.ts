@@ -11,6 +11,8 @@ const testSchoolId = "school_nuist";
 
 test("登录邮箱会去除空格并转为小写", () => {
   const result = loginSchema.parse({
+    captchaId: "a".repeat(48),
+    captchaAnswer: "ACD67",
     schoolId: testSchoolId,
     email: "  Student@Example.COM ",
     password: "Student123!",
@@ -20,6 +22,8 @@ test("登录邮箱会去除空格并转为小写", () => {
 
 test("登录账号支持学号文本", () => {
   const result = loginSchema.parse({
+    captchaId: "a".repeat(48),
+    captchaAnswer: "ACD67",
     schoolId: testSchoolId,
     email: "  202400000001 ",
     password: "Student123!",

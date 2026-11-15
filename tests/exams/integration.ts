@@ -63,6 +63,7 @@ import {
 import { publishExamTestSyllabus } from "./syllabus-fixture";
 import {
   completeProgrammingJob,
+  createFormalProgrammingAttempt,
   getStudentProgrammingAttempt,
 } from "@/services/programming-attempts/service";
 import { createProgrammingConfigInTransaction } from "@/services/programming-questions/service";
@@ -1412,6 +1413,114 @@ async function main() {
   );
   console.log(
     "Exam programming question: publication, frozen config, prorated partial score and result visibility passed",
+  );
+  const programmingRoom = await prisma.assignment.findUniqueOrThrow({
+    where: { id: programmingAssignment.id },
+    select: { classroomId: true },
+  });
+  for (const condition of [
+    "COMPLETED",
+    "CLASS_ARCHIVED",
+    "ASSIGNMENT_ARCHIVED",
+    "REVOKED",
+    "LEFT",
+  ] as const) {
+    await prisma.classroom.update({
+      where: { id: programmingRoom.classroomId },
+      data: { status: "ACTIVE" },
+    });
+    await prisma.assignment.update({
+      where: { id: programmingAssignment.id },
+      data: { status: "PUBLISHED" },
+    });
+    await prisma.classMembership.update({
+      where: {
+        classroomId_studentId: {
+          classroomId: programmingRoom.classroomId,
+          studentId: student.id,
+        },
+      },
+      data: { status: "ACTIVE", endedAt: null },
+    });
+    const pending = await prisma.$transaction((tx) =>
+      createFormalProgrammingAttempt(tx, {
+        studentAnswerId: gradedProgramming.answers[0].id,
+        assignmentQuestionId: frozen.id,
+        studentId: student.id,
+        sourceCode: "print(4)",
+        courseId: course.id,
+      }),
+    );
+    assert.ok(pending.backgroundJobId);
+    const lease = await claimBackgroundJobById(pending.backgroundJobId, {
+      acceptedTypes: ["PYTHON_JUDGE"],
+      workerId: "late-projection-test",
+      executorVersion: "test",
+      leaseDurationMs: 30_000,
+    });
+    assert.ok(lease?.currentLeaseId);
+    if (condition === "COMPLETED" || condition === "CLASS_ARCHIVED")
+      await prisma.classroom.update({
+        where: { id: programmingRoom.classroomId },
+        data: { status: condition === "COMPLETED" ? "COMPLETED" : "ARCHIVED" },
+      });
+    if (condition === "ASSIGNMENT_ARCHIVED" || condition === "REVOKED")
+      await prisma.assignment.update({
+        where: { id: programmingAssignment.id },
+        data: { status: condition === "REVOKED" ? "REVOKED" : "ARCHIVED" },
+      });
+    if (condition === "LEFT")
+      await prisma.classMembership.update({
+        where: {
+          classroomId_studentId: {
+            classroomId: programmingRoom.classroomId,
+            studentId: student.id,
+          },
+        },
+        data: { status: "LEFT", endedAt: new Date() },
+      });
+    const answerBefore = await prisma.studentAnswer.findUniqueOrThrow({
+      where: { id: gradedProgramming.answers[0].id },
+    });
+    await completeProgrammingJob(pending.backgroundJobId, {
+      leaseId: lease.currentLeaseId,
+      result: {
+        attemptId: pending.id,
+        cases: config.testCases.map((testCase) => ({
+          testCaseId: testCase.id,
+          passed: true,
+          errorType: "NONE",
+          stdout: testCase.expectedOutput,
+          stderr: "",
+          resourceUsage: null,
+        })),
+      },
+    });
+    const finished = await prisma.programmingAttempt.findUniqueOrThrow({
+      where: { id: pending.id },
+      include: { testResults: true },
+    });
+    assert.equal(finished.testResults.length, config.testCases.length);
+    if (condition === "COMPLETED") {
+      assert.equal(finished.status, "SUCCEEDED");
+    } else {
+      assert.equal(finished.status, "CANCELLED");
+      assert.match(finished.safeErrorSummary ?? "", /成绩未计入/);
+      const answerAfter = await prisma.studentAnswer.findUniqueOrThrow({
+        where: { id: answerBefore.id },
+      });
+      assert.equal(
+        answerAfter.score?.toString(),
+        answerBefore.score?.toString(),
+      );
+      assert.equal(
+        answerAfter.gradedAt?.getTime(),
+        answerBefore.gradedAt?.getTime(),
+      );
+    }
+  }
+  console.log(
+    "Late judge projection preserves completed-class grading and records excluded results for archived/revoked/left scopes",
   );
   console.log("Exam integration passed");
 }

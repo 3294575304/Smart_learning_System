@@ -21,14 +21,19 @@ export function TeacherWorkspaceScope({
       <label className="min-w-0 space-y-1 text-xs">
         <span className="font-medium text-slate-600">当前课程</span>
         <select
+          title={courses.find((course) => course.id === courseId)?.name}
           className="min-h-10 w-full rounded-lg border bg-white px-3 py-2 text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-600 disabled:opacity-60"
           value={courseId}
           disabled={pending}
           onChange={(event) => navigate(event.target.value)}
         >
           {courses.map((course) => (
-            <option key={course.id} value={course.id}>
-              {course.name} · {course.term}
+            <option
+              key={course.id}
+              value={course.id}
+              title={`${course.name} · ${course.term}`}
+            >
+              {course.name}
             </option>
           ))}
         </select>

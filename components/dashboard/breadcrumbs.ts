@@ -59,6 +59,7 @@ export function buildBreadcrumbs(
             segments[0] === "student" &&
             [
               "assignments",
+              "attendance",
               "recommendations",
               "wrong-questions",
               "exams",

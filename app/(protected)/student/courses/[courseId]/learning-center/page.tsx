@@ -1,19 +1,24 @@
 import { Role } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import {
-  BookOpen,
+  ArrowLeft,
   ArrowUpRight,
   CalendarCheck,
-  ChevronDown,
   ClipboardCheck,
   ClipboardList,
   FileClock,
   GitBranch,
   GraduationCap,
-  Sparkles,
+  NotebookPen,
+  Target,
 } from "lucide-react";
-import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { StudentPageLink } from "@/components/dashboard/student-page-link";
+import {
+  SECTION_TABS_LIST,
+  sectionTabClass,
+} from "@/components/ui/section-tabs";
+import { StatFunnel } from "@/components/ui/stat-funnel";
+import { StatusChip } from "@/components/ui/status-chip";
 import { StudentHomeTasks } from "@/components/dashboard/student-home-tasks";
 import { HomeKnowledgeMatrix } from "@/components/dashboard/home-knowledge-matrix";
 import { ScoreChart } from "@/components/dashboard/student-analysis-workspace";
@@ -38,10 +43,13 @@ import { getStudentCourseLearningCenter } from "@/services/learner-profiles/lear
 import { getStudentLearnerProfile } from "@/services/learner-profiles/service";
 
 const action =
-  "inline-flex min-h-10 items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
+  "inline-flex min-h-10 items-center gap-2 rounded-lg border border-line bg-card px-3 py-2 text-sm font-medium text-ink-body hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
 const primary =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
-const panel = "min-w-0 rounded-2xl border border-sky-100 bg-white p-4 sm:p-5";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-sky-700 bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
+const panel = "min-w-0 rounded-xl border border-line bg-card p-4 sm:p-5";
+/** 课程记录入口：窄栏里的紧凑宫格，去掉右侧外跳箭头，把宽度留给标签。 */
+const tile =
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-line bg-card px-2 text-xs font-medium text-ink-body hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
 
 export default async function StudentCourseLearningCenterPage({
   params,
@@ -85,32 +93,49 @@ export default async function StudentCourseLearningCenterPage({
     classroom.status,
   );
   return (
-    <section className="mx-auto max-w-6xl min-w-0 space-y-4">
+    <section className="mx-auto max-w-7xl min-w-0 space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold [overflow-wrap:anywhere] text-slate-950 sm:text-2xl">
+          <h1 className="text-ink text-[22px] font-semibold [overflow-wrap:anywhere] sm:text-[26px]">
             {course.name}
           </h1>
-          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-700">
-            <span className="rounded-md bg-sky-100 px-2 py-1 font-medium [overflow-wrap:anywhere] text-sky-900">
+          <p className="text-ink-body mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="bg-muted text-ink-soft rounded-md px-2 py-1 font-medium [overflow-wrap:anywhere]">
               {classroom.name}
             </span>
             <span>{course.term}</span>
             {readOnly && (
-              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs">
+              <span className="bg-muted text-ink-soft rounded-md px-2 py-1 text-xs">
                 {label} · 仅查看记录
               </span>
             )}
           </p>
         </div>
-        <StudentBackLink href="/student/courses">返回我的课程</StudentBackLink>
+        <StudentPageLink
+          className="border-line bg-card text-ink-body hover:bg-muted inline-flex min-h-11 w-fit max-w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+          href="/student/courses"
+        >
+          <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
+          我的课程
+        </StudentPageLink>
       </header>
       <CourseWorkspaceTabs
         courseId={course.id}
         classroomId={classroom.id}
         tab={location.tab}
       />
-      {await courseContent(student.id, scope, location, readOnly)}
+      <p className="text-ink-soft -mt-2 text-xs">
+        {
+          {
+            overview: "本课程概览、下一步建议与知识掌握汇总",
+            tasks: "本课程待办与课程记录入口",
+            growth: "章节掌握、学习路径、我的画像与趋势记录",
+          }[location.tab]
+        }
+      </p>
+      <div className="mt-2 min-w-0 space-y-4">
+        {await courseContent(student.id, scope, location, readOnly)}
+      </div>
     </section>
   );
 }
@@ -135,7 +160,7 @@ async function courseContent(
         : await getStudentTaskOverview(studentId, now, scope);
       return (
         <div
-          className={`grid items-start gap-4 ${overview ? "lg:grid-cols-[minmax(0,1fr)_17rem]" : ""}`}
+          className={`grid items-start gap-4 ${overview ? "lg:grid-cols-[minmax(0,1fr)_20rem]" : ""}`}
         >
           {overview && (
             <>
@@ -148,21 +173,21 @@ async function courseContent(
           <section className={panel} aria-labelledby="class-task-records">
             <h2
               id="class-task-records"
-              className="font-semibold text-slate-950"
+              className="text-ink text-[15px] font-semibold"
             >
-              课程记录与成绩
+              课程记录
             </h2>
-            <p className="mt-1 text-xs leading-5 text-slate-600">
-              仅显示当前教学班的个人待办与课程记录。
+            <p className="text-ink-soft mt-1 max-w-[52ch] text-xs leading-5">
+              作业、考试、签到、问卷与课程总评的入口，仅统计当前教学班。
             </p>
             {readOnly && (
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="text-ink-body mt-1 text-sm">
                 当前教学班已停止作答，可查看已有记录。
               </p>
             )}
             <nav
               aria-label="课程记录入口"
-              className={`mt-3 grid gap-1.5 ${readOnly ? "sm:grid-cols-2 lg:grid-cols-4" : ""}`}
+              className={`mt-3 grid grid-cols-2 gap-2 ${readOnly ? "sm:grid-cols-3 lg:grid-cols-5" : ""}`}
             >
               {[
                 {
@@ -191,13 +216,9 @@ async function courseContent(
                   Icon: GraduationCap,
                 },
               ].map(({ href, label, Icon }) => (
-                <StudentPageLink key={href} href={href} className={action}>
+                <StudentPageLink key={href} href={href} className={tile}>
                   <Icon aria-hidden="true" className="size-4 shrink-0" />
                   {label}
-                  <ArrowUpRight
-                    aria-hidden="true"
-                    className="ml-auto size-4 shrink-0"
-                  />
                 </StudentPageLink>
               ))}
             </nav>
@@ -206,138 +227,218 @@ async function courseContent(
       );
     }
     if (location.tab === "overview") {
-      const [
-        data,
-        {
-          classes: [analysis],
-        },
-      ] = await Promise.all([
+      const [data, analytics] = await Promise.all([
         getStudentCourseLearningCenter(studentId, courseId, classroomId),
         getStudentClassAnalytics(studentId, scope, now),
       ]);
+      const analysis = analytics.classes[0];
       if (!analysis) notFound();
+      const { exams } = analytics;
+      const masteryStep = data.progressSteps.find(
+        (step) => step.key === "mastered-concepts",
+      );
+      const pendingCount =
+        analysis.assignmentProgress.overdue + analysis.attendance.pending;
+      const examSummary =
+        exams.missed > 0
+          ? `缺考 ${exams.missed} 次`
+          : exams.scoredCount > 0
+            ? `已出分 ${exams.scoredCount} 次`
+            : "暂无安排";
+      const pendingRows = [
+        {
+          label: "正式作业",
+          value: analysis.assignmentProgress.total
+            ? `已交 ${analysis.assignmentProgress.submitted}/${analysis.assignmentProgress.total}`
+            : "暂无作业",
+          note:
+            analysis.assignmentProgress.overdue > 0
+              ? `逾期 ${analysis.assignmentProgress.overdue} 项`
+              : null,
+          muted: analysis.assignmentProgress.total === 0,
+        },
+        {
+          label: "签到与出勤",
+          value: analysis.attendance.total
+            ? `${analysis.attendance.total} 条记录`
+            : "暂无记录",
+          note: analysis.attendance.pending
+            ? `待确认 ${analysis.attendance.pending} 条`
+            : null,
+          muted: analysis.attendance.total === 0,
+        },
+        {
+          label: "考试",
+          value: examSummary,
+          note: null,
+          muted: examSummary === "暂无安排",
+        },
+        {
+          label: "成绩公布",
+          value: analysis.awaitingRelease
+            ? `${analysis.awaitingRelease} 项待公布`
+            : "无待公布",
+          note: null,
+          muted: analysis.awaitingRelease === 0,
+        },
+      ];
       return (
         <>
-          <section
-            className={`${panel} flex flex-wrap items-center justify-between gap-3`}
-            aria-labelledby="course-next-action"
-          >
-            <div className="min-w-0 flex-1 basis-72">
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+            <section className={panel} aria-labelledby="course-next-action">
               <h2
+                className="text-ink text-[15px] font-semibold"
                 id="course-next-action"
-                className="font-semibold text-slate-950"
               >
-                接下来学什么
+                下一步
               </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-700">
+              <p className="text-ink-body mt-2 max-w-[52ch] text-sm leading-6">
                 {data.nextAction}
               </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {!readOnly && (
-                <StudentPageLink
-                  className={primary}
-                  href={`/student/recommendations?view=generate&${scoped}`}
-                >
-                  <Sparkles aria-hidden="true" className="size-4" />
-                  自主练习
-                </StudentPageLink>
-              )}
-              <StudentPageLink
-                className={action}
-                href={`/student/wrong-questions?${new URLSearchParams({ courseId, backCourseId: courseId, backClassroomId: classroomId })}`}
-              >
-                <BookOpen aria-hidden="true" className="size-4" />
-                本课程题库
-              </StudentPageLink>
-            </div>
-          </section>
-          <div
-            className={`${panel} grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]`}
-          >
-            <section className="min-w-0">
-              <header className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-semibold text-slate-950">我的作业与出勤</h2>
+              <ul className="mt-3 flex flex-wrap gap-1.5">
+                {[
+                  masteryStep
+                    ? `待巩固 ${Math.max(
+                        0,
+                        masteryStep.denominator - masteryStep.numerator,
+                      )} 个`
+                    : null,
+                  `逾期 ${analysis.assignmentProgress.overdue} 项`,
+                  `待公布 ${analysis.awaitingRelease} 项`,
+                ]
+                  .filter((chip): chip is string => Boolean(chip))
+                  .map((chip) => (
+                    <li
+                      className="border-line text-ink-soft rounded-md border px-2 py-0.5 text-xs"
+                      key={chip}
+                    >
+                      {chip}
+                    </li>
+                  ))}
+              </ul>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {!readOnly && (
+                  <StudentPageLink
+                    className={primary}
+                    href={`/student/recommendations?view=generate&${scoped}`}
+                  >
+                    <Target aria-hidden="true" className="size-4" />
+                    自主练习
+                  </StudentPageLink>
+                )}
                 <StudentPageLink
                   className={action}
-                  href={`/student/analytics?${scoped}`}
+                  href={`/student/wrong-questions?${new URLSearchParams({ courseId, backCourseId: courseId, backClassroomId: classroomId })}`}
                 >
-                  我的学习分析
-                  <ArrowUpRight aria-hidden="true" className="size-4" />
+                  <NotebookPen aria-hidden="true" className="size-4" />
+                  本课程错题
                 </StudentPageLink>
-              </header>
-              <p className="mt-1 text-xs text-slate-600">仅统计当前教学班</p>
-              <dl className="mt-3 grid grid-cols-2 divide-x divide-slate-100">
-                <div className="pr-3">
-                  <dt className="text-xs text-slate-600">正式作业</dt>
-                  <dd className="mt-1 text-lg font-semibold text-slate-950 tabular-nums">
-                    {analysis.total
-                      ? `已交 ${analysis.submitted}/${analysis.total}`
-                      : "暂无作业"}
-                  </dd>
-                  <dd className="text-xs text-slate-600">
-                    {analysis.overdue} 项逾期未交
-                  </dd>
-                </div>
-                <div className="pl-3">
-                  <dt className="text-xs text-slate-600">出勤记录</dt>
-                  <dd className="mt-1 text-lg font-semibold text-slate-950 tabular-nums">
-                    {analysis.attendance.total
-                      ? `${analysis.attendance.total} 条`
-                      : "暂无记录"}
-                  </dd>
-                  <dd className="text-xs text-slate-600">
-                    正常 {analysis.attendance.present} · 待确认{" "}
-                    {analysis.attendance.pending}
-                  </dd>
-                </div>
-              </dl>
+              </div>
             </section>
-            <section className="min-w-0 border-t border-slate-100 pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
-              <h2 className="font-semibold text-slate-950">我的知识掌握</h2>
-              <p className="mt-1 text-xs leading-5 text-slate-600">
-                汇总我在这门课的评分记录，已授范围按当前教学班统计。
-              </p>
-              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-4">
-                {data.progressSteps.map((step) => (
-                  <div key={step.key} className="min-w-0">
-                    <dt className="text-xs text-slate-600">
-                      {step.key === "teaching-progress"
-                        ? "课程已授范围"
-                        : step.label}
+
+            <section className={panel} aria-labelledby="course-pending">
+              <header className="flex flex-wrap items-center justify-between gap-2">
+                <h2
+                  className="text-ink text-[15px] font-semibold"
+                  id="course-pending"
+                >
+                  本课程待办
+                </h2>
+                <StatusChip tone={pendingCount > 0 ? "warn" : "ok"}>
+                  {pendingCount > 0 ? `${pendingCount} 项待处理` : "无待办"}
+                </StatusChip>
+              </header>
+              <p className="text-ink-soft mt-1 text-xs">仅统计当前教学班</p>
+              <dl className="mt-3 space-y-2.5">
+                {pendingRows.map((row) => (
+                  <div
+                    className="flex min-w-0 items-baseline justify-between gap-3"
+                    key={row.label}
+                  >
+                    <dt className="text-ink-soft shrink-0 text-xs">
+                      {row.label}
                     </dt>
-                    <dd
-                      className="mt-1 text-lg font-semibold text-slate-950 tabular-nums"
-                      title={step.detail}
-                    >
-                      {step.denominator
-                        ? `${step.numerator} / ${step.denominator}`
-                        : "—"}
+                    <dd className="min-w-0 text-right">
+                      <span
+                        className={
+                          row.muted
+                            ? "text-ink-muted text-sm font-medium"
+                            : "text-ink text-sm font-medium"
+                        }
+                      >
+                        {row.value}
+                      </span>
+                      {row.note ? (
+                        <span className="text-ink-soft ml-2 text-xs">
+                          {row.note}
+                        </span>
+                      ) : null}
                     </dd>
                   </div>
                 ))}
               </dl>
-              <p className="mt-3 text-xs text-slate-600">
-                课程已授范围以全部知识点为分母，其余各项依次缩小统计范围。
-              </p>
             </section>
           </div>
+
+          <section className={panel} aria-labelledby="course-mastery">
+            <header className="flex flex-wrap items-center justify-between gap-2">
+              <h2
+                className="text-ink text-[15px] font-semibold"
+                id="course-mastery"
+              >
+                我的知识掌握
+              </h2>
+              <StudentPageLink
+                className={action}
+                href={`/student/analytics?${scoped}`}
+              >
+                我的学习分析
+                <ArrowUpRight aria-hidden="true" className="size-4" />
+              </StudentPageLink>
+            </header>
+            <p className="text-ink-soft mt-1 max-w-[52ch] text-xs leading-5">
+              根据已公布的作业、考试成绩和练习结果，看看这门课掌握得怎么样。
+            </p>
+            <StatFunnel
+              className="mt-3"
+              dots={
+                masteryStep && masteryStep.denominator > 0
+                  ? {
+                      total: masteryStep.denominator,
+                      filled: masteryStep.numerator,
+                      caption:
+                        masteryStep.numerator === masteryStep.denominator
+                          ? `${masteryStep.denominator} 个记录较充分的知识点都已掌握。`
+                          : `${masteryStep.denominator} 个记录较充分的知识点中，${masteryStep.numerator} 个已掌握，${Math.max(
+                              0,
+                              masteryStep.denominator - masteryStep.numerator,
+                            )} 个还需巩固。`,
+                    }
+                  : undefined
+              }
+              steps={data.progressSteps.map((step) => ({
+                key: step.key,
+                label: step.label,
+                numerator: step.numerator,
+                denominator: step.denominator,
+                value: step.value,
+                detail: step.detail,
+              }))}
+            />
+          </section>
         </>
       );
     }
     if (location.tab !== "growth") return null;
     const section = location.section;
     const growthNav = (
-      <nav
-        aria-label="知识与成长内容"
-        className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-sky-100 bg-white p-1"
-      >
+      <nav aria-label="知识与成长内容" className={SECTION_TABS_LIST}>
         {STUDENT_GROWTH_SECTIONS.map((item) => (
           <StudentPageLink
             key={item.id}
             href={courseUrl("growth", item.id)}
             aria-current={section === item.id ? "page" : undefined}
-            className={`inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-700 ${section === item.id ? "bg-sky-100 font-semibold text-sky-900" : "font-medium text-slate-700 hover:bg-sky-50 hover:text-sky-900"}`}
+            className={sectionTabClass(section === item.id)}
           >
             {item.label}
           </StudentPageLink>
@@ -349,7 +450,7 @@ async function courseContent(
       return (
         <>
           {growthNav}
-          <p className="text-sm leading-6 text-slate-700">
+          <p className="text-ink-body max-w-[52ch] text-sm leading-6">
             汇总我在这门课的评分记录。出勤、自我反思和知识掌握分别展示。
           </p>
           <LearnerProfileDetail profile={profile} studentView />
@@ -370,7 +471,7 @@ async function courseContent(
             <header className="flex flex-wrap items-center justify-between gap-2">
               <h2
                 id="course-chapter-matrix"
-                className="font-semibold text-slate-950"
+                className="text-ink text-[15px] font-semibold"
               >
                 我的知识掌握
               </h2>
@@ -398,6 +499,7 @@ async function courseContent(
               profileHref={`/student/courses/${courseId}/profile?${new URLSearchParams({ classroomId })}`}
               generatedAt={data.generatedAt.toISOString()}
               profileRevision={data.profileRevision}
+              scroll={false}
             />
           </section>
         )}
@@ -408,24 +510,24 @@ async function courseContent(
           <>
             {analysis?.classes[0] && (
               <section className={panel}>
-                <h2 className="mb-3 font-semibold text-slate-950">
+                <h2 className="text-ink text-[15px] font-semibold">
                   我的作业成绩
                 </h2>
-                <ScoreChart points={analysis.classes[0].scoreHistory} />
+                <div className="mt-3">
+                  <ScoreChart points={analysis.classes[0].scoreHistory} />
+                </div>
               </section>
             )}
-            <details className={`${panel} group`}>
-              <summary className="-my-1 flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 rounded-md font-medium text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 [&::-webkit-details-marker]:hidden">
-                其他学习趋势与记录
-                <ChevronDown
-                  aria-hidden="true"
-                  className="size-4 shrink-0 group-open:rotate-180"
-                />
-              </summary>
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <StudentCourseLearningCenterView data={data} tab="activity" />
-              </div>
-            </details>
+            {/*
+              原来"其他学习趋势与记录"把掌握度趋势、活动时间线、画像说明
+              整屏塞进一个默认收起的 details —— 学生看不到自己有没有在进步。
+              这里直接展开，只保留趋势与记录本身的内容。
+            */}
+            <StudentCourseLearningCenterView
+              data={data}
+              scoreTrend={false}
+              tab="activity"
+            />
           </>
         )}
       </>
