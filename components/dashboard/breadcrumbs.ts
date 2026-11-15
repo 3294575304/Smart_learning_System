@@ -82,7 +82,7 @@ export function buildBreadcrumbs(
                   ? "/student/assignments?view=records"
                   : "/student/assignments"
                 : segment === "question-favorites"
-                  ? "/student/wrong-questions?view=favorites"
+                  ? "/student/question-favorites"
                   : "/student/recommendations"
               : isStudentCourse
                 ? `${href}/learning-center`

@@ -1,66 +1,50 @@
-/*
- * 教师端皮肤 · B「全浅墨青」
- * ---------------------------------------------------------------------------
- * 目标：登录后教师端的整体配色与登录页统一，版式沿用对照稿第二种「V2 秩序」
- *      —— 行优先、方角、1px 细线、无阴影、高密度。
- *
- * 做法：复用既有教师页面与组件。Tailwind v4 的实色工具类输出的是
- *      `var(--color-sky-700)` 这类变量引用，因此在教师 shell 根节点上重定义
- *      `--color-*` 即可整站换肤；再叠一层结构微调（圆角、阴影、导航选中态）。
- *
- * 作用域：`[data-shell-role="TEACHER"]`，学生端、管理员端、超级管理员端
- *      以及登录页完全不受影响。要回退，删掉本文件的 @import 即可。
- *
- * 色值来源：components/auth/login-space.module.css 与 space-illustration.tsx
- *      深空 #112B3C / 青绿 #328F96 #67D8D1 #7EE0D4 / 珊瑚 #D94B50
- *      墨蓝 #152D3E / 奶油 #FFF8ED —— 未引入任何新色相。
- */
+/* 教师端 · 暖白陶土：复用既有教学工作区，颜色与学生端一致。 */
 
 [data-shell-role="TEACHER"] {
   /* --- 语义令牌：与登录页同一套 --- */
-  --tt-canvas: #f3f6f7;
-  --tt-ink: #152d3e;
-  --tt-ink-2: #3f5768;
-  --tt-ink-3: #84919b;
-  --tt-line: #dfe6e9;
-  --tt-line-2: #eff3f5;
-  --tt-brand: #328f96;
-  --tt-brand-ink: #26717a;
-  --tt-brand-soft: #eaf6f4;
-  --tt-cta: #cf4148;
+  --tt-canvas: #f3f3ef;
+  --tt-ink: #2f3834;
+  --tt-ink-2: #455249;
+  --tt-ink-3: #69726b;
+  --tt-line: #d9ddd4;
+  --tt-line-2: #e5e7df;
+  --tt-brand: #a64e36;
+  --tt-brand-ink: #a64e36;
+  --tt-brand-soft: #f4e7df;
+  --tt-cta: #a64e36;
 
   /* --- shadcn 语义变量：底色、边框、主色、焦点环 --- */
-  --background: #ffffff;
+  --background: #fcfbf8;
   --foreground: var(--tt-ink);
-  --card: #ffffff;
+  --card: #fcfbf8;
   --card-foreground: var(--tt-ink);
-  --popover: #ffffff;
+  --popover: #fcfbf8;
   --popover-foreground: var(--tt-ink);
   --primary: var(--tt-brand-ink);
-  --primary-foreground: #ffffff;
-  --secondary: #f3f8f8;
+  --primary-foreground: #fcfbf8;
+  --secondary: #f6f5ef;
   --secondary-foreground: var(--tt-brand-ink);
-  --muted: #f3f6f7;
+  --muted: #f3f3ef;
   --muted-foreground: var(--tt-ink-3);
   --accent: var(--tt-brand-soft);
   --accent-foreground: var(--tt-brand-ink);
   --border: var(--tt-line);
   --input: var(--tt-line);
-  --ring: #5fc7c3;
-  --surface: #f8fafb;
+  --ring: #b47760;
+  --surface: #f8f8f3;
 
   /* --- sky：品牌色族，换成登录页青绿 --- */
-  --color-sky-50: #eaf6f4;
-  --color-sky-100: #dbefed;
-  --color-sky-200: #c4e3e0;
-  --color-sky-300: #9bcfcc;
-  --color-sky-400: #5fc7c3;
-  --color-sky-500: #328f96;
-  --color-sky-600: #2a7c83;
-  --color-sky-700: #26717a;
-  --color-sky-800: #1f5c64;
-  --color-sky-900: #183f46;
-  --color-sky-950: #0f2c32;
+  --color-sky-50: #f4e7df;
+  --color-sky-100: #ecd6ca;
+  --color-sky-200: #dfbdac;
+  --color-sky-300: #c5b39f;
+  --color-sky-400: #b47760;
+  --color-sky-500: #a64e36;
+  --color-sky-600: #ad5c42;
+  --color-sky-700: #a64e36;
+  --color-sky-800: #8c3f2a;
+  --color-sky-900: #653628;
+  --color-sky-950: #40261e;
 
   /* --- emerald：成功/达标 --- */
   --color-emerald-50: #e7f4ed;
@@ -99,27 +83,27 @@
   --color-rose-900: #5d1d22;
 
   /* --- slate / gray：正文层级，统一到墨蓝灰 --- */
-  --color-slate-50: #f7fafb;
-  --color-slate-100: #eff3f5;
-  --color-slate-200: #dfe6e9;
-  --color-slate-300: #c7d3d9;
+  --color-slate-50: #f6f6f1;
+  --color-slate-100: #e5e7df;
+  --color-slate-200: #d9ddd4;
+  --color-slate-300: #bdc7b9;
   --color-slate-400: #a9bac6;
-  --color-slate-500: #84919b;
-  --color-slate-600: #63798a;
-  --color-slate-700: #4a6272;
-  --color-slate-800: #33495a;
-  --color-slate-900: #152d3e;
+  --color-slate-500: #69726b;
+  --color-slate-600: #69726b;
+  --color-slate-700: #536057;
+  --color-slate-800: #39483e;
+  --color-slate-900: #2f3834;
   --color-slate-950: #0e2230;
-  --color-gray-50: #f7fafb;
-  --color-gray-100: #eff3f5;
-  --color-gray-200: #dfe6e9;
-  --color-gray-300: #c7d3d9;
+  --color-gray-50: #f6f6f1;
+  --color-gray-100: #e5e7df;
+  --color-gray-200: #d9ddd4;
+  --color-gray-300: #bdc7b9;
   --color-gray-400: #a9bac6;
-  --color-gray-500: #84919b;
-  --color-gray-600: #63798a;
-  --color-gray-700: #4a6272;
-  --color-gray-800: #33495a;
-  --color-gray-900: #152d3e;
+  --color-gray-500: #69726b;
+  --color-gray-600: #69726b;
+  --color-gray-700: #536057;
+  --color-gray-800: #39483e;
+  --color-gray-900: #2f3834;
 }
 
 /* ==========================================================================
@@ -134,7 +118,7 @@
    2. 侧栏
    ========================================================================== */
 [data-shell-role="TEACHER"] > aside {
-  background-color: #ffffff;
+  background-color: #fcfbf8;
   border-right-color: var(--tt-line);
 }
 
@@ -143,7 +127,7 @@
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.14em;
-  color: #9da9b1;
+  color: #788277;
 }
 
 /* 导航分组标题 */
@@ -153,7 +137,7 @@
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.12em;
-  color: #9da9b1;
+  color: #788277;
 }
 
 /* 导航项：行高收到 36px 左右，方角细边 */
@@ -163,7 +147,7 @@
   border-radius: 6px;
   font-size: 13.5px;
   font-weight: 500;
-  color: #576e7c;
+  color: #536057;
 }
 
 /* 分组间距从 20px 收到 12px，整条导航更紧 */
@@ -285,7 +269,7 @@
 #dashboard-main[data-workspace-role="TEACHER"]
   :where(a, button):where(.bg-sky-700, .bg-sky-800, .bg-sky-900) {
   background-color: var(--tt-brand-ink);
-  color: #ffffff;
+  color: #fcfbf8;
 }
 
 #dashboard-main[data-workspace-role="TEACHER"]
@@ -327,7 +311,7 @@
 
 [data-shell-role="TEACHER"]
   :where(.tt-btn, .tt-btn-cta, .tt-btn-line, .tt-btn-ghost):focus-visible {
-  outline: 2px solid #5fc7c3;
+  outline: 2px solid #b47760;
   outline-offset: 1px;
 }
 
@@ -348,7 +332,7 @@
 [data-shell-role="TEACHER"] .tt-btn {
   background-color: var(--tt-brand-ink);
   border-color: var(--tt-brand-ink);
-  color: #ffffff;
+  color: #fcfbf8;
 }
 
 [data-shell-role="TEACHER"] .tt-btn:hover:not(:disabled) {
@@ -360,7 +344,7 @@
 [data-shell-role="TEACHER"] .tt-btn-cta {
   background-color: var(--tt-cta);
   border-color: var(--tt-cta);
-  color: #ffffff;
+  color: #fcfbf8;
 }
 
 [data-shell-role="TEACHER"] .tt-btn-cta:hover:not(:disabled) {
@@ -370,14 +354,14 @@
 
 /* 次按钮：白底细边，用于并排的次要动作 */
 [data-shell-role="TEACHER"] .tt-btn-line {
-  background-color: #ffffff;
+  background-color: #fcfbf8;
   border-color: var(--tt-line);
   color: var(--tt-ink-2);
 }
 
 [data-shell-role="TEACHER"] .tt-btn-line:hover:not(:disabled) {
-  background-color: #f7fafb;
-  border-color: #c7d3d9;
+  background-color: #f6f6f1;
+  border-color: #bdc7b9;
   color: var(--tt-ink);
 }
 
@@ -401,7 +385,7 @@
   ) {
   border: 1px solid var(--tt-line);
   border-radius: 5px;
-  background-color: #ffffff;
+  background-color: #fcfbf8;
   color: var(--tt-ink);
   font-size: 13px;
   min-height: 32px;
@@ -452,7 +436,7 @@
   padding: 2px;
   border: 1px solid var(--tt-line);
   border-radius: 5px;
-  background-color: #f3f6f7;
+  background-color: #f3f3ef;
 }
 
 [data-shell-role="TEACHER"] .tt-tab {
@@ -477,13 +461,13 @@
 
 [data-shell-role="TEACHER"] .tt-tab[aria-selected="true"],
 [data-shell-role="TEACHER"] .tt-tab[aria-current="page"] {
-  background-color: #ffffff;
+  background-color: #fcfbf8;
   color: var(--tt-brand-ink);
   box-shadow: 0 1px 2px rgb(21 45 62 / 8%);
 }
 
 [data-shell-role="TEACHER"] .tt-tab:focus-visible {
-  outline: 2px solid #5fc7c3;
+  outline: 2px solid #b47760;
   outline-offset: 1px;
 }
 
@@ -505,7 +489,7 @@
   padding-inline: 10px;
   border: 1px solid var(--tt-line);
   border-radius: 5px;
-  background-color: #ffffff;
+  background-color: #fcfbf8;
 }
 
 [data-shell-role="TEACHER"] .tt-search:focus-within {
@@ -605,7 +589,7 @@
 [data-shell-role="TEACHER"] .tt-rows {
   border: 1px solid var(--tt-line);
   border-radius: 6px;
-  background-color: #ffffff;
+  background-color: #fcfbf8;
   overflow: hidden;
 }
 
@@ -662,7 +646,7 @@
 }
 
 [data-shell-role="TEACHER"] .tt-row-title:focus-visible {
-  outline: 2px solid #5fc7c3;
+  outline: 2px solid #b47760;
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -843,8 +827,8 @@
   align-items: flex-end;
   height: 64px;
   padding: 10px 16px;
-  border-bottom: 1px solid #dfe6e9;
-  background-color: #e3eef0;
+  border-bottom: 1px solid #d9ddd4;
+  background-color: #e9ece5;
   background-image: repeating-linear-gradient(
     90deg,
     transparent 0 30px,

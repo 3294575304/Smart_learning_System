@@ -2,7 +2,6 @@ import { Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/dashboard/page-header";
 import { TeacherResultsFilters } from "@/components/assignment-results/overview-filters";
 import { TeacherCourseAnalyticsView } from "@/components/courses/teacher-course-analytics";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -77,22 +76,10 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
 
   return (
     <section className="space-y-6">
-      <PageHeader
-        description="选择课程和班级查看学习证据、作业与考试表现。"
-        title="学情分析"
-      />
-      <section
-        aria-labelledby="selected-course-learning-heading"
-        className="space-y-4 rounded-xl border bg-white p-4"
-      >
-        <div className="min-w-0">
-          <h2
-            className="text-base font-semibold text-slate-900"
-            id="selected-course-learning-heading"
-          >
-            课程学情分析
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 basis-64">
+          <h1 className="tt-h1">学情分析</h1>
+          <p className="tt-sub">
             {selectedCourse
               ? `${selectedCourse.name} · ${selectedCourse.courseNo} · ${selectedCourse.term}${classroomId && selectedClassroom ? ` · ${selectedClassroom.name}` : " · 当前范围的全部班级"}`
               : "选择课程和班级查看学习证据、作业与考试表现。"}
@@ -116,6 +103,11 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
           query={query}
           scopeChanged={rawQuery.scopeChanged === "1"}
         />
+      </header>
+      <section
+        aria-label="学情统计说明与课程入口"
+        className="min-w-0 space-y-3"
+      >
         <p className="text-xs leading-5 text-slate-500">
           在线任务统计范围：{REPORTING_SECTION_LABELS[query.section]}
           。作业与已结束考试按现有有效成员关系实时统计，未冻结历史名单；入班前已截止的任务也计入应交。已退出、移除成员的作答单独保留，不计入应交和缺交。仅台账录入的考试参与成绩分析，不计提交率。章节掌握度仍展示当前有效授课班级的学情。

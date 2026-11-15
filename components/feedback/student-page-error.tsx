@@ -9,7 +9,7 @@ import {
 export function StudentPageError({
   title = "页面暂时无法加载",
   returnHref = "/student",
-  returnLabel = "返回学习主页",
+  returnLabel = "返回学习中心",
 }: {
   title?: string;
   returnHref?: string;

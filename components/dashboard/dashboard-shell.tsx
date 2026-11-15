@@ -36,6 +36,7 @@ import {
   type NavigationGroup,
 } from "@/components/dashboard/navigation";
 import { NotificationIndicator } from "@/components/notifications/notification-indicator";
+import { WorkspaceSearch } from "@/components/dashboard/workspace-search";
 import { cn } from "@/lib/utils";
 import type { AuthenticatedUser } from "@/services/auth/types";
 
@@ -44,6 +45,14 @@ interface DashboardShellProps {
   title: string;
   platformName: string;
   platformAnnouncement?: string;
+  /** 侧栏徽标：href -> 数字。目前只有学生的「作业与考试」用到。 */
+  navBadges?: Record<string, number>;
+  /** 学生侧栏底部的课程坐标（课程 / 教学班 · 第几周）。 */
+  sidebarMeta?: {
+    courseName: string | null;
+    classroomName: string | null;
+    week: number | null;
+  } | null;
   children: ReactNode;
 }
 
@@ -93,7 +102,6 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
       : crumb,
   );
 
-  const nativeBreadcrumbs = pathname.startsWith("/student");
   const breadcrumbClassName =
     "inline-flex min-w-0 items-center gap-1 truncate rounded px-1 py-0.5 font-medium text-sky-700 underline-offset-4 transition hover:bg-sky-100 hover:underline focus-visible:outline-2 focus-visible:outline-sky-600";
   if (!crumbs.length) return null;
@@ -110,10 +118,14 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
             >
               {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0" /> : null}
               {crumb.linkable && !isCurrent ? (
-                nativeBreadcrumbs ? (
-                  <a className={breadcrumbClassName} href={crumb.href}>
+                pathname.startsWith("/student") ? (
+                  <Link
+                    className={breadcrumbClassName}
+                    href={crumb.href}
+                    prefetch={false}
+                  >
                     {crumb.label}
-                  </a>
+                  </Link>
                 ) : (
                   <FeedbackLink
                     className={breadcrumbClassName}
@@ -166,14 +178,16 @@ function SidebarNavigation({
   groups,
   pathname,
   student = false,
+  badges,
   onNavigate,
 }: {
   groups: NavigationGroup[];
   pathname: string;
   student?: boolean;
+  badges?: Record<string, number>;
   onNavigate?: () => void;
 }) {
-  const NavigationLink = student ? "a" : Link;
+  const NavigationLink = Link;
   return (
     <nav aria-label="主导航" className="space-y-5 px-3 py-4">
       {groups.map((group) => (
@@ -183,7 +197,7 @@ function SidebarNavigation({
           aria-label={group.label}
         >
           {group.label ? (
-            <p className="mb-2 px-3 text-xs font-medium tracking-wide text-slate-500">
+            <p className="workspace-nav-group mb-2 px-3 text-xs font-medium tracking-wide text-slate-500">
               {group.label}
             </p>
           ) : null}
@@ -191,6 +205,7 @@ function SidebarNavigation({
             {group.items.map((item) => {
               const Icon = item.icon;
               const active = isNavigationItemActive(pathname, item);
+              const badge = badges?.[item.href];
               return (
                 <NavigationLink
                   aria-current={active ? "page" : undefined}
@@ -203,17 +218,20 @@ function SidebarNavigation({
                       : "text-gray-600 hover:bg-sky-50 hover:text-sky-800",
                   )}
                   href={item.href}
+                  prefetch={student ? null : undefined}
                   key={item.href}
                   onClick={onNavigate}
                 >
-                  {student && active ? (
-                    <span
-                      aria-hidden="true"
-                      className="absolute inset-y-2.5 left-0 w-0.5 rounded-full bg-sky-600"
-                    />
-                  ) : null}
                   <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {badge ? (
+                    <span
+                      className="workspace-nav-badge tabular-nums"
+                      aria-label={`${badge} 项待处理`}
+                    >
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  ) : null}
                 </NavigationLink>
               );
             })}
@@ -229,6 +247,8 @@ export function DashboardShell({
   title,
   platformName,
   platformAnnouncement = "",
+  navBadges,
+  sidebarMeta = null,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -426,8 +446,8 @@ export function DashboardShell({
             </div>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto">
-          {user.role !== Role.SUPER_ADMIN ? (
+        <div className="flex flex-1 flex-col overflow-y-auto">
+          {user.role !== Role.SUPER_ADMIN && user.role !== Role.STUDENT ? (
             <div className="px-6 pt-5 pb-2">
               <p className="text-muted-foreground text-xs font-medium tracking-wide">
                 {title}
@@ -435,10 +455,26 @@ export function DashboardShell({
             </div>
           ) : null}
           <SidebarNavigation
+            badges={navBadges}
             groups={navigationGroups}
             pathname={pathname}
             student={user.role === Role.STUDENT}
           />
+          {user.role === Role.STUDENT && sidebarMeta?.courseName ? (
+            <div className="workspace-sidebar-meta mt-auto px-5 py-4">
+              <p className="truncate text-[11.5px] font-medium text-slate-700">
+                {sidebarMeta.courseName}
+              </p>
+              <p className="mt-0.5 truncate text-[10.5px] text-slate-500">
+                {[
+                  sidebarMeta.classroomName,
+                  sidebarMeta.week ? `第 ${sidebarMeta.week} 周` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+          ) : null}
         </div>
       </aside>
 
@@ -462,7 +498,7 @@ export function DashboardShell({
               className={
                 user.role === Role.SUPER_ADMIN
                   ? "relative flex h-16 items-center justify-between border-b px-5"
-                  : "relative flex h-16 items-center justify-start border-b px-4 pr-12"
+                  : "workspace-school-brand relative flex h-16 items-center justify-start border-b px-4 pr-12"
               }
             >
               {user.role === Role.SUPER_ADMIN ? (
@@ -501,6 +537,7 @@ export function DashboardShell({
             </div>
             <div className="flex-1 overflow-y-auto">
               <SidebarNavigation
+                badges={navBadges}
                 groups={navigationGroups}
                 student={user.role === Role.STUDENT}
                 onNavigate={() => setMobileMenuOpen(false)}
@@ -584,6 +621,11 @@ export function DashboardShell({
                 <Breadcrumbs pathname={pathname} />
               </Suspense>
             </div>
+            {user.role === Role.STUDENT ? (
+              <Suspense fallback={null}>
+                <WorkspaceSearch action="/student/search" />
+              </Suspense>
+            ) : null}
             <div className="ml-auto flex items-center gap-2">
               <NotificationIndicator />
               <div className="relative hidden sm:block" ref={accountMenuRef}>

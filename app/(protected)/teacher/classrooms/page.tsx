@@ -17,14 +17,6 @@ import {
 } from "@/services/classrooms/service";
 
 const CLASSROOM_STATUS_VALUES = ["ACTIVE", "COMPLETED", "CLOSED"] as const;
-const CLASSROOM_VIEWS = [
-  { history: false, href: "/teacher/classrooms", label: "班级列表" },
-  {
-    history: true,
-    href: "/teacher/classrooms?view=history",
-    label: "历史班级",
-  },
-];
 
 async function HistoricalClassrooms({ teacherId }: { teacherId: string }) {
   const classrooms = await listTeacherHistoricalClassrooms(teacherId);
@@ -148,19 +140,6 @@ export default async function TeacherClassroomsPage({
           {history ? null : <CreateEntry tone="cta" />}
         </div>
       </header>
-      <nav aria-label="班级管理视图" className="tt-tabs">
-        {CLASSROOM_VIEWS.map((view) => (
-          <Link
-            aria-current={view.history === history ? "page" : undefined}
-            className="tt-tab"
-            href={view.href}
-            key={view.href}
-          >
-            {view.label}
-          </Link>
-        ))}
-      </nav>
-
       {history ? (
         <HistoricalClassrooms teacherId={teacher.id} />
       ) : (

@@ -60,7 +60,7 @@ export default async function StudentCoursesPage({
     new URLSearchParams({ status: nextStatus, sort: nextSort, q: keyword });
 
   return (
-    <section className="text-foreground @container mx-auto max-w-7xl min-w-0 space-y-5">
+    <section className="st-courses-page text-foreground @container mx-auto max-w-7xl min-w-0 space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-foreground text-2xl font-semibold">我的课程</h1>
@@ -93,7 +93,7 @@ export default async function StudentCoursesPage({
         >
           <input type="hidden" name="status" value={status} />
           <input type="hidden" name="sort" value={sort} />
-          <label className="border-border bg-card focus-within:ring-brand-strong flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md border px-3 focus-within:ring-2">
+          <label className="workspace-search-field flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md border px-3">
             <Search
               aria-hidden="true"
               className="size-4 shrink-0 text-slate-500"
@@ -102,6 +102,8 @@ export default async function StudentCoursesPage({
             <input
               key={keyword}
               name="q"
+              type="search"
+              autoComplete="off"
               defaultValue={keyword}
               maxLength={120}
               placeholder="搜索课程名或班级名"
@@ -151,7 +153,7 @@ export default async function StudentCoursesPage({
             return (
               <article
                 key={classroom.id}
-                className="group border-border bg-card hover:border-brand/55 relative isolate flex min-w-0 flex-col overflow-hidden rounded-lg border transition-colors"
+                className="st-course-card group border-border bg-card hover:border-brand/55 relative isolate flex min-w-0 flex-col overflow-hidden rounded-lg border transition-colors"
               >
                 <div className="st-course-cover border-border bg-muted text-foreground flex min-h-14 flex-wrap items-end justify-between gap-x-3 gap-y-1 border-b px-3 py-2 text-xs">
                   <span className="min-w-0 font-mono [overflow-wrap:anywhere]">

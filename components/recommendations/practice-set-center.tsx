@@ -117,113 +117,123 @@ export function PracticeSetCenter({
       expectedRevision: item.management?.revision ?? 0,
     }));
   return (
-    <section className="space-y-4" aria-label="我的练习组" aria-busy={busy}>
-      <p className="text-xs text-slate-500">
-        当前范围：
-        {query.courseId === "GENERAL"
-          ? "通用历史练习"
-          : (result.courses.find((course) => course.id === query.courseId)
-              ?.name ?? "全部课程")}
-        {query.keyword ? ` · 搜索“${query.keyword}”` : ""}
-      </p>
-      <nav className="flex flex-wrap items-center gap-2" aria-label="练习分区">
-        {(
-          [
-            ["ACTIVE", "进行中"],
-            ["HISTORY", "历史记录"],
-            ["TRASH", "回收站"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            disabled={busy}
-            aria-pressed={section === value}
-            onClick={() =>
-              void load({
-                ...query,
-                section: value,
-                status: undefined,
-                page: 1,
-              })
-            }
-            className={`rounded-lg border px-4 py-2 text-sm ${value === "TRASH" ? "ml-2" : ""} ${section === value ? "bg-sky-700 text-white" : "bg-white text-slate-600"}`}
-          >
-            {label}
-            {result.counts ? ` ${result.counts[value]}` : ""}
-          </button>
-        ))}
-      </nav>
-      <form
-        className="flex w-full max-w-3xl flex-wrap items-end gap-3 rounded-xl border border-sky-100 bg-white p-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void load({
-            ...query,
-            keyword: keyword.trim() || undefined,
-            page: 1,
-          });
-        }}
-      >
-        <label className="w-full text-sm sm:w-52">
-          课程
-          <select
-            disabled={busy}
-            value={query.courseId ?? ""}
-            onChange={(event) =>
-              void load({
-                ...query,
-                courseId: event.target.value || undefined,
-                page: 1,
-              })
-            }
-            className="mt-1 w-full min-w-0 rounded-lg border p-2"
-          >
-            <option value="">全部课程</option>
-            {initialResult.courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.name}
-              </option>
-            ))}
-            <option value="GENERAL">通用历史练习</option>
-          </select>
-        </label>
-        <label className="w-full min-w-0 text-sm sm:w-72">
-          搜索
-          <input
-            className="mt-1 w-full min-w-0 rounded-lg border p-2"
-            placeholder="练习名称、课程或题目"
-            maxLength={100}
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            disabled={busy}
-          />
-        </label>
-        <button disabled={busy} className="rounded-lg border px-3 py-2 text-sm">
-          搜索
-        </button>
-        {section !== "ACTIVE" ? (
-          <label className="text-sm">
-            状态
-            <select
-              className="mt-1 w-full min-w-0 rounded-lg border p-2"
+    <section
+      className="st-practice-library"
+      aria-label="我的练习组"
+      aria-busy={busy}
+    >
+      <div className="st-practice-library-head">
+        <p className="st-practice-scope">
+          当前范围：
+          {query.courseId === "GENERAL"
+            ? "通用历史练习"
+            : (result.courses.find((course) => course.id === query.courseId)
+                ?.name ?? "全部课程")}
+          {query.keyword ? ` · 搜索“${query.keyword}”` : ""}
+        </p>
+        <nav className="st-practice-status-tabs" aria-label="练习分区">
+          {(
+            [
+              ["ACTIVE", "进行中"],
+              ["HISTORY", "历史记录"],
+              ["TRASH", "回收站"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
               disabled={busy}
-              value={query.status ?? ""}
-              onChange={(event) =>
+              aria-pressed={section === value}
+              onClick={() =>
                 void load({
                   ...query,
-                  status: (event.target.value || undefined) as Query["status"],
+                  section: value,
+                  status: undefined,
                   page: 1,
                 })
               }
+              className={`rounded-lg border px-4 py-2 text-sm ${value === "TRASH" ? "ml-2" : ""} ${section === value ? "bg-sky-700 text-white" : "bg-white text-slate-600"}`}
             >
-              <option value="">全部状态</option>
-              <option value="COMPLETED">已完成</option>
-              <option value="EXPIRED">已结束</option>
+              {label}
+              {result.counts ? ` ${result.counts[value]}` : ""}
+            </button>
+          ))}
+        </nav>
+        <form
+          className="st-study-filter st-practice-filter"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void load({
+              ...query,
+              keyword: keyword.trim() || undefined,
+              page: 1,
+            });
+          }}
+        >
+          <label className="w-full text-sm sm:w-52">
+            课程
+            <select
+              disabled={busy}
+              value={query.courseId ?? ""}
+              onChange={(event) =>
+                void load({
+                  ...query,
+                  courseId: event.target.value || undefined,
+                  page: 1,
+                })
+              }
+              className="mt-1 w-full min-w-0 rounded-lg border p-2"
+            >
+              <option value="">全部课程</option>
+              {initialResult.courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.name}
+                </option>
+              ))}
+              <option value="GENERAL">通用历史练习</option>
             </select>
           </label>
-        ) : null}
-      </form>
+          <label className="w-full min-w-0 text-sm sm:w-72">
+            搜索
+            <input
+              className="mt-1 w-full min-w-0 rounded-lg border p-2"
+              placeholder="练习名称、课程或题目"
+              maxLength={100}
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              disabled={busy}
+            />
+          </label>
+          <button
+            disabled={busy}
+            className="rounded-lg border px-3 py-2 text-sm"
+          >
+            搜索
+          </button>
+          {section !== "ACTIVE" ? (
+            <label className="text-sm">
+              状态
+              <select
+                className="mt-1 w-full min-w-0 rounded-lg border p-2"
+                disabled={busy}
+                value={query.status ?? ""}
+                onChange={(event) =>
+                  void load({
+                    ...query,
+                    status: (event.target.value ||
+                      undefined) as Query["status"],
+                    page: 1,
+                  })
+                }
+              >
+                <option value="">全部状态</option>
+                <option value="COMPLETED">已完成</option>
+                <option value="EXPIRED">已结束</option>
+              </select>
+            </label>
+          ) : null}
+        </form>
+      </div>
       {section === "TRASH" ? (
         <p className="text-sm text-slate-600">
           可以恢复记录或永久删除。恢复后的练习可在历史记录中回看。
@@ -251,7 +261,7 @@ export function PracticeSetCenter({
           正在加载练习组…
         </p>
       ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="st-practice-batch">
         <label className="text-sm">
           <input
             type="checkbox"
@@ -268,7 +278,10 @@ export function PracticeSetCenter({
           />{" "}
           选择本页 · 共 {result.total} 组
         </label>
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="flex flex-wrap items-center gap-2"
+          hidden={!selectedItems.length}
+        >
           <PracticeManagementActions
             id="batch"
             title="所选练习"
@@ -297,14 +310,11 @@ export function PracticeSetCenter({
             : "暂无符合条件的练习，可调整筛选或前往生成练习。"}
         </p>
       ) : null}
-      <div inert={busy} className="divide-y rounded-xl border bg-white">
+      <div inert={busy} className="st-practice-list">
         {result.items.map((item) => {
           const score = summarizePracticeScores(item.questions);
           return (
-            <article
-              key={item.id}
-              className="flex flex-wrap items-center gap-3 p-4 sm:p-5"
-            >
+            <article key={item.id} className="st-practice-row">
               <input
                 type="checkbox"
                 aria-label={`选择${item.title}`}
@@ -330,7 +340,7 @@ export function PracticeSetCenter({
                   {item.knowledgePoints.join(" · ") || "按近期学习情况推荐"}
                 </p>
               </div>
-              <div className="text-sm text-slate-600">
+              <div className="st-practice-progress text-sm text-slate-600">
                 <p>
                   {item.management?.trashedAt
                     ? "已移入回收站"
@@ -359,15 +369,17 @@ export function PracticeSetCenter({
                     : "开始练习"
                   : "查看记录"}
               </Link>
-              <PracticeManagementActions
-                id={item.id}
-                title={item.title}
-                management={item.management}
-                primaryRestore={Boolean(item.management?.trashedAt)}
-                active={item.status === "ACTIVE"}
-                onChange={changed}
-              />
-              <details className="basis-full text-xs text-slate-500">
+              <div className="st-practice-management">
+                <PracticeManagementActions
+                  id={item.id}
+                  title={item.title}
+                  management={item.management}
+                  primaryRestore={Boolean(item.management?.trashedAt)}
+                  active={item.status === "ACTIVE"}
+                  onChange={changed}
+                />
+              </div>
+              <details className="st-practice-questions text-xs text-slate-500">
                 <summary className="cursor-pointer">查看本组题目</summary>
                 <ol className="mt-2 space-y-2">
                   {item.questions.map((question, index) => (
@@ -394,10 +406,7 @@ export function PracticeSetCenter({
           );
         })}
       </div>
-      <nav
-        className="flex items-center justify-between text-sm"
-        aria-label="练习组分页"
-      >
+      <nav className="st-study-pagination" aria-label="练习组分页">
         <button
           type="button"
           className="rounded-lg border bg-white px-3 py-2 disabled:opacity-40"

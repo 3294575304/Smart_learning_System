@@ -1,18 +1,21 @@
-import { getStudentExamClassAverage } from "@/services/exams/student-score-context";
 import { Role } from "@prisma/client";
-import { Suspense } from "react";
-import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
-import { StudentHomeView } from "@/components/dashboard/student-home-view";
-import { requirePageRole } from "@/services/auth/page-authorization";
-import { getStudentTaskOverview } from "@/services/dashboard/student-task-service";
-import { StudentHomeInsights } from "@/components/dashboard/student-home-insights";
-import { getStudentClassAnalytics } from "@/services/dashboard/student-class-analytics";
-import {
-  StudentHomeKnowledge,
-  StudentHomeKnowledgeLoading,
-} from "@/components/dashboard/student-home-knowledge";
-import { selectStudentEnrollment } from "@/services/courses/student-enrollment";
 import { notFound } from "next/navigation";
+
+import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
+import { StudentHomeInsights } from "@/components/dashboard/student-home-insights";
+import { StudentHomeView } from "@/components/dashboard/student-home-view";
+import type { HomeKnowledgeChapter } from "@/components/dashboard/home-knowledge-matrix";
+import { requirePageRole } from "@/services/auth/page-authorization";
+import { ResourceNotFoundError } from "@/services/auth/policy";
+import { getStudentClassAnalytics } from "@/services/dashboard/student-class-analytics";
+import { getStudentHomeKnowledge } from "@/services/dashboard/student-home-knowledge";
+import { getStudentHomePulse } from "@/services/dashboard/student-home-pulse";
+import { getStudentSidebarMetaShared } from "@/services/dashboard/student-sidebar";
+import {
+  getStudentTaskOverviewShared,
+  sharedNowMs,
+} from "@/services/dashboard/student-task-service";
+import { selectStudentEnrollment } from "@/services/courses/student-enrollment";
 
 export default async function StudentPage({
   searchParams,
@@ -21,10 +24,14 @@ export default async function StudentPage({
 }) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
-  const now = new Date();
-  const [overview, analytics] = await Promise.all([
-    getStudentTaskOverview(student.id, now),
+  // 与外壳同一次统计：徽标、侧栏周次、正文指标都从这一次查询里来。
+  const nowMs = sharedNowMs();
+  const now = new Date(nowMs);
+  const [overview, analytics, pulse, sidebarMeta] = await Promise.all([
+    getStudentTaskOverviewShared(student.id, nowMs),
     getStudentClassAnalytics(student.id, {}, now),
+    getStudentHomePulse(student.id, now),
+    getStudentSidebarMetaShared(student.id, nowMs),
   ]);
   let selected;
   try {
@@ -37,46 +44,49 @@ export default async function StudentPage({
   } catch {
     notFound();
   }
-  const recentExam = analytics.exams.recent;
-  const classAverage =
-    recentExam?.resultState === "PUBLISHED"
-      ? await getStudentExamClassAverage(
-          student.id,
-          recentExam.assignmentId,
-          recentExam.classroomId,
-          now,
-        )
-      : null;
+
+  // 知识掌握既要喂右侧卡片，也要喂"知识掌握"这个指标，
+  // 所以从 Suspense 里提到页面：一次查询，两处读数不会对不上。
+  let chapters: HomeKnowledgeChapter[] = [];
+  let knowledgeError = false;
+  if (selected) {
+    try {
+      const knowledge = await getStudentHomeKnowledge(
+        student.id,
+        selected.course.id,
+        selected.classroom.id,
+      );
+      chapters = knowledge.heatmap;
+    } catch (error) {
+      knowledgeError = true;
+      if (!(error instanceof ResourceNotFoundError)) {
+        console.error("student_home_knowledge_failed", {
+          name: error instanceof Error ? error.name : "UnknownError",
+        });
+      }
+    }
+  }
+
   return (
     <>
       <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
       <StudentHomeView
-        name={student.displayName ?? "同学"}
-        overview={overview}
         insights={
           <StudentHomeInsights
+            chapters={chapters}
             classes={analytics.classes}
-            exams={analytics.exams}
-            examClassAverage={classAverage}
-            selected={selected}
-            knowledge={
-              selected ? (
-                <Suspense
-                  key={selected.classroom.id}
-                  fallback={<StudentHomeKnowledgeLoading />}
-                >
-                  <StudentHomeKnowledge
-                    studentId={student.id}
-                    courseId={selected.course.id}
-                    classroomId={selected.classroom.id}
-                  />
-                </Suspense>
-              ) : undefined
-            }
-            overview={overview}
+            knowledgeError={knowledgeError}
             now={now}
+            overview={overview}
+            pulse={pulse}
+            selected={selected}
           />
         }
+        name={student.displayName ?? "同学"}
+        now={now}
+        overview={overview}
+        pulse={pulse}
+        week={sidebarMeta.week}
       />
     </>
   );

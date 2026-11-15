@@ -124,7 +124,7 @@ test("课程学习中心路径只显示主页、我的课程和当前页，链�
     "/student/courses/course-123/learning-center",
   );
   assert.deepEqual(crumbs, [
-    { href: "/student", label: "学习主页", linkable: true },
+    { href: "/student", label: "学习中心", linkable: true },
     { href: "/student/courses", label: "我的课程", linkable: true },
     {
       href: "/student/courses/course-123/learning-center",

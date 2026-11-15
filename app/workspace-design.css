@@ -379,7 +379,9 @@
 }
 @container (min-width: 48rem) {
   #dashboard-main[data-workspace-role="STUDENT"] .workspace-home-columns {
-    grid-template-columns: minmax(0, 1fr) 286px;
+    /* 左栏放任务清单，右栏放两块读数。比例约 1.9 : 1，
+       与对照稿一致：右栏刚好放得下环图 + 四行薄弱章节。 */
+    grid-template-columns: minmax(0, 1.9fr) minmax(280px, 1fr);
   }
 }
 @media (max-width: 639px) {

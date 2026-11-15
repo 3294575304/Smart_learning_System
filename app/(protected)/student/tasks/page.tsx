@@ -51,8 +51,8 @@ export default async function StudentTasksPage({
     <section className="space-y-4">
       <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
       <StudentPageHeader
-        title="学习任务"
-        description="查看待办、考试预告和问卷开放安排。"
+        title="作业与考试"
+        description="作业、考试、签到与问卷都在这一个列表里，按截止时间排。"
       />
       <StudentActivityFilters
         view="tasks"

@@ -1,0 +1,343 @@
+/* 教师端最终外观层：限定角色与路径，不改变学生端或管理员。 */
+:root[data-teacher-route],
+[data-shell-role="TEACHER"] {
+  --background: #f3f3ef;
+  --foreground: #2f3834;
+  --card: #fcfbf8;
+  --card-foreground: #2f3834;
+  --popover: #fcfbf8;
+  --popover-foreground: #2f3834;
+  --primary: #a64e36;
+  --primary-foreground: #fcfbf8;
+  --secondary: #f4e7df;
+  --secondary-foreground: #a64e36;
+  --muted: #eceee7;
+  --muted-foreground: #69726b;
+  --accent: #f4e7df;
+  --accent-foreground: #a64e36;
+  --border: #d9ddd4;
+  --input: #d9ddd4;
+  --ring: #496b50;
+  --surface: #e9ece5;
+  --brand: #a64e36;
+  --brand-strong: #8c3f2a;
+  --progress-track: #d9ddd4;
+  --color-sky-50: #f4e7df;
+  --color-sky-100: #ecd6ca;
+  --color-sky-200: #dfbdac;
+  --color-sky-300: #a6b69e;
+  --color-sky-400: #bd8871;
+  --color-sky-500: #496b50;
+  --color-sky-600: #ad5c42;
+  --color-sky-700: #a64e36;
+  --color-sky-800: #8c3f2a;
+  --color-sky-900: #653628;
+  --color-sky-950: #40261e;
+  --color-slate-50: #f6f6f1;
+  --color-slate-100: #eceee7;
+  --color-slate-200: #d9ddd4;
+  --color-slate-500: #69726b;
+  --color-slate-600: #536057;
+  --color-slate-700: #455249;
+  --color-slate-800: #39483e;
+  --color-slate-900: #2f3834;
+  background: #f3f3ef;
+  color: #2f3834;
+  --tt-canvas: #f3f3ef;
+  --tt-ink: #2f3834;
+  --tt-ink-2: #455249;
+  --tt-ink-3: #69726b;
+  --tt-line: #d9ddd4;
+  --tt-line-2: #e5e7df;
+  --tt-brand: #a64e36;
+  --tt-brand-ink: #a64e36;
+  --tt-brand-soft: #f4e7df;
+  --tt-cta: #a64e36;
+  --radius: 4px;
+  --ring: #a64e36;
+  --destructive: #b23e35;
+  --mark-danger: #b23e35;
+}
+:root[data-teacher-route] body {
+  background: var(--background);
+  background-image: none;
+}
+[data-shell-role="TEACHER"] {
+  --color-neutral-50: #f8f8f3;
+  --color-neutral-100: #eceee7;
+  --color-neutral-200: #d9ddd4;
+  --color-neutral-500: #69726b;
+  --color-neutral-600: #536057;
+  --color-neutral-700: #455249;
+  --color-neutral-800: #39483e;
+  --color-neutral-900: #2f3834;
+  background: var(--background);
+  color: var(--foreground);
+}
+[data-shell-role="TEACHER"] > aside,
+[data-shell-role="TEACHER"] #mobile-navigation-dialog {
+  background: #e9ece5;
+  border-color: var(--border);
+}
+[data-shell-role="TEACHER"] .workspace-brand-row,
+[data-shell-role="TEACHER"] .workspace-school-brand {
+  background: #fff;
+}
+[data-shell-role="TEACHER"] .workspace-topbar,
+[data-shell-role="TEACHER"] :where(.bg-white, .bg-white\/95) {
+  background-color: var(--card);
+}
+[data-shell-role="TEACHER"] aside nav a[aria-current="page"] {
+  background: var(--card);
+  color: var(--brand);
+}
+[data-shell-role="TEACHER"] aside nav a[aria-current="page"]::before {
+  display: none;
+}
+[data-shell-role="TEACHER"] aside nav a:hover {
+  background-color: #e0e5dc;
+}
+#dashboard-main[data-workspace-role="TEACHER"] {
+  max-width: 1440px;
+  padding: 28px 30px 36px;
+}
+#dashboard-main[data-workspace-role="TEACHER"] h1 {
+  font-size: 26px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  :where(.rounded-2xl, .rounded-xl, .rounded-lg, .rounded-md) {
+  border-radius: 4px;
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  :is(.workspace-panel, .tt-panel) {
+  border-color: var(--border);
+  background: var(--card);
+  border-radius: 4px;
+  padding: 20px;
+  box-shadow: none;
+}
+#dashboard-main[data-workspace-role="TEACHER"] .workspace-page-header {
+  margin-bottom: 24px;
+  align-items: flex-end;
+}
+#dashboard-main[data-workspace-role="TEACHER"] :where(th) {
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+#dashboard-main[data-workspace-role="TEACHER"] :where(td) {
+  border-color: var(--border);
+  font-size: 12px;
+}
+#dashboard-main[data-workspace-role="TEACHER"] :where(th, td) {
+  padding-block: 12px;
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  :is(button, a):is(
+    .tt-btn-cta,
+    .tt-btn,
+    .bg-brand,
+    .bg-primary,
+    .bg-sky-500,
+    .bg-sky-600,
+    .bg-sky-700,
+    .bg-sky-800,
+    .bg-sky-900,
+    .bg-teal-600,
+    .bg-teal-700,
+    .bg-blue-600,
+    .bg-indigo-600
+  ) {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fffaf5;
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  :is(button, a):is(
+    .tt-btn-cta,
+    .tt-btn,
+    .bg-brand,
+    .bg-primary,
+    .bg-sky-500,
+    .bg-sky-600,
+    .bg-sky-700,
+    .bg-sky-800,
+    .bg-sky-900,
+    .bg-teal-600,
+    .bg-teal-700,
+    .bg-blue-600,
+    .bg-indigo-600
+  ):hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--brand-strong);
+  border-color: var(--brand-strong);
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  :is(button, a):is(
+    .tt-btn-cta,
+    .tt-btn,
+    .bg-brand,
+    .bg-primary,
+    .bg-sky-500,
+    .bg-sky-600,
+    .bg-sky-700,
+    .bg-sky-800,
+    .bg-sky-900
+  ):active:not(:disabled):not([aria-disabled="true"]) {
+  background: #653628;
+  border-color: #653628;
+}
+[data-shell-role="TEACHER"] :is(a, button):focus-visible {
+  outline-color: var(--brand);
+}
+[data-shell-role="TEACHER"] .tt-fbar {
+  gap: 12px;
+  padding: 16px;
+  background: var(--card);
+  border-color: var(--border);
+}
+[data-shell-role="TEACHER"] .tt-search {
+  min-height: 38px;
+  background: var(--card);
+}
+[data-shell-role="TEACHER"] .tt-search > input {
+  min-height: 30px;
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  :where(button, a):is(.min-h-10, .min-h-11, .h-10, .h-11) {
+  min-height: 36px;
+}
+#dashboard-main[data-workspace-role="TEACHER"] .teacher-dashboard {
+  display: grid;
+  gap: 20px;
+}
+#dashboard-main[data-workspace-role="TEACHER"] .teacher-dashboard > * + * {
+  margin-top: 0;
+}
+#dashboard-main[data-workspace-role="TEACHER"] .teacher-dashboard > header {
+  padding: 20px;
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  .teacher-dashboard
+  strong.tabular-nums {
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Microsoft YaHei",
+    sans-serif;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  font-size: 28px;
+}
+:root[data-teacher-route] :is(.animate-pulse, .motion-safe\:animate-pulse),
+[data-shell-role="TEACHER"] :is(.animate-pulse, .motion-safe\:animate-pulse) {
+  animation: none;
+}
+@media (max-width: 1100px) {
+  #dashboard-main[data-workspace-role="TEACHER"] {
+    padding-inline: 22px;
+  }
+}
+@media (max-width: 639px) {
+  #dashboard-main[data-workspace-role="TEACHER"] {
+    padding: 20px 16px 28px;
+  }
+  #dashboard-main[data-workspace-role="TEACHER"] h1 {
+    font-size: 23px;
+  }
+  #dashboard-main[data-workspace-role="TEACHER"]
+    :is(.workspace-panel, .tt-panel) {
+    padding: 16px;
+  }
+  #dashboard-main[data-workspace-role="TEACHER"]
+    :where(button, a):is(.min-h-10, .min-h-11, .h-10, .h-11) {
+    min-height: 40px;
+  }
+}
+
+/* 输入控件沿用学生端已修正的单层焦点与图标间距规则。 */
+/* 单一焦点描边：独立输入框由自身绘制，图标组合搜索框由外层绘制。 */
+[data-shell-role="TEACHER"]
+  :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):is(
+    :focus,
+    :focus-visible,
+    :open
+  ),
+#dashboard-main[data-workspace-role="TEACHER"]
+  :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):is(
+    :focus,
+    :focus-visible,
+    :open
+  ) {
+  border-color: var(--brand);
+  outline: none;
+  outline-offset: 0;
+  box-shadow: 0 0 0 1px var(--brand);
+}
+[data-shell-role="TEACHER"] .workspace-search-field {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding-inline: 12px;
+  background: var(--card);
+  color: var(--foreground);
+}
+[data-shell-role="TEACHER"] .workspace-search-field:focus-within {
+  border-color: var(--brand);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--brand);
+}
+[data-shell-role="TEACHER"] .workspace-search-field > input,
+[data-shell-role="TEACHER"] .workspace-search-field > input[type="search"],
+[data-shell-role="TEACHER"]
+  .workspace-search-field
+  > input:is(:focus, :focus-visible),
+#dashboard-main[data-workspace-role="TEACHER"]
+  .workspace-search-field
+  > input:not([type="checkbox"]):not([type="radio"]):is(
+    :focus,
+    :focus-visible
+  ) {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  line-height: 1.5;
+}
+[data-shell-role="TEACHER"] .workspace-topbar-search {
+  min-height: 34px;
+}
+[data-shell-role="TEACHER"] .workspace-topbar-search > input {
+  min-height: 30px;
+}
+/* 既有共享题库控件也有图标容器，避免其子输入框重复绘制。 */
+[data-shell-role="TEACHER"] .tt-search:focus-within {
+  border-color: var(--brand);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--brand);
+}
+[data-shell-role="TEACHER"] .tt-search input:is(:focus, :focus-visible),
+#dashboard-main[data-workspace-role="TEACHER"]
+  .tt-search
+  input:not([type="checkbox"]):not([type="radio"]):is(:focus, :focus-visible) {
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
+/* 校徽源图为白底，学校标识区域保留纯白，避免出现一块白色贴片。 */
+[data-shell-role="TEACHER"] .workspace-brand-row,
+[data-shell-role="TEACHER"] .workspace-school-brand {
+  background: #fff;
+}

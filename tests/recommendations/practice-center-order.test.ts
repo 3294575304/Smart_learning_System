@@ -25,6 +25,6 @@ test("自主练习标题区不重复显示返回学习主页链接", async () =>
     "utf8",
   );
 
-  assert.match(page, /<StudentPageHeader[\s\S]*?title="自主练习"/);
+  assert.match(page, /<StudentPageHeader[\s\S]*?title="练习中心"/);
   assert.doesNotMatch(page, /返回学习主页/);
 });

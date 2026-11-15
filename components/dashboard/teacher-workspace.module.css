@@ -1,6 +1,6 @@
 .card {
   border-color: var(--tt-line, #dfe6e9);
-  border-radius: 6px;
+  border-radius: 4px;
   box-shadow: none;
 }
 
@@ -21,10 +21,14 @@
   background: var(--tt-brand, #328f96);
 }
 
+.todoHeading::before {
+  background: var(--color-rose-600, #a83239);
+}
+
 .toolbar {
   border-color: var(--tt-line, #dfe6e9);
-  border-radius: 6px;
-  background: #fff;
+  border-radius: 4px;
+  background: var(--card);
   box-shadow: none;
 }
 
@@ -36,8 +40,8 @@
 
 .shortcut {
   border-color: var(--tt-line-2, #eff3f5);
-  background: #fff;
-  border-radius: 6px;
+  background: var(--card);
+  border-radius: 4px;
   transition:
     background-color 150ms,
     border-color 150ms,
@@ -45,22 +49,32 @@
 }
 
 .shortcut:hover {
-  border-color: #9bcfcc;
-  background: #f0f7f6;
+  border-color: var(--tt-brand);
+  background: var(--tt-brand-soft);
   box-shadow: none;
+}
+
+/* 快捷入口沿用同一组品牌色，提醒与错误仍由业务状态区分。 */
+.shortcutIcon {
+  background: var(--surface);
+  color: var(--tt-brand-ink);
+  box-shadow: none;
+  --color-sky-50: var(--tt-brand-soft);
+  --color-sky-100: var(--tt-brand-soft);
+  --color-sky-700: var(--tt-brand-ink);
 }
 
 .metric {
   border-color: var(--tt-line-2, #eff3f5);
-  border-radius: 6px;
-  background: #f8fafb;
+  border-radius: 4px;
+  background: var(--card);
   transition:
     border-color 150ms,
     background-color 150ms;
 }
 
 .metric:hover {
-  border-color: #9bcfcc;
+  border-color: var(--tt-brand);
   background: var(--tt-brand-soft, #eaf6f4);
 }
 

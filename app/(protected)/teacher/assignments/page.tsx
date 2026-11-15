@@ -19,6 +19,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -196,22 +197,32 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
           query.courseId,
         ])}
         aria-label="作业列表筛选"
-        className="grid grid-cols-2 gap-3 rounded-xl border bg-white p-4 xl:grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_minmax(0,1fr)_8rem_auto] xl:items-end"
+        className="tt-fbar"
       >
-        <label className="col-span-2 flex min-w-0 flex-col gap-1.5 xl:col-span-1">
-          <span className="text-xs font-medium">搜索</span>
+        <div className="tt-search" style={{ flex: "1 1 16rem" }}>
+          <Search
+            aria-hidden="true"
+            className="size-3.5 shrink-0 text-slate-400"
+          />
           <input
-            className="h-10 w-full min-w-0 rounded-lg border px-3 text-sm"
+            aria-label="搜索作业"
             defaultValue={query.keyword}
             maxLength={120}
             name="keyword"
             placeholder="搜索作业名称"
+            type="search"
           />
-        </label>
-        <label className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-xs font-medium">作业类别</span>
+          <button
+            className="shrink-0 text-xs font-medium text-sky-700 hover:text-sky-900"
+            type="submit"
+          >
+            搜索
+          </button>
+        </div>
+        <label className="max-w-full min-w-0">
+          <span className="sr-only">作业类别</span>
           <AutoSubmitSelect
-            className="h-10 w-full min-w-0 rounded-lg border px-3 text-sm"
+            className="max-w-full sm:max-w-40"
             name="category"
             defaultValue={query.category ?? ""}
           >
@@ -225,10 +236,10 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
             )}
           </AutoSubmitSelect>
         </label>
-        <label className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-xs font-medium">状态</span>
+        <label className="max-w-full min-w-0">
+          <span className="sr-only">状态</span>
           <AutoSubmitSelect
-            className="h-10 w-full min-w-0 rounded-lg border px-3 text-sm"
+            className="max-w-full sm:max-w-40"
             defaultValue={query.status ?? ""}
             name="status"
           >
@@ -250,10 +261,10 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
             ))}
           </AutoSubmitSelect>
         </label>
-        <label className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-xs font-medium">班级</span>
+        <label className="max-w-full min-w-0">
+          <span className="sr-only">班级</span>
           <AutoSubmitSelect
-            className="h-10 w-full min-w-0 rounded-lg border px-3 text-sm"
+            className="max-w-full sm:max-w-56"
             defaultValue={query.classroomId ?? ""}
             name="classroomId"
           >
@@ -268,10 +279,10 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
             ))}
           </AutoSubmitSelect>
         </label>
-        <label className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-xs font-medium">排序</span>
+        <label className="max-w-full min-w-0">
+          <span className="sr-only">排序</span>
           <AutoSubmitSelect
-            className="h-10 w-full min-w-0 rounded-lg border px-3 text-sm"
+            className="max-w-full sm:max-w-40"
             defaultValue={query.sort}
             name="sort"
           >
@@ -286,15 +297,13 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
         {query.courseId ? (
           <input name="courseId" type="hidden" value={query.courseId} />
         ) : null}
-        <div className="col-span-2 flex items-end gap-2 xl:col-span-1">
-          <button
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800"
-            type="submit"
-          >
-            搜索
-          </button>
-          <a
-            className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-sky-200 bg-white px-4 text-sm font-medium text-sky-700 transition hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none xl:w-auto"
+        {query.keyword ||
+        query.category ||
+        query.status ||
+        query.classroomId ||
+        query.sort !== "CREATED_DESC" ? (
+          <Link
+            className="tt-btn-ghost shrink-0"
             href={queryHref(
               {
                 ...query,
@@ -309,8 +318,8 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
           >
             <RotateCcw aria-hidden="true" className="h-4 w-4" />
             重置
-          </a>
-        </div>
+          </Link>
+        ) : null}
       </form>
 
       <div className="flex items-center justify-between text-sm text-gray-500">
@@ -328,7 +337,7 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
             query.status ||
             query.classroomId ||
             query.category ? (
-              <a
+              <Link
                 className="text-sm font-medium underline"
                 href={queryHref(
                   {
@@ -342,14 +351,14 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
                 )}
               >
                 清除筛选
-              </a>
+              </Link>
             ) : query.section === "HISTORY" ? (
-              <a
+              <Link
                 className="text-sm font-medium underline"
                 href={queryHref({ ...query, section: "CURRENT" }, 1)}
               >
                 查看当前作业
-              </a>
+              </Link>
             ) : (
               <Link
                 className="text-sm font-medium underline"

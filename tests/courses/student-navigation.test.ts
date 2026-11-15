@@ -13,11 +13,11 @@ import {
 test("学生共享路径使用学生名称，顶部与面包屑保持一致", () => {
   const cases = [
     ["/student/assignments", "我的作业"],
-    ["/student/tasks", "学习任务"],
+    ["/student/tasks", "作业与考试"],
     ["/student/results", "课程总评"],
     ["/student/attendance", "签到与出勤"],
     ["/student/surveys", "课程问卷"],
-    ["/student/recommendations", "自主练习"],
+    ["/student/recommendations", "练习中心"],
     ["/student/wrong-questions", "我的题库"],
     ["/student/analytics", "学习分析"],
     ["/student/course-grades", "课程总评"],
@@ -28,14 +28,14 @@ test("学生共享路径使用学生名称，顶部与面包屑保持一致", ()
   }
 });
 
-test("课程总评与成绩详情路径只选中课程总评，首页不会同时选中", () => {
+test("课程总评与成绩详情挂在学习分析下，首页不会同时选中", () => {
   const items = NAVIGATION.STUDENT.flatMap((group) => group.items);
   for (const pathname of ["/student/results", "/student/course-grades"]) {
     assert.deepEqual(
       items
         .filter((item) => isNavigationItemActive(pathname, item))
         .map((item) => item.href),
-      ["/student/course-grades"],
+      ["/student/analytics"],
     );
   }
   assert.equal(
@@ -112,7 +112,7 @@ test("学生命名不会影响教师同名路径或管理员导航", () => {
   assert.equal(NAVIGATION.ADMIN.length, 1);
 });
 
-test("课程练习和收藏详情保留自主练习选中，面包屑不指向不存在的根页", () => {
+test("课程练习选中练习中心，收藏详情归入我的题库，面包屑不指向不存在的根页", () => {
   const items = NAVIGATION.STUDENT.flatMap((group) => group.items);
   for (const path of [
     "/student/practice/cycle1",
@@ -132,7 +132,7 @@ test("课程练习和收藏详情保留自主练习选中，面包屑不指向�
     assert.equal(
       crumbs[1].href,
       path.includes("question-favorites")
-        ? "/student/wrong-questions?view=favorites"
+        ? "/student/question-favorites"
         : "/student/recommendations",
     );
   }
@@ -185,15 +185,15 @@ test("学生所有资源详情使用同一标题与面包屑命名，不暴露�
 });
 
 test("虚拟详情父级只保留可访问的模块，作答不陈列不存在的提交页", () => {
-  assert.equal(buildBreadcrumbs("/student/practice/c1")[1].label, "自主练习");
+  assert.equal(buildBreadcrumbs("/student/practice/c1")[1].label, "练习中心");
   assert.equal(
     buildBreadcrumbs("/student/question-favorites/q1")[1].label,
-    "我的题库",
+    "我的收藏",
   );
   const crumbs = buildBreadcrumbs("/student/submissions/s1/answer");
   assert.deepEqual(
     crumbs.map((c) => c.label),
-    ["学习主页", "我的作业", "在线答题"],
+    ["学习中心", "我的作业", "在线答题"],
   );
   assert.ok(!crumbs.some((c) => c.href === "/student/submissions/s1"));
 });
@@ -231,4 +231,20 @@ test("学生全部已实现页面有一致标题、唯一选中导航，侧栏�
   }
   for (const item of items)
     await access(`app/(protected)${item.href}/page.tsx`);
+});
+
+test("侧栏只保留我的题库，旧收藏入口与详情仍能选中该模块", () => {
+  const items = NAVIGATION.STUDENT.flatMap((group) => group.items);
+  assert.ok(!items.some((item) => item.href === "/student/question-favorites"));
+  for (const path of [
+    "/student/question-favorites",
+    "/student/question-favorites/q1",
+  ]) {
+    assert.deepEqual(
+      items
+        .filter((item) => isNavigationItemActive(path, item))
+        .map((item) => item.label),
+      ["我的题库"],
+    );
+  }
 });

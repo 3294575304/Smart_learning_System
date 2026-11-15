@@ -121,7 +121,7 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
     resultsPage,
     /recentAssignments=\{recentResults\?\.items \?\? \[\]\}/u,
   );
-  assert.match(resultsPage, /title="学情分析"/u);
+  assert.match(resultsPage, /<h1 className="tt-h1">学情分析<\/h1>/u);
   assert.match(view, /assignmentParams\.set\("classroomId", classroomId\)/u);
   assert.match(
     view,

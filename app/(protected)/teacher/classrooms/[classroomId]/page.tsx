@@ -1,4 +1,4 @@
-import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
+import { ClassroomStatusBadge } from "@/components/classrooms/classroom-status-badge";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { PageIndex } from "@/components/dashboard/page-index";
 import { Role } from "@prisma/client";
@@ -61,7 +61,7 @@ export default async function TeacherClassroomPage({
           <div>
             <dt className="text-muted-foreground text-sm">班级状态</dt>
             <dd className="mt-1 font-medium">
-              {CLASSROOM_STATUS_LABELS[classroom.status]}
+              <ClassroomStatusBadge status={classroom.status} />
             </dd>
             {classroom.status === "COMPLETED" && (
               <dd className="mt-1 text-sm text-slate-600">正常结课</dd>

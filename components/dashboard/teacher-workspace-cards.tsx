@@ -99,35 +99,35 @@ export function TeacherWorkspaceCards({
       description: "管理班级、成员与邀请码",
       href: "/teacher/classrooms",
       icon: School,
-      accent: "bg-sky-50 text-sky-700 ring-sky-100",
+      accent: "bg-violet-50 text-violet-700 ring-violet-100",
     },
     {
       label: "考试管理",
       description: "组卷、安排考试与查看详情",
       href: `/teacher/exams?courseId=${workspace.course.id}`,
       icon: FilePenLine,
-      accent: "bg-sky-50 text-sky-700 ring-sky-100",
+      accent: "bg-indigo-50 text-indigo-700 ring-indigo-100",
     },
     {
       label: "课程题库",
       description: "查看当前课程题目",
       href: `/teacher/questions?courseId=${workspace.course.id}`,
       icon: BookOpenCheck,
-      accent: "bg-sky-50 text-sky-700 ring-sky-100",
+      accent: "bg-teal-50 text-teal-700 ring-teal-100",
     },
     {
       label: "学情分析",
       description: "学情分析与课程评价",
       href: `/teacher/results?${resultsParams.toString()}`,
       icon: BarChart3,
-      accent: "bg-sky-50 text-sky-700 ring-sky-100",
+      accent: "bg-amber-50 text-amber-700 ring-amber-100",
     },
     {
       label: "课程通知",
       description: "发布通知与管理历史记录",
       href: `${base}/announcements`,
       icon: Megaphone,
-      accent: "bg-sky-50 text-sky-700 ring-sky-100",
+      accent: "bg-orange-50 text-orange-700 ring-orange-100",
     },
   ];
   const stats = [
@@ -193,7 +193,7 @@ export function TeacherWorkspaceCards({
                 className={`${styles.shortcut} group flex min-w-0 items-center gap-3 border p-3 focus-visible:outline-2 focus-visible:outline-sky-600 active:bg-teal-50`}
               >
                 <span
-                  className={`rounded-xl p-2.5 ring-1 ring-inset ${accent}`}
+                  className={`${styles.shortcutIcon} rounded-xl p-2.5 ring-1 ring-inset ${accent}`}
                 >
                   <Icon aria-hidden="true" className="size-4" />
                 </span>
@@ -220,10 +220,10 @@ export function TeacherWorkspaceCards({
           <div className="min-w-0">
             <h2
               id="teacher-next-actions"
-              className={`${styles.heading} font-semibold`}
+              className={`${styles.heading} ${styles.todoHeading} font-semibold`}
             >
               当前待办{" "}
-              <span className="rounded-full bg-teal-50 px-2 text-xs font-medium text-teal-700">
+              <span className="rounded-full bg-rose-50 px-2 text-xs font-medium text-rose-700">
                 {todo.length} 项
               </span>
             </h2>

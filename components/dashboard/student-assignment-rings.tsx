@@ -116,7 +116,7 @@ export function StudentAssignmentRings({
                           <span>未交未截止 {parts[1].count}</span>
                         )}
                         {overdue > 0 && (
-                          <span className="text-rose-700">
+                          <span className="st-danger-text">
                             逾期未交 {overdue}
                           </span>
                         )}

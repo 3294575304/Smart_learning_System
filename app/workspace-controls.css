@@ -335,3 +335,9 @@
   border-color: #183f46;
   color: #fff;
 }
+
+/* 带前置图标的 select 必须保留文字让位；通用 padding 简写会覆盖 pl-9 / pr-9。 */
+#dashboard-main[data-workspace-role]
+  select.workspace-select-with-icon:not([multiple]):not([size]) {
+  padding-inline: 2.25rem;
+}

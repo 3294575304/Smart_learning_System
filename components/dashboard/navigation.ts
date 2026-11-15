@@ -1,6 +1,7 @@
 import type { Role } from "@prisma/client";
 import {
   BarChart3,
+  Bell,
   BookOpenCheck,
   BrainCircuit,
   ClipboardCheck,
@@ -94,15 +95,27 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
       ],
     },
   ],
+  /*
+   * 学生端导航按「学习 → 回顾 → 其他」三段收拢：
+   * 第一段是每天要走的动线（进门、看课、交作业、练习），
+   * 第二段是回头看的地方（错题、收藏、分析），
+   * 第三段是账号与消息。原来的「课程总评」不再单独占一行，
+   * 它作为学习分析的下一级（relatedPaths），避免侧栏出现六个平级入口。
+   */
   STUDENT: [
-    { items: [{ href: "/student", label: "学习主页", icon: Home }] },
     {
-      label: "课程学习",
+      label: "学习",
       items: [
+        {
+          href: "/student",
+          label: "学习中心",
+          icon: Home,
+          relatedPaths: ["/student/search"],
+        },
         { href: "/student/courses", label: "我的课程", icon: Library },
         {
           href: "/student/tasks",
-          label: "学习任务",
+          label: "作业与考试",
           icon: ClipboardCheck,
           relatedPaths: [
             "/student/assignments",
@@ -111,35 +124,36 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
             "/student/exams",
           ],
         },
-      ],
-    },
-    {
-      label: "练习巩固",
-      items: [
         {
           href: "/student/recommendations",
-          label: "自主练习",
+          label: "练习中心",
           icon: Sparkles,
           relatedPaths: ["/student/practice"],
         },
+      ],
+    },
+    {
+      label: "回顾",
+      items: [
         {
           href: "/student/wrong-questions",
           label: "我的题库",
-          relatedPaths: ["/student/question-favorites"],
           icon: NotebookPen,
+          relatedPaths: ["/student/question-favorites"],
+        },
+        {
+          href: "/student/analytics",
+          label: "学习分析",
+          icon: BrainCircuit,
+          relatedPaths: ["/student/course-grades", "/student/results"],
         },
       ],
     },
     {
-      label: "学习反馈",
+      label: "其他",
       items: [
-        {
-          href: "/student/course-grades",
-          label: "课程总评",
-          icon: BarChart3,
-          relatedPaths: ["/student/results"],
-        },
-        { href: "/student/analytics", label: "学习分析", icon: BrainCircuit },
+        { href: "/notifications", label: "通知", icon: Bell },
+        { href: "/student/settings", label: "设置", icon: Settings },
       ],
     },
   ],
@@ -178,7 +192,7 @@ export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   students: "学生名单",
   import: "导入",
   teacher: "教师工作台",
-  student: "学习主页",
+  student: "学习中心",
   classrooms: "班级管理",
   classes: "班级管理",
   questions: "题库管理",
@@ -212,9 +226,10 @@ const STUDENT_SEGMENT_LABELS: Readonly<Record<string, string>> = {
   results: "课程总评",
   attendance: "签到与出勤",
   surveys: "课程问卷",
-  tasks: "学习任务",
+  tasks: "作业与考试",
   exams: "我的考试",
   "learning-center": "课程学习中心",
+  search: "搜索结果",
   profile: "我的课程画像",
 };
 
@@ -269,6 +284,7 @@ export function getStudentPageLabel(pathname: string): string | undefined {
   if (path !== "/student" && !path.startsWith("/student/")) return undefined;
   const detailRoutes: Array<[RegExp, string]> = [
     [/^\/student\/assignments\/[^/]+$/, "作业详情"],
+    [/^\/student\/attendance\/[^/]+$/, "签到与出勤详情"],
     [/^\/student\/exams\/[^/]+\/report$/, "我的考试报告"],
     [/^\/student\/surveys\/[^/]+$/, "问卷详情"],
     [/^\/student\/wrong-questions\/[^/]+$/, "错题详情"],

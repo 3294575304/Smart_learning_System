@@ -607,6 +607,8 @@ export function AnswerSheet({
             <Save aria-hidden="true" className="size-4" />
             {finalAction === "exit" ? "正在保存…" : "保存并退出"}
           </button>
+          {/* 这是全站唯一允许"实心红 + 不可逆"并存的按钮，提示必须与它同屏。 */}
+          <span className="st-submit-hint">提交后不可修改</span>
           <button
             className="st-btn-cta min-h-10 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
             disabled={editingDisabled || attachmentPending}
@@ -715,7 +717,7 @@ export function AnswerSheet({
           ) : (
             <p className="mt-3 text-sm text-slate-700">所有题目均已作答。</p>
           )}
-          <p className="mt-3 text-sm text-slate-700">交卷后答卷将锁定。</p>
+          <p className="st-submit-hint mt-3">交卷后答卷将锁定。</p>
           {saveState === "failed" && saveError && (
             <p role="alert" className="mt-2 text-sm text-rose-800">
               {saveError}

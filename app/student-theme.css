@@ -1,105 +1,1296 @@
-/* 学生端 · 全浅墨青。保留学习主页、课程、练习和答题页的既有布局。 */
+/* 学生端 · 暖白陶土。保留学习主页、课程、练习和答题页的既有布局。 */
+:root[data-student-route],
 [data-shell-role="STUDENT"] {
-  --background: #f3f6f7;
-  --foreground: #152d3e;
-  --card: #fff;
-  --card-foreground: #152d3e;
-  --popover: #fff;
-  --popover-foreground: #152d3e;
-  --primary: #26717a;
-  --primary-foreground: #fff;
-  --secondary: #eaf6f4;
-  --secondary-foreground: #26717a;
-  --muted: #eff3f5;
-  --muted-foreground: #63798a;
-  --accent: #eaf6f4;
-  --accent-foreground: #26717a;
-  --border: #dfe6e9;
-  --input: #dfe6e9;
-  --ring: #328f96;
-  --surface: #edf2f3;
-  --brand: #26717a;
-  --brand-strong: #1f5c64;
-  --progress-track: #dfe6e9;
-  --color-sky-50: #eaf6f4;
-  --color-sky-100: #dbefed;
-  --color-sky-200: #c4e3e0;
-  --color-sky-300: #9bcfcc;
-  --color-sky-400: #5fc7c3;
-  --color-sky-500: #328f96;
-  --color-sky-600: #2a7c83;
-  --color-sky-700: #26717a;
-  --color-sky-800: #1f5c64;
-  --color-sky-900: #183f46;
-  --color-sky-950: #0f2c32;
-  --color-slate-50: #f7fafb;
-  --color-slate-100: #eff3f5;
-  --color-slate-200: #dfe6e9;
-  --color-slate-500: #63798a;
-  --color-slate-600: #4a6272;
-  --color-slate-700: #3f5768;
-  --color-slate-800: #33495a;
-  --color-slate-900: #152d3e;
-  background: #f3f6f7;
-  color: #152d3e;
+  /* 陶土强调行动，灰绿承托区域；危险状态仍保留独立语义色。 */
+  --st-red: #a64e36;
+  --st-red-ink: #93432e;
+  --st-red-soft: #f7eee7;
+  --st-red-line: #d8bfb1;
+  --background: #f3f3ef;
+  --foreground: #2f3834;
+  --card: #fcfbf8;
+  --card-foreground: #2f3834;
+  --popover: #fcfbf8;
+  --popover-foreground: #2f3834;
+  --primary: #a64e36;
+  --primary-foreground: #fcfbf8;
+  --secondary: #f4e7df;
+  --secondary-foreground: #a64e36;
+  --muted: #eceee7;
+  --muted-foreground: #69726b;
+  --accent: #f4e7df;
+  --accent-foreground: #a64e36;
+  --border: #d9ddd4;
+  --input: #d9ddd4;
+  --ring: #496b50;
+  --surface: #e9ece5;
+  --brand: #a64e36;
+  --brand-strong: #8c3f2a;
+  --progress-track: #d9ddd4;
+  --color-sky-50: #f4e7df;
+  --color-sky-100: #ecd6ca;
+  --color-sky-200: #dfbdac;
+  --color-sky-300: #a6b69e;
+  --color-sky-400: #bd8871;
+  --color-sky-500: #496b50;
+  --color-sky-600: #ad5c42;
+  --color-sky-700: #a64e36;
+  --color-sky-800: #8c3f2a;
+  --color-sky-900: #653628;
+  --color-sky-950: #40261e;
+  --color-slate-50: #f6f6f1;
+  --color-slate-100: #eceee7;
+  --color-slate-200: #d9ddd4;
+  --color-slate-500: #69726b;
+  --color-slate-600: #536057;
+  --color-slate-700: #455249;
+  --color-slate-800: #39483e;
+  --color-slate-900: #2f3834;
+  background: #f3f3ef;
+  color: #2f3834;
 }
 [data-shell-role="STUDENT"] > aside {
-  background: #fff;
-  border-right-color: #dfe6e9;
+  background: #fcfbf8;
+  border-right-color: #d9ddd4;
 }
 [data-shell-role="STUDENT"] aside nav a {
-  color: #4a6272;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 4px;
+  color: #536057;
+  font-size: 12.5px;
+  font-weight: 500;
   box-shadow: none;
 }
+[data-shell-role="STUDENT"] aside nav a svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.7;
+}
 [data-shell-role="STUDENT"] aside nav a[aria-current="page"] {
-  background: #eaf6f4;
-  color: #26717a;
-  box-shadow: inset 3px 0 #328f96;
+  background: #fcfbf8;
+  color: #8c3f2a;
+  font-weight: 600;
+  box-shadow: none;
 }
 [data-shell-role="STUDENT"] aside nav a:hover {
-  background-color: #f0f7f6;
+  background-color: #e0e5dc;
+}
+[data-shell-role="STUDENT"] .workspace-nav-group {
+  margin-bottom: 5px;
+  padding-left: 10px;
+  color: #788277;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+}
+[data-shell-role="STUDENT"] .workspace-nav-badge {
+  flex: none;
+  min-width: 14px;
+  color: #707a6f;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-align: right;
+}
+[data-shell-role="STUDENT"]
+  aside
+  nav
+  a[aria-current="page"]
+  .workspace-nav-badge {
+  color: #a64e36;
+}
+[data-shell-role="STUDENT"] .workspace-sidebar-meta {
+  margin: 0 12px 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eceee7;
 }
 [data-shell-role="STUDENT"] > div > header {
-  background: #fff;
-  border-bottom-color: #dfe6e9;
+  background: #fcfbf8;
+  border-bottom-color: #d9ddd4;
 }
 [data-shell-role="STUDENT"] header button > span.rounded-full {
-  background: #26717a;
+  background: #a64e36;
 }
 [data-shell-role="STUDENT"] :where(.shadow-sm, .shadow-md) {
   box-shadow: none;
 }
 [data-shell-role="STUDENT"] :where(input, textarea) {
-  border-color: #dfe6e9;
-  accent-color: #26717a;
+  border-color: #d9ddd4;
+  accent-color: #a64e36;
 }
 [data-shell-role="STUDENT"] :where(input, textarea):focus-visible {
-  outline: 2px solid #26717a;
+  outline: 2px solid #a64e36;
   outline-offset: 2px;
 }
 [data-shell-role="STUDENT"]
   :where(input[type="checkbox"], input[type="radio"]) {
-  accent-color: #26717a;
+  accent-color: #a64e36;
 }
 [data-shell-role="STUDENT"] :where(button, a).bg-brand:not(.st-btn-cta) {
-  background: #26717a;
-  color: #fff;
+  background: #a64e36;
+  color: #fcfbf8;
 }
 [data-shell-role="STUDENT"]
   :where(button, a).bg-brand:not(.st-btn-cta):hover:not(:disabled) {
-  background: #1f5c64;
+  background: #8c3f2a;
 }
 [data-shell-role="STUDENT"] .st-course-cover {
-  background-color: #e3eef0;
+  background-color: #e9ece5;
   background-image: repeating-linear-gradient(
     90deg,
     transparent 0 30px,
     rgb(255 255 255 / 70%) 30px 31px
   );
-  border-bottom-color: #dfe6e9;
+  border-bottom-color: #d9ddd4;
 }
+/* ==========================================================================
+   学生端强调色落点
+   --------------------------------------------------------------------------
+   屏幕上只允许一颗实心红按钮（页头主动作）。其余红色只能出现在
+   "面积很小、且不暗示点击后会发生什么"的位置：品牌竖条、页头 kicker 方点、
+   指标里的落后数字、逾期行的行首细线与天数、需加强的知识点标记。
+   ========================================================================== */
+
+/* 1. 品牌行：红色小方块 + 平台名 + 角色标签，红色只做识别标记 */
+[data-shell-role="STUDENT"] .workspace-brand-row {
+  position: relative;
+}
+[data-shell-role="STUDENT"] .workspace-brand-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--st-red);
+  color: #fcfbf8;
+}
+[data-shell-role="STUDENT"] .workspace-role-tag {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #eceee7;
+  color: #707a6f;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* 2. 页头 kicker：给"第几周、今天几号"一个时间坐标 */
+[data-shell-role="STUDENT"] .st-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--st-red-ink);
+}
+[data-shell-role="STUDENT"] .st-kicker::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: var(--st-red);
+}
+[data-shell-role="STUDENT"] .st-kicker em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--st-red-ink);
+}
+
+/* 3. 指标：只有"拖着的数"才上红底红字，中性进度一律不上红 */
+#dashboard-main[data-workspace-role="STUDENT"] .workspace-metric-alert {
+  background: var(--st-red-soft);
+  border-color: var(--st-red-line);
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  .workspace-metric-alert
+  .workspace-metric-value {
+  color: var(--st-red-ink);
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  .workspace-metric-alert
+  .workspace-metric-icon {
+  background: transparent;
+  color: var(--st-red-ink);
+}
+
+/* 4. 逾期未交：环图那一段与行内数字用同一支红 */
+:root[data-student-route],
+[data-shell-role="STUDENT"] {
+  --mark-danger: var(--st-red);
+}
+[data-shell-role="STUDENT"] .st-danger-text {
+  font-weight: 600;
+  color: var(--st-red-ink);
+}
+
+/* 5. 不可逆动作旁的提示：只有交卷这一步出现 */
+[data-shell-role="STUDENT"] .st-submit-hint {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--st-red-ink);
+}
+
+/*
+ * 6. 把散落在组件里的 rose / red 统一到同一支红，
+ *    避免一屏出现 #e11d48、#be123c、#a64e36 三种红。
+ */
+[data-shell-role="STUDENT"] :where(.bg-rose-600, .bg-rose-400) {
+  background-color: var(--st-red);
+}
+[data-shell-role="STUDENT"] :where(.bg-rose-50) {
+  background-color: var(--st-red-soft);
+}
+[data-shell-role="STUDENT"]
+  :where(.text-rose-700, .text-rose-800, .text-red-600, .text-red-700) {
+  color: var(--st-red-ink);
+}
+[data-shell-role="STUDENT"] :where(.border-rose-100, .border-rose-200) {
+  border-color: var(--st-red-line);
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-shell-role="STUDENT"] :where(button, a, select) {
     transition: none;
   }
+}
+
+/* ==========================================================================
+   学习中心首屏（对照稿）
+   --------------------------------------------------------------------------
+   一屏四块：指标行 → 今日任务 → 知识掌握 / 错题本。
+   数字统一使用无衬线等宽数字，说明文字保持可读对比度。
+   ========================================================================== */
+
+/* 1. 指标行 */
+#dashboard-main[data-workspace-role="STUDENT"] .st-metric {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 15px 16px;
+  border: 1px solid #d9ddd4;
+  border-radius: 6px;
+  background: #fcfbf8;
+  transition: border-color 0.15s ease;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-metric:hover {
+  border-color: #bcc8b8;
+  background: #fcfbf8;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-metric.is-alert {
+  border-color: var(--st-red-line);
+  background: var(--st-red-soft);
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-metric.is-alert:hover {
+  border-color: #c99e89;
+}
+[data-shell-role="STUDENT"] .st-metric-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #69726b;
+}
+[data-shell-role="STUDENT"] .st-metric-value {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  margin-top: 2px;
+  color: #2f3834;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+}
+[data-shell-role="STUDENT"] .st-metric.is-alert .st-metric-value {
+  color: var(--st-red-ink);
+}
+[data-shell-role="STUDENT"] .st-metric-unit {
+  color: #69726b;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+[data-shell-role="STUDENT"] .st-metric-empty {
+  color: #788277;
+  font-weight: 500;
+}
+[data-shell-role="STUDENT"] .st-metric-detail {
+  margin-top: auto;
+  color: #707a6f;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+/* 2. 今日任务 */
+[data-shell-role="STUDENT"] .st-agenda {
+  margin-top: 6px;
+}
+[data-shell-role="STUDENT"] .st-agenda-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid #e5e7df;
+}
+[data-shell-role="STUDENT"] .st-agenda-main {
+  min-width: 0;
+}
+[data-shell-role="STUDENT"] .st-agenda-title {
+  display: block;
+  overflow: hidden;
+  color: #303b32;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-shell-role="STUDENT"] .st-agenda-title:hover {
+  color: var(--brand-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+[data-shell-role="STUDENT"] .st-agenda-row.is-done .st-agenda-title {
+  color: #58675c;
+  font-weight: 500;
+}
+[data-shell-role="STUDENT"] .st-agenda-meta {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #707a6f;
+  font-size: 10.5px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-shell-role="STUDENT"] .st-agenda-when {
+  color: #707a6f;
+  font-size: 10.5px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+[data-shell-role="STUDENT"] .st-agenda-row.is-overdue .st-agenda-when {
+  color: var(--st-red-ink);
+  font-weight: 600;
+}
+[data-shell-role="STUDENT"] .st-agenda-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid #d9ddd4;
+  border-radius: 4px;
+  background: #fcfbf8;
+  color: #536057;
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+[data-shell-role="STUDENT"] .st-agenda-action:hover {
+  border-color: #bdc7b9;
+  background: #f6f6f1;
+}
+[data-shell-role="STUDENT"] .st-agenda-action.is-overdue {
+  border-color: var(--st-red);
+  background: var(--st-red);
+  color: #fcfbf8;
+}
+[data-shell-role="STUDENT"] .st-agenda-action.is-overdue:hover {
+  border-color: #8c3f2a;
+  background: #8c3f2a;
+}
+[data-shell-role="STUDENT"] .st-agenda-action.is-done,
+[data-shell-role="STUDENT"] .st-agenda-action.is-review {
+  border-color: transparent;
+  background: transparent;
+  color: #64715f;
+}
+[data-shell-role="STUDENT"] .st-agenda-action.is-done:hover,
+[data-shell-role="STUDENT"] .st-agenda-action.is-review:hover {
+  background: #eeefe8;
+  color: var(--brand-strong);
+}
+[data-shell-role="STUDENT"] .st-agenda-action.is-review {
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+
+/* 3. 上次学到 / 上次做到 */
+[data-shell-role="STUDENT"] .st-resume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px dashed #d9ddd4;
+  border-radius: 4px;
+  background: #f8f8f3;
+  font-size: 11px;
+}
+[data-shell-role="STUDENT"] .st-resume:hover {
+  border-color: #bcc8b8;
+  background: #f6f6f1;
+}
+[data-shell-role="STUDENT"] .st-resume-label {
+  flex: none;
+  color: #788277;
+}
+[data-shell-role="STUDENT"] .st-resume-title {
+  min-width: 0;
+  overflow: hidden;
+  color: #455249;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-shell-role="STUDENT"] .st-resume-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+
+/* 4. 知识掌握 */
+[data-shell-role="STUDENT"] .st-course-tag {
+  max-width: 132px;
+  overflow: hidden;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #eceee7;
+  color: #5e6d60;
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-shell-role="STUDENT"] .st-mastery {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+[data-shell-role="STUDENT"] .st-mastery-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2f3834;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+[data-shell-role="STUDENT"] .st-mastery-unit {
+  margin-left: 1px;
+  color: #69726b;
+  font-size: 9.5px;
+  font-weight: 500;
+}
+[data-shell-role="STUDENT"] .st-mastery-legend {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+[data-shell-role="STUDENT"] .st-mastery-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #69726b;
+  font-size: 10.5px;
+}
+[data-shell-role="STUDENT"] .st-mastery-legend i {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+}
+[data-shell-role="STUDENT"] .st-mastery-legend i.is-mastered {
+  background: #496b50;
+}
+[data-shell-role="STUDENT"] .st-mastery-legend i.is-developing {
+  background: #a6b69e;
+}
+[data-shell-role="STUDENT"] .st-mastery-legend i.is-weak {
+  background: var(--st-red);
+}
+[data-shell-role="STUDENT"] .st-mastery-legend b {
+  margin-left: auto;
+  color: #303b32;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+[data-shell-role="STUDENT"] .st-weak {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7df;
+}
+[data-shell-role="STUDENT"] .st-weak-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 7px;
+}
+[data-shell-role="STUDENT"] .st-weak-track {
+  display: block;
+  height: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #e5e7df;
+}
+[data-shell-role="STUDENT"] .st-weak-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: #c5cdc0;
+}
+[data-shell-role="STUDENT"] .st-weak-track > span.is-danger {
+  background: var(--st-red);
+}
+[data-shell-role="STUDENT"] .st-knowledge-details {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7df;
+}
+[data-shell-role="STUDENT"] .st-knowledge-details > summary {
+  cursor: pointer;
+  color: #707a6f;
+  font-size: 10.5px;
+}
+[data-shell-role="STUDENT"] .st-knowledge-details > summary:hover {
+  color: var(--brand-strong);
+}
+
+/* 5. 错题本 */
+[data-shell-role="STUDENT"] .st-wrongbook-count {
+  margin-right: 2px;
+  color: #2f3834;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 6. 顶栏搜索 */
+[data-shell-role="STUDENT"] .workspace-topbar input[type="search"] {
+  height: 30px;
+  border: 1px solid #d9ddd4;
+  border-radius: 6px;
+  background: #f8f8f3;
+  color: #2f3834;
+  font-size: 11.5px;
+}
+[data-shell-role="STUDENT"] .workspace-topbar input[type="search"]:focus {
+  border-color: #b2bfa8;
+  background: #fcfbf8;
+}
+[data-shell-role="STUDENT"]
+  .workspace-topbar
+  input[type="search"]::placeholder {
+  color: #788277;
+}
+
+@media (max-width: 639px) {
+  [data-shell-role="STUDENT"] .st-agenda-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+  [data-shell-role="STUDENT"] .st-agenda-when {
+    grid-column: 1;
+  }
+  [data-shell-role="STUDENT"] .st-agenda-action {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+  }
+}
+
+/* 知识掌握卡片标题行的课程选择器：只在多门课时出现，做成与标签同高的小控件 */
+[data-shell-role="STUDENT"] .st-course-select {
+  min-width: 0;
+  max-width: 150px;
+}
+[data-shell-role="STUDENT"] .st-course-select form,
+[data-shell-role="STUDENT"] .st-course-select label {
+  min-width: 0;
+  width: 100%;
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  .st-course-select
+  select:not([multiple]):not([size]) {
+  min-height: 22px;
+  height: 22px;
+  padding: 0 20px 0 7px;
+  border: 1px solid #d9ddd4;
+  border-radius: 4px;
+  background-color: #f6f6f1;
+  color: #5e6d60;
+  font-size: 10.5px;
+}
+
+/* 共用工作区规则含固定色值；在学生边界收口，不改变其他角色或布局。 */
+:root[data-student-route],
+[data-shell-role="STUDENT"] {
+  --radius: 4px;
+  --brand: #a64e36;
+  --brand-strong: #8c3f2a;
+  --ring: #a64e36;
+  --destructive: #b23e35;
+  --tt-ink-3: #69726b;
+  --mark-muted: #707a6f;
+  --color-neutral-50: #f8f8f3;
+  --color-neutral-100: #eceee7;
+  --color-neutral-200: #d9ddd4;
+  --color-neutral-300: #c5cdc0;
+  --color-neutral-400: #788277;
+  --color-neutral-500: #69726b;
+  --color-neutral-600: #536057;
+  --color-neutral-700: #455249;
+  --color-neutral-800: #39483e;
+  --color-neutral-900: #2f3834;
+  --color-gray-50: #f8f8f3;
+  --color-gray-100: #eceee7;
+  --color-gray-200: #d9ddd4;
+  --color-gray-500: #69726b;
+  --color-gray-600: #536057;
+  --color-gray-700: #455249;
+  --color-gray-900: #2f3834;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  background-image: none;
+}
+[data-shell-role="STUDENT"] > aside,
+[data-shell-role="STUDENT"] #mobile-navigation-dialog {
+  background: #e9ece5;
+  border-color: var(--border);
+}
+[data-shell-role="STUDENT"] :where(.bg-white, .bg-white\/95, .bg-white\/90) {
+  background-color: var(--card);
+}
+[data-shell-role="STUDENT"] .workspace-brand-mark {
+  border: 1px solid #bbc5b6;
+  background: #fcfbf8;
+  color: #496b50;
+}
+[data-shell-role="STUDENT"] .workspace-brand-row,
+[data-shell-role="STUDENT"] .workspace-sidebar-meta {
+  border-color: var(--border);
+}
+[data-shell-role="STUDENT"] aside nav a[aria-current="page"] {
+  background: var(--card);
+  color: var(--brand);
+}
+[data-shell-role="STUDENT"]
+  :where(button, a, input, select, textarea):focus-visible {
+  outline-color: var(--brand);
+}
+[data-shell-role="STUDENT"]
+  :where(button, a):is(.rounded-md, .rounded-lg, .rounded-xl),
+#dashboard-main[data-workspace-role="STUDENT"]
+  :where(.rounded-2xl, .rounded-xl, .rounded-lg, .rounded-md) {
+  border-radius: 4px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .workspace-panel {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+}
+/* CTA 与普通主按钮共用陶土色；危险、成功、警告状态不参与替换。 */
+[data-shell-role="STUDENT"]
+  :is(button, a):is(
+    .st-btn-cta,
+    .bg-brand,
+    .bg-primary,
+    .bg-sky-500,
+    .bg-sky-600,
+    .bg-sky-700,
+    .bg-sky-800,
+    .bg-sky-900,
+    .bg-teal-600,
+    .bg-teal-700,
+    .bg-blue-600,
+    .bg-indigo-600
+  ),
+#dashboard-main[data-workspace-role="STUDENT"]
+  :is(button, a):is(
+    .st-btn-cta,
+    .bg-brand,
+    .bg-primary,
+    .bg-sky-500,
+    .bg-sky-600,
+    .bg-sky-700,
+    .bg-sky-800,
+    .bg-sky-900,
+    .bg-teal-600,
+    .bg-teal-700,
+    .bg-blue-600,
+    .bg-indigo-600
+  ) {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fffaf5;
+}
+[data-shell-role="STUDENT"]
+  :is(button, a):is(
+    .st-btn-cta,
+    .bg-brand,
+    .bg-primary,
+    .bg-sky-500,
+    .bg-sky-600,
+    .bg-sky-700,
+    .bg-sky-800,
+    .bg-sky-900,
+    .bg-teal-600,
+    .bg-teal-700,
+    .bg-blue-600,
+    .bg-indigo-600
+  ):hover:not(:disabled):not([aria-disabled="true"]),
+#dashboard-main[data-workspace-role="STUDENT"]
+  :is(button, a):is(
+    .st-btn-cta,
+    .bg-brand,
+    .bg-primary,
+    .bg-sky-500,
+    .bg-sky-600,
+    .bg-sky-700,
+    .bg-sky-800,
+    .bg-sky-900,
+    .bg-teal-600,
+    .bg-teal-700,
+    .bg-blue-600,
+    .bg-indigo-600
+  ):hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--brand-strong);
+  border-color: var(--brand-strong);
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  :is(button, a):is(
+    .st-btn-cta,
+    .bg-brand,
+    .bg-primary,
+    .bg-sky-500,
+    .bg-sky-600,
+    .bg-sky-700,
+    .bg-sky-800,
+    .bg-sky-900
+  ):active:not(:disabled):not([aria-disabled="true"]) {
+  background: #653628;
+  border-color: #653628;
+}
+/* 主数字不再使用衬线、花体或紧挤字距，小数点与单位按基线对齐。 */
+[data-shell-role="STUDENT"]
+  :is(.st-metric-value, .st-mastery-value, .st-wrongbook-count) {
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Microsoft YaHei",
+    sans-serif;
+  font-style: normal;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+[data-shell-role="STUDENT"] .st-metric-value {
+  gap: 6px;
+  margin-block: 8px;
+  line-height: 1.2;
+}
+[data-shell-role="STUDENT"] .st-metric-unit {
+  font-size: 12px;
+  font-weight: 400;
+}
+[data-shell-role="STUDENT"] .st-metric-detail {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+[data-shell-role="STUDENT"] .st-mastery-legend i.is-mastered {
+  background: #496b50;
+}
+[data-shell-role="STUDENT"] .st-mastery-legend i.is-developing {
+  background: #a6b69e;
+}
+#dashboard-main[data-workspace-role="STUDENT"] :where(th, td),
+#dashboard-main[data-workspace-role="STUDENT"] .workspace-course-row {
+  border-color: var(--border);
+}
+#dashboard-main[data-workspace-role="STUDENT"] th {
+  color: var(--muted-foreground);
+  background: var(--muted);
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-course-cover {
+  background-color: var(--surface);
+  background-image: none;
+  border-color: var(--border);
+}
+@supports (appearance: base-select) {
+  [data-shell-role="STUDENT"] select:not([multiple]):not([size]),
+  #dashboard-main[data-workspace-role="STUDENT"]
+    select:not([multiple]):not([size]),
+  [data-shell-role="STUDENT"]
+    select:not([multiple]):not([size])::picker(select),
+  #dashboard-main[data-workspace-role="STUDENT"]
+    select:not([multiple]):not([size])::picker(select) {
+    border-color: var(--border);
+    border-radius: 4px;
+    background-color: var(--card);
+    color: var(--foreground);
+  }
+  [data-shell-role="STUDENT"] select:not([multiple]):not([size]) option,
+  #dashboard-main[data-workspace-role="STUDENT"]
+    select:not([multiple]):not([size])
+    option {
+    color: var(--foreground);
+  }
+  [data-shell-role="STUDENT"] select:not([multiple]):not([size]) option:checked,
+  #dashboard-main[data-workspace-role="STUDENT"]
+    select:not([multiple]):not([size])
+    option:checked {
+    background: var(--accent);
+    color: var(--brand);
+  }
+  [data-shell-role="STUDENT"]
+    select:not([multiple]):not([size]):is(:open, :focus-visible, :hover):not(
+      :disabled
+    ),
+  #dashboard-main[data-workspace-role="STUDENT"]
+    select:not([multiple]):not([size]):is(:open, :focus-visible, :hover):not(
+      :disabled
+    ) {
+    border-color: var(--brand);
+    outline-color: var(--brand);
+  }
+  [data-shell-role="STUDENT"]
+    select:not([multiple]):not([size])
+    option:is(:hover, :focus-visible),
+  #dashboard-main[data-workspace-role="STUDENT"]
+    select:not([multiple]):not([size])
+    option:is(:hover, :focus-visible) {
+    background: var(--accent);
+    color: var(--brand-strong);
+  }
+}
+
+/* 样例的空间节奏：保留原导航与业务分区，放松内容、列表和卡片内部层级。 */
+#dashboard-main[data-workspace-role="STUDENT"] {
+  max-width: 1440px;
+  padding: 28px 30px 36px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .workspace-page-header {
+  align-items: flex-end;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] h1 {
+  font-size: 26px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  .workspace-page-header
+  > div
+  > p {
+  font-size: 12px;
+  line-height: 1.7;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .workspace-metrics {
+  gap: 14px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-metric {
+  min-height: 136px;
+  padding: 20px;
+  gap: 4px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .workspace-insights > * + * {
+  margin-top: 20px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .workspace-home-columns,
+#dashboard-main[data-workspace-role="STUDENT"] .workspace-home-column {
+  gap: 20px;
+  align-items: stretch;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .workspace-home-columns {
+  align-items: start;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-home-panel {
+  padding: 20px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-panel-header {
+  flex-wrap: wrap;
+  min-height: 37px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-panel-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+[data-shell-role="STUDENT"] .st-agenda {
+  margin-top: 0;
+}
+[data-shell-role="STUDENT"] .st-agenda-row {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 5px;
+  padding: 19px 0;
+}
+[data-shell-role="STUDENT"] .st-agenda-row:first-child {
+  border-top: 0;
+}
+[data-shell-role="STUDENT"] .st-agenda-symbol {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 38px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: #496b50;
+}
+[data-shell-role="STUDENT"] .st-agenda-symbol svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.6;
+}
+[data-shell-role="STUDENT"] .st-agenda-row.is-overdue .st-agenda-symbol {
+  background: var(--st-red-soft);
+  color: var(--st-red-ink);
+}
+[data-shell-role="STUDENT"] .st-agenda-main {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+[data-shell-role="STUDENT"] .st-agenda-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+[data-shell-role="STUDENT"] .st-agenda-meta {
+  margin-top: 5px;
+  font-size: 11px;
+}
+[data-shell-role="STUDENT"] .st-agenda-when {
+  grid-column: 3;
+  grid-row: 1;
+  text-align: right;
+}
+[data-shell-role="STUDENT"] .st-agenda-action {
+  grid-column: 3;
+  grid-row: 2;
+  justify-self: end;
+  min-height: 32px;
+  padding: 5px 12px;
+  font-size: 11px;
+}
+[data-shell-role="STUDENT"] .st-resume {
+  min-height: 42px;
+  padding: 10px 12px;
+}
+[data-shell-role="STUDENT"] .st-mastery {
+  margin-top: 20px;
+  margin-bottom: 20px;
+  gap: 20px;
+}
+[data-shell-role="STUDENT"] .st-mastery-legend {
+  gap: 8px;
+}
+[data-shell-role="STUDENT"] .st-weak {
+  padding-top: 16px;
+}
+[data-shell-role="STUDENT"] .st-weak-list {
+  margin-top: 14px;
+  gap: 14px;
+}
+[data-shell-role="STUDENT"] .st-weak-track {
+  margin-top: 7px;
+  height: 4px;
+}
+[data-shell-role="STUDENT"] .st-knowledge-details {
+  margin-top: 18px;
+  padding-top: 13px;
+}
+[data-shell-role="STUDENT"] .st-wrongbook-panel > div {
+  margin-top: 18px;
+  flex-wrap: wrap;
+  row-gap: 12px;
+}
+[data-shell-role="STUDENT"] .st-wrongbook-count {
+  display: inline-block;
+  margin-right: 5px;
+  font-size: 28px;
+  line-height: 1.2;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-activity-card {
+  padding: 20px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] form.st-activity-card {
+  margin-bottom: 20px;
+}
+#dashboard-main[data-workspace-role="STUDENT"] .st-courses-page > header {
+  margin-bottom: 24px;
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  .st-course-card
+  > .st-course-cover {
+  min-height: 64px;
+  padding: 14px 18px;
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  .st-course-card
+  > .st-course-cover
+  + div {
+  padding: 18px;
+  gap: 7px;
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  :where(button, a):is(.min-h-10, .min-h-11, .h-10, .h-11) {
+  min-height: 36px;
+}
+@media (max-width: 1100px) {
+  #dashboard-main[data-workspace-role="STUDENT"] {
+    padding-inline: 22px;
+  }
+  #dashboard-main[data-workspace-role="STUDENT"] .st-metric {
+    padding: 16px;
+  }
+}
+@container (max-width: 47.99rem) {
+  #dashboard-main[data-workspace-role="STUDENT"] .workspace-home-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 639px) {
+  #dashboard-main[data-workspace-role="STUDENT"] {
+    padding: 20px 16px 28px;
+  }
+  #dashboard-main[data-workspace-role="STUDENT"] .workspace-page-header {
+    align-items: flex-start;
+    gap: 14px;
+  }
+  #dashboard-main[data-workspace-role="STUDENT"] h1 {
+    font-size: 23px;
+  }
+  #dashboard-main[data-workspace-role="STUDENT"] .workspace-metrics {
+    gap: 10px;
+  }
+  #dashboard-main[data-workspace-role="STUDENT"] .st-metric {
+    min-height: 128px;
+    padding: 15px;
+  }
+  #dashboard-main[data-workspace-role="STUDENT"] .st-home-panel,
+  #dashboard-main[data-workspace-role="STUDENT"] .st-activity-card {
+    padding: 16px;
+  }
+  [data-shell-role="STUDENT"] .st-agenda-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 10px;
+  }
+  [data-shell-role="STUDENT"] .st-agenda-symbol {
+    display: none;
+  }
+  [data-shell-role="STUDENT"] .st-agenda-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  [data-shell-role="STUDENT"] .st-agenda-meta {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  [data-shell-role="STUDENT"] .st-agenda-when {
+    grid-column: 1;
+    grid-row: 2;
+    text-align: left;
+    white-space: normal;
+  }
+  [data-shell-role="STUDENT"] .st-agenda-action {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    min-height: 40px;
+    align-self: center;
+  }
+  #dashboard-main[data-workspace-role="STUDENT"]
+    :where(button, a):is(.min-h-10, .min-h-11, .h-10, .h-11) {
+    min-height: 40px;
+  }
+}
+
+/* 首页四个独立模块与内页共用的信息层级。 */
+[data-shell-role="STUDENT"] .st-section-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 3px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.6;
+}
+[data-shell-role="STUDENT"] .st-section-link:hover {
+  color: var(--brand);
+}
+[data-shell-role="STUDENT"] .st-panel-empty {
+  padding: 28px 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.8;
+}
+[data-shell-role="STUDENT"] .st-recent-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+[data-shell-role="STUDENT"] .st-recent-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+[data-shell-role="STUDENT"] .st-recent-date {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+[data-shell-role="STUDENT"] .st-recent-score {
+  flex-shrink: 0;
+  font-size: 23px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+[data-shell-role="STUDENT"] .st-recent-score span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 400;
+}
+[data-shell-role="STUDENT"] .st-knowledge-course {
+  margin-top: 18px;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+[data-shell-role="STUDENT"] .st-chapter-progress {
+  display: grid;
+  gap: 17px;
+  margin-top: 20px;
+}
+[data-shell-role="STUDENT"] .st-chapter-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+}
+[data-shell-role="STUDENT"] .st-chapter-label > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+[data-shell-role="STUDENT"] .st-chapter-label > span:last-child {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+[data-shell-role="STUDENT"] .st-chapter-track {
+  height: 5px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--progress-track);
+}
+[data-shell-role="STUDENT"] .st-chapter-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #496b50;
+}
+[data-shell-role="STUDENT"] .st-chapter-track > span.is-weak {
+  background: var(--brand);
+}
+[data-shell-role="STUDENT"] .st-knowledge-note {
+  margin-top: 18px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.8;
+}
+[data-shell-role="STUDENT"] .st-wrongbook-cta {
+  display: flex;
+  justify-content: center;
+  min-height: 36px;
+  margin-top: 20px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+[data-shell-role="STUDENT"] .st-wrongbook-cta:hover {
+  background: var(--surface);
+  text-decoration: none;
+}
+/* 只触及业务页的分区容器，不改编程编辑器、图谱画布及题目正文内部结构。 */
+#dashboard-main[data-workspace-role="STUDENT"]
+  > section
+  > :is(section, article, form, details).border,
+#dashboard-main[data-workspace-role="STUDENT"]
+  > section
+  > .grid
+  > :is(section, article, aside).border:not(.st-course-card) {
+  padding: 20px;
+  border-color: var(--border);
+  background-color: var(--card);
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  > section
+  > :is(.space-y-4, .space-y-5, .space-y-6) {
+  row-gap: 20px;
+}
+#dashboard-main[data-workspace-role="STUDENT"]
+  :is(.st-activity-card, .workspace-panel)
+  > h2 {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+@media (max-width: 639px) {
+  [data-shell-role="STUDENT"] .st-recent-row {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  [data-shell-role="STUDENT"] .st-recent-date {
+    flex-basis: 100%;
+  }
+  #dashboard-main[data-workspace-role="STUDENT"]
+    > section
+    > :is(section, article, form, details).border,
+  #dashboard-main[data-workspace-role="STUDENT"]
+    > section
+    > .grid
+    > :is(section, article, aside).border:not(.st-course-card) {
+    padding: 16px;
+  }
+}
+
+/* 首次请求与整页恢复时，外层主题先于异步学生布局生效。 */
+:root[data-student-route] body {
+  background: var(--background);
+  background-image: none;
 }

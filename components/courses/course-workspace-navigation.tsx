@@ -131,7 +131,10 @@ export function CourseWorkspaceNavigation({
     ? rememberedClassroomId
     : (classrooms[0]?.id ?? "");
   return (
-    <nav aria-label="课程功能" className="bg-card rounded-xl border p-5 sm:p-6">
+    <nav
+      aria-label="课程功能"
+      className="tc-course-navigation bg-card rounded-xl border p-5 sm:p-6"
+    >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-3">
         <div
           role="tablist"

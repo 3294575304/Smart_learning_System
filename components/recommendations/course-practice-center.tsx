@@ -267,7 +267,7 @@ export function CoursePracticeCenter({
   return (
     <section
       id="course-practice-center"
-      className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      className="st-practice-builder space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
     >
       <div>
         <a

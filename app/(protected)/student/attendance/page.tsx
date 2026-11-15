@@ -47,7 +47,7 @@ export default async function StudentAttendancePage({
             />
           ) : (
             <StudentBackLink href="/student/tasks">
-              返回学习任务
+              返回作业与考试
             </StudentBackLink>
           )
         }

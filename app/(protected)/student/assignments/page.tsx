@@ -146,14 +146,14 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
             />
           ) : (
             <StudentBackLink href="/student/tasks">
-              返回学习任务
+              返回作业与考试
             </StudentBackLink>
           )
         }
         description={
           course
             ? "查看当前课程的全部作业、提交记录与成绩，最新发布的作业排在前面。"
-            : "查看各门课程的全部作业、提交记录与成绩。待处理任务集中在学习任务中。"
+            : "查看各门课程的全部作业、提交记录与成绩。待处理任务集中在作业与考试中。"
         }
         eyebrow={course?.name}
         title="我的作业"

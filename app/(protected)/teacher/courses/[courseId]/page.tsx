@@ -58,7 +58,7 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="tc-course-workspace space-y-6">
       <PageHeader
         actions={
           <TeacherBackLink href="/teacher/courses">
@@ -69,9 +69,7 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
         title={course.name}
       />
 
-      <CourseSetupChecklist courseId={course.id} progress={setupProgress} />
-
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-1 text-sm text-slate-600">
+      <div className="tc-course-scope flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600">
         <span
           className={`rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
         >
@@ -91,98 +89,117 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
         </span>
         <span>{course.term}</span>
       </div>
-      <CourseWorkspaceNavigation
-        courseId={course.id}
-        classrooms={course.linkedClassrooms
-          .filter((classroom) => classroom.status === "ACTIVE")
-          .map(({ id, name }) => ({ id, name }))}
-      />
-      <CourseDetailDisclosure
-        id="course-classrooms"
-        title="授课班级"
-        summary={`${course.linkedClassrooms.length} 个课程班级 · 按班级分别管理教学记录`}
-        revealOnHash={false}
-      >
-        <p className="text-muted-foreground text-sm">
-          在班级页面逐个创建班级、导入名单并管理已有班级。
-        </p>
-        <Link
-          href={`/teacher/courses/${course.id}/classrooms`}
-          className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
-        >
-          查看和创建班级
-        </Link>
-      </CourseDetailDisclosure>
-      <CourseDetailDisclosure
-        id="course-basics"
-        title="课程信息与设置"
-        summary={`${course.courseNo} · ${course.template.name}`}
-      >
-        <div className="bg-card scroll-mt-20 rounded-xl border p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="font-semibold">课程概览</h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                课程号 {course.courseNo} · 学期 {course.term}
-              </p>
-            </div>
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
-            >
-              {COURSE_STATUS_LABELS[course.status]}
-            </span>
-          </div>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <p className="text-muted-foreground text-xs">模板</p>
-              <p className="mt-1 font-medium">
-                {course.template.name}
-                <span className="text-muted-foreground mt-1 block text-xs break-all">
-                  {course.template.code}
-                </span>
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs">版本</p>
-              <p className="mt-1 font-medium">{course.template.version}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs">创建时间</p>
-              <p className="mt-1 font-medium">
-                {course.createdAt.toLocaleString("zh-CN")}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs">更新时间</p>
-              <p className="mt-1 font-medium">
-                {course.updatedAt.toLocaleString("zh-CN")}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <details className="bg-card group rounded-xl border p-5">
-          <summary className="cursor-pointer rounded-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4">
-            编辑课程基础信息
-          </summary>
-          <p className="text-muted-foreground mt-1 mb-5 text-sm">
-            这里只修改课程号、学期、名称和描述，不影响班级关联。
-          </p>
-          <CourseForm
+      <div className="tc-construction-top">
+        <CourseSetupChecklist
+          courseId={course.id}
+          progress={setupProgress}
+          section="construction"
+        />
+      </div>
+      <div className="tc-workspace-layout">
+        <div className="tc-workspace-main">
+          <CourseWorkspaceNavigation
             courseId={course.id}
-            defaultValues={{
-              courseNo: course.courseNo,
-              questionCategoryId: course.questionCategoryId,
-              term: course.term,
-              name: course.name,
-              description: course.description ?? "",
-            }}
-            mode="edit"
-            categories={categories}
-            template={course.template}
+            classrooms={course.linkedClassrooms
+              .filter((classroom) => classroom.status === "ACTIVE")
+              .map(({ id, name }) => ({ id, name }))}
           />
-        </details>
-      </CourseDetailDisclosure>
+
+          <CourseDetailDisclosure
+            id="course-classrooms"
+            title="授课班级"
+            summary={`${course.linkedClassrooms.length} 个课程班级 · 按班级分别管理教学记录`}
+            revealOnHash={false}
+          >
+            <p className="text-muted-foreground text-sm">
+              在班级页面逐个创建班级、导入名单并管理已有班级。
+            </p>
+            <Link
+              href={`/teacher/courses/${course.id}/classrooms`}
+              className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+            >
+              查看和创建班级
+            </Link>
+          </CourseDetailDisclosure>
+          <CourseDetailDisclosure
+            id="course-basics"
+            title="课程信息与设置"
+            summary={`${course.courseNo} · ${course.template.name}`}
+          >
+            <div className="bg-card scroll-mt-20 rounded-xl border p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold">课程概览</h2>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    课程号 {course.courseNo} · 学期 {course.term}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
+                >
+                  {COURSE_STATUS_LABELS[course.status]}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <p className="text-muted-foreground text-xs">模板</p>
+                  <p className="mt-1 font-medium">
+                    {course.template.name}
+                    <span className="text-muted-foreground mt-1 block text-xs break-all">
+                      {course.template.code}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">版本</p>
+                  <p className="mt-1 font-medium">{course.template.version}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">创建时间</p>
+                  <p className="mt-1 font-medium">
+                    {course.createdAt.toLocaleString("zh-CN")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">更新时间</p>
+                  <p className="mt-1 font-medium">
+                    {course.updatedAt.toLocaleString("zh-CN")}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <details className="bg-card group rounded-xl border p-5">
+              <summary className="cursor-pointer rounded-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4">
+                编辑课程基础信息
+              </summary>
+              <p className="text-muted-foreground mt-1 mb-5 text-sm">
+                这里只修改课程号、学期、名称和描述，不影响班级关联。
+              </p>
+              <CourseForm
+                courseId={course.id}
+                defaultValues={{
+                  courseNo: course.courseNo,
+                  questionCategoryId: course.questionCategoryId,
+                  term: course.term,
+                  name: course.name,
+                  description: course.description ?? "",
+                }}
+                mode="edit"
+                categories={categories}
+                template={course.template}
+              />
+            </details>
+          </CourseDetailDisclosure>
+        </div>
+        <aside className="tc-workspace-support" aria-label="题目与题库工具">
+          <CourseSetupChecklist
+            courseId={course.id}
+            progress={setupProgress}
+            section="questions"
+          />
+        </aside>
+      </div>
     </section>
   );
 }

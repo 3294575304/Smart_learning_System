@@ -108,7 +108,7 @@ export default async function TeacherCoursesPage({
         )
       }
     >
-      <section className="mx-auto max-w-6xl space-y-5">
+      <section className="tc-course-page mx-auto w-full space-y-5">
         <header className="tt-phead">
           <div className="min-w-0">
             <h1 className="tt-h1">我的课程</h1>
