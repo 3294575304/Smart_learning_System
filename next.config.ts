@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@napi-rs/canvas"],
   distDir: process.env.NEXT_DIST_DIR?.trim() || ".next",
+  // Windows static generation can fail when Next.js starts one worker per CPU.
+  experimental: { cpus: 2 },
   outputFileTracingIncludes: {
     "/super-admin/development-logs": ["./CHANGELOG.md"],
   },
