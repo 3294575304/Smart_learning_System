@@ -691,6 +691,7 @@ async function main(): Promise<void> {
     assert.deepEqual(Object.keys(ownAnswer).sort(), [
       "assignmentQuestionId",
       "content",
+      "images",
       "sortOrder",
       "studentAnswer",
       "title",

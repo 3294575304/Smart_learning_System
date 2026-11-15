@@ -43,14 +43,14 @@ export async function ensureSuperAdminAccount(prisma: PrismaClient) {
       "SEED_SUPER_ADMIN_PASSWORD is required to create the super administrator; random passwords are no longer generated.",
     );
   }
-  const parsedCredentials = adminLoginSchema.safeParse({ email, password });
-  if (!parsedCredentials.success) {
+  const parsedPassword = adminLoginSchema.shape.password.safeParse(password);
+  if (!parsedPassword.success) {
     throw new Error(
       "SEED_SUPER_ADMIN_PASSWORD must be between 1 and 72 UTF-8 bytes.",
     );
   }
 
-  const passwordHash = await hash(parsedCredentials.data.password, 12);
+  const passwordHash = await hash(parsedPassword.data, 12);
   await prisma.user.create({
     data: {
       email,

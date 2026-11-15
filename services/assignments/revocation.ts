@@ -79,12 +79,12 @@ export function revokeAssignment(
           "已有成绩公布或台账关联，不能撤销作业",
         );
       const now = new Date();
-      // 撤销即删除：教师端不再需要这条作业，历史作业只用于归档。
-      // 采用软删除保留作答/审计快照以支持追溯，但所有教师端列表与详情
-      // 均按 deletedAt: null 过滤，因此撤销后立即从作业管理中消失。
+      // 撤销保留记录：作业转入历史分区（status=REVOKED），教师仍可查看并
+      // 通过 COPY_REVOKED 复制为草稿重发；不置 deletedAt，否则详情页 404，
+      // 历史列表与复制入口都会不可达。学生端按 status 拒绝作答并提示「已撤销」。
       await tx.assignment.update({
         where: { id: assignmentId },
-        data: { status: "REVOKED", deletedAt: now },
+        data: { status: "REVOKED" },
       });
       await tx.assignmentMakeupGrant.updateMany({
         where: { assignmentId, status: "ACTIVE" },
@@ -143,7 +143,6 @@ export function revokeAssignment(
           status: "REVOKED",
           reason: input.reason,
           revokedAt: now.toISOString(),
-          deletedAt: now.toISOString(),
         },
         context,
       });

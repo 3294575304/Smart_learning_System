@@ -169,7 +169,7 @@ export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   gradebook: "成绩台账",
   attendance: "出勤台账",
   "check-in": "课堂签到",
-  "quality-report": "教学质量分析",
+  "quality-report": "教学质量报告",
   profiles: "课程画像",
   "knowledge-graph": "知识图谱",
   "question-mapping": "题目知识点映射",
@@ -270,6 +270,7 @@ export function getStudentPageLabel(pathname: string): string | undefined {
   const detailRoutes: Array<[RegExp, string]> = [
     [/^\/student\/assignments\/[^/]+$/, "作业详情"],
     [/^\/student\/exams\/[^/]+\/report$/, "我的考试报告"],
+    [/^\/student\/exams\/[^/]+\/record$/, "考试记录"],
     [/^\/student\/surveys\/[^/]+$/, "问卷详情"],
     [/^\/student\/wrong-questions\/[^/]+$/, "错题详情"],
     [/^\/student\/question-favorites\/[^/]+$/, "收藏题目详情"],

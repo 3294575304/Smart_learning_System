@@ -10,6 +10,31 @@ import type { TeacherSubmissionAnswerView } from "../../services/assignments/typ
 const id = "cl00000000000000000000001",
   student = "cl00000000000000000000002",
   room = "cl00000000000000000000003";
+
+test("考试个人答卷返回保留本班成绩分页，拒绝其他场次地址", () => {
+  const examId = "cl00000000000000000000004";
+  const base = `/teacher/exams/${examId}/classes/${id}`;
+  assert.equal(
+    personalWorkReturn(
+      `/teacher/assignments/${id}/results?page=3&pageSize=10`,
+      id,
+      student,
+      room,
+      examId,
+    ).href,
+    `${base}/results?page=3&pageSize=10`,
+  );
+  assert.equal(
+    personalWorkReturn(
+      `/teacher/exams/${room}/classes/${id}/results`,
+      id,
+      student,
+      room,
+      examId,
+    ).href,
+    `${base}/submissions`,
+  );
+});
 const answer: TeacherSubmissionAnswerView = {
   id,
   assignmentQuestionId: id,

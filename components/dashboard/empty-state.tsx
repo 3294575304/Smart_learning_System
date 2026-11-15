@@ -17,10 +17,10 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div
-      className={`flex flex-col items-center justify-center rounded-xl border border-dashed border-sky-200 bg-gradient-to-br from-white to-sky-50/70 text-center ${compact ? "p-6" : "p-10"}`}
+      className={`bg-card flex min-w-0 flex-col items-center justify-center rounded-xl border border-dashed text-center ${compact ? "p-6" : "px-4 py-10 sm:px-10"}`}
     >
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-        <Icon className="h-5 w-5" />
+      <span className="bg-muted text-muted-foreground flex h-11 w-11 items-center justify-center rounded-lg">
+        <Icon aria-hidden="true" className="h-5 w-5" />
       </span>
       <h3 className="mt-3 font-medium">{title}</h3>
       <p className="text-muted-foreground mt-1 max-w-md text-sm leading-6">

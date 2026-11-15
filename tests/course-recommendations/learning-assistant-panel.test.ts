@@ -25,12 +25,20 @@ const router: AppRouterInstance = {
   replace() {},
   prefetch() {},
 };
-function render(props: React.ComponentProps<typeof LearningAssistantPanel>) {
+function render(
+  props: Omit<
+    React.ComponentProps<typeof LearningAssistantPanel>,
+    "initialAvailable"
+  >,
+) {
   return renderToStaticMarkup(
     React.createElement(
       AppRouterContext.Provider,
       { value: router },
-      React.createElement(LearningAssistantPanel, props),
+      React.createElement(LearningAssistantPanel, {
+        ...props,
+        initialAvailable: true,
+      }),
     ),
   );
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { safeStudentWorkReturn } from "./student-query";
 import { teacherSubmissionListQuerySchema } from "./schemas";
+import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
 
 export const personalWorkQuerySchema = z.object({
   filter: z
@@ -15,10 +16,11 @@ export function personalWorkHref(
   submissionId: string,
   returnTo?: string,
   filter = "ALL",
+  examId?: string | null,
 ) {
   const query = new URLSearchParams({ filter });
   if (returnTo) query.set("returnTo", returnTo);
-  return `/teacher/assignments/${assignmentId}/submissions/${submissionId}?${query}`;
+  return `${teacherAssessmentHref(assignmentId, examId)}/submissions/${submissionId}?${query}`;
 }
 
 /** Never replace a missing student submission with the class-wide assignment page. */
@@ -39,22 +41,30 @@ export function personalWorkReturn(
   assignmentId: string,
   studentId: string,
   classroomId: string,
+  examId?: string | null,
 ) {
-  const fallback = `/teacher/assignments/${assignmentId}/submissions`;
-  const studentReturn = safeStudentWorkReturn(value, studentId, classroomId);
+  const base = teacherAssessmentHref(assignmentId, examId);
+  const fallback = `${base}/submissions`;
+  const studentReturn = examId
+    ? null
+    : safeStudentWorkReturn(value, studentId, classroomId);
+  const fallbackLabel = examId ? "返回答卷列表" : "返回提交列表";
   if (studentReturn) return { href: studentReturn, label: "返回该学生的作业" };
-  if (
-    !value ||
-    value.length > 8000 ||
-    !value.startsWith("/teacher/assignments/")
-  )
-    return { href: fallback, label: "返回提交列表" };
+  if (!value || value.length > 8000 || !value.startsWith("/teacher/"))
+    return { href: fallback, label: fallbackLabel };
   try {
     const url = new URL(value, "http://localhost");
     if (url.origin !== "http://localhost") throw new Error("Invalid origin");
+    const legacyBase = teacherAssessmentHref(assignmentId);
     const results =
-      url.pathname === `/teacher/assignments/${assignmentId}/results`;
-    if (!results && url.pathname !== fallback) throw new Error("Invalid path");
+      url.pathname === `${base}/results` ||
+      (examId && url.pathname === `${legacyBase}/results`);
+    if (
+      !results &&
+      url.pathname !== fallback &&
+      !(examId && url.pathname === `${legacyBase}/submissions`)
+    )
+      throw new Error("Invalid path");
     const input = Object.fromEntries(url.searchParams);
     const schema = results
       ? z
@@ -74,10 +84,10 @@ export function personalWorkReturn(
       ? url.hash
       : "";
     return {
-      href: `${url.pathname}?${params}${hash}`,
-      label: results ? "返回班级成绩" : "返回提交列表",
+      href: `${results ? `${base}/results` : fallback}?${params}${hash}`,
+      label: results ? "返回班级成绩" : fallbackLabel,
     };
   } catch {
-    return { href: fallback, label: "返回提交列表" };
+    return { href: fallback, label: fallbackLabel };
   }
 }

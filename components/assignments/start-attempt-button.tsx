@@ -7,6 +7,7 @@ import {
 
 import { useRef, useState } from "react";
 
+import { notifyStudentExamStarted } from "@/components/student-assistant/use-availability";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 
 interface Props {
@@ -35,20 +36,21 @@ export function StartAttemptButton({
     requestId.current ??= crypto.randomUUID();
     setPending(true);
     setError(null);
-    const response = await requestAssignmentApi<{ id: string }>(
-      `/api/student/assignments/${assignmentId}/attempts`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idempotencyKey: requestId.current }),
-      },
-    );
+    const response = await requestAssignmentApi<{
+      id: string;
+      examSessionId: string | null;
+    }>(`/api/student/assignments/${assignmentId}/attempts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idempotencyKey: requestId.current }),
+    });
     if (!response.success) {
       setError(response.error);
       setPending(false);
       inFlight.current = false;
       return;
     }
+    if (response.data.examSessionId) notifyStudentExamStarted();
     window.location.assign(
       studentTaskHref(`/student/submissions/${response.data.id}/answer`, scope),
     );

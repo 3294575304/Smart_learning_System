@@ -1,27 +1,26 @@
 import { PageIndex } from "@/components/dashboard/page-index";
+import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
 
 interface ResultsPaginationProps {
   assignmentId: string;
+  examId?: string | null;
   page: number;
   pageSize: number;
   total: number;
   totalPages: number;
 }
 
-function pageHref(
-  assignmentId: string,
-  page: number,
-  pageSize: number,
-): string {
+function pageHref(base: string, page: number, pageSize: number): string {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
   });
-  return `/teacher/assignments/${assignmentId}/results?${params.toString()}`;
+  return `${base}/results?${params.toString()}`;
 }
 
 export function ResultsPagination({
   assignmentId,
+  examId,
   page,
   pageSize,
   total,
@@ -34,7 +33,11 @@ export function ResultsPagination({
       <PageIndex
         ariaLabel="学生成绩分页"
         hrefForPage={(targetPage) =>
-          pageHref(assignmentId, targetPage, pageSize)
+          pageHref(
+            teacherAssessmentHref(assignmentId, examId),
+            targetPage,
+            pageSize,
+          )
         }
         page={page}
         summary={`共 ${total} 名学生，第 ${page} / ${totalPages} 页`}

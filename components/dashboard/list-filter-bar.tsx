@@ -77,17 +77,17 @@ export function ListFilterBar({
           role="search"
         >
           <label className="block space-y-1" htmlFor={searchId}>
-            <span className="block text-xs font-medium text-slate-600">
+            <span className="text-muted-foreground block text-xs font-medium">
               {searchLabel}
             </span>
             <span className="relative block">
               <Search
                 aria-hidden="true"
-                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2"
               />
               <input
                 autoComplete="off"
-                className="w-full rounded-lg border bg-white py-2 ps-9 pe-9 text-sm transition-colors focus-visible:border-sky-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 [&::-webkit-search-cancel-button]:hidden"
+                className="bg-card focus-visible:border-brand focus-visible:outline-brand w-full rounded-lg border py-2 ps-9 pe-9 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-search-cancel-button]:hidden"
                 id={searchId}
                 maxLength={80}
                 onChange={(event) => onKeywordChange(event.target.value)}
@@ -99,7 +99,7 @@ export function ListFilterBar({
               {keyword.length > 0 ? (
                 <button
                   aria-label="清除搜索关键词"
-                  className="absolute end-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-sky-600"
+                  className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-brand absolute end-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 transition-colors focus-visible:outline-2"
                   onClick={() => onKeywordChange("")}
                   type="button"
                 >
@@ -118,11 +118,11 @@ export function ListFilterBar({
               htmlFor={selectId}
               key={filter.key}
             >
-              <span className="block text-xs font-medium text-slate-600">
+              <span className="text-muted-foreground block text-xs font-medium">
                 {filter.label}
               </span>
               <select
-                className="w-full rounded-lg border bg-white px-3 py-2 text-sm transition-colors focus-visible:border-sky-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                className="bg-card focus-visible:border-brand focus-visible:outline-brand w-full rounded-lg border px-3 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
                 id={selectId}
                 onChange={(event) => filter.onChange(event.target.value)}
                 value={filter.value}
@@ -139,7 +139,7 @@ export function ListFilterBar({
         })}
 
         <button
-          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent sm:col-span-2 lg:col-span-1 lg:shrink-0"
+          className="text-foreground hover:bg-muted focus-visible:outline-brand inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent sm:col-span-2 lg:col-span-1 lg:shrink-0"
           disabled={!isFiltered}
           onClick={onReset}
           type="button"
@@ -149,10 +149,10 @@ export function ListFilterBar({
         </button>
       </div>
 
-      <p aria-live="polite" className="text-xs leading-5 text-slate-500">
+      <p aria-live="polite" className="text-muted-foreground text-xs leading-5">
         {summary}
       </p>
-      <p className="text-xs leading-5 text-slate-400">
+      <p className="text-muted-foreground text-xs leading-5">
         可搜索范围：{searchScope}
       </p>
     </section>

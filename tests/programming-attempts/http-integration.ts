@@ -439,17 +439,18 @@ async function main(): Promise<void> {
         sessionCookie(student.id),
         sessionCookie(outsider.id),
       ]);
+    // 课程分类 ID 现要求 cuid 或 qc_<24hex>，这里按新格式生成，且 where/create 复用同一值。
+    const categoryId = `qc_${randomBytes(12).toString("hex")}`;
     const course = await prisma.course.create({
       data: {
         questionCategory: {
           connectOrCreate: {
-            where: {
-              id: "test-category-automated-test-category",
-            },
+            where: { id: categoryId },
             create: {
-              id: "test-category-automated-test-category",
-              name: "自动化测试课程分类",
-              normalizedName: "automated-test-category",
+              id: categoryId,
+              name: `自动化测试课程分类-${suffix}`,
+              normalizedName: `automated-test-category-${suffix}`,
+              schoolId: teacher.schoolId,
             },
           },
         },

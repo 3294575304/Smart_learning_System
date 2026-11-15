@@ -15,6 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ScrollableActionGrid } from "@/components/ui/scrollable-action-grid";
 import { withClassroomQuery } from "@/lib/course-classroom";
 
@@ -87,7 +88,7 @@ const WORKSPACE_GROUPS = [
     title: "评价分析",
     items: [
       {
-        title: "课程分析中心",
+        title: "学情分析",
         description: "汇总教学进度、学情证据与结课状态",
         path: "analytics",
         icon: BarChart3,
@@ -99,7 +100,7 @@ const WORKSPACE_GROUPS = [
         icon: MessageSquareText,
       },
       {
-        title: "教学质量分析",
+        title: "教学质量报告",
         description: "审核分析报告，下载 DOCX 与成绩工作簿",
         path: "quality-report",
         icon: FileChartColumn,
@@ -111,10 +112,13 @@ const WORKSPACE_GROUPS = [
 export function CourseWorkspaceNavigation({
   courseId,
   classrooms,
+  initialClassroomId,
 }: {
   courseId: string;
   classrooms: Array<{ id: string; name: string }>;
+  initialClassroomId?: string;
 }) {
+  const query = useSearchParams();
   const [activeGroup, setActiveGroup] = useRememberedSelection<string>(
     "workspace-group",
     "教学管理",
@@ -125,18 +129,24 @@ export function CourseWorkspaceNavigation({
     classrooms[0]?.id ?? "",
     classrooms.map((classroom) => classroom.id),
   );
+  const requestedClassroomId = query?.get("classroomId") ?? initialClassroomId;
   const classroomId = classrooms.some(
-    (item) => item.id === rememberedClassroomId,
+    (item) => item.id === requestedClassroomId,
   )
-    ? rememberedClassroomId
-    : (classrooms[0]?.id ?? "");
+    ? (requestedClassroomId ?? "")
+    : classrooms.some((item) => item.id === rememberedClassroomId)
+      ? rememberedClassroomId
+      : (classrooms[0]?.id ?? "");
   return (
-    <nav aria-label="课程功能" className="bg-card rounded-xl border p-5 sm:p-6">
+    <nav
+      aria-label="课程功能"
+      className="workspace-panel bg-card rounded-xl border p-4 sm:p-6"
+    >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-3">
         <div
           role="tablist"
           aria-label="课程管理分类"
-          className="flex flex-wrap gap-2"
+          className="flex min-w-0 flex-wrap gap-2"
         >
           {WORKSPACE_GROUPS.map((group) => (
             <button
@@ -171,20 +181,25 @@ export function CourseWorkspaceNavigation({
                   ?.focus();
               }}
               onClick={() => setActiveGroup(group.title)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${activeGroup === group.title ? "bg-sky-700 text-white" : "bg-sky-50 text-slate-600 hover:bg-sky-100"}`}
+              className={`min-h-11 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${activeGroup === group.title ? "bg-brand text-white" : "bg-muted text-muted-foreground hover:bg-brand-soft"}`}
             >
               {group.title}
             </button>
           ))}
         </div>
         <label className="ml-auto flex items-center gap-2 text-sm text-slate-600">
-          <span>班级</span>
+          <span className="shrink-0">当前教学班</span>
           <select
             aria-label="选择课程关联班级"
             className="max-w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-slate-900 focus-visible:outline-sky-600 disabled:text-slate-400"
             value={classroomId}
             disabled={classrooms.length === 0}
-            onChange={(event) => setClassroomId(event.target.value)}
+            onChange={(event) => {
+              setClassroomId(event.target.value);
+              const url = new URL(window.location.href);
+              url.searchParams.set("classroomId", event.target.value);
+              window.history.replaceState(null, "", url);
+            }}
           >
             {classrooms.length === 0 && <option value="">暂无课程班级</option>}
             {classrooms.map((classroom) => (
@@ -227,7 +242,7 @@ export function CourseWorkspaceNavigation({
                           classroomId,
                         )
                 }
-                className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 active:bg-sky-200"
+                className="group bg-card hover:bg-muted hover:border-brand focus-visible:outline-brand flex min-w-0 items-center gap-3 rounded-lg border p-3 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 transition-colors group-hover:border-sky-100 group-hover:text-blue-600">
                   <Icon aria-hidden="true" className="size-5" />
@@ -238,7 +253,7 @@ export function CourseWorkspaceNavigation({
                   </h3>
                   <p
                     title={description}
-                    className="mt-1 truncate text-xs leading-5 text-slate-500"
+                    className="text-muted-foreground mt-1 truncate text-xs leading-5"
                   >
                     {group.title === "课堂活动" && !classroomId
                       ? "请先创建课程班级"

@@ -1,6 +1,9 @@
-import Link from "next/link";
+import { examClassroomHref } from "@/services/exams/classroom-navigation";
 import { ArrowRight } from "lucide-react";
-import type { getTeacherExamDetails } from "@/services/exams/analysis";
+import type {
+  getTeacherExamDetails,
+  getTeacherExamHeader,
+} from "@/services/exams/analysis";
 
 type ExamDetails = Awaited<ReturnType<typeof getTeacherExamDetails>>;
 
@@ -11,7 +14,10 @@ export function ExamWorkspaceSummary({
   details,
   assignmentId,
 }: {
-  details: ExamDetails;
+  details: {
+    exam: Awaited<ReturnType<typeof getTeacherExamHeader>>;
+    analysis?: ExamDetails["analysis"];
+  };
   assignmentId?: string;
 }) {
   const { exam, analysis } = details;
@@ -54,8 +60,9 @@ export function ExamWorkspaceSummary({
                         : undefined
                     }
                   >
-                    <Link
-                      href={`/teacher/assignments/${assignment.id}?source=exam&examId=${exam.id}`}
+                    {/* These entries must also work when App Router navigation is stalled. */}
+                    <a
+                      href={examClassroomHref(exam.id, assignment.id)}
                       aria-current={
                         assignment.id === assignmentId ? "page" : undefined
                       }
@@ -70,14 +77,14 @@ export function ExamWorkspaceSummary({
                           className="size-4 shrink-0"
                         />
                       )}
-                    </Link>
+                    </a>
                     {!assignmentId && (
-                      <Link
+                      <a
                         className="mt-1 inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-medium text-sky-800 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-700"
                         href={`/teacher/exams/${exam.id}/monitor?classroomId=${assignment.classroomId}`}
                       >
                         监考与成绩公布
-                      </Link>
+                      </a>
                     )}
                   </div>
                 ))}
@@ -88,7 +95,7 @@ export function ExamWorkspaceSummary({
           <p className="mt-3 text-sm text-slate-600">暂无可查看的教学班。</p>
         )}
       </section>
-      {exam.cancelledAt ? (
+      {assignmentId ? null : exam.cancelledAt ? (
         <p className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
           考试已取消，暂无参考率或题目分析。
         </p>

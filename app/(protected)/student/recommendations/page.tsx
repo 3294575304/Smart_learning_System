@@ -13,6 +13,7 @@ import { SelfReflectionPanel } from "@/components/recommendations/self-reflectio
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { listStudentClassrooms } from "@/services/classrooms/service";
 import { listStudentPracticeCourses } from "@/services/course-recommendations/service";
+import { hasActiveExamAttempt } from "@/services/exams/assistant-policy";
 import { listSelfReflections } from "@/services/self-reflections/service";
 
 interface Props {
@@ -76,10 +77,11 @@ export default async function StudentRecommendationsPage({
     keyword: firstQueryValue(query.keyword),
     status: firstQueryValue(query.status),
   });
-  const [result, classrooms, practiceCourses] = await Promise.all([
+  const [result, classrooms, practiceCourses, examActive] = await Promise.all([
     activeView === "recommended" ? listPracticeSets(student, listQuery) : null,
     activeView === "generate" ? listStudentClassrooms(student.id) : [],
     activeView !== "recommended" ? listStudentPracticeCourses(student.id) : [],
+    activeView === "assistant" ? hasActiveExamAttempt(student.id) : false,
   ]);
   if (
     activeView !== "recommended" &&
@@ -99,7 +101,7 @@ export default async function StudentRecommendationsPage({
     ) ?? practiceCourses[0];
   const reflectionCourse = reflectionOption?.courseId ?? null;
   const reflections =
-    activeView === "assistant" && reflectionCourse
+    activeView === "assistant" && !examActive && reflectionCourse
       ? await listSelfReflections(student.id, reflectionCourse)
       : [];
   const activeClassrooms = classrooms
@@ -125,6 +127,7 @@ export default async function StudentRecommendationsPage({
           activeView === "assistant" ? (
             <LearningAssistantPanel
               key={`${initialCourseId}:${initialConceptId}`}
+              initialAvailable={!examActive}
               courses={practiceCourses}
               initialCourseId={initialCourseId}
               initialConceptId={initialConceptId}

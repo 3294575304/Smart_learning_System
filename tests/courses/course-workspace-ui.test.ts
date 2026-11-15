@@ -4,7 +4,10 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CourseWorkspaceNavigation } from "../../components/courses/course-workspace-navigation";
-import { CourseSetupChecklist } from "../../components/courses/course-setup-checklist";
+import {
+  CourseQuestionTools,
+  CourseSetupChecklist,
+} from "../../components/courses/course-setup-checklist";
 import { CourseDetailDisclosure } from "../../components/courses/course-detail-disclosure";
 import {
   buildCourseSetupProgress,
@@ -37,11 +40,16 @@ function renderSetup(overrides: Partial<CourseSetupInput> = {}) {
     },
     ...overrides,
   });
-  return renderToStaticMarkup(
-    React.createElement(CourseSetupChecklist, {
-      courseId: "course-a",
-      progress,
-    }),
+  return (
+    renderToStaticMarkup(
+      React.createElement(CourseSetupChecklist, {
+        courseId: "course-a",
+        progress,
+      }),
+    ) +
+    renderToStaticMarkup(
+      React.createElement(CourseQuestionTools, { courseId: "course-a" }),
+    )
   );
 }
 
@@ -110,7 +118,7 @@ test("班级选择器仅显示关联班级，三个分类的入口都携带默�
   );
 });
 
-test("课程建设独立展示，大纲只有一个入口且课程功能均有对应页面", async () => {
+test("课程建设集中在原清单，三个日常分类不重复提供建设入口", async () => {
   const html = renderToStaticMarkup(
     React.createElement(CourseWorkspaceNavigation, {
       courseId: "course-a",
@@ -118,6 +126,7 @@ test("课程建设独立展示，大纲只有一个入口且课程功能均有�
     }),
   );
   assert.match(html, /aria-selected="true"[^>]*>教学管理/u);
+  assert.equal((html.match(/role="tab"/g) ?? []).length, 3);
   assert.doesNotMatch(html, /课程建设/u);
   assert.match(html, /id="course-workspace-评价分析"[^>]*hidden/u);
   const construction = renderToStaticMarkup(
@@ -136,31 +145,42 @@ test("课程建设独立展示，大纲只有一个入口且课程功能均有�
   );
   assert.match(construction, /课程建设/u);
   assert.match(construction, /课程已归档/u);
-  const paths = [
-    ...new Set(
-      [
-        ...(html + construction).matchAll(
-          /href="\/teacher\/courses\/course-a\/([a-z-]+)(?:#[^"]*)?"/g,
-        ),
-      ].map((match) => match[1]),
+  const questionTools = renderToStaticMarkup(
+    React.createElement(CourseQuestionTools, { courseId: "course-a" }),
+  );
+  const entryPaths = [
+    ...(html + construction + questionTools).matchAll(
+      /href="\/teacher\/courses\/course-a\/([a-z-]+)(?:#[^"]*)?"/g,
     ),
-  ];
+  ].map((match) => match[1]);
+  const paths = [...new Set(entryPaths)];
   assert.equal(
     (html.match(/href="\/teacher\/courses\/course-a\/classrooms"/g) ?? [])
       .length,
     5,
   );
-  assert.equal(paths.filter((path) => path === "syllabus").length, 1);
+  for (const path of [
+    "syllabus",
+    "knowledge-graph",
+    "assessment-scheme",
+    "question-mapping",
+  ]) {
+    assert.equal(
+      entryPaths.filter((entryPath) => entryPath === path).length,
+      1,
+      `${path}应只有一个入口`,
+    );
+  }
   assert.doesNotMatch(
     construction,
     /课程信息与模板|教学进度|核对学生名单与认领/u,
   );
   assert.match(
-    construction,
+    questionTools,
     /href="\/teacher\/questions\?courseId=course-a"[\s\S]*题库管理/u,
   );
   assert.ok(
-    construction.indexOf("题目关联") < construction.indexOf("题库管理"),
+    questionTools.indexOf("题目关联") < questionTools.indexOf("题库管理"),
   );
   assert.match(html, /请先创建课程班级/u);
   assert.doesNotMatch(html, /href="\/teacher\/assignments\/new"/u);
@@ -203,8 +223,8 @@ test("大纲上传与审核共用卡片状态，下一步保留文字提示", ()
   assert.match(html, /aria-valuemax="4"/u);
   assert.match(html, /role="progressbar"/u);
   const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(hrefs.length, 5);
-  assert.equal(new Set(hrefs).size, 5);
+  assert.equal(hrefs.length, 3);
+  assert.equal(new Set(hrefs).size, 3);
   assert.match(
     html,
     /href="\/teacher\/courses\/course-a\/syllabus"[^>]*>[\s\S]*?教学大纲[\s\S]*?未完成/u,
@@ -214,7 +234,10 @@ test("大纲上传与审核共用卡片状态，下一步保留文字提示", ()
     /href="\/teacher\/courses\/course-a\/syllabus"[^>]*>[\s\S]*?查看诊断并重试/u,
   );
   assert.doesNotMatch(html, /展开详情|收起详情/u);
-  assert.match(html, /href="\/teacher\/courses\/course-a\/question-mapping"/u);
+  assert.doesNotMatch(
+    html,
+    /href="\/teacher\/courses\/course-a\/question-mapping"/u,
+  );
   assert.doesNotMatch(
     html,
     /href="\/teacher\/courses\/course-a\/teaching-progress"/u,
@@ -241,12 +264,12 @@ test("课程准备进度随完成情况变化，四项始终保留直接入口",
     [partial, 1],
   ] as const) {
     assert.match(html, new RegExp(`已完成 ${count} \\/ 4 项基础准备`, "u"));
-    assert.match(html, /class="[^"]*bg-red-200" role="progressbar"/u);
-    assert.match(html, /bg-red-600/u);
+    assert.match(html, /aria-valuenow="[01]"/u);
+    assert.match(html, /bg-brand/u);
     assert.match(html, /<details id="course-construction-details" open=""/u);
   }
   assert.match(complete, /已完成 4 \/ 4 项基础准备/u);
-  assert.doesNotMatch(complete, /role="progressbar"|bg-red-600/u);
+  assert.doesNotMatch(complete, /role="progressbar"/u);
   assert.match(complete, /<details id="course-construction-details" class=/u);
   for (const [html, detailsCount] of [
     [empty, 1],
@@ -260,7 +283,7 @@ test("课程准备进度随完成情况变化，四项始终保留直接入口",
   assert.doesNotMatch(empty, /id="course-completed-setup-details"/u);
   assert.match(
     partial,
-    /<details id="course-completed-setup-details" class="group\/completed"/u,
+    /<details id="course-completed-setup-details" class="group\/completed\s/u,
   );
   assert.match(partial, /已完成 1 项/u);
   const completedGroup = partial.indexOf('id="course-completed-setup-details"');
@@ -274,7 +297,7 @@ test("课程准备进度随完成情况变化，四项始终保留直接入口",
   );
   assert.match(
     complete,
-    /<details id="course-completed-setup-details" class="group\/completed"/u,
+    /<details id="course-completed-setup-details" open="" class="group\/completed\s/u,
   );
   assert.match(complete, /已完成 4 项/u);
   assert.deepEqual(constructionEntries(empty), [
@@ -386,13 +409,21 @@ test("授课班级卡片默认收起", () => {
   assert.match(html, /展开管理/u);
 });
 
-test("精简建设入口后仍保留课程信息、名单和教学进度页面", async () => {
+test("建设清单位于日常功能上方，课程信息、名单和教学进度仍可达", async () => {
   const courseDetail = await readFile(
     "app/(protected)/teacher/courses/[courseId]/page.tsx",
     "utf8",
   );
   assert.match(courseDetail, /id="course-basics"/u);
   assert.match(courseDetail, /<CourseForm/u);
+  assert.ok(
+    courseDetail.indexOf("<CourseSetupChecklist") <
+      courseDetail.indexOf("<CourseWorkspaceNavigation"),
+  );
+  assert.ok(
+    courseDetail.indexOf("<CourseWorkspaceNavigation") <
+      courseDetail.indexOf("<CourseQuestionTools"),
+  );
   assert.match(courseDetail, /id="course-classrooms"/u);
   assert.ok(
     courseDetail.includes("href={`/teacher/courses/${course.id}/classrooms`}"),

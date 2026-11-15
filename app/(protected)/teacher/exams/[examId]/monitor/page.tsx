@@ -1,3 +1,4 @@
+import { examClassroomHref } from "@/services/exams/classroom-navigation";
 import Link from "next/link";
 import { Role } from "@prisma/client";
 import { notFound } from "next/navigation";
@@ -47,13 +48,18 @@ export default async function ExamMonitorPage({
           </div>
           <Link
             className="inline-flex min-h-10 items-center rounded-lg border bg-white px-3 text-sm font-medium text-sky-800 hover:bg-sky-50"
-            href={`/teacher/assignments/${initial.assignmentId}/submissions?source=exam&examId=${examId}`}
+            href={`${examClassroomHref(examId, initial.assignmentId)}/submissions`}
           >
             答卷与批改
           </Link>
         </header>
-        <ExamMonitorPanel initial={initial} endpoint={endpoint} />
+        <ExamMonitorPanel
+          examId={examId}
+          initial={initial}
+          endpoint={endpoint}
+        />
         <ExamResultManagement
+          examId={examId}
           assignmentId={initial.assignmentId}
           endpoint={endpoint}
           data={management}

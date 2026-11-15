@@ -395,11 +395,38 @@ async function main() {
       redirect: "manual",
     });
     assert.equal(workspace.status, 200);
-    assert.ok(
-      (await workspace.text()).includes(
-        `/teacher/assignments/${assignment.id}?source=exam`,
-      ),
+    const classroomPath = `/teacher/exams/${examId}/classes/${assignment.id}`;
+    assert.ok((await workspace.text()).includes(classroomPath));
+    const teacherPage = (path: string, cookie = teacherCookie) =>
+      fetch(`${base}${path}`, { headers: { cookie } });
+    const paper = await (await teacherPage(classroomPath)).text();
+    assert.ok(paper.includes(`${classroomPath}/submissions`));
+    assert.ok(paper.includes(`${classroomPath}/results`));
+    assert.match(paper, /班级试卷|查看试卷/);
+    assert.doesNotMatch(paper, /返回作业管理|作业内容/);
+    const legacy = await teacherPage(
+      `/teacher/assignments/${assignment.id}/submissions?pageSize=10`,
     );
+    const legacyUrl = new URL(legacy.url);
+    if (legacyUrl.pathname === `${classroomPath}/submissions`) {
+      assert.equal(legacyUrl.searchParams.get("pageSize"), "10");
+    } else {
+      assert.ok(
+        (await legacy.text()).includes(
+          `${classroomPath}/submissions?pageSize=10`,
+        ),
+      );
+    }
+    for (const path of [
+      classroomPath,
+      classroomPath.replace(examId, assignment.id),
+    ]) {
+      const denied = await teacherPage(
+        path,
+        path === classroomPath ? otherCookie : teacherCookie,
+      );
+      assert.match(await denied.text(), /资源不存在/);
+    }
     const startedAt = new Date(Date.now() - 1000);
     await prisma.examSession.update({
       where: { id: examId },
@@ -553,6 +580,22 @@ async function main() {
       data: { scheduledAt: cutoff },
     });
     assert.equal(await publishDueExamResults(), 1);
+    const submissions = await (
+      await teacherPage(`${classroomPath}/submissions`)
+    ).text();
+    const personalPath = `${classroomPath}/submissions/${attempt.id}`;
+    assert.ok(submissions.includes(personalPath));
+    const results = await (
+      await teacherPage(`${classroomPath}/results`)
+    ).text();
+    assert.ok(results.includes(personalPath));
+    const personal = await (
+      await teacherPage(
+        `${personalPath}?returnTo=${encodeURIComponent(`${classroomPath}/results?page=1&pageSize=10`)}`,
+      )
+    ).text();
+    assert.match(personal, /个人答卷详情/);
+    assert.ok(personal.includes(`${classroomPath}/results?page=1`));
     assert.equal(await publishDueExamResults(), 0);
     assert.match(
       await (await studentResult()).text(),

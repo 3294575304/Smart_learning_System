@@ -3,11 +3,16 @@ import { CourseStatus, Role } from "@prisma/client";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
-import { CourseSetupChecklist } from "@/components/courses/course-setup-checklist";
+import {
+  CourseQuestionTools,
+  CourseSetupChecklist,
+} from "@/components/courses/course-setup-checklist";
 import { CourseWorkspaceNavigation } from "@/components/courses/course-workspace-navigation";
 import { CourseForm } from "@/components/courses/course-form";
 import { CourseDetailDisclosure } from "@/components/courses/course-detail-disclosure";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { PageContainer } from "@/components/ui/workspace";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { ResourceNotFoundError } from "@/services/auth/authorization";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
@@ -19,6 +24,7 @@ import { getTeacherCourseSetupProgress } from "@/services/courses/setup-service"
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
@@ -27,13 +33,16 @@ const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
   ARCHIVED: "归档",
 };
 
-const COURSE_STATUS_STYLES: Record<CourseStatus, string> = {
-  DRAFT: "bg-sky-100/70 text-gray-700",
-  ACTIVE: "bg-emerald-50 text-emerald-700",
-  ARCHIVED: "bg-sky-100/70 text-slate-600",
+const COURSE_STATUS_TONES: Record<CourseStatus, StatusTone> = {
+  DRAFT: "neutral",
+  ACTIVE: "success",
+  ARCHIVED: "neutral",
 };
 
-export default async function TeacherCourseDetailPage({ params }: PageProps) {
+export default async function TeacherCourseDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
   const teacher = await requirePageRole(Role.TEACHER);
   const { courseId } = await params;
   const parsedId = courseIdSchema.safeParse(courseId);
@@ -57,46 +66,63 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
     throw error;
   }
 
+  const query = await searchParams;
+  const requestedClassroomId = query.classroomId;
+  if (
+    requestedClassroomId !== undefined &&
+    (typeof requestedClassroomId !== "string" ||
+      !course.linkedClassrooms.some(
+        (item) => item.id === requestedClassroomId && item.status === "ACTIVE",
+      ))
+  )
+    notFound();
   return (
-    <section className="space-y-6">
-      <PageHeader
-        actions={
-          <TeacherBackLink href="/teacher/courses">
-            返回课程列表
-          </TeacherBackLink>
-        }
-        description={`${course.courseNo} · ${course.term}`}
-        title={course.name}
-      />
+    <PageContainer density="compact" className="space-y-5">
+      <div className="space-y-3">
+        <PageHeader
+          actions={
+            <TeacherBackLink href="/teacher/courses">
+              返回课程列表
+            </TeacherBackLink>
+          }
+          description={`${course.courseNo} · ${course.term}`}
+          title={course.name}
+        />
 
-      <CourseSetupChecklist courseId={course.id} progress={setupProgress} />
-
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-1 text-sm text-slate-600">
-        <span
-          className={`rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
-        >
-          {COURSE_STATUS_LABELS[course.status]}
-        </span>
-        <span>
-          开课班级{" "}
-          <strong className="text-slate-900">
-            {course.activeClassroomCount}
-          </strong>
-        </span>
-        <span>
-          在读学生（去重）{" "}
-          <strong className="text-slate-900">
-            {setupProgress.activeStudentCount}
-          </strong>
-        </span>
-        <span>{course.term}</span>
+        <div className="text-muted-foreground flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <StatusBadge tone={COURSE_STATUS_TONES[course.status]}>
+            {COURSE_STATUS_LABELS[course.status]}
+          </StatusBadge>
+          <span>
+            开课班级{" "}
+            <strong className="text-foreground font-semibold tabular-nums">
+              {course.activeClassroomCount}
+            </strong>
+          </span>
+          <span>
+            在读学生（去重）{" "}
+            <strong className="text-foreground font-semibold tabular-nums">
+              {setupProgress.activeStudentCount}
+            </strong>
+          </span>
+        </div>
       </div>
-      <CourseWorkspaceNavigation
-        courseId={course.id}
-        classrooms={course.linkedClassrooms
-          .filter((classroom) => classroom.status === "ACTIVE")
-          .map(({ id, name }) => ({ id, name }))}
-      />
+      <CourseSetupChecklist courseId={course.id} progress={setupProgress} />
+      <div className="space-y-4">
+        <CourseWorkspaceNavigation
+          key={course.id}
+          courseId={course.id}
+          initialClassroomId={
+            typeof requestedClassroomId === "string"
+              ? requestedClassroomId
+              : undefined
+          }
+          classrooms={course.linkedClassrooms
+            .filter((classroom) => classroom.status === "ACTIVE")
+            .map(({ id, name }) => ({ id, name }))}
+        />
+        <CourseQuestionTools courseId={course.id} />
+      </div>
       <CourseDetailDisclosure
         id="course-classrooms"
         title="授课班级"
@@ -126,11 +152,9 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
                 课程号 {course.courseNo} · 学期 {course.term}
               </p>
             </div>
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs ${COURSE_STATUS_STYLES[course.status]}`}
-            >
+            <StatusBadge tone={COURSE_STATUS_TONES[course.status]}>
               {COURSE_STATUS_LABELS[course.status]}
-            </span>
+            </StatusBadge>
           </div>
           <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <div>
@@ -183,6 +207,6 @@ export default async function TeacherCourseDetailPage({ params }: PageProps) {
           />
         </details>
       </CourseDetailDisclosure>
-    </section>
+    </PageContainer>
   );
 }

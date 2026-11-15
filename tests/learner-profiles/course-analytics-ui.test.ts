@@ -158,12 +158,12 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
   assert.match(view, /data\.overview\.completedSurveyCount/u);
   assert.match(view, /data\.overview\.surveyResponseCount/u);
   assert.match(view, /课程质量报告/u);
-  assert.match(navigation, /title: "课程分析中心"/u);
+  assert.match(navigation, /title: "学情分析"/u);
   assert.match(navigation, /path: "analytics"/u);
   assert.match(navigation, /title: "结课问卷"[\s\S]*?path: "surveys"/u);
   assert.match(
     navigation,
-    /title: "教学质量分析"[\s\S]*?path: "quality-report"/u,
+    /title: "教学质量报告"[\s\S]*?path: "quality-report"/u,
   );
   assert.match(
     navigation,
