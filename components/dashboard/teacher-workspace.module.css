@@ -49,15 +49,15 @@
 }
 
 .shortcut:hover {
-  border-color: var(--tt-brand);
-  background: var(--tt-brand-soft);
+  border-color: var(--tt-line);
+  background: var(--card);
   box-shadow: none;
 }
 
-/* 快捷入口沿用同一组品牌色，提醒与错误仍由业务状态区分。 */
+/* 所有快捷入口使用一致的图标底色，交互强调交给焦点环与箭头。 */
 .shortcutIcon {
   background: var(--surface);
-  color: var(--tt-brand-ink);
+  color: #496b50;
   box-shadow: none;
   --color-sky-50: var(--tt-brand-soft);
   --color-sky-100: var(--tt-brand-soft);

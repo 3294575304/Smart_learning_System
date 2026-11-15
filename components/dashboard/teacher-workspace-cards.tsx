@@ -89,45 +89,45 @@ export function TeacherWorkspaceCards({
   const quickLinks = [
     {
       label: "作业管理",
+      accent: { backgroundColor: "#e8f2fb", color: "#2c648b" },
       description: "布置、批改与公布成绩",
       href: assignmentsHref,
       icon: ClipboardList,
-      accent: "bg-sky-50 text-sky-700 ring-sky-100",
     },
     {
       label: "班级管理",
+      accent: { backgroundColor: "#f1ebfb", color: "#7253a8" },
       description: "管理班级、成员与邀请码",
       href: "/teacher/classrooms",
       icon: School,
-      accent: "bg-violet-50 text-violet-700 ring-violet-100",
     },
     {
       label: "考试管理",
+      accent: { backgroundColor: "#eaeefd", color: "#4e62ab" },
       description: "组卷、安排考试与查看详情",
       href: `/teacher/exams?courseId=${workspace.course.id}`,
       icon: FilePenLine,
-      accent: "bg-indigo-50 text-indigo-700 ring-indigo-100",
     },
     {
       label: "课程题库",
+      accent: { backgroundColor: "#e0f2f0", color: "#246f6b" },
       description: "查看当前课程题目",
       href: `/teacher/questions?courseId=${workspace.course.id}`,
       icon: BookOpenCheck,
-      accent: "bg-teal-50 text-teal-700 ring-teal-100",
     },
     {
       label: "学情分析",
+      accent: { backgroundColor: "#fbf1db", color: "#8e671f" },
       description: "学情分析与课程评价",
       href: `/teacher/results?${resultsParams.toString()}`,
       icon: BarChart3,
-      accent: "bg-amber-50 text-amber-700 ring-amber-100",
     },
     {
       label: "课程通知",
+      accent: { backgroundColor: "#faeade", color: "#9b5b2e" },
       description: "发布通知与管理历史记录",
       href: `${base}/announcements`,
       icon: Megaphone,
-      accent: "bg-orange-50 text-orange-700 ring-orange-100",
     },
   ];
   const stats = [
@@ -193,7 +193,8 @@ export function TeacherWorkspaceCards({
                 className={`${styles.shortcut} group flex min-w-0 items-center gap-3 border p-3 focus-visible:outline-2 focus-visible:outline-sky-600 active:bg-teal-50`}
               >
                 <span
-                  className={`${styles.shortcutIcon} rounded-xl p-2.5 ring-1 ring-inset ${accent}`}
+                  className={`${styles.shortcutIcon} rounded-xl p-2.5 ring-1 ring-inset`}
+                  style={accent}
                 >
                   <Icon aria-hidden="true" className="size-4" />
                 </span>

@@ -341,3 +341,31 @@
 [data-shell-role="TEACHER"] .workspace-school-brand {
   background: #fff;
 }
+
+/* 页头课程筛选与创建按钮并排，不再占用独立工具栏。 */
+[data-shell-role="TEACHER"] .assignment-course-inline-form {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+}
+[data-shell-role="TEACHER"] .assignment-course-inline {
+  min-width: 0;
+  max-width: 100%;
+}
+[data-shell-role="TEACHER"] .assignment-course-inline select {
+  width: 15rem;
+  max-width: 100%;
+}
+[data-shell-role="TEACHER"] .assignment-course-inline > p {
+  max-width: 20rem;
+  font-size: 11px;
+}
+@media (max-width: 639px) {
+  [data-shell-role="TEACHER"] .assignment-header-actions {
+    justify-content: flex-start;
+  }
+  [data-shell-role="TEACHER"] .assignment-course-inline select {
+    width: 12rem;
+  }
+}

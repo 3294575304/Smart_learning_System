@@ -21,6 +21,7 @@ export function AssignmentCourseFilter({
   notice,
   studentQuery,
   category,
+  compact = false,
 }: {
   courses: { id: string; name: string; term: string }[];
   classrooms: { id: string; courseId: string | null }[];
@@ -30,6 +31,7 @@ export function AssignmentCourseFilter({
   notice: boolean;
   studentQuery?: TeacherStudentQuery;
   category?: string;
+  compact?: boolean;
 }) {
   useEffect(() => {
     if (notice) {
@@ -39,9 +41,9 @@ export function AssignmentCourseFilter({
     }
   }, [notice]);
   return (
-    <div>
+    <div className={compact ? "assignment-course-inline" : undefined}>
       <form
-        className="tt-fbar"
+        className={compact ? "assignment-course-inline-form" : "tt-fbar"}
         onSubmit={(event) => {
           const form = event.currentTarget;
           const course = form.elements.namedItem("courseId");

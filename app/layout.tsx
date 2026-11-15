@@ -15,6 +15,8 @@ import "./student-study.css";
 import "./student-inputs.css";
 import "./teacher-appearance.css";
 import "./teacher-courses.css";
+import "./workspace-select-menu.css";
+import "./question-cards.css";
 
 export const metadata: Metadata = {
   title: "智学课堂",

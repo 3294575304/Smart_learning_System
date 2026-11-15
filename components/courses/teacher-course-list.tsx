@@ -469,84 +469,80 @@ export function TeacherCourseList({
               title="没有匹配的课程"
             />
           ) : (
-            <div className="tc-course-catalog">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {visibleCourses.map((course) => (
-                <article className="tc-course-row" key={course.id}>
-                  <span className="tc-course-symbol" aria-hidden="true">
-                    <BookOpenCheck className="size-6" />
-                  </span>
-                  <div className="tc-course-main">
-                    <div className="flex flex-wrap items-center gap-3">
+                <article
+                  className="tt-course-card min-w-0 rounded-xl border border-slate-200 bg-white transition-colors hover:border-sky-300"
+                  key={course.id}
+                >
+                  <div className="tt-course-cover" aria-hidden="true">
+                    <span>{course.courseNo}</span>
+                  </div>
+                  <div className="tt-course-body">
+                    <div className="flex items-start justify-between gap-3">
                       <Link
-                        className="tc-course-title"
+                        className="flex min-w-0 items-center gap-2 rounded text-slate-900 hover:text-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600"
                         href={`/teacher/courses/${course.id}`}
                       >
-                        {course.name}
+                        <BookOpenCheck
+                          aria-hidden="true"
+                          className="size-4 shrink-0 text-sky-600"
+                        />
+                        <h3 className="text-[13.5px] font-semibold break-words">
+                          {course.name}
+                        </h3>
                       </Link>
                       <span className={COURSE_STATUS_STYLES[course.status]}>
                         {COURSE_STATUS_LABELS[course.status]}
                       </span>
                     </div>
-                    <p className="tc-course-meta">
-                      课程号 {course.courseNo} · {course.term}
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      {course.courseNo} · {course.term}
                     </p>
-                    {course.description ? (
-                      <p className="tc-course-description">
+                    {course.description && (
+                      <p className="mt-1 line-clamp-1 text-xs text-slate-500">
                         {course.description}
                       </p>
-                    ) : null}
-                    <div className="tc-course-shortcuts">
-                      <Link href={`/teacher/courses/${course.id}/classrooms`}>
-                        课程班级
-                      </Link>
-                      <Link href={`/teacher/courses/${course.id}/syllabus`}>
-                        教学大纲
-                      </Link>
+                    )}
+                    <div className="tt-course-facts mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                      <span>
+                        <strong className="font-semibold text-slate-900">
+                          {course.classroomCount}
+                        </strong>{" "}
+                        个课程班级
+                      </span>
+                      <span>
+                        <strong className="font-semibold text-slate-900">
+                          {course.activeClassroomCount}
+                        </strong>{" "}
+                        个开课班级
+                      </span>
+                      <span>
+                        <strong className="font-semibold text-slate-900">
+                          {course.activeStudentCount}
+                        </strong>{" "}
+                        学生人次
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
                       <Link
-                        href={`/teacher/courses/${course.id}/knowledge-graph`}
+                        className="tt-btn"
+                        href={`/teacher/courses/${course.id}`}
                       >
-                        知识图谱
+                        进入课程
+                        <ArrowUpRight aria-hidden="true" className="size-3.5" />
                       </Link>
+                      <div className="ml-auto">
+                        <CourseDeleteAction
+                          course={course}
+                          onDeleted={handleDeleted}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <dl className="tc-course-stats">
-                    <div>
-                      <dt>课程班级</dt>
-                      <dd>
-                        {course.classroomCount}
-                        <span> 个</span>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>开课班级</dt>
-                      <dd>
-                        {course.activeClassroomCount}
-                        <span> 个</span>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>学生人次</dt>
-                      <dd>{course.activeStudentCount}</dd>
-                    </div>
-                  </dl>
-                  <div className="tc-course-actions">
-                    <Link
-                      className="tt-btn"
-                      href={`/teacher/courses/${course.id}`}
-                    >
-                      进入课程
-                      <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                    </Link>
-                    <CourseDeleteAction
-                      course={course}
-                      onDeleted={handleDeleted}
-                    />
                   </div>
                 </article>
               ))}
-              {createEntry ? (
-                <div className="tc-create-row">{createEntry}</div>
-              ) : null}
+              {createEntry}
             </div>
           )}
         </>

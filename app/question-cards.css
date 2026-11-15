@@ -1,0 +1,272 @@
+/* 第二版紧凑题目卡片。题型、状态与标签分别承担独立的信息层级。 */
+[data-shell-role="TEACHER"] .tq-list {
+  display: grid;
+  gap: 12px;
+}
+[data-shell-role="TEACHER"] .tq-card {
+  --tq-type-bg: #e8f2fb;
+  --tq-type-ink: #2c648b;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+}
+[data-shell-role="TEACHER"] .tq-card[data-question-type="MULTIPLE_CHOICE"] {
+  --tq-type-bg: #e0f2f0;
+  --tq-type-ink: #246f6b;
+}
+[data-shell-role="TEACHER"] .tq-card[data-question-type="TRUE_FALSE"] {
+  --tq-type-bg: #e7f2e6;
+  --tq-type-ink: #42703e;
+}
+[data-shell-role="TEACHER"] .tq-card[data-question-type="FILL_BLANK"] {
+  --tq-type-bg: #faeade;
+  --tq-type-ink: #9b5b2e;
+}
+[data-shell-role="TEACHER"] .tq-card[data-question-type="SHORT_ANSWER"] {
+  --tq-type-bg: #fbf1db;
+  --tq-type-ink: #8e671f;
+}
+[data-shell-role="TEACHER"] .tq-card[data-question-type="PYTHON_PROGRAMMING"] {
+  --tq-type-bg: #f1ebfb;
+  --tq-type-ink: #7253a8;
+}
+[data-shell-role="TEACHER"] .tq-main {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 13px;
+  padding: 16px 20px 14px;
+}
+[data-shell-role="TEACHER"] .tq-body {
+  min-width: 0;
+}
+[data-shell-role="TEACHER"] .tq-type-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 35px;
+  margin-top: 3px;
+  border-radius: 4px;
+  background: var(--tq-type-bg);
+  color: var(--tq-type-ink);
+}
+[data-shell-role="TEACHER"] .tq-type-icon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.6;
+}
+[data-shell-role="TEACHER"] .tq-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-height: 21px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.6;
+}
+[data-shell-role="TEACHER"] .tq-type-label {
+  color: var(--tq-type-ink);
+  font-weight: 500;
+}
+[data-shell-role="TEACHER"] .tq-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: #eaece6;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+[data-shell-role="TEACHER"] .tq-status[data-status="ACTIVE"] {
+  background: #dcf5e8;
+  color: #167747;
+}
+[data-shell-role="TEACHER"] .tq-status[data-status="DRAFT"] {
+  background: var(--accent);
+  color: var(--brand);
+}
+[data-shell-role="TEACHER"] .tq-status i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+[data-shell-role="TEACHER"] .tq-objective {
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+[data-shell-role="TEACHER"] .tq-source {
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: #f0f0eb;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+[data-shell-role="TEACHER"] .tq-title {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 6px 0;
+  border-radius: 3px;
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+[data-shell-role="TEACHER"] .tq-title:hover {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+[data-shell-role="TEACHER"] .tq-stem {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: #536057;
+  font-size: 13px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+[data-shell-role="TEACHER"] .tq-warning {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 3px;
+  background: #f6f0e4;
+  color: #80613b;
+  font-size: 11px;
+  line-height: 1.7;
+}
+[data-shell-role="TEACHER"] .tq-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 11px;
+}
+[data-shell-role="TEACHER"] .tq-tag-label {
+  margin-right: 2px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+[data-shell-role="TEACHER"] .tq-tag {
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: #edf1e7;
+  color: #4f6745;
+  font-size: 10px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+[data-shell-role="TEACHER"] .tq-scope-note {
+  margin-top: 8px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  line-height: 1.7;
+}
+[data-shell-role="TEACHER"] .tq-actions {
+  margin-top: 1px;
+}
+[data-shell-role="TEACHER"] .tq-actions :is(a, button) {
+  min-height: 33px;
+  padding: 6px 11px;
+  font-size: 11px;
+}
+[data-shell-role="TEACHER"] .tq-actions svg {
+  width: 14px;
+  height: 14px;
+}
+[data-shell-role="TEACHER"] .tq-actions button {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+[data-shell-role="TEACHER"] .tq-actions button:hover:not(:disabled) {
+  background: #f9eeea;
+  color: var(--destructive);
+}
+[data-shell-role="TEACHER"] .tq-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 9px 20px 9px 65px;
+  border-top: 1px solid #e5e7df;
+  background: color-mix(in srgb, var(--surface) 28%, var(--card));
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+[data-shell-role="TEACHER"] .tq-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 14px;
+}
+[data-shell-role="TEACHER"] .tq-reference,
+[data-shell-role="TEACHER"] .tq-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+[data-shell-role="TEACHER"] .tq-reference svg,
+[data-shell-role="TEACHER"] .tq-detail svg {
+  width: 12px;
+  height: 12px;
+}
+[data-shell-role="TEACHER"] .tq-detail {
+  padding: 3px 0;
+  border-radius: 3px;
+  font-size: 11px;
+}
+[data-shell-role="TEACHER"] .tq-detail:hover {
+  color: var(--brand);
+}
+[data-shell-role="TEACHER"] .tq-card :is(a, button):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+@media (max-width: 850px) {
+  [data-shell-role="TEACHER"] .tq-main {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+  [data-shell-role="TEACHER"] .tq-actions {
+    grid-column: 2;
+  }
+}
+@media (max-width: 540px) {
+  [data-shell-role="TEACHER"] .tq-main {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 10px;
+    padding: 15px 14px;
+  }
+  [data-shell-role="TEACHER"] .tq-type-icon {
+    width: 28px;
+    height: 32px;
+  }
+  [data-shell-role="TEACHER"] .tq-title {
+    font-size: 14px;
+  }
+  [data-shell-role="TEACHER"] .tq-meta {
+    font-size: 10px;
+    gap: 5px 8px;
+  }
+  [data-shell-role="TEACHER"] .tq-objective {
+    border: 0;
+    padding-left: 0;
+  }
+  [data-shell-role="TEACHER"] .tq-footer {
+    padding-inline: 14px;
+  }
+  [data-shell-role="TEACHER"] .tq-actions :is(a, button) {
+    min-height: 38px;
+  }
+}

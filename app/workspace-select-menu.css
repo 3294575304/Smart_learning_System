@@ -1,0 +1,101 @@
+/* 师生端下拉选项共用外观；不改关闭态的内边距，保留前置图标让位。 */
+@supports (appearance: base-select) {
+  :is(
+    [data-shell-role="TEACHER"],
+    [data-shell-role="STUDENT"],
+    #dashboard-main[data-workspace-role="TEACHER"],
+    #dashboard-main[data-workspace-role="STUDENT"]
+  ) {
+    select:not([multiple]):not([size])::picker(select) {
+      inline-size: max-content;
+      min-inline-size: anchor-size(width);
+      max-inline-size: calc(100vw - 32px);
+      max-block-size: min(22rem, 60vh);
+      overflow: auto;
+      overscroll-behavior: contain;
+      margin-block: 5px;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: 0 8px 24px rgb(47 56 52 / 12%);
+      scrollbar-width: thin;
+      scrollbar-color: #bdc7b9 var(--card);
+      font-family:
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        "Microsoft YaHei",
+        sans-serif;
+    }
+
+    select:not([multiple]):not([size]) option {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-height: 36px;
+      margin-block: 2px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      color: var(--foreground);
+      font-family:
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        "Microsoft YaHei",
+        sans-serif;
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.7;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: normal;
+      outline: none;
+      box-shadow: none;
+    }
+
+    select:not([multiple]):not([size]) option:is(:hover, :focus-visible) {
+      background: #efeee5;
+      color: var(--foreground);
+      outline: none;
+    }
+
+    select:not([multiple]):not([size]) option:checked {
+      background: var(--accent);
+      color: var(--brand-strong);
+      font-weight: 500;
+    }
+
+    select:not([multiple]):not([size])
+      option:checked:is(:hover, :focus-visible) {
+      background: #ecd8cc;
+      color: var(--brand-strong);
+      outline: none;
+    }
+
+    select:not([multiple]):not([size]) option::checkmark {
+      order: 1;
+      flex-shrink: 0;
+      margin-inline-start: auto;
+      color: var(--brand);
+    }
+
+    select:not([multiple]):not([size]) option:disabled,
+    select:not([multiple]):not([size])
+      option:disabled:is(:hover, :focus-visible) {
+      background: transparent;
+      color: var(--muted-foreground);
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    select:not([multiple]):not([size]) optgroup {
+      color: var(--muted-foreground);
+      font-size: 11px;
+      font-weight: 500;
+    }
+  }
+}

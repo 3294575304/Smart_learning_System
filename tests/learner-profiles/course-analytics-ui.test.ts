@@ -145,7 +145,10 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
   assert.match(view, /作业与考试得分率/u);
   assert.match(view, /学生分数段分布/u);
   assert.match(view, /未评分/u);
-  assert.match(view, /本阶段教学待办/u);
+  assert.doesNotMatch(
+    view,
+    /本阶段教学待办|系统按课程建设、学习证据和结课评价|当前课程关键环节均已完成/u,
+  );
   assert.match(view, /章节掌握度/u);
   assert.match(
     view,

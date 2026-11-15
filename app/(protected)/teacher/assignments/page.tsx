@@ -149,31 +149,34 @@ export default async function TeacherAssignmentsPage({ searchParams }: Props) {
     <section className="min-w-0 space-y-4">
       <PageHeader
         actions={
-          <Link
-            className="tt-btn-cta flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
-            href="/teacher/assignments/new"
-          >
-            <Plus className="h-4 w-4" />
-            创建作业
-          </Link>
+          <div className="assignment-header-actions flex max-w-full flex-wrap items-center justify-end gap-2">
+            <AssignmentCourseFilter
+              compact
+              key={JSON.stringify(query)}
+              courses={courses}
+              classrooms={allClassrooms.map((item) => ({
+                id: item.id,
+                courseId: item.course?.id ?? null,
+              }))}
+              courseId={query.courseId}
+              classroomId={query.classroomId}
+              section={query.section}
+              category={query.category}
+              notice={rawQuery.scopeChanged === "1"}
+            />
+            <Link
+              className="tt-btn-cta flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
+              href="/teacher/assignments/new"
+            >
+              <Plus className="h-4 w-4" />
+              创建作业
+            </Link>
+          </div>
         }
         description="当前作业用于日常教学；班级结课或关闭后，作业自动转入历史，仍可批改和发布成绩。"
         title="作业管理"
       />
 
-      <AssignmentCourseFilter
-        key={JSON.stringify(query)}
-        courses={courses}
-        classrooms={allClassrooms.map((item) => ({
-          id: item.id,
-          courseId: item.course?.id ?? null,
-        }))}
-        courseId={query.courseId}
-        classroomId={query.classroomId}
-        section={query.section}
-        category={query.category}
-        notice={rawQuery.scopeChanged === "1"}
-      />
       <AssignmentManagementTabs
         view="ASSIGNMENTS"
         section={query.section}
