@@ -1,4 +1,5 @@
 import "server-only";
+import { programmingRuntimeLimits } from "@/lib/programming-language";
 
 import { randomUUID } from "node:crypto";
 
@@ -18,11 +19,14 @@ export async function verifyProgrammingCandidate(
     try {
       const receipt = await executor.submitExecution({
         requestId: randomUUID(),
-        language: "PYTHON",
+        language: config.language ?? "PYTHON",
         sourceCode: config.standardCode,
         stdin: testCase.stdin,
         networkAccess: false,
-        limits: config.limits,
+        limits: programmingRuntimeLimits(
+          config.language ?? "PYTHON",
+          config.limits,
+        ),
         metadata: { purpose: "FUTURE_JUDGE" },
       });
       executionId = receipt.executionId;

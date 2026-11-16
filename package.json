@@ -28,6 +28,7 @@
     "test:all": "npm test && npm run test:integration",
     "test:sandbox-capabilities": "node --conditions=react-server --import tsx scripts/verify-sandbox-capabilities.ts",
     "test:programming-runtime": "tsx tests/programming-attempts/real-runtime.ts",
+    "test:programming-languages": "tsx tests/programming-attempts/languages-run.ts",
     "build:sandbox-executor": "tsc -p services/sandbox-executor-server/tsconfig.json",
     "build:programming-judge-worker": "tsc -p services/programming-judge-worker/tsconfig.json",
     "build:background-worker": "esbuild services/background-worker/main.ts --bundle --platform=node --format=esm --target=node20 --conditions=react-server --packages=external --outfile=.data/background-worker-build/main.js"
@@ -36,7 +37,16 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/lang-java": "^6.0.2",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
     "@hookform/resolvers": "^5.2.2",
+    "@lezer/highlight": "^1.2.5",
     "@napi-rs/canvas": "0.1.100",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",

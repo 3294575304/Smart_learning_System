@@ -1,8 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
+import { ProgrammingEditor } from "@/components/programming/code-editor";
+import type { ProgrammingLanguage } from "@/lib/programming-language";
+import {
+  ProgrammingSample,
+  type PublicProgrammingSample,
+} from "@/components/programming/programming-sample";
+
+import {
+  ProgrammingTestResults,
+  type ProgrammingTestResult,
+} from "@/components/programming/test-results";
 
 interface AttemptDto {
   id: string;
@@ -11,41 +22,44 @@ interface AttemptDto {
   score: number | null;
   maxScore: number;
   safeErrorSummary: string | null;
-  cases: Array<{
-    index: number;
-    passed: boolean;
-    errorType: string;
-    safeErrorSummary: string | null;
-    stdout?: string;
-    stderr?: string;
-  }>;
+  cases: ProgrammingTestResult[];
 }
 
 const terminal = new Set(["SUCCEEDED", "SYSTEM_ERROR", "CANCELLED"]);
 
 export function ProgrammingQuestionInput({
   assignmentQuestionId,
+  recommendationId,
   code,
+  language = "PYTHON",
+  sample,
   disabled,
   onChange,
   submissionId,
 }: {
-  assignmentQuestionId: string;
+  assignmentQuestionId?: string;
+  recommendationId?: string;
   code: string;
+  language?: ProgrammingLanguage;
+  sample?: PublicProgrammingSample | null;
   disabled?: boolean;
-  onChange: (code: string) => void;
-  submissionId: string;
+  onChange: (code: string, language: ProgrammingLanguage) => void;
+  submissionId?: string;
 }) {
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [attempt, setAttempt] = useState<AttemptDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const activeAttemptId = useRef<string | null>(null);
   const attemptStatus = attempt?.status;
+  const running =
+    starting || (attempt !== null && !terminal.has(attempt.status));
 
   const load = useCallback(async (id: string) => {
     const response = await requestAssignmentApi<AttemptDto>(
       `/api/student/programming-attempts/${id}`,
     );
+    if (activeAttemptId.current !== id) return;
     if (!response.success) {
       setError(response.error);
       return;
@@ -67,23 +81,43 @@ export function ProgrammingQuestionInput({
     setStarting(true);
     setError(null);
     setAttempt(null);
+    activeAttemptId.current = null;
+    setAttemptId(null);
     const response = await requestAssignmentApi<{
       attemptId: string;
       status: string;
-    }>(`/api/student/submissions/${submissionId}/programming-runs`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        assignmentQuestionId,
-        sourceCode: code,
-        idempotencyKey: crypto.randomUUID(),
-      }),
-    });
+    }>(
+      recommendationId
+        ? `/api/recommendations/${recommendationId}/programming-attempts`
+        : `/api/student/submissions/${submissionId}/programming-runs`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...(recommendationId
+            ? { kind: "PUBLIC_RUN" }
+            : { assignmentQuestionId }),
+          sourceCode: code,
+          language,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      },
+    );
     setStarting(false);
     if (!response.success) {
       setError(response.error);
       return;
     }
+    activeAttemptId.current = response.data.attemptId;
+    setAttempt({
+      id: response.data.attemptId,
+      status: "PENDING",
+      progress: 0,
+      score: null,
+      maxScore: 0,
+      safeErrorSummary: null,
+      cases: [],
+    });
     setAttemptId(response.data.attemptId);
   }
 
@@ -102,13 +136,18 @@ export function ProgrammingQuestionInput({
 
   return (
     <div className="mt-4 space-y-3">
-      <textarea
-        aria-label="Python 代码"
-        className="min-h-72 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900 disabled:opacity-60"
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
+      {sample ? <ProgrammingSample sample={sample} /> : null}
+      <ProgrammingEditor
         value={code}
+        language={language}
+        disabled={disabled || running}
+        onChange={(value, nextLanguage) => {
+          if (value === code && nextLanguage === language) return;
+          activeAttemptId.current = null;
+          setAttempt(null);
+          setAttemptId(null);
+          onChange(value, nextLanguage);
+        }}
       />
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -121,7 +160,7 @@ export function ProgrammingQuestionInput({
           onClick={() => void run()}
           type="button"
         >
-          {starting ? "正在创建运行…" : "运行公开样例"}
+          {starting ? "正在创建运行…" : "运行测试"}
         </button>
         {attempt && !terminal.has(attempt.status) ? (
           <button
@@ -160,28 +199,9 @@ export function ProgrammingQuestionInput({
         </p>
       ) : null}
       {attempt?.cases.length === 0 && attempt.status === "SUCCEEDED" ? (
-        <p className="text-sm text-gray-500">暂无公开样例结果。</p>
+        <p className="text-sm text-gray-500">暂无测试点结果。</p>
       ) : null}
-      {attempt?.cases.map((item) => (
-        <div
-          className={`rounded-md border p-3 text-sm ${item.passed ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
-          key={item.index}
-        >
-          <p className="font-medium">
-            样例 {item.index} · {item.passed ? "通过" : item.safeErrorSummary}
-          </p>
-          {item.stdout ? (
-            <pre className="mt-2 overflow-auto rounded bg-white/70 p-2 whitespace-pre-wrap">
-              输出：{item.stdout}
-            </pre>
-          ) : null}
-          {item.stderr ? (
-            <pre className="mt-2 overflow-auto rounded bg-white/70 p-2 whitespace-pre-wrap text-red-700">
-              错误：{item.stderr}
-            </pre>
-          ) : null}
-        </div>
-      ))}
+      {attempt ? <ProgrammingTestResults cases={attempt.cases} /> : null}
     </div>
   );
 }

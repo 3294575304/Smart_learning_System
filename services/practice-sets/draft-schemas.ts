@@ -1,3 +1,4 @@
+import { programmingLanguageSchema } from "@/lib/programming-language";
 import { z } from "zod";
 import { recommendationIdSchema } from "@/services/recommendations/schemas";
 
@@ -12,7 +13,13 @@ const draftAnswerSchema = z.discriminatedUnion("kind", [
     .object({ kind: z.literal("BOOLEAN"), value: z.boolean().nullable() })
     .strict(),
   z.object({ kind: z.literal("TEXT"), value: z.string().max(10000) }).strict(),
-  z.object({ kind: z.literal("CODE"), value: z.string().max(200000) }).strict(),
+  z
+    .object({
+      kind: z.literal("CODE"),
+      value: z.string().max(200000),
+      language: programmingLanguageSchema.optional(),
+    })
+    .strict(),
 ]);
 
 const fields = {

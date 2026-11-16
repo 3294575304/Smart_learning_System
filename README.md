@@ -247,6 +247,8 @@ MVP 已完成演示验收，V1.0 迭代一至六保留既有专项验收结论�
 
 ## 技术栈
 
+编程题多语言扩展支持 Python、C、C++、Java 和 JavaScript 的语言选择、语法高亮与异步编译运行契约；学生展示一个可复制公开样例，后台执行多个测试点，下方用紧凑卡片显示 AC/WA 等结果及实测资源。新增迁移和运行镜像必须配套部署，目标环境五语言运行及安全验收尚未完成，详见 [沙箱部署说明](deploy/sandbox-executor/README.md)。独立测试库检查命令为 `npm run test:programming-languages`，覆盖语言保存、运行/正式任务、幂等、样例隔离与归属，不包含真实编译器执行。这次按明确需求扩展原 Python 范围，不表示 V1.0 整体验收完成。
+
 - Next.js（App Router）
 - React 与 TypeScript
 - Tailwind CSS

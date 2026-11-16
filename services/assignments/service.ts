@@ -102,6 +102,22 @@ const teacherAssignmentInclude = {
 } satisfies Prisma.AssignmentInclude;
 
 const studentQuestionSelect = {
+  programmingConfigSnapshot: {
+    select: {
+      configRevision: {
+        select: {
+          language: true,
+          starterCode: true,
+          testCases: {
+            where: { visibility: "PUBLIC" as const },
+            orderBy: { sortOrder: "asc" as const },
+            take: 1,
+            select: { stdin: true, expectedOutput: true },
+          },
+        },
+      },
+    },
+  },
   id: true,
   titleSnapshot: true,
   contentSnapshot: true,
@@ -1301,6 +1317,7 @@ export async function getStudentSubmissionDraft(
     writeBlockedReason: work.reason,
     makeupKind: work.grant?.kind ?? null,
     questions: submission.assignment.questions.map((question) => ({
+      programming: question.programmingConfigSnapshot?.configRevision ?? null,
       id: question.id,
       title: question.titleSnapshot,
       content: question.contentSnapshot,
@@ -1321,6 +1338,7 @@ export async function getStudentSubmissionDraft(
     answers: submission.answers.map((answer) => ({
       assignmentQuestionId: answer.assignmentQuestionId,
       textAnswer: answer.textAnswer,
+      codeLanguage: answer.codeLanguage,
       booleanAnswer: answer.booleanAnswer,
       optionIds: answer.selectedOptions.map(
         (selection) => selection.assignmentQuestionOptionId,
@@ -1507,6 +1525,8 @@ export async function saveStudentAnswers(
             answer.kind === "TEXT" || answer.kind === "CODE"
               ? answer.value
               : null,
+          codeLanguage:
+            answer.kind === "CODE" ? (answer.language ?? "PYTHON") : "PYTHON",
           booleanAnswer: answer.kind === "BOOLEAN" ? answer.value : null,
           responseTimeMs: answer.responseTimeMs,
           gradingStatus: GradingStatus.UNGRADED,
@@ -1521,6 +1541,8 @@ export async function saveStudentAnswers(
             answer.kind === "TEXT" || answer.kind === "CODE"
               ? answer.value
               : null,
+          codeLanguage:
+            answer.kind === "CODE" ? (answer.language ?? "PYTHON") : "PYTHON",
           booleanAnswer: answer.kind === "BOOLEAN" ? answer.value : null,
           responseTimeMs: answer.responseTimeMs,
           maxScore: question.points,
@@ -1726,6 +1748,7 @@ export async function submitStudentAssignment(
           assignmentQuestionId: question.id,
           studentId,
           sourceCode: currentAnswer?.textAnswer ?? "",
+          language: currentAnswer?.codeLanguage ?? "PYTHON",
           courseId: submission.assignment.classroom.courseId,
         });
       }

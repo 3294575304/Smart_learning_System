@@ -164,6 +164,7 @@ export class ExecutorClient {
 
   async submit(input: {
     requestId: string;
+    language?: "PYTHON" | "C" | "CPP" | "JAVA" | "JAVASCRIPT";
     sourceCode: string;
     stdin?: string;
     limits: Record<string, number>;
@@ -174,7 +175,7 @@ export class ExecutorClient {
         method: "POST",
         body: JSON.stringify({
           requestId: input.requestId,
-          language: "PYTHON",
+          language: input.language ?? "PYTHON",
           sourceCode: input.sourceCode,
           stdin: input.stdin ?? "",
           networkAccess: false,

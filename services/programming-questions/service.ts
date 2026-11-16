@@ -39,6 +39,7 @@ function teacherRevisionDto(record: RevisionRecord) {
     revisionNumber: record.revisionNumber,
     standardCode: record.standardCode,
     starterCode: record.starterCode,
+    language: record.language,
     totalPoints: record.totalPoints.toNumber(),
     limits: {
       cpuTimeMs: record.cpuTimeMs,
@@ -69,6 +70,7 @@ export function publicProgrammingRevisionDto(record: RevisionRecord) {
     questionId: record.questionId,
     revisionNumber: record.revisionNumber,
     starterCode: record.starterCode,
+    language: record.language,
     limits: {
       cpuTimeMs: record.cpuTimeMs,
       wallTimeMs: record.wallTimeMs,
@@ -80,6 +82,7 @@ export function publicProgrammingRevisionDto(record: RevisionRecord) {
       .filter(
         (testCase) => testCase.visibility === ProgrammingTestVisibility.PUBLIC,
       )
+      .slice(0, 1)
       .map((testCase, index) => ({
         index: index + 1,
         name: testCase.name,
@@ -172,6 +175,7 @@ export async function createProgrammingConfigInTransaction(
     data: {
       questionId,
       revisionNumber: (latest?.revisionNumber ?? 0) + 1,
+      language: input.language ?? "PYTHON",
       standardCode: input.standardCode,
       starterCode: input.starterCode,
       totalPoints: input.totalPoints,

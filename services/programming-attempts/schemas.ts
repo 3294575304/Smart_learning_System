@@ -1,3 +1,4 @@
+import { programmingLanguageSchema } from "@/lib/programming-language";
 import { z } from "zod";
 
 import {
@@ -12,6 +13,7 @@ export const programmingAttemptPathSchema = z.object({
 export const createPublicProgrammingRunSchema = z
   .object({
     assignmentQuestionId: z.string().cuid(),
+    language: programmingLanguageSchema.default("PYTHON"),
     sourceCode: z.string().max(200_000),
     idempotencyKey: z.string().uuid(),
   })
@@ -19,6 +21,8 @@ export const createPublicProgrammingRunSchema = z
 
 export const createRecommendationProgrammingAttemptSchema = z
   .object({
+    kind: z.enum(["PUBLIC_RUN", "FORMAL_JUDGE"]).default("FORMAL_JUDGE"),
+    language: programmingLanguageSchema.default("PYTHON"),
     sourceCode: z.string().trim().min(1).max(200_000),
     idempotencyKey: z.string().uuid(),
   })

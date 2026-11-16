@@ -1,3 +1,4 @@
+import { programmingLanguageSchema } from "@/lib/programming-language";
 import { assignmentCategorySchema } from "./category";
 import { SubmissionStatus } from "@prisma/client";
 import { z } from "zod";
@@ -221,7 +222,8 @@ const answerSchema = z.discriminatedUnion("kind", [
   }),
   answerBase.extend({
     kind: z.literal("CODE"),
-    value: z.string().max(200_000, "Python 代码不能超过 200000 个字符"),
+    language: programmingLanguageSchema.optional(),
+    value: z.string().max(200_000, "代码不能超过 200000 个字符"),
   }),
 ]);
 

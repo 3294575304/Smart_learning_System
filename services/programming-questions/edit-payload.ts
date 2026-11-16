@@ -4,8 +4,12 @@ import type { ProgrammingConfigRevisionInput } from "@/services/programming-ques
 export function programmingCasesForSave(
   cases: ProgrammingConfigRevisionInput["testCases"],
 ) {
+  const firstPublic = cases.findIndex((item) => item.visibility === "PUBLIC");
   return cases.map((item, index) => ({
-    visibility: item.visibility,
+    visibility:
+      item.visibility === "PUBLIC" && index !== firstPublic
+        ? ("HIDDEN" as const)
+        : item.visibility,
     name: item.name,
     stdin: item.stdin,
     expectedOutput: item.expectedOutput,

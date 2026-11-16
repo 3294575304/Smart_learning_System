@@ -2803,6 +2803,7 @@ model ProgrammingQuestionConfigRevision {
   revisionNumber      Int
   standardCode        String   @db.Text
   starterCode         String   @db.Text
+  language            ProgrammingLanguage @default(PYTHON)
   totalPoints         Decimal  @db.Decimal(8, 2)
   cpuTimeMs           Int
   wallTimeMs          Int
@@ -3206,6 +3207,7 @@ model ProgrammingAttempt {
   kind                 ProgrammingAttemptKind
   revisionNumber       Int
   sourceCode           String                     @db.Text
+  language             ProgrammingLanguage        @default(PYTHON)
   inputFingerprint     String                     @db.Char(64)
   ruleVersion          String                     @db.VarChar(100)
   status               ProgrammingAttemptStatus   @default(PENDING)
@@ -3380,12 +3382,21 @@ model Submission {
   @@index([status, submittedAt])
 }
 
+enum ProgrammingLanguage {
+  PYTHON
+  C
+  CPP
+  JAVA
+  JAVASCRIPT
+}
+
 model StudentAnswer {
   id                      String        @id @default(cuid())
   submissionId            String
   assignmentQuestionId    String
   graderId                String?
   textAnswer              String?       @db.Text
+  codeLanguage            ProgrammingLanguage @default(PYTHON)
   booleanAnswer           Boolean?
   gradingStatus           GradingStatus @default(UNGRADED)
   score                   Decimal?      @db.Decimal(8, 2)

@@ -10,6 +10,7 @@ export interface ExecutorConfig {
   dockerBinary: string;
   dockerRuntime: string;
   runtimeImage: string;
+  runtimeImages?: Partial<Record<"C" | "CPP" | "JAVA" | "JAVASCRIPT", string>>;
   workRoot: string;
   executorVersion: string;
 }
@@ -67,6 +68,12 @@ export function readExecutorConfig(
     runtimeImage:
       environment.SANDBOX_RUNTIME_IMAGE?.trim() ||
       "zhixue-python-sandbox:3.10-v1",
+    runtimeImages: {
+      C: environment.SANDBOX_C_RUNTIME_IMAGE?.trim(),
+      CPP: environment.SANDBOX_CPP_RUNTIME_IMAGE?.trim(),
+      JAVA: environment.SANDBOX_JAVA_RUNTIME_IMAGE?.trim(),
+      JAVASCRIPT: environment.SANDBOX_JAVASCRIPT_RUNTIME_IMAGE?.trim(),
+    },
     workRoot: resolve(
       environment.SANDBOX_EXECUTOR_WORK_ROOT?.trim() ||
         "/var/lib/zhixue-sandbox-executor/work",

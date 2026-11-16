@@ -222,6 +222,12 @@ function detailFromRecord(
     startedAt: record.startedAt?.toISOString() ?? null,
     completedAt: record.completedAt?.toISOString() ?? null,
     practiceResult: practiceResultFromRecord(record),
+    codeLanguage:
+      record.programmingAttempts[0]?.language ??
+      record.question.programmingConfigRevisions[0]?.language ??
+      "PYTHON",
+    programmingSample:
+      record.question.programmingConfigRevisions[0]?.testCases[0] ?? null,
     starterCode:
       record.question.type === "PYTHON_PROGRAMMING"
         ? (record.question.programmingConfigRevisions[0]?.starterCode ?? "")

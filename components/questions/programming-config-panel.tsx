@@ -4,6 +4,9 @@ import { ProgrammingTestVisibility } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { programmingCasesForSave } from "@/services/programming-questions/edit-payload";
+import { ProgrammingEditor } from "@/components/programming/code-editor";
+import { CodeEditor } from "@/components/programming/code-editor";
+import type { ProgrammingLanguage } from "@/lib/programming-language";
 import { requestQuestionApi } from "@/components/questions/request-api";
 
 interface TestCaseDraft {
@@ -16,6 +19,7 @@ interface TestCaseDraft {
 }
 
 interface ConfigDto {
+  language: ProgrammingLanguage;
   revisionNumber: number;
   standardCode: string;
   starterCode: string;
@@ -33,24 +37,17 @@ interface ConfigDto {
   testCases: TestCaseDraft[];
 }
 
-const defaultCases: TestCaseDraft[] = [
-  {
-    visibility: ProgrammingTestVisibility.PUBLIC,
-    name: "公开样例 1",
-    stdin: "",
-    expectedOutput: "",
-    points: 2,
-    sortOrder: 1,
-  },
-  {
-    visibility: ProgrammingTestVisibility.HIDDEN,
-    name: "隐藏用例 1",
-    stdin: "",
-    expectedOutput: "",
-    points: 8,
-    sortOrder: 2,
-  },
-];
+const defaultCases: TestCaseDraft[] = Array.from({ length: 6 }, (_, index) => ({
+  visibility:
+    index === 0
+      ? ProgrammingTestVisibility.PUBLIC
+      : ProgrammingTestVisibility.HIDDEN,
+  name: index === 0 ? "公开样例" : `隐藏用例 ${index}`,
+  stdin: "",
+  expectedOutput: "",
+  points: index === 0 ? 5 : 1,
+  sortOrder: index + 1,
+}));
 
 export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
   const endpoint = `/api/teacher/questions/${questionId}/programming-config`;
@@ -59,6 +56,7 @@ export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [revision, setRevision] = useState<number | null>(null);
+  const [language, setLanguage] = useState<ProgrammingLanguage>("PYTHON");
   const [standardCode, setStandardCode] = useState("");
   const [starterCode, setStarterCode] = useState("# 在这里编写代码\n");
   const [totalPoints, setTotalPoints] = useState(10);
@@ -82,6 +80,7 @@ export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
     }
     if (response.data) {
       setRevision(response.data.revisionNumber);
+      setLanguage(response.data.language ?? "PYTHON");
       setStandardCode(response.data.standardCode);
       setStarterCode(response.data.starterCode);
       setTotalPoints(response.data.totalPoints);
@@ -129,6 +128,7 @@ export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        language,
         standardCode,
         starterCode,
         totalPoints,
@@ -150,7 +150,7 @@ export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
       <div>
         <h2 className="text-lg font-semibold">编程题判题配置</h2>
         <p className="mt-2 text-sm text-gray-600">
-          执行语言：Python（当前自动判题支持的语言）
+          支持 Python、C、C++、Java 和 JavaScript；下方选择参考代码语言。
         </p>
         <p className="text-muted-foreground mt-1 text-sm">
           {revision === null ? "尚无配置修订" : `当前修订 ${revision}`}
@@ -177,21 +177,27 @@ export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2">
               <span className="text-sm font-medium">初始代码</span>
-              <textarea
-                className="min-h-40 w-full rounded-md border p-3 font-mono text-sm"
+              <ProgrammingEditor
                 value={starterCode}
-                onChange={(event) => setStarterCode(event.target.value)}
+                language={language}
+                onChange={(code, next) => {
+                  setStarterCode(code);
+                  setLanguage(next);
+                }}
               />
             </label>
             <label className="space-y-2">
               <span className="text-sm font-medium">
                 标准代码（仅教师可见）
               </span>
-              <textarea
-                className="min-h-40 w-full rounded-md border p-3 font-mono text-sm"
-                value={standardCode}
-                onChange={(event) => setStandardCode(event.target.value)}
-              />
+              <div className="mt-4 overflow-hidden rounded-lg border">
+                <CodeEditor
+                  label="标准代码（仅教师可见）"
+                  language={language}
+                  value={standardCode}
+                  onChange={setStandardCode}
+                />
+              </div>
             </label>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -246,9 +252,13 @@ export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {
                   ])
                 }
               >
-                添加用例
+                添加隐藏用例
               </button>
             </div>
+            <p className="text-sm text-slate-500">
+              学生只看到首个公开样例，可复制输入和输出。其余公开样例保存时转为隐藏用例；正式检测执行全部用例。建议覆盖正常、边界和特殊输入，最多
+              100 个用例。
+            </p>
             {testCases.length === 0 ? (
               <p className="rounded-md border border-dashed p-6 text-center text-sm text-gray-500">
                 暂无测试用例。

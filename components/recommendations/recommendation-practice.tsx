@@ -10,6 +10,9 @@ import { recommendationDetailApiPath } from "@/lib/api/recommendations";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { QuestionType, RecommendationStatus } from "@prisma/client";
 import { useEffect, useState } from "react";
+import { ProgrammingQuestionInput } from "@/components/assignments/programming-question-input";
+import type { ProgrammingLanguage } from "@/lib/programming-language";
+import { ProgrammingStatement } from "@/components/programming/programming-statement";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -209,6 +212,11 @@ export function RecommendationPractice({
         ? initialAnswer.value
         : (recommendation.starterCode ?? ""),
   );
+  const [language, setLanguage] = useState<ProgrammingLanguage>(
+    initialAnswer?.kind === "CODE"
+      ? (initialAnswer.language ?? "PYTHON")
+      : (recommendation.codeLanguage ?? "PYTHON"),
+  );
   const [programmingPending, setProgrammingPending] = useState(false);
   const form = useForm<
     z.input<typeof clientPracticeFormSchema>,
@@ -238,12 +246,14 @@ export function RecommendationPractice({
       onDraftChange?.(recommendation.id, {
         kind: "CODE",
         value: recommendation.starterCode,
+        language: recommendation.codeLanguage ?? "PYTHON",
       });
     }
   }, [
     recommendation.id,
     recommendation.type,
     recommendation.starterCode,
+    recommendation.codeLanguage,
     recommendation.programmingAttempt,
     initialAnswer,
     onDraftChange,
@@ -297,7 +307,7 @@ export function RecommendationPractice({
     setServerError(null);
     const response = await submitRecommendationProgrammingRequest(
       recommendation.id,
-      { sourceCode: code, idempotencyKey },
+      { sourceCode: code, language, idempotencyKey },
     );
     setProgrammingPending(false);
     if (!response.success) {
@@ -360,20 +370,25 @@ export function RecommendationPractice({
               {embedded && <div className="shrink-0">{favorite}</div>}
             </div>
             <div className="mt-4">
-              <QuestionText text={recommendation.content} />
+              <ProgrammingStatement
+                text={recommendation.content}
+                sample={recommendation.programmingSample}
+              />
             </div>
-            <textarea
-              aria-label="Python 代码"
-              className="mt-4 min-h-80 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900"
+            <ProgrammingQuestionInput
+              recommendationId={recommendation.id}
+              code={code}
+              language={language}
               disabled={programmingPending || Boolean(programmingAttemptId)}
-              onChange={(event) => {
-                setCode(event.target.value);
+              onChange={(value, nextLanguage) => {
+                setCode(value);
+                setLanguage(nextLanguage);
                 onDraftChange?.(recommendation.id, {
                   kind: "CODE",
-                  value: event.target.value,
+                  value,
+                  language: nextLanguage,
                 });
               }}
-              value={code}
             />
           </article>
           {serverError ? (
@@ -412,7 +427,7 @@ export function RecommendationPractice({
                 ? "正在提交判题…"
                 : embedded
                   ? "提交本题"
-                  : "提交 Python 判题"}
+                  : "提交判题"}
             </button>
           )}
           <p className="text-sm text-gray-500">

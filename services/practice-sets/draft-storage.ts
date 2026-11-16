@@ -1,3 +1,4 @@
+import { programmingLanguageSchema } from "@/lib/programming-language";
 import { z } from "zod";
 
 const answerSchema = z.discriminatedUnion("kind", [
@@ -6,7 +7,12 @@ const answerSchema = z.discriminatedUnion("kind", [
     optionIds: z.array(z.string().max(128)).max(50),
   }),
   z.object({ kind: z.literal("BOOLEAN"), value: z.boolean().nullable() }),
-  z.object({ kind: z.enum(["TEXT", "CODE"]), value: z.string().max(200000) }),
+  z.object({ kind: z.literal("TEXT"), value: z.string().max(200000) }),
+  z.object({
+    kind: z.literal("CODE"),
+    value: z.string().max(200000),
+    language: programmingLanguageSchema.optional(),
+  }),
 ]);
 const snapshotSchema = z.object({
   at: z.number().finite(),

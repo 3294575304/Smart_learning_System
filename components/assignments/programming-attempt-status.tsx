@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 
+import {
+  ProgrammingTestResults,
+  type ProgrammingTestResult,
+} from "@/components/programming/test-results";
+
 interface AttemptDto {
   id: string;
   status: "PENDING" | "RUNNING" | "SUCCEEDED" | "SYSTEM_ERROR" | "CANCELLED";
@@ -12,14 +17,7 @@ interface AttemptDto {
   maxScore: number;
   errorType: string | null;
   safeErrorSummary: string | null;
-  cases: Array<{
-    index: number;
-    passed: boolean;
-    score: number;
-    maxScore: number;
-    errorType: string;
-    safeErrorSummary: string | null;
-  }>;
+  cases: ProgrammingTestResult[];
 }
 
 const terminal = new Set(["SUCCEEDED", "SYSTEM_ERROR", "CANCELLED"]);
@@ -71,7 +69,7 @@ export function ProgrammingAttemptStatus({
     <article className="space-y-3 rounded-xl border bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Python 正式判题</h2>
+          <h2 className="font-semibold">正式判题</h2>
           <p className="text-muted-foreground mt-1 text-xs">
             题目 {assignmentQuestionId} · Attempt {attemptId.slice(-8)}
           </p>
@@ -106,19 +104,7 @@ export function ProgrammingAttemptStatus({
       {attempt?.cases.length === 0 && attempt.status === "SUCCEEDED" ? (
         <p className="text-sm text-gray-500">没有可显示的用例结果。</p>
       ) : null}
-      {attempt?.cases.map((item) => (
-        <div
-          className="flex items-center justify-between rounded-md border p-3 text-sm"
-          key={item.index}
-        >
-          <span>
-            用例 {item.index} · {item.passed ? "通过" : item.safeErrorSummary}
-          </span>
-          <span>
-            {item.score} / {item.maxScore}
-          </span>
-        </div>
-      ))}
+      {attempt ? <ProgrammingTestResults cases={attempt.cases} /> : null}
     </article>
   );
 }

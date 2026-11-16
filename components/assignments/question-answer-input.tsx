@@ -2,6 +2,8 @@
 
 import { QuestionType } from "@prisma/client";
 import React from "react";
+import type { ProgrammingLanguage } from "@/lib/programming-language";
+import { ProgrammingEditor } from "@/components/programming/code-editor";
 
 export interface AnswerOption {
   id: string;
@@ -20,7 +22,7 @@ export type QuestionAnswerState =
   | { kind: "CHOICE"; optionIds: string[] }
   | { kind: "BOOLEAN"; value: boolean | null }
   | { kind: "TEXT"; value: string }
-  | { kind: "CODE"; value: string };
+  | { kind: "CODE"; value: string; language?: ProgrammingLanguage };
 
 interface Props {
   answer: QuestionAnswerState;
@@ -113,15 +115,13 @@ export function QuestionAnswerInput({
     answer.kind === "CODE"
   ) {
     return (
-      <textarea
-        aria-label="Python 代码"
-        className="mt-4 min-h-72 w-full rounded-md border bg-sky-50 p-4 font-mono text-sm text-slate-900 disabled:opacity-60"
-        disabled={disabled}
-        onChange={(event) =>
-          onChange({ kind: "CODE", value: event.target.value })
-        }
-        spellCheck={false}
+      <ProgrammingEditor
         value={answer.value}
+        language={answer.language ?? "PYTHON"}
+        disabled={disabled}
+        onChange={(value, language) =>
+          onChange({ kind: "CODE", value, language })
+        }
       />
     );
   }

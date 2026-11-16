@@ -153,6 +153,8 @@ export interface RecommendationDetailView extends RecommendationListItemView {
   completedAt: string | null;
   practiceResult: RecommendationPracticeResultView | null;
   starterCode?: string;
+  codeLanguage?: import("@/lib/programming-language").ProgrammingLanguage;
+  programmingSample?: { stdin: string; expectedOutput: string } | null;
   programmingAttempt?: {
     id: string;
     status: string;

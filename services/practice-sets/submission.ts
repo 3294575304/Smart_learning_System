@@ -3,7 +3,12 @@ import type { QuestionType } from "@prisma/client";
 export type PracticeDraft =
   | { kind: "CHOICE"; optionIds: string[] }
   | { kind: "BOOLEAN"; value: boolean | null }
-  | { kind: "TEXT" | "CODE"; value: string };
+  | { kind: "TEXT"; value: string }
+  | {
+      kind: "CODE";
+      value: string;
+      language?: import("@/lib/programming-language").ProgrammingLanguage;
+    };
 
 export function practiceAnswerRequired(type: QuestionType): boolean {
   return ["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TRUE_FALSE"].includes(type);

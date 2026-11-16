@@ -239,7 +239,11 @@ export function RecommendationPracticeSet({
           } else if (answer.kind === "CODE" && answer.value.trim()) {
             const submitted = await submitRecommendationProgrammingRequest(
               q.id,
-              { sourceCode: answer.value, idempotencyKey: key },
+              {
+                sourceCode: answer.value,
+                language: answer.language ?? "PYTHON",
+                idempotencyKey: key,
+              },
             );
             if (!submitted.success) throw new Error(submitted.error);
             item = {

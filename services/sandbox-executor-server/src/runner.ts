@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import type { ExecutorConfig } from "./config.js";
+import { RUNTIMES } from "./languages.js";
 import type {
   SandboxErrorType,
   SandboxExecutionRequest,
@@ -72,7 +73,9 @@ export function classifySandboxOutcome(input: {
   if (
     input.oomKilled ||
     (input.exitCode === 137 && !input.timedOut) ||
-    /MemoryError|Cannot allocate memory/iu.test(input.stderr)
+    /MemoryError|Cannot allocate memory|OutOfMemoryError|Killed signal terminated program/iu.test(
+      input.stderr,
+    )
   )
     return "MEMORY_LIMIT";
   if (
@@ -91,6 +94,15 @@ export function classifySandboxOutcome(input: {
     return "PROCESS_LIMIT";
   if (input.timedOut || input.exitCode === 152) return "TIME_LIMIT";
   if (input.exitCode === 0) return "NONE";
+  if (
+    input.exitCode === 127 ||
+    /not found|Could not create the Java Virtual Machine|Error occurred during initialization of VM/iu.test(
+      input.stderr,
+    )
+  )
+    return "INTERNAL_ERROR";
+  if (input.exitCode === 65 && input.stderr.includes("COMPILATION_ERROR"))
+    return "SYNTAX_ERROR";
   if (/SyntaxError|IndentationError|TabError/iu.test(input.stderr))
     return "SYNTAX_ERROR";
   return "RUNTIME_ERROR";
@@ -149,7 +161,8 @@ export class DockerSandboxRunner {
   ): Promise<SandboxExecutionResult> {
     const containerName = `zhixue-${executionId.replace(/[^a-z0-9]/giu, "")}`;
     const executionRoot = join(this.config.workRoot, executionId);
-    const sourcePath = join(executionRoot, "main.py");
+    const runtime = RUNTIMES[request.language];
+    const sourcePath = join(executionRoot, runtime.filename);
     const startedAt = Date.now();
     this.containerNames.set(executionId, containerName);
 
@@ -193,7 +206,10 @@ export class DockerSandboxRunner {
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,nodev,size=16777216",
         "--mount",
-        `type=bind,src=${sourcePath},dst=/workspace/main.py,readonly`,
+        `type=bind,src=${sourcePath},dst=/workspace/${runtime.filename},readonly`,
+        ...(runtime.build
+          ? ["--tmpfs", "/build:rw,exec,nosuid,nodev,size=67108864,mode=1777"]
+          : []),
         "--workdir",
         "/workspace",
         "--hostname",
@@ -209,12 +225,11 @@ export class DockerSandboxRunner {
         "--label",
         "zhixue.sandbox=true",
         "--entrypoint",
-        "python3",
-        this.config.runtimeImage,
-        "-I",
-        "-B",
-        "-S",
-        "/workspace/main.py",
+        runtime.entrypoint,
+        request.language === "PYTHON"
+          ? this.config.runtimeImage
+          : this.config.runtimeImages?.[request.language] || runtime.image,
+        ...runtime.args,
       ]);
 
       if (this.cancelled.has(executionId)) {

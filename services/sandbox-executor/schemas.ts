@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { programmingLanguageSchema } from "@/lib/programming-language";
 
 export const sandboxLimitsSchema = z
   .object({
@@ -13,7 +14,7 @@ export const sandboxLimitsSchema = z
 export const sandboxExecutionRequestSchema = z
   .object({
     requestId: z.string().uuid(),
-    language: z.literal("PYTHON"),
+    language: programmingLanguageSchema,
     sourceCode: z.string().min(1).max(200_000),
     stdin: z.string().max(65_536).default(""),
     networkAccess: z.literal(false),

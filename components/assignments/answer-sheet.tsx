@@ -28,6 +28,7 @@ import {
   type AssignmentLocalDraft,
 } from "./local-draft";
 import { ProgrammingQuestionInput } from "@/components/assignments/programming-question-input";
+import { ProgrammingStatement } from "@/components/programming/programming-statement";
 import {
   QuestionAnswerInput,
   type QuestionAnswerState,
@@ -40,6 +41,11 @@ import type { SavedAnswerInput } from "@/services/assignments/schemas";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 
 interface DraftQuestion {
+  programming?: {
+    language: import("@/lib/programming-language").ProgrammingLanguage;
+    starterCode: string;
+    testCases: Array<{ stdin: string; expectedOutput: string }>;
+  } | null;
   id: string;
   title: string;
   content: string;
@@ -58,6 +64,7 @@ interface DraftQuestion {
 interface SavedAnswer {
   assignmentQuestionId: string;
   textAnswer: string | null;
+  codeLanguage?: import("@/lib/programming-language").ProgrammingLanguage;
   booleanAnswer: boolean | null;
   optionIds: string[];
   responseTimeMs: number | null;
@@ -129,7 +136,18 @@ function initialAnswers(
         ];
       }
       if (question.type === QuestionType.PYTHON_PROGRAMMING) {
-        return [question.id, { kind: "CODE", value: answer?.textAnswer ?? "" }];
+        return [
+          question.id,
+          {
+            kind: "CODE",
+            value:
+              answer?.textAnswer ?? question.programming?.starterCode ?? "",
+            language:
+              answer?.codeLanguage ??
+              question.programming?.language ??
+              "PYTHON",
+          },
+        ];
       }
       return [question.id, { kind: "TEXT", value: answer?.textAnswer ?? "" }];
     }),
@@ -162,11 +180,19 @@ function apiAnswers(
             responseTimeMs,
           };
     }
+    if (answer.kind === "CODE")
+      return {
+        assignmentQuestionId,
+        kind: "CODE",
+        value: answer.value,
+        language: answer.language ?? "PYTHON",
+        responseTimeMs,
+      };
     return answer.value.length === 0
       ? { assignmentQuestionId, kind: "EMPTY", responseTimeMs }
       : {
           assignmentQuestionId,
-          kind: answer.kind === "CODE" ? "CODE" : "TEXT",
+          kind: "TEXT",
           value: answer.value,
           responseTimeMs,
         };
@@ -811,7 +837,14 @@ export function AnswerSheet({
                     </div>
                   </div>
                   <div className="mt-4 min-w-0">
-                    <QuestionText text={question.content} />
+                    {question.type === QuestionType.PYTHON_PROGRAMMING ? (
+                      <ProgrammingStatement
+                        text={question.content}
+                        sample={question.programming?.testCases[0]}
+                      />
+                    ) : (
+                      <QuestionText text={question.content} />
+                    )}
                   </div>
                   {question.images?.map((image) => (
                     <Image
@@ -830,8 +863,13 @@ export function AnswerSheet({
                       assignmentQuestionId={question.id}
                       disabled={editingDisabled}
                       code={answer.value}
-                      onChange={(code) =>
-                        changeAnswer(question.id, { kind: "CODE", value: code })
+                      language={answer.language ?? "PYTHON"}
+                      onChange={(code, language) =>
+                        changeAnswer(question.id, {
+                          kind: "CODE",
+                          value: code,
+                          language,
+                        })
                       }
                       submissionId={submission.id}
                     />

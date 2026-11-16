@@ -125,7 +125,11 @@ export function submitRecommendationPracticeRequest(
 
 export function submitRecommendationProgrammingRequest(
   recommendationId: string,
-  input: { sourceCode: string; idempotencyKey: string },
+  input: {
+    sourceCode: string;
+    language?: import("@/lib/programming-language").ProgrammingLanguage;
+    idempotencyKey: string;
+  },
   options: RequestOptions = {},
 ): Promise<ActionResult<{ attemptId: string; status: string }>> {
   return requestRecommendationApi(

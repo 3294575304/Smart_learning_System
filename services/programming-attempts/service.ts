@@ -7,6 +7,10 @@ import {
 import { assertClassroomWorkAllowed } from "@/services/assignments/classroom-work";
 import "server-only";
 import {
+  programmingRuntimeLimits,
+  type ProgrammingLanguage,
+} from "@/lib/programming-language";
+import {
   assertPracticeGroupWritable,
   readPracticeManagement,
 } from "@/services/practice-sets/management";
@@ -26,6 +30,7 @@ import {
 } from "@prisma/client";
 
 import { needsProgrammingScoreReview } from "@/services/programming-attempts/review-policy";
+import { studentCaseDetails } from "@/services/programming-attempts/student-results";
 import { prisma } from "@/lib/prisma";
 import { AssignmentOperationError } from "@/services/assignments/errors";
 import { runAssignmentSerializable } from "@/services/assignments/transactions";
@@ -89,7 +94,8 @@ function safeSummary(errorType: ProgrammingJudgeErrorType) {
 
 function safePublicStderr(value: string) {
   return value
-    .replaceAll("/workspace/main.py", "main.py")
+    .replace(/\/workspace\/(main\.(?:py|c|cpp|js)|Main\.java)/gu, "$1")
+    .replace(/\/build\/[^\s:]+/gu, "program")
     .replace(/File "[^"]+"/gu, 'File "main.py"')
     .slice(0, 16_384);
 }
@@ -105,6 +111,7 @@ async function createAttemptAndJob(
     studentId: string;
     createdById: string;
     sourceCode: string;
+    language?: ProgrammingLanguage;
     kind: ProgrammingAttemptKind;
     courseId: string | null;
     idempotencyKey: string;
@@ -130,6 +137,9 @@ async function createAttemptAndJob(
   }
   const inputFingerprint = programmingAttemptFingerprint({
     sourceCode: input.sourceCode,
+    ...(input.language && input.language !== "PYTHON"
+      ? { language: input.language }
+      : {}),
     kind: input.kind,
     configurationHash:
       snapshot?.configurationHash ?? configRevision.configurationHash,
@@ -172,6 +182,7 @@ async function createAttemptAndJob(
       kind: input.kind,
       revisionNumber: (latest?.revisionNumber ?? 0) + 1,
       sourceCode: input.sourceCode,
+      language: input.language ?? "PYTHON",
       inputFingerprint,
       ruleVersion:
         snapshot?.executorRuleVersion ?? configRevision.executorRuleVersion,
@@ -273,6 +284,7 @@ export async function createPublicProgrammingRun(
       studentId,
       createdById: studentId,
       sourceCode: input.sourceCode,
+      language: input.language ?? "PYTHON",
       kind: ProgrammingAttemptKind.PUBLIC_RUN,
       courseId: submission.assignment.classroom.courseId,
       idempotencyKey: `public:${answer.id}:${input.idempotencyKey}`,
@@ -288,6 +300,7 @@ export async function createFormalProgrammingAttempt(
     assignmentQuestionId: string;
     studentId: string;
     sourceCode: string;
+    language?: ProgrammingLanguage;
     courseId: string | null;
   },
 ) {
@@ -313,6 +326,7 @@ export async function createRecommendationProgrammingAttempt(
   rawInput: unknown,
 ) {
   const input = createRecommendationProgrammingAttemptSchema.parse(rawInput);
+  const requestKey = `${input.kind === "PUBLIC_RUN" ? "recommendation-run" : "recommendation"}:${recommendationId}:${input.idempotencyKey}`;
   return runAssignmentSerializable(async (transaction) => {
     await assertPracticeGroupWritable(transaction, studentId, recommendationId);
     const existing = await transaction.programmingAttempt.findFirst({
@@ -321,15 +335,21 @@ export async function createRecommendationProgrammingAttempt(
         recommendationId,
         backgroundJob: {
           is: {
-            type: "PYTHON_JUDGE",
-            idempotencyKey: `recommendation:${recommendationId}:${input.idempotencyKey}`,
+            type:
+              input.kind === "PUBLIC_RUN"
+                ? "PYTHON_PUBLIC_RUN"
+                : "PYTHON_JUDGE",
+            idempotencyKey: requestKey,
           },
         },
       },
-      select: { id: true, sourceCode: true, status: true },
+      select: { id: true, sourceCode: true, language: true, status: true },
     });
     if (existing) {
-      if (existing.sourceCode !== input.sourceCode)
+      if (
+        existing.sourceCode !== input.sourceCode ||
+        existing.language !== input.language
+      )
         throw new AssignmentOperationError("相同幂等键对应了不同判题输入", 409);
       return { attemptId: existing.id, status: existing.status };
     }
@@ -389,9 +409,10 @@ export async function createRecommendationProgrammingAttempt(
       studentId,
       createdById: studentId,
       sourceCode: input.sourceCode,
-      kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+      language: input.language ?? "PYTHON",
+      kind: input.kind,
       courseId,
-      idempotencyKey: `recommendation:${recommendation.id}:${input.idempotencyKey}`,
+      idempotencyKey: requestKey,
     });
     return { attemptId: attempt.id, status: attempt.status };
   }, "推荐判题请求发生冲突，请重试");
@@ -435,26 +456,21 @@ export async function getProgrammingAttemptPayload(attemptId: string) {
       attempt.configSnapshot?.configRevision ?? attempt.configRevision;
     if (!config) throw new AssignmentOperationError("判题配置不存在", 409);
     const allCases = config.testCases;
-    const selectedCases =
-      attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
-        ? allCases.filter(
-            (testCase) =>
-              testCase.visibility === ProgrammingTestVisibility.PUBLIC,
-          )
-        : allCases;
+    const selectedCases = allCases;
     return {
       attemptId: attempt.id,
       kind: attempt.kind,
       sourceCode: attempt.sourceCode,
+      language: attempt.language,
       inputFingerprint: attempt.inputFingerprint,
-      limits: {
+      limits: programmingRuntimeLimits(attempt.language, {
         cpuTimeMs: attempt.configSnapshot?.cpuTimeMs ?? config.cpuTimeMs,
         wallTimeMs: attempt.configSnapshot?.wallTimeMs ?? config.wallTimeMs,
         memoryBytes: attempt.configSnapshot?.memoryBytes ?? config.memoryBytes,
         outputBytes: attempt.configSnapshot?.outputBytes ?? config.outputBytes,
         processCount:
           attempt.configSnapshot?.processCount ?? config.processCount,
-      },
+      }),
       testCases: selectedCases.map((testCase) => ({
         id: testCase.id,
         visibility: testCase.visibility,
@@ -551,13 +567,7 @@ async function projectJudgeResult(
     attempt.configSnapshot?.configRevision ?? attempt.configRevision;
   if (!config) throw new AssignmentOperationError("判题配置不存在", 409);
   const allCases = config.testCases;
-  const expectedCases =
-    attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
-      ? allCases.filter(
-          (testCase) =>
-            testCase.visibility === ProgrammingTestVisibility.PUBLIC,
-        )
-      : allCases;
+  const expectedCases = allCases;
   const resultByCase = new Map(
     result.cases.map((item) => [item.testCaseId, item]),
   );
@@ -781,9 +791,13 @@ function studentAttemptDto(
     include: typeof attemptInclude;
   }>,
 ) {
+  const firstPublicId = attempt.testResults.find(
+    (item) => item.visibility === ProgrammingTestVisibility.PUBLIC,
+  )?.id;
   return {
     id: attempt.id,
     kind: attempt.kind,
+    language: attempt.language,
     status: attempt.status,
     jobStatus: attempt.backgroundJob?.status ?? null,
     progress: attempt.backgroundJob?.progress ?? 0,
@@ -794,15 +808,17 @@ function studentAttemptDto(
     createdAt: attempt.createdAt,
     completedAt: attempt.completedAt,
     cases: attempt.testResults.map((item) => ({
+      ...studentCaseDetails(
+        item,
+        firstPublicId,
+        attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN,
+      ),
       index: item.caseIndex,
       passed: item.passed,
       score: item.earnedPoints.toNumber(),
       maxScore: item.maxPoints.toNumber(),
       errorType: item.errorType,
       safeErrorSummary: item.safeErrorSummary,
-      ...(attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
-        ? { stdout: item.stdout ?? "", stderr: item.stderr ?? "" }
-        : {}),
     })),
   };
 }
@@ -890,6 +906,7 @@ export async function rejudgeProgrammingAttempt(
       studentId: previous.studentId,
       createdById: teacherId,
       sourceCode: previous.sourceCode,
+      language: previous.language,
       kind: ProgrammingAttemptKind.FORMAL_JUDGE,
       courseId: previous.studentAnswer.submission.assignment.classroom.courseId,
       idempotencyKey: `rejudge:${previous.studentAnswerId}:${idempotencyKey}`,
@@ -968,6 +985,7 @@ export async function revokeProgrammingAttempt(
         kind: ProgrammingAttemptKind.FORMAL_JUDGE,
         revisionNumber: latest.revisionNumber + 1,
         sourceCode: previous.sourceCode,
+        language: previous.language,
         inputFingerprint: programmingAttemptFingerprint({
           revokedAttemptId: previous.id,
           reason,
@@ -1050,6 +1068,7 @@ export async function rejudgeRecommendationProgrammingAttempt(
       studentId: previous.studentId,
       createdById: teacherId,
       sourceCode: previous.sourceCode,
+      language: previous.language,
       kind: ProgrammingAttemptKind.FORMAL_JUDGE,
       courseId: previous.recommendation.courseCycle.courseId,
       idempotencyKey: `recommendation-rejudge:${previous.recommendationId}:${idempotencyKey}`,
@@ -1120,6 +1139,7 @@ export async function revokeRecommendationProgrammingAttempt(
         kind: ProgrammingAttemptKind.FORMAL_JUDGE,
         revisionNumber: latest.revisionNumber + 1,
         sourceCode: previous.sourceCode,
+        language: previous.language,
         inputFingerprint: programmingAttemptFingerprint({
           revokedAttemptId: previous.id,
           reason,

@@ -78,12 +78,14 @@ const recommendationViewSelect =
       },
     },
     programmingAttempts: {
+      where: { kind: "FORMAL_JUDGE" },
       orderBy: { revisionNumber: "desc" },
       take: 1,
       select: {
         id: true,
         status: true,
         sourceCode: true,
+        language: true,
         backgroundJob: { select: { progress: true } },
       },
     },
@@ -105,7 +107,16 @@ const recommendationViewSelect =
         programmingConfigRevisions: {
           orderBy: { revisionNumber: "desc" },
           take: 1,
-          select: { starterCode: true },
+          select: {
+            starterCode: true,
+            language: true,
+            testCases: {
+              where: { visibility: "PUBLIC" },
+              orderBy: { sortOrder: "asc" },
+              take: 1,
+              select: { stdin: true, expectedOutput: true },
+            },
+          },
         },
         correctBoolean: true,
         referenceAnswer: true,

@@ -24,6 +24,9 @@ export function programmingConfigFingerprints(
   return {
     testCasesHash,
     configurationHash: sha256({
+      ...(input.language && input.language !== "PYTHON"
+        ? { language: input.language }
+        : {}),
       standardCode: input.standardCode,
       starterCode: input.starterCode,
       totalPoints: input.totalPoints.toFixed(2),

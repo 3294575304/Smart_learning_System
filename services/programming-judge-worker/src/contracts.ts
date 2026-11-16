@@ -72,6 +72,9 @@ export const programmingAttemptPayloadSchema = z
   .object({
     attemptId: z.string().cuid(),
     kind: z.enum(["PUBLIC_RUN", "FORMAL_JUDGE"]),
+    language: z
+      .enum(["PYTHON", "C", "CPP", "JAVA", "JAVASCRIPT"])
+      .default("PYTHON"),
     sourceCode: z.string().max(200_000),
     inputFingerprint: z.string().length(64),
     limits: sandboxLimitsSchema,

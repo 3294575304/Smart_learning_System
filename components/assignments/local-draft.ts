@@ -1,3 +1,4 @@
+import { programmingLanguageSchema } from "@/lib/programming-language";
 import { z } from "zod";
 import type {
   AnswerableQuestion,
@@ -11,7 +12,11 @@ const answer = z.discriminatedUnion("kind", [
   }),
   z.object({ kind: z.literal("BOOLEAN"), value: z.boolean().nullable() }),
   z.object({ kind: z.literal("TEXT"), value: z.string().max(100_000) }),
-  z.object({ kind: z.literal("CODE"), value: z.string().max(200_000) }),
+  z.object({
+    kind: z.literal("CODE"),
+    value: z.string().max(200_000),
+    language: programmingLanguageSchema.optional(),
+  }),
 ]);
 const localDraftSchema = z.object({
   answers: z.record(z.string(), answer),

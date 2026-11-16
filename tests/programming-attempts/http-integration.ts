@@ -660,7 +660,9 @@ async function main(): Promise<void> {
     assert.equal(publicResult.status, ProgrammingAttemptStatus.SUCCEEDED);
     assert.equal(publicResult.kind, "PUBLIC_RUN");
     assert.equal(publicResult.score, null);
-    assert.equal(publicResult.cases.length, 1);
+    assert.equal(publicResult.cases.length, 2);
+    assert.equal(publicResult.cases[1]?.stdout, undefined);
+    assert.equal(publicResult.cases[1]?.stderr, undefined);
     assert.equal(
       publicResult.cases[0]?.stdout,
       "4\n",

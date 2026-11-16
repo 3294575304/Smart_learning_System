@@ -1,3 +1,4 @@
+import { programmingLanguageSchema } from "@/lib/programming-language";
 import { ProgrammingTestVisibility } from "@prisma/client";
 import { z } from "zod";
 
@@ -30,6 +31,7 @@ export const programmingTestCaseInputSchema = z
 
 export const programmingConfigRevisionInputSchema = z
   .object({
+    language: programmingLanguageSchema.optional(),
     standardCode: z.string().min(1).max(200_000),
     starterCode: z.string().max(200_000),
     totalPoints: preciseScore,

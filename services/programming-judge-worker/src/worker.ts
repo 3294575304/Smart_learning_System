@@ -195,7 +195,12 @@ export class ProgrammingJudgeWorker {
             payload.inputFingerprint,
             testCase.id,
           ),
-          sourceCode: payload.sourceCode.trim() ? payload.sourceCode : "pass\n",
+          sourceCode: payload.sourceCode.trim()
+            ? payload.sourceCode
+            : payload.language === "PYTHON"
+              ? "pass\n"
+              : " ",
+          language: payload.language,
           stdin: testCase.stdin,
           limits: payload.limits,
           jobId: job.id,

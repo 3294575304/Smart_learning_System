@@ -30,6 +30,7 @@ export function isAutoGradableQuestionType(type: QuestionType): boolean {
 
 export interface StoredGradingAnswer {
   textAnswer: string | null;
+  codeLanguage?: import("@/lib/programming-language").ProgrammingLanguage;
   booleanAnswer: boolean | null;
   selectedOptions: Array<{ assignmentQuestionOptionId: string }>;
 }
@@ -66,6 +67,7 @@ export function savedAnswerInput(
       : {
           assignmentQuestionId: question.id,
           kind: "CODE",
+          language: answer.codeLanguage ?? "PYTHON",
           value: answer.textAnswer,
         };
   }

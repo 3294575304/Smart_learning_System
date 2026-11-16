@@ -22,7 +22,7 @@ export interface SandboxLimits {
 
 export interface SandboxExecutionRequest {
   requestId: string;
-  language: "PYTHON";
+  language: "PYTHON" | "C" | "CPP" | "JAVA" | "JAVASCRIPT";
   sourceCode: string;
   stdin: string;
   networkAccess: false;
@@ -99,7 +99,8 @@ export function validateExecutionRequest(
       "metadata",
     ]) ||
     !isUuid(value.requestId) ||
-    value.language !== "PYTHON" ||
+    typeof value.language !== "string" ||
+    !["PYTHON", "C", "CPP", "JAVA", "JAVASCRIPT"].includes(value.language) ||
     typeof value.sourceCode !== "string" ||
     value.sourceCode.length < 1 ||
     value.sourceCode.length > 200_000 ||
