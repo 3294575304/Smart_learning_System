@@ -2,6 +2,7 @@ import React from "react";
 import { getStudentHomeKnowledge } from "@/services/dashboard/student-home-knowledge";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { HomeKnowledgeMatrix } from "./home-knowledge-matrix";
+import { StudentKnowledgeSummary } from "./student-knowledge-summary";
 import { StudentSectionRetry } from "./student-section-retry";
 import { StudentPageLink } from "./student-page-link";
 import { FOCUS_RING } from "./ui-focus";
@@ -54,6 +55,7 @@ export async function StudentHomeKnowledge({
   }
   return (
     <>
+      <StudentKnowledgeSummary chapters={knowledge.heatmap} />
       <HomeKnowledgeMatrix
         chapters={knowledge.heatmap}
         profileHref={`/student/courses/${courseId}/profile?${new URLSearchParams({ classroomId })}`}

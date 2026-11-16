@@ -98,7 +98,7 @@ export function ExamPublicationDialog({
               type="button"
               disabled={busy}
               onClick={onConfirm}
-              className="min-h-10 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50"
+              className="tt-btn-cta min-h-10 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800 disabled:opacity-50"
             >
               {busy ? "正在发布…" : "确认发布考试"}
             </button>

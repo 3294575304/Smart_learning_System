@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 import { CourseRosterImportWizard } from "@/components/courses/course-roster-import-wizard";
 import { requestApi } from "@/components/courses/request-api";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
+import { ClassroomStatusBadge } from "@/components/classrooms/classroom-status-badge";
 import {
   createClassroomSchema,
   type CreateClassroomData,
@@ -177,9 +177,7 @@ export function CourseClassroomManager({
                       {classroom.description ?? "暂无班级说明"}
                     </p>
                   </div>
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
-                    {CLASSROOM_STATUS_LABELS[classroom.status]}
-                  </span>
+                  <ClassroomStatusBadge status={classroom.status} />
                 </div>
                 <p className="text-muted-foreground mt-3 text-xs">
                   班级成员 {classroom.studentCount} 名

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { RotateCcw } from "lucide-react";
 import Link from "next/link";
 import type { ClassroomStatus } from "@prisma/client";
 import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
@@ -44,12 +45,12 @@ export function TeacherResultsFilters({
       (!query.courseId || classroom.courseId === query.courseId) &&
       reportingClassroomMatches(classroom, query.section),
   );
-  const control = "h-10 w-full min-w-0 rounded-lg border bg-card px-3 text-sm";
+  const control = "max-w-full sm:max-w-72";
   return (
-    <div className="space-y-2">
+    <div className="max-w-full min-w-0 space-y-2">
       <form
         aria-label="成绩统计筛选"
-        className="bg-card grid gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,18rem)_8rem_minmax(10rem,16rem)_auto] lg:items-end"
+        className="tt-fbar"
         onChange={(event) => {
           const form = event.currentTarget;
           const course = form.elements.namedItem("courseId");
@@ -83,8 +84,8 @@ export function TeacherResultsFilters({
           form.requestSubmit();
         }}
       >
-        <label className="min-w-0 space-y-1.5">
-          <span className="text-xs font-medium">课程</span>
+        <label className="max-w-full min-w-0">
+          <span className="sr-only">课程</span>
           <select
             className={control}
             defaultValue={query.courseId ?? ""}
@@ -98,8 +99,8 @@ export function TeacherResultsFilters({
             ))}
           </select>
         </label>
-        <label className="min-w-0 space-y-1.5">
-          <span className="text-xs font-medium">教学范围</span>
+        <label className="max-w-full min-w-0">
+          <span className="sr-only">教学范围</span>
           <select
             className={control}
             defaultValue={query.section}
@@ -112,8 +113,8 @@ export function TeacherResultsFilters({
             ))}
           </select>
         </label>
-        <label className="min-w-0 space-y-1.5">
-          <span className="text-xs font-medium">班级</span>
+        <label className="max-w-full min-w-0">
+          <span className="sr-only">班级</span>
           <select
             className={control}
             defaultValue={query.classroomId ?? ""}
@@ -132,23 +133,15 @@ export function TeacherResultsFilters({
         </label>
         <input name="pageSize" type="hidden" value={query.pageSize} />
         <input name="scopeChanged" type="hidden" defaultValue="0" />
-        <div className="flex items-end gap-2">
-          <button
-            type="submit"
-            className="bg-brand hover:bg-brand-strong h-10 rounded-lg px-4 text-sm font-medium text-white"
-          >
-            查看
-          </button>
-          <Link
-            className="inline-flex h-10 items-center rounded-lg border px-4 text-sm"
-            href="/teacher/results"
-          >
+        {query.courseId || query.classroomId || query.section !== "ALL" ? (
+          <Link className="tt-btn-ghost shrink-0" href="/teacher/results">
+            <RotateCcw aria-hidden="true" className="size-3.5" />
             重置
           </Link>
-        </div>
+        ) : null}
       </form>
       {scopeChanged && (
-        <p role="status" className="text-brand-strong text-sm">
+        <p role="status" className="text-sm text-sky-800">
           原班级不属于新的课程或教学范围，已切换为该范围的全部班级。
         </p>
       )}

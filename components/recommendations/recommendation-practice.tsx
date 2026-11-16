@@ -18,7 +18,8 @@ import {
   type QuestionAnswerState,
 } from "@/components/assignments/question-answer-input";
 import { ProgrammingAttemptStatus } from "@/components/assignments/programming-attempt-status";
-import { PythonCodeEditor } from "@/components/assignments/python-code-editor";
+import { PythonCodeEditor } from "@/components/programming/code-editor";
+import { ProgrammingStatement } from "@/components/programming/programming-statement";
 import {
   AnswerQuestionHeading,
   ProgrammingAnswerLayout,
@@ -353,11 +354,11 @@ export function RecommendationPractice({
       <h3 className="text-ink text-sm font-semibold">你的作答</h3>
       <PythonCodeEditor
         disabled={programmingPending || Boolean(programmingAttemptId)}
-        onChange={(event) => {
-          setCode(event.target.value);
+        onChange={(next) => {
+          setCode(next);
           onDraftChange?.(recommendation.id, {
             kind: "CODE",
-            value: event.target.value,
+            value: next,
           });
         }}
         value={code}
@@ -397,7 +398,9 @@ export function RecommendationPractice({
               <>
                 {embeddedHeading}
                 <ProgrammingAnswerLayout
-                  prompt={<QuestionText text={recommendation.content} />}
+                  prompt={
+                    <ProgrammingStatement text={recommendation.content} />
+                  }
                 >
                   {codeEditor}
                 </ProgrammingAnswerLayout>
@@ -407,7 +410,7 @@ export function RecommendationPractice({
                 <h2 className="font-semibold [overflow-wrap:anywhere]">
                   {recommendation.title}
                 </h2>
-                <QuestionText text={recommendation.content} />
+                <ProgrammingStatement text={recommendation.content} />
                 {codeEditor}
               </div>
             )}

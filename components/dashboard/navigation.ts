@@ -1,6 +1,7 @@
 import type { Role } from "@prisma/client";
 import {
   BarChart3,
+  Bell,
   BookOpenCheck,
   BrainCircuit,
   ClipboardCheck,
@@ -95,7 +96,16 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
     },
   ],
   STUDENT: [
-    { items: [{ href: "/student", label: "学习主页", icon: Home }] },
+    {
+      items: [
+        {
+          href: "/student",
+          label: "学习主页",
+          icon: Home,
+          relatedPaths: ["/student/search"],
+        },
+      ],
+    },
     {
       label: "课程学习",
       items: [
@@ -144,6 +154,15 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
     },
   ],
 };
+
+export const STUDENT_FOOTER_NAVIGATION: NavigationGroup[] = [
+  {
+    items: [
+      { href: "/notifications", label: "通知", icon: Bell },
+      { href: "/student/settings", label: "设置", icon: Settings },
+    ],
+  },
+];
 
 export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   "super-admin": "超级管理员工作台",
@@ -205,6 +224,8 @@ const STUDENT_SEGMENT_LABELS: Readonly<Record<string, string>> = {
     ),
   ),
   "course-grades": "课程总评",
+  search: "搜索结果",
+  settings: "设置",
   "question-favorites": "我的收藏",
   submissions: "我的作答",
   practice: "练习",

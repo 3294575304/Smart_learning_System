@@ -4,33 +4,33 @@ import { PageIndex } from "./page-index";
 import type { StudentClassroomOption } from "./student-classroom-filter";
 import {
   activityHref,
+  withAssignmentTaskReturn,
   activityKindLabels,
   activityStatusLabels,
   activityStatusOptions,
-  withAssignmentTaskReturn,
   type ActivityQuery,
   type ActivityView,
 } from "@/services/student-experience/activity-query";
 
 export const activityCardClass =
-  "min-w-0 rounded-xl border border-sky-100 bg-white p-4 sm:p-5";
+  "st-activity-card min-w-0 rounded-xl border border-sky-100 bg-white p-4 sm:p-5";
 export const activityActionClass =
   "inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
 const control =
   "min-h-10 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-700";
 
 export function StudentActivityFilters({
+  returnTo,
   view,
   query,
   classrooms,
   total,
-  returnTo,
 }: {
+  returnTo?: string;
   view: ActivityView;
   query: ActivityQuery;
   classrooms: StudentClassroomOption[];
   total: number;
-  returnTo?: string;
 }) {
   const fixed = Boolean(query.courseId && query.classroomId);
   const classroom = classrooms.find(
@@ -47,11 +47,7 @@ export function StudentActivityFilters({
       {query.courseId && (
         <input type="hidden" name="courseId" value={query.courseId} />
       )}
-      {/*
-        筛选控件与计数同行：计数是弱信息，不该单独占一行、
-        也不该让筛选卡和内容卡同等高度。控件换行时计数自然落到下一行行尾。
-      */}
-      <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
+      <div className="flex flex-wrap items-end gap-3">
         {fixed ? (
           <div aria-label="当前教学班" className="min-w-0 flex-1 text-sm">
             <input type="hidden" name="classroomId" value={query.classroomId} />
@@ -114,45 +110,45 @@ export function StudentActivityFilters({
             ))}
           </AutoSubmitSelect>
         </label>
-        <div className="ml-auto flex items-center gap-2 pb-2 text-sm text-neutral-600">
-          <p role="status">共 {total} 项</p>
-          {(query.status !== "ALL" ||
-            query.kind !== "ALL" ||
-            (query.classroomId && !fixed)) && (
-            <Link
-              className="rounded px-2 py-1 font-medium text-sky-800 hover:bg-sky-50 focus-visible:outline-2"
-              href={withAssignmentTaskReturn(
-                activityHref(view, {
-                  courseId: query.courseId,
-                  classroomId: fixed ? query.classroomId : undefined,
-                }),
-                returnTo,
-              )}
-            >
-              重置筛选
-            </Link>
-          )}
-          <noscript>
-            <button className={activityActionClass} type="submit">
-              应用筛选
-            </button>
-          </noscript>
-        </div>
+        <noscript>
+          <button className={activityActionClass} type="submit">
+            应用筛选
+          </button>
+        </noscript>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+        <p role="status">共 {total} 项</p>
+        {(query.status !== "ALL" ||
+          query.kind !== "ALL" ||
+          (query.classroomId && !fixed)) && (
+          <Link
+            className="rounded px-2 py-1 font-medium text-sky-800 hover:bg-sky-50 focus-visible:outline-2"
+            href={withAssignmentTaskReturn(
+              activityHref(view, {
+                courseId: query.courseId,
+                classroomId: fixed ? query.classroomId : undefined,
+              }),
+              returnTo,
+            )}
+          >
+            重置筛选
+          </Link>
+        )}
       </div>
     </form>
   );
 }
 
 export function StudentActivityPagination({
+  returnTo,
   view,
   query,
   pagination,
-  returnTo,
 }: {
+  returnTo?: string;
   view: ActivityView;
   query: ActivityQuery;
   pagination: { page: number; totalPages: number };
-  returnTo?: string;
 }) {
   return (
     <PageIndex

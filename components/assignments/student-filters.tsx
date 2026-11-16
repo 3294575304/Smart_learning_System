@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import { RotateCcw, Search } from "lucide-react";
 import {
   studentListHref,
   type TeacherStudentQuery,
@@ -20,6 +21,7 @@ export function AssignmentCourseFilter({
   notice,
   studentQuery,
   category,
+  compact = false,
 }: {
   courses: { id: string; name: string; term: string }[];
   classrooms: { id: string; courseId: string | null }[];
@@ -29,6 +31,7 @@ export function AssignmentCourseFilter({
   notice: boolean;
   studentQuery?: TeacherStudentQuery;
   category?: string;
+  compact?: boolean;
 }) {
   useEffect(() => {
     if (notice) {
@@ -38,9 +41,9 @@ export function AssignmentCourseFilter({
     }
   }, [notice]);
   return (
-    <div>
+    <div className={compact ? "assignment-course-inline" : undefined}>
       <form
-        className="flex flex-wrap items-center gap-3"
+        className={compact ? "assignment-course-inline-form" : "tt-fbar"}
         onSubmit={(event) => {
           const form = event.currentTarget;
           const course = form.elements.namedItem("courseId");
@@ -90,10 +93,10 @@ export function AssignmentCourseFilter({
           defaultValue={classroomId ?? ""}
         />
         <input type="hidden" name="scopeChanged" defaultValue="0" />
-        <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium">
+        <label className="flex max-w-full min-w-0 items-center gap-2 text-xs font-medium">
           课程
           <select
-            className="h-10 w-full max-w-sm min-w-0 rounded-lg border bg-white px-3 text-sm sm:w-80"
+            className="max-w-full sm:max-w-80"
             name="courseId"
             defaultValue={courseId ?? ""}
             onChange={(event) => event.currentTarget.form?.requestSubmit()}
@@ -122,23 +125,39 @@ export function StudentAssignmentFilters({
   query: TeacherStudentQuery;
   classrooms: Classroom[];
 }) {
-  const control = "h-10 min-w-0 rounded-lg border bg-white px-3 text-sm";
   return (
-    <form
-      aria-label="学生作业查询"
-      className="flex flex-wrap items-center gap-3 rounded-xl border bg-white p-3 sm:p-4"
-    >
+    <form aria-label="学生作业查询" className="tt-fbar">
       <input type="hidden" name="view" value="STUDENTS" />
       <input type="hidden" name="section" value="ALL" />
       <input type="hidden" name="pageSize" value={query.pageSize} />
       {query.courseId && (
         <input type="hidden" name="courseId" value={query.courseId} />
       )}
-      <label className="flex w-full min-w-0 items-center gap-2 text-sm sm:w-auto">
-        <span className="shrink-0">班级</span>
+      <div className="tt-search" style={{ flex: "1 1 16rem" }}>
+        <Search
+          aria-hidden="true"
+          className="size-3.5 shrink-0 text-slate-400"
+        />
+        <input
+          aria-label="姓名或学号"
+          name="studentKeyword"
+          maxLength={120}
+          placeholder="搜索学生学号／姓名"
+          defaultValue={query.studentKeyword}
+          type="search"
+        />
+        <button
+          type="submit"
+          className="shrink-0 text-xs font-medium text-sky-700 hover:text-sky-900"
+        >
+          搜索
+        </button>
+      </div>
+      <label className="max-w-full min-w-0">
+        <span className="sr-only">班级</span>
         <select
           name="classroomId"
-          className={`${control} w-full sm:w-[220px]`}
+          className="max-w-full sm:max-w-56"
           defaultValue={query.classroomId ?? ""}
           onChange={(event) => event.currentTarget.form?.requestSubmit()}
         >
@@ -155,25 +174,9 @@ export function StudentAssignmentFilters({
             ))}
         </select>
       </label>
-      <label className="w-full min-w-0 sm:w-[280px]">
-        <span className="sr-only">姓名或学号</span>
-        <input
-          name="studentKeyword"
-          maxLength={120}
-          placeholder="搜索学生学号／姓名"
-          defaultValue={query.studentKeyword}
-          className={`${control} w-full`}
-        />
-      </label>
-      <button
-        type="submit"
-        className="h-10 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800"
-      >
-        搜索
-      </button>
       {(query.classroomId || query.studentKeyword) && (
         <a
-          className="inline-flex h-10 items-center px-1 text-sm text-slate-500 hover:text-sky-700"
+          className="tt-btn-ghost shrink-0"
           href={studentListHref(
             {
               ...query,
@@ -184,7 +187,8 @@ export function StudentAssignmentFilters({
             1,
           )}
         >
-          清空
+          <RotateCcw aria-hidden="true" className="size-3.5" />
+          重置
         </a>
       )}
     </form>

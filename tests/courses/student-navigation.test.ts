@@ -8,6 +8,7 @@ import {
   getDashboardPageTitle,
   isNavigationItemActive,
   NAVIGATION,
+  STUDENT_FOOTER_NAVIGATION,
 } from "../../components/dashboard/navigation";
 
 test("学生共享路径使用学生名称，顶部与面包屑保持一致", () => {
@@ -214,7 +215,9 @@ test("学生全部已实现页面有一致标题、唯一选中导航，侧栏�
     );
     return nested.flat();
   }
-  const items = NAVIGATION.STUDENT.flatMap((g) => g.items);
+  const items = [...NAVIGATION.STUDENT, ...STUDENT_FOOTER_NAVIGATION].flatMap(
+    (g) => g.items,
+  );
   for (const file of await pages(root)) {
     const relative = path
       .relative(root, path.dirname(file))

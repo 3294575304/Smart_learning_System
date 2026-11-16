@@ -25,7 +25,9 @@ function ClassRateBars({
 }) {
   const completion = kind === "completion";
   const totals = summarizeAssignmentRates(rows);
-  const color = completion ? "#0d9488" : "#6366f1";
+  const color = completion
+    ? "var(--tt-brand, #0d9488)"
+    : "var(--tt-ink-2, #6366f1)";
   const title = completion ? "作业完成率" : "作业正确率";
   const rate = completion ? totals.completionRate : totals.accuracyRate;
   const numerator = completion ? totals.completedCount : totals.correctCount;
@@ -36,7 +38,7 @@ function ClassRateBars({
   const barWidth = Math.min(38, slot * 0.48);
   const y = (value: number) => 148 - value * 1.12;
   return (
-    <figure className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+    <figure className="flex min-w-0 flex-col rounded-xl border border-slate-100 bg-slate-50/50 p-3">
       <figcaption className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <span
@@ -61,7 +63,7 @@ function ClassRateBars({
           : `${totals.correctCount} / ${totals.judgedCount} 已判定题次答对`}
       </p>
       {ring ? (
-        <div className="mt-2 flex flex-col items-center gap-2">
+        <div className="mt-2 flex flex-1 flex-col items-center justify-center gap-2">
           <svg
             viewBox="0 0 180 180"
             className="size-40 max-w-full"
@@ -137,7 +139,9 @@ function ClassRateBars({
           </ul>
         </div>
       ) : (
-        <div className={`${styles.scrollArea} mt-2 overflow-x-auto`}>
+        <div
+          className={`${styles.scrollArea} mt-2 flex flex-1 items-center overflow-x-auto`}
+        >
           <svg
             viewBox={`0 0 ${width} 202`}
             className="h-52 w-full"
@@ -250,7 +254,7 @@ export function TeacherAssignmentProgress({
   return (
     <section
       aria-labelledby="assignment-progress-title"
-      className={`${styles.card} flex min-w-0 flex-col border bg-white p-4 xl:max-h-[520px] xl:overflow-y-auto ${className ?? ""}`}
+      className={`${styles.card} flex min-w-0 flex-col border bg-white p-4 xl:min-h-0 xl:self-stretch ${className ?? ""}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2
@@ -275,7 +279,7 @@ export function TeacherAssignmentProgress({
           当前范围暂无已发布作业
         </div>
       ) : (
-        <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid min-h-0 min-w-0 flex-1 gap-3 sm:grid-cols-2">
           <ClassRateBars rows={rows} kind="completion" ring={ring} />
           <ClassRateBars rows={rows} kind="accuracy" ring={ring} />
         </div>
@@ -285,14 +289,6 @@ export function TeacherAssignmentProgress({
           ? "圆环展示本班全部作业的总体比例；灰色部分为未提交或已判定但未答对，暂无数据不按0%处理。"
           : "柱子表示各班全部作业的总体比例，右上角为所选范围的整体值；长班名可悬停查看。"}
       </p>
-      <details className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-        <summary className="cursor-pointer font-medium text-teal-700">
-          统计口径
-        </summary>
-        <p className="mt-2">
-          每个班级汇总全部已发布、已关闭作业及当前在读成员。完成率＝已提交人次÷应交人次；正确率＝答对题次÷已判定题次。每人每份作业仅取最新有效提交，草稿、撤回记录不参与；部分得分但未完全答对按未答对统计，待批改和无题目任务不强行计为0%正确率。未截止作业也计入，暂无作业或判定数据时标明暂无数据。全部班级整体值按人次、题次总量汇总，不平均各班百分比。
-        </p>
-      </details>
     </section>
   );
 }

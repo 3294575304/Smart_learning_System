@@ -80,7 +80,7 @@ export function PracticeCenterTabs({
   }
 
   return (
-    <div className="space-y-5" aria-busy={pending}>
+    <div className="st-practice-panels" aria-busy={pending}>
       {pending ? (
         <p role="status" className="text-sm text-slate-500">
           正在加载功能…
@@ -89,7 +89,7 @@ export function PracticeCenterTabs({
       <div
         role="tablist"
         aria-label="自主练习功能"
-        className={SECTION_TABS_LIST}
+        className={`st-study-tabs ${SECTION_TABS_LIST}`}
       >
         {(
           [

@@ -1,0 +1,80 @@
+/* 单一焦点描边：独立输入框由自身绘制，图标组合搜索框由外层绘制。 */
+[data-shell-role="STUDENT"]
+  :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):is(
+    :focus,
+    :focus-visible,
+    :open
+  ),
+#dashboard-main[data-workspace-role="STUDENT"]
+  :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):is(
+    :focus,
+    :focus-visible,
+    :open
+  ) {
+  border-color: var(--brand);
+  outline: none;
+  outline-offset: 0;
+  box-shadow: 0 0 0 1px var(--brand);
+}
+[data-shell-role="STUDENT"] .workspace-search-field {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding-inline: 12px;
+  background: var(--card);
+  color: var(--foreground);
+}
+[data-shell-role="STUDENT"] .workspace-search-field:focus-within {
+  border-color: var(--brand);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--brand);
+}
+[data-shell-role="STUDENT"] .workspace-search-field > input,
+[data-shell-role="STUDENT"] .workspace-search-field > input[type="search"],
+[data-shell-role="STUDENT"]
+  .workspace-search-field
+  > input:is(:focus, :focus-visible),
+#dashboard-main[data-workspace-role="STUDENT"]
+  .workspace-search-field
+  > input:not([type="checkbox"]):not([type="radio"]):is(
+    :focus,
+    :focus-visible
+  ) {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  line-height: 1.5;
+}
+[data-shell-role="STUDENT"] .workspace-topbar-search {
+  min-height: 34px;
+}
+[data-shell-role="STUDENT"] .workspace-topbar-search > input {
+  min-height: 30px;
+}
+/* 既有共享题库控件也有图标容器，避免其子输入框重复绘制。 */
+[data-shell-role="STUDENT"] .tt-search:focus-within {
+  border-color: var(--brand);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--brand);
+}
+[data-shell-role="STUDENT"] .tt-search input:is(:focus, :focus-visible),
+#dashboard-main[data-workspace-role="STUDENT"]
+  .tt-search
+  input:not([type="checkbox"]):not([type="radio"]):is(:focus, :focus-visible) {
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
+/* 校徽源图为白底，学校标识区域保留纯白，避免出现一块白色贴片。 */
+[data-shell-role="STUDENT"] .workspace-brand-row,
+[data-shell-role="STUDENT"] .workspace-school-brand {
+  background: #fff;
+}

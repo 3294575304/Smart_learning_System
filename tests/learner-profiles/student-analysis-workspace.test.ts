@@ -37,6 +37,7 @@ function sample(): StudentClassAnalysis {
       pending: 0,
       total: 0,
     },
+    attendanceWeek: [],
     recent: [],
   };
 }
@@ -139,6 +140,50 @@ test("ended exams stay outside assignment reminders and have their own counts", 
   assert.match(html, /已提交 2 \/ 2 项作业/);
   assert.match(html, /已结束考试 1 场（已交卷 0 场）/);
   assert.doesNotMatch(html, /还有 1 项作业未提交/);
+});
+
+test("attendance week strip marks no-class days instead of counting them absent", () => {
+  Object.assign(globalThis, { React });
+  const selected = sample();
+  selected.assignmentProgress = { total: 1, submitted: 1, overdue: 0 };
+  selected.total = 1;
+  selected.submitted = 1;
+  selected.completion = 100;
+  selected.attendance = {
+    present: 3,
+    late: 1,
+    earlyLeave: 0,
+    leave: 0,
+    absent: 1,
+    pending: 0,
+    total: 5,
+  };
+  selected.attendanceWeek = [
+    { key: "11-11", weekday: "六", status: "PRESENT" },
+    { key: "11-12", weekday: "日", status: null },
+    { key: "11-13", weekday: "一", status: "PRESENT" },
+    { key: "11-14", weekday: "二", status: "LATE" },
+    { key: "11-15", weekday: "三", status: "PRESENT" },
+    { key: "11-16", weekday: "四", status: "ABSENT" },
+    { key: "11-17", weekday: "五", status: null },
+  ];
+  const html = renderToStaticMarkup(
+    React.createElement(StudentAnalysisWorkspace, {
+      selected,
+      contexts: [selected],
+      updatedAt: new Date("2026-11-17T00:00:00Z"),
+    }),
+  );
+  // 周历条按天呈现；无课日单独标注，不并入缺勤口径。
+  assert.match(html, /最近 7 天出勤/);
+  assert.match(html, /周日 无课/);
+  assert.match(html, /本周 5 次课/);
+  assert.match(html, /灰格为无课日，不按缺勤计/);
+  assert.match(html, /缺勤/);
+  assert.doesNotMatch(html, /我还没有出勤记录/);
+  // 建议卡固定头部给出条目数，不再用整段文字堆叠。
+  assert.match(html, /接下来可以做/);
+  assert.match(html, /1 项/);
 });
 
 test("practice tab stays in the course scope and never enters the score axis", () => {

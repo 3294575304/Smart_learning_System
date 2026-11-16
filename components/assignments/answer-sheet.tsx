@@ -56,6 +56,7 @@ import {
   QuestionTimingTracker,
 } from "@/components/assignments/question-timing";
 import type { SavedAnswerInput } from "@/services/assignments/schemas";
+import { ProgrammingStatement } from "@/components/programming/programming-statement";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 
 interface DraftQuestion {
@@ -66,6 +67,10 @@ interface DraftQuestion {
   type: QuestionType;
   sortOrder: number;
   points: number;
+  /** 编程题才有：冻结配置里的第一条公开用例，隐藏用例不会下发。 */
+  programming?: {
+    sample: { stdin: string; expectedOutput: string };
+  } | null;
   options: Array<{
     id: string;
     label: string;
@@ -771,7 +776,10 @@ export function AnswerSheet({
         <ProgrammingAnswerLayout
           prompt={
             <>
-              <QuestionText text={question.content} />
+              <ProgrammingStatement
+                sample={question.programming?.sample ?? null}
+                text={question.content}
+              />
               {question.images?.map((image) => (
                 <Image
                   alt={`第 ${question.sortOrder} 题附图`}

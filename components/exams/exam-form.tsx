@@ -925,7 +925,7 @@ export function ExamForm({
         )}
         <button
           type="button"
-          className="ms-auto inline-flex min-h-10 items-center rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
+          className="tt-btn-cta ms-auto inline-flex min-h-10 items-center rounded-lg bg-sky-700 px-4 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
           disabled={busy || assembling}
           onClick={previewPublication}
         >

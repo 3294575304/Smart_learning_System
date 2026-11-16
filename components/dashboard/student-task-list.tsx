@@ -66,7 +66,7 @@ export function StudentTaskList({
 }) {
   if (layout === "home") {
     return (
-      <ul className="divide-border border-border divide-y border-t">
+      <ul className="workspace-task-list divide-border border-border divide-y border-t">
         {items.map((item) => {
           const start = item.kind === "exam" ? item.opensAt : undefined;
           const time = start ?? item.dueAt;
@@ -87,6 +87,9 @@ export function StudentTaskList({
                   {item.id === priorityId && (
                     <span className="sr-only"> 优先处理</span>
                   )}
+                  <span className="workspace-task-meta">
+                    {studentTaskContext(item)}
+                  </span>
                 </span>
                 <span className="col-start-2 text-sm text-neutral-600 sm:col-start-auto sm:text-end">
                   {start
