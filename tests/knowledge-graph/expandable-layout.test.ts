@@ -6,10 +6,21 @@ import {
   wheelExpansion,
 } from "@/components/courses/knowledge-graph-expandable-layout";
 import {
+  HOBERMAN_MAX_RADIUS,
+  HOBERMAN_MIN_RADIUS,
+  breathingExpansion,
+  breathingPhaseAt,
   hobermanMotion,
-  scissorPairPose,
+  sphereMotionModes,
+  spherePosition,
 } from "@/components/courses/knowledge-graph-hoberman-motion";
 import type { KnowledgeGraphStructure } from "@/services/knowledge-graph/schemas";
+
+type Point = { x: number; y: number; z: number };
+
+const distance = (a: Point, b: Point) =>
+  Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+const length = (a: Point) => Math.hypot(a.x, a.y, a.z);
 
 function fixture(): KnowledgeGraphStructure {
   const node = (
@@ -56,40 +67,45 @@ function fixture(): KnowledgeGraphStructure {
   };
 }
 
-test("收起时章节在球面，展开后知识点位于球体内部", () => {
+test("章节与知识点保留原有球形坐标", () => {
   const graph = fixture();
   const original = structuredClone(graph);
   const result = expandableSphereLayout(graph);
   assert.deepEqual(graph, original);
   assert.equal(result.collapsed.size, graph.nodes.length);
   assert.equal(result.expanded.size, graph.nodes.length);
+
   for (const chapter of graph.nodes.filter((node) => node.type === "CHAPTER")) {
     const small = result.collapsed.get(chapter.key);
     const large = result.expanded.get(chapter.key);
     assert.ok(small && large);
-    assert.ok(Math.abs(Math.hypot(small.x, small.y, small.z) - 110) < 0.001);
-    assert.ok(Math.abs(Math.hypot(large.x, large.y, large.z) - 255) < 0.001);
+    assert.ok(
+      Math.abs(length(small) - (HOBERMAN_MIN_RADIUS + 2)) < 0.001,
+      "收起时章节贴在收紧的球壳上",
+    );
+    assert.ok(
+      Math.abs(length(large) - (HOBERMAN_MAX_RADIUS + 4)) < 0.001,
+      "展开时章节推到骨架铰点外沿",
+    );
   }
+
   for (const point of graph.nodes.filter(
     (node) => node.type === "KNOWLEDGE_POINT",
   )) {
-    assert.deepEqual(result.collapsed.get(point.key), {
-      x: 0,
-      y: 0,
-      z: 0,
-      color: result.expanded.get(point.key)?.color,
-    });
+    const small = result.collapsed.get(point.key);
     const position = result.expanded.get(point.key);
-    assert.ok(position);
-    assert.ok(Math.hypot(position.x, position.y, position.z) < 255);
+    assert.ok(small && position);
+    assert.ok(
+      length(small) < HOBERMAN_MIN_RADIUS,
+      "收起时知识点收拢在球体内部",
+    );
+    assert.ok(
+      length(position) > HOBERMAN_MAX_RADIUS,
+      "展开时知识点浮到球壳外侧，不被连杆遮挡",
+    );
+    assert.ok(length(position) < HOBERMAN_MAX_RADIUS + 90);
     assert.ok([position.x, position.y, position.z].every(Number.isFinite));
   }
-  assert.ok(result.struts.length > 0);
-  assert.ok(
-    result.struts.every(
-      (strut) => result.shell.has(strut.from) && result.shell.has(strut.to),
-    ),
-  );
 });
 
 test("名称与输入顺序不改变伸缩坐标，孤立节点和空图可布局", () => {
@@ -110,52 +126,103 @@ test("名称与输入顺序不改变伸缩坐标，孤立节点和空图可布�
   );
 });
 
-test("滚轮向上展开、向下收起并保持边界；收起仅显示章节", () => {
+test("滚轮向上展开、向下收起并保持边界；收起显示课程与章节", () => {
   assert.ok(wheelExpansion(0.4, -120) > 0.4);
   assert.ok(wheelExpansion(0.4, 120) < 0.4);
   assert.equal(wheelExpansion(1, -1000), 1);
   assert.equal(wheelExpansion(0, 1000), 0);
   assert.equal(wheelExpansion(0.4, 0), 0.4);
   assert.equal(sphereNodeVisible("CHAPTER", 0), true);
-  assert.equal(sphereNodeVisible("COURSE", 0), false);
+  assert.equal(sphereNodeVisible("COURSE", 0), true);
+  assert.equal(sphereNodeVisible("COURSE", 1), true);
   assert.equal(sphereNodeVisible("KNOWLEDGE_POINT", 0), false);
   assert.equal(sphereNodeVisible("KNOWLEDGE_POINT", 1), true);
 });
 
-test("剪式杆绕球面转轴开合，四根杆臂长度保持不变", () => {
-  const pair = expandableSphereLayout(fixture()).scissors[0];
-  assert.ok(pair);
-  const distance = (
-    a: { x: number; y: number; z: number },
-    b: { x: number; y: number; z: number },
-  ) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-  const closed = scissorPairPose(pair, 0);
-  const open = scissorPairPose(pair, 1);
-  assert.ok(
-    distance(closed.ends[0], closed.ends[2]) >
-      distance(open.ends[0], open.ends[2]),
-  );
-  for (const progress of [0, 0.2, 0.5, 0.8, 1]) {
-    const pose = scissorPairPose(pair, progress);
-    const motion = hobermanMotion(progress);
+test("隐藏骨架后节点沿原有收展轨迹移动，旋转不改变节点间距离", () => {
+  const layout = expandableSphereLayout(fixture());
+  assert.equal("skeleton" in layout, false);
+  assert.equal("scissors" in layout, false);
+  for (const [key, start] of layout.collapsed) {
+    const end = layout.expanded.get(key);
+    assert.ok(end);
+    assert.ok(distance(spherePosition(start, end, 0, 0), start) < 1e-9);
+    assert.ok(distance(spherePosition(start, end, 1, 0), end) < 1e-9);
+    const midpoint = spherePosition(start, end, 0.5, 0);
     assert.ok(
-      Math.abs(
-        motion.halfSpan / motion.radius -
-          hobermanMotion(0).halfSpan / hobermanMotion(0).radius,
-      ) < 1e-8,
+      distance(midpoint, {
+        x: (start.x + end.x) / 2,
+        y: (start.y + end.y) / 2,
+        z: (start.z + end.z) / 2,
+      }) < 1e-9,
     );
+    const rotated = spherePosition(start, end, 0.5, Math.PI / 3);
+    assert.ok(Math.abs(length(rotated) - length(midpoint)) < 1e-9);
     assert.ok(
-      Math.abs(
-        Math.hypot(pose.pivot.x, pose.pivot.y, pose.pivot.z) -
-          motion.radius -
-          motion.pivotLift,
-      ) < 1e-8,
+      distance(spherePosition(start, end, 0.5, Math.PI * 2), midpoint) < 1e-9,
+      "整圈旋转后回到原坐标",
     );
-    for (const end of pose.ends)
-      assert.ok(
-        Math.abs(distance(end, pose.pivot) - Math.hypot(50, 10)) < 1e-8,
-      );
   }
-  assert.equal(hobermanMotion(0).radius, 110);
-  assert.equal(hobermanMotion(1).radius, 255);
+  const first = layout.collapsed.get("CH-0");
+  const second = layout.collapsed.get("CH-1");
+  const firstEnd = layout.expanded.get("CH-0");
+  const secondEnd = layout.expanded.get("CH-1");
+  assert.ok(first && second && firstEnd && secondEnd);
+  assert.ok(
+    Math.abs(
+      distance(first, second) -
+        distance(
+          spherePosition(first, firstEnd, 0, 1.3),
+          spherePosition(second, secondEnd, 0, 1.3),
+        ),
+    ) < 1e-9,
+  );
+});
+
+test("呼吸在收起和展开间平滑循环且可从当前展开度启动", () => {
+  assert.equal(breathingExpansion(0), 0);
+  assert.equal(breathingExpansion(Math.PI), 1);
+  assert.ok(Math.abs(breathingExpansion(Math.PI * 2)) < 1e-12);
+  for (const progress of [0, 0.25, 0.62, 1]) {
+    assert.ok(
+      Math.abs(breathingExpansion(breathingPhaseAt(progress)) - progress) <
+        1e-12,
+    );
+  }
+  assert.equal(hobermanMotion(-1).radialFraction, 0);
+  assert.equal(hobermanMotion(2).radialFraction, 1);
+  assert.equal(Math.round(hobermanMotion(0).radius), HOBERMAN_MIN_RADIUS);
+  assert.equal(Math.round(hobermanMotion(1).radius), HOBERMAN_MAX_RADIUS);
+});
+
+test("自动动效在聚焦、不可见和减少动效时暂停，拖动只暂停旋转", () => {
+  const settings = {
+    visible: true,
+    reducedMotion: false,
+    selected: false,
+    dragging: false,
+    breathing: true,
+    autoRotate: true,
+  };
+  assert.deepEqual(sphereMotionModes(settings), {
+    breathe: true,
+    rotate: true,
+  });
+  assert.deepEqual(sphereMotionModes({ ...settings, dragging: true }), {
+    breathe: true,
+    rotate: false,
+  });
+  for (const paused of [
+    { visible: false },
+    { reducedMotion: true },
+    { selected: true },
+  ])
+    assert.deepEqual(sphereMotionModes({ ...settings, ...paused }), {
+      breathe: false,
+      rotate: false,
+    });
+  assert.deepEqual(sphereMotionModes(settings), {
+    breathe: true,
+    rotate: true,
+  });
 });
