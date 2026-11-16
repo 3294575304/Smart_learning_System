@@ -48,6 +48,7 @@ import {
   normalizeProgramOutput,
   programmingAttemptFingerprint,
 } from "@/services/programming-attempts/fingerprint";
+import { sandboxResourceUsageSchema } from "@/services/sandbox-executor/schemas";
 import {
   createPublicProgrammingRunSchema,
   createRecommendationProgrammingAttemptSchema,
@@ -814,6 +815,11 @@ function studentAttemptDto(
       maxScore: item.maxPoints.toNumber(),
       errorType: item.errorType,
       safeErrorSummary: item.safeErrorSummary,
+      // 耗时内存是学生自己那次运行的数据，不涉及隐藏用例内容。
+      resourceUsage: (() => {
+        const usage = sandboxResourceUsageSchema.safeParse(item.resourceUsage);
+        return usage.success ? usage.data : null;
+      })(),
       ...(attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
         ? { stdout: item.stdout ?? "", stderr: item.stderr ?? "" }
         : {}),

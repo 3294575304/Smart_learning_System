@@ -267,7 +267,7 @@ export function CoursePracticeCenter({
   return (
     <section
       id="course-practice-center"
-      className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      className="st-practice-builder space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
     >
       <div>
         <a
@@ -463,7 +463,7 @@ export function CoursePracticeCenter({
         </p>
       ) : null}
       <button
-        className="rounded-md bg-sky-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+        className="st-btn-cta rounded-md bg-sky-700 px-4 py-2 text-sm text-white disabled:opacity-50"
         disabled={pending || selectionNeedsReview || !course.chapters.length}
         onClick={() => void generate()}
         type="button"

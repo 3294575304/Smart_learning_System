@@ -108,6 +108,21 @@ const studentQuestionSelect = {
   typeSnapshot: true,
   sortOrder: true,
   points: true,
+  // 只取第一条 PUBLIC 用例用于答题页展示；隐藏用例不进前端。
+  programmingConfigSnapshot: {
+    select: {
+      configRevision: {
+        select: {
+          testCases: {
+            where: { visibility: "PUBLIC" as const },
+            orderBy: { sortOrder: "asc" as const },
+            take: 1,
+            select: { stdin: true, expectedOutput: true },
+          },
+        },
+      },
+    },
+  },
   examImages: {
     orderBy: { sortOrder: "asc" as const },
     select: { id: true },
@@ -1346,6 +1361,13 @@ export async function getStudentSubmissionDraft(
       type: question.typeSnapshot,
       sortOrder: question.sortOrder,
       points: question.points.toNumber(),
+      programming: question.programmingConfigSnapshot?.configRevision
+        .testCases[0]
+        ? {
+            sample:
+              question.programmingConfigSnapshot.configRevision.testCases[0],
+          }
+        : null,
       images: question.examImages.map((image) => ({
         id: image.id,
         url: `/api/assignment-question-images/${image.id}`,

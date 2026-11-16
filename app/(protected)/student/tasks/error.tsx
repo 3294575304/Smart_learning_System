@@ -7,7 +7,7 @@ export default function Error() {
     <StudentPageError
       title="学习任务暂时无法加载"
       returnHref="/student"
-      returnLabel="返回学习主页"
+      returnLabel="返回学习中心"
     />
   );
 }

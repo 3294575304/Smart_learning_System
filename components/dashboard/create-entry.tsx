@@ -37,7 +37,17 @@ export function CreateEntryProvider({
   );
 }
 
-export function CreateEntry({ card = false }: { card?: boolean }) {
+export function CreateEntry({
+  card = false,
+  row = false,
+  tone = "brand",
+}: {
+  card?: boolean;
+  /** 列表末尾的「再加一条」行，与行优先列表同一套分隔线 */
+  row?: boolean;
+  /** brand = 青绿实心；cta = 珊瑚红，每屏最多一个 */
+  tone?: "brand" | "cta";
+}) {
   const entry = useContext(CreateEntryContext);
   if (!entry) return null;
 
@@ -47,7 +57,11 @@ export function CreateEntry({ card = false }: { card?: boolean }) {
       className={
         card
           ? "flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-sky-400 bg-sky-50/30 px-5 py-6 text-sm font-medium text-sky-800 transition-colors duration-150 hover:border-sky-600 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 active:bg-sky-100"
-          : "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-sky-700 ps-3.5 pe-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 active:bg-sky-900"
+          : row
+            ? "flex w-full items-center justify-center gap-2 border-t border-dashed border-sky-300 px-4 py-3 text-xs font-medium text-sky-800 transition-colors duration-150 hover:bg-sky-50/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-700"
+            : tone === "cta"
+              ? "tt-btn-cta inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-sky-700 ps-3.5 pe-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 active:bg-sky-900"
+              : "tt-btn inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-sky-700 ps-3.5 pe-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 active:bg-sky-900"
       }
       onClick={(event) => {
         event.currentTarget.focus();

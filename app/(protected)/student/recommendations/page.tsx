@@ -109,7 +109,7 @@ export default async function StudentRecommendationsPage({
     .map((classroom) => ({ id: classroom.id, name: classroom.name }));
 
   return (
-    <section className="mx-auto max-w-[1440px] min-w-0 space-y-5">
+    <section className="st-practice-workspace mx-auto max-w-[1440px] min-w-0 space-y-5">
       <StudentPageHeader
         actions={
           <StudentCourseReturnLink
@@ -157,7 +157,7 @@ export default async function StudentRecommendationsPage({
           activeView === "generate" ? (
             <section
               aria-labelledby="generate-practice-heading"
-              className="space-y-4"
+              className="st-practice-generation space-y-4"
             >
               <header>
                 <h2 className="font-semibold" id="generate-practice-heading">

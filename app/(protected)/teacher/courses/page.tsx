@@ -1,12 +1,12 @@
 import { Role } from "@prisma/client";
 import { BookOpenCheck } from "lucide-react";
+import Link from "next/link";
 import { CourseForm } from "@/components/courses/course-form";
 import { TeacherCourseList } from "@/components/courses/teacher-course-list";
 import {
   CreateEntry,
   CreateEntryProvider,
 } from "@/components/dashboard/create-entry";
-import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { readAllowedParam, readTextParam } from "@/lib/list-filter";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -17,6 +17,11 @@ import {
 } from "@/services/courses/service";
 
 const COURSE_STATUS_VALUES = ["ACTIVE", "DRAFT"] as const;
+
+/** 副标题里的日期只要「月日」：课程列表看的是最近动作，不是长历史。 */
+function formatMonthDay(date: Date) {
+  return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+}
 
 export default async function TeacherCoursesPage({
   searchParams,
@@ -46,6 +51,25 @@ export default async function TeacherCoursesPage({
     templates.find((template) => template.code === "python-programming-v1")
       ?.id ?? templates[0]?.id;
   const canCreate = templates.length > 0 && categories.length > 0;
+
+  // 页头副标题：门数 / 进行中 / 最近一次改动，替代原来大段说明文字
+  const activeCourseCount = courses.filter(
+    (course) => course.status === "ACTIVE",
+  ).length;
+  const draftCourseCount = courses.length - activeCourseCount;
+  const latestCourse = [...courses].sort(
+    (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
+  )[0];
+  const summaryParts = [`共 ${courses.length} 门`];
+  if (activeCourseCount > 0) summaryParts.push(`${activeCourseCount} 门进行中`);
+  if (draftCourseCount > 0) summaryParts.push(`${draftCourseCount} 门草稿`);
+  if (latestCourse) {
+    summaryParts.push(
+      `最近更新：${latestCourse.name} · ${formatMonthDay(latestCourse.updatedAt)}`,
+    );
+  }
+  const summaryLine = summaryParts.join(" · ");
+
   return (
     <CreateEntryProvider
       title="创建课程"
@@ -84,12 +108,19 @@ export default async function TeacherCoursesPage({
         )
       }
     >
-      <section className="mx-auto max-w-6xl space-y-6">
-        <PageHeader
-          title="课程管理"
-          description="管理课程与授课班级。可按课程名称、课程号搜索，或按学期筛选。"
-          actions={<CreateEntry />}
-        />
+      <section className="tc-course-page mx-auto w-full space-y-5">
+        <header className="tt-phead">
+          <div className="min-w-0">
+            <h1 className="tt-h1">我的课程</h1>
+            <p className="tt-sub">{summaryLine}</p>
+          </div>
+          <div className="tt-phead-act">
+            <Link className="tt-btn-line" href="/teacher/classrooms">
+              班级管理
+            </Link>
+            <CreateEntry tone="cta" />
+          </div>
+        </header>
         <TeacherCourseList
           initialCourses={courses}
           initialFilters={initialFilters}

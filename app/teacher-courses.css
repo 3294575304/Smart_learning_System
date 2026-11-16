@@ -1,0 +1,526 @@
+/* 课程目录与课程工作区；保持现有筛选、授权和课程数据口径。 */
+[data-shell-role="TEACHER"] .tc-course-page .tt-phead {
+  margin-bottom: 24px;
+  align-items: flex-end;
+}
+[data-shell-role="TEACHER"] .tc-course-page .tt-sub {
+  margin-top: 8px;
+  max-width: 56rem;
+  font-size: 12px;
+  line-height: 1.8;
+}
+[data-shell-role="TEACHER"] .tc-course-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px 18px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+}
+[data-shell-role="TEACHER"] .tc-course-filters .tt-tabs {
+  flex-basis: 100%;
+  padding: 0;
+  gap: 24px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+[data-shell-role="TEACHER"] .tc-course-filters .tt-tab {
+  min-height: 48px;
+  margin-bottom: -1px;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+[data-shell-role="TEACHER"] .tc-course-filters .tt-tab[aria-selected="true"] {
+  border-bottom-color: var(--brand);
+  color: var(--brand);
+  background: transparent;
+  box-shadow: none;
+}
+[data-shell-role="TEACHER"] .tc-course-filters .tt-search {
+  flex: 1 1 20rem;
+}
+[data-shell-role="TEACHER"] .tc-course-filters > select {
+  flex: 0 1 12rem;
+  min-width: 0;
+}
+[data-shell-role="TEACHER"] .tc-course-library > .tt-hint {
+  padding-inline: 2px;
+  font-size: 11px;
+}
+[data-shell-role="TEACHER"] .tc-course-catalog {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+}
+[data-shell-role="TEACHER"] .tc-course-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) minmax(240px, auto) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 26px 24px;
+  border-bottom: 1px solid var(--border);
+}
+[data-shell-role="TEACHER"] .tc-course-row:hover {
+  background: color-mix(in srgb, var(--surface) 25%, var(--card));
+}
+[data-shell-role="TEACHER"] .tc-course-symbol {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 58px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ok);
+}
+[data-shell-role="TEACHER"] .tc-course-main {
+  min-width: 0;
+}
+[data-shell-role="TEACHER"] .tc-course-title {
+  border-radius: 3px;
+  color: var(--foreground);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+[data-shell-role="TEACHER"] .tc-course-title:hover {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+[data-shell-role="TEACHER"] .tc-course-meta,
+[data-shell-role="TEACHER"] .tc-course-description {
+  margin-top: 5px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+[data-shell-role="TEACHER"] .tc-course-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+[data-shell-role="TEACHER"] .tc-course-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 13px;
+  color: var(--brand);
+  font-size: 11px;
+}
+[data-shell-role="TEACHER"] .tc-course-shortcuts a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+[data-shell-role="TEACHER"] .tc-course-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  padding-inline: 24px;
+  border-inline: 1px solid var(--border);
+}
+[data-shell-role="TEACHER"] .tc-course-stats dt {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  white-space: nowrap;
+}
+[data-shell-role="TEACHER"] .tc-course-stats dd {
+  margin-top: 7px;
+  color: var(--foreground);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+[data-shell-role="TEACHER"] .tc-course-stats dd span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 400;
+}
+[data-shell-role="TEACHER"] .tc-course-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+[data-shell-role="TEACHER"] .tc-create-row > button {
+  min-height: 64px;
+  flex-direction: row;
+  padding: 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+}
+[data-shell-role="TEACHER"] .tc-create-row > button > span {
+  width: 26px;
+  height: 26px;
+  background: var(--surface);
+}
+[data-shell-role="TEACHER"] .tc-course-workspace {
+  display: grid;
+  gap: 20px;
+}
+[data-shell-role="TEACHER"] .tc-course-workspace > * + * {
+  margin-top: 0;
+}
+[data-shell-role="TEACHER"] .tc-course-scope {
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  font-size: 12px;
+}
+[data-shell-role="TEACHER"] .tc-course-navigation {
+  padding: 20px;
+}
+[data-shell-role="TEACHER"] .tc-course-navigation > div:first-child {
+  align-items: flex-end;
+  padding-bottom: 16px;
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  .tc-course-navigation
+  [role="tablist"]
+  > button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  .tc-course-navigation
+  [role="tablist"]
+  > button[aria-selected="true"] {
+  border-bottom-color: var(--brand);
+  background: transparent;
+  color: var(--brand);
+}
+[data-shell-role="TEACHER"] .tc-course-navigation [role="tabpanel"] a {
+  min-height: 88px;
+  background: var(--card);
+  border-color: var(--border);
+}
+[data-shell-role="TEACHER"] .tc-course-navigation [role="tabpanel"] a:hover {
+  background: var(--muted);
+  border-color: var(--line);
+}
+[data-shell-role="TEACHER"]
+  .tc-course-navigation
+  [role="tabpanel"]
+  a
+  > span:first-child {
+  background: var(--surface);
+  border: 0;
+  color: var(--ok);
+}
+[data-shell-role="TEACHER"] .tc-foundation-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+[data-shell-role="TEACHER"] .tc-foundation-card {
+  padding: 20px;
+}
+[data-shell-role="TEACHER"] .tc-foundation-card h2 {
+  font-size: 15px;
+}
+[data-shell-role="TEACHER"] .tc-foundation-card > div > a,
+[data-shell-role="TEACHER"] .tc-foundation-card details a {
+  background: var(--card);
+  border-color: var(--border);
+}
+@media (max-width: 1100px) {
+  [data-shell-role="TEACHER"] .tc-course-row {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    gap: 16px;
+    padding: 20px;
+  }
+  [data-shell-role="TEACHER"] .tc-course-symbol {
+    width: 42px;
+    height: 48px;
+  }
+  [data-shell-role="TEACHER"] .tc-course-stats {
+    grid-column: 2;
+    padding: 14px 0 0;
+    border: 0;
+    border-top: 1px solid var(--border);
+  }
+  [data-shell-role="TEACHER"] .tc-course-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+  [data-shell-role="TEACHER"] .tc-foundation-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 639px) {
+  [data-shell-role="TEACHER"] .tc-course-filters {
+    gap: 12px;
+    padding-inline: 16px;
+  }
+  [data-shell-role="TEACHER"] .tc-course-filters > select {
+    flex: 1 1 9rem;
+  }
+  [data-shell-role="TEACHER"] .tc-course-row {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 16px;
+  }
+  [data-shell-role="TEACHER"] .tc-course-symbol {
+    display: none;
+  }
+  [data-shell-role="TEACHER"] .tc-course-stats,
+  [data-shell-role="TEACHER"] .tc-course-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  [data-shell-role="TEACHER"] .tc-course-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  [data-shell-role="TEACHER"] .tc-foundation-card,
+  [data-shell-role="TEACHER"] .tc-course-navigation {
+    padding: 16px;
+  }
+}
+
+/* 课程功能入口采用紧凑尺寸，保持标题与说明可读，不让图标抢占空间。 */
+[data-shell-role="TEACHER"] .tc-course-navigation {
+  padding: 16px;
+}
+[data-shell-role="TEACHER"] .tc-course-navigation > div:first-child {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+}
+#dashboard-main[data-workspace-role="TEACHER"]
+  .tc-course-navigation
+  [role="tablist"]
+  > button {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+[data-shell-role="TEACHER"] .tc-course-navigation > div:first-child > label {
+  font-size: 12px;
+}
+[data-shell-role="TEACHER"] .tc-course-navigation [role="region"] {
+  max-height: none;
+  grid-auto-rows: minmax(64px, auto);
+  gap: 8px;
+  overflow: visible;
+}
+[data-shell-role="TEACHER"] .tc-course-navigation [role="region"] + p {
+  display: none;
+}
+[data-shell-role="TEACHER"] .tc-course-navigation [role="tabpanel"] a {
+  min-height: 64px;
+  gap: 10px;
+  padding: 10px 12px;
+}
+[data-shell-role="TEACHER"]
+  .tc-course-navigation
+  [role="tabpanel"]
+  a
+  > span:first-child {
+  width: 32px;
+  height: 32px;
+}
+[data-shell-role="TEACHER"]
+  .tc-course-navigation
+  [role="tabpanel"]
+  a
+  > span:first-child
+  svg {
+  width: 17px;
+  height: 17px;
+}
+[data-shell-role="TEACHER"] .tc-course-navigation [role="tabpanel"] h3 {
+  font-size: 13px;
+  line-height: 1.5;
+}
+[data-shell-role="TEACHER"] .tc-course-navigation [role="tabpanel"] a p {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: normal;
+}
+[data-shell-role="TEACHER"]
+  .tc-course-navigation
+  [role="tabpanel"]
+  a
+  > svg:last-child {
+  width: 14px;
+  height: 14px;
+}
+@media (min-width: 1280px) {
+  [data-shell-role="TEACHER"] .tc-course-navigation [role="region"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 日常教学留在主栏，课程准备与题库维护放在辅助栏。 */
+[data-shell-role="TEACHER"] .tc-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+[data-shell-role="TEACHER"] .tc-workspace-main,
+[data-shell-role="TEACHER"] .tc-workspace-support {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+  align-content: start;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card {
+  min-width: 0;
+  padding: 14px;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  h2 {
+  font-size: 13px;
+  line-height: 1.6;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  h3 {
+  font-size: 12px;
+  line-height: 1.6;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  :is(p, summary) {
+  font-size: 11px;
+  line-height: 1.7;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  summary {
+  padding: 6px 8px;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  [role="progressbar"] {
+  height: 5px;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  a {
+  min-height: 52px;
+  gap: 9px;
+  padding: 9px;
+  background: var(--card);
+  border-color: var(--border);
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  a:hover {
+  background: var(--muted);
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  a
+  > span:first-child {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ok);
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  a
+  > span:first-child
+  svg {
+  width: 15px;
+  height: 15px;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  a
+  > svg:last-child {
+  width: 13px;
+  height: 13px;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  a
+  :is(.text-xs, .text-sm) {
+  font-size: 11px;
+  line-height: 1.6;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  a
+  ul {
+  margin-top: 5px;
+}
+[data-shell-role="TEACHER"]
+  :is(.tc-workspace-support, .tc-construction-top)
+  .tc-foundation-card
+  > .grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+@media (min-width: 800px) and (max-width: 1279px) {
+  [data-shell-role="TEACHER"] .tc-workspace-support {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+}
+@media (min-width: 1280px) {
+  [data-shell-role="TEACHER"] .tc-workspace-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  [data-shell-role="TEACHER"]
+    .tc-workspace-main
+    .tc-course-navigation
+    [role="region"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 800px) {
+  [data-shell-role="TEACHER"]
+    .tc-construction-top
+    #course-construction-details
+    > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  [data-shell-role="TEACHER"]
+    .tc-construction-top
+    #course-completed-setup-details {
+    grid-column: 1 / -1;
+  }
+}

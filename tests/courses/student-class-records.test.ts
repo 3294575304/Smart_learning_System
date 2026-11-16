@@ -175,5 +175,8 @@ test("待开始的考试进详情页显示考试信息，而不是空的提交�
   assert.match(page, /考试信息/u);
   assert.match(page, /EXAM_TYPE_LABELS/u);
   assert.match(page, /!exam \|\| hasAttempts/u);
-  assert.match(page, /返回\{exam \? "考试" : "作业"\}列表/u);
+  assert.match(
+    page,
+    /returnTo \? "返回学习任务" : exam \? "返回考试列表" : "返回作业列表"/u,
+  );
 });

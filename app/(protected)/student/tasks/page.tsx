@@ -65,7 +65,7 @@ export default async function StudentTasksPage({
       <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
       <StudentPageHeader
         title="学习任务"
-        description="查看待办、考试预告和问卷开放安排。"
+        description="作业、考试、签到与问卷都在这一个列表里，按截止时间排。"
       />
       <StudentActivityFilters
         view="tasks"
@@ -94,12 +94,9 @@ export default async function StudentTasksPage({
             >
               <h2
                 id="student-pending-tasks"
-                className="mb-3 flex items-center gap-2 text-base font-semibold"
+                className="mb-3 text-lg font-semibold"
               >
                 我的待办
-                <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-xs font-medium">
-                  {pending.length}
-                </span>
               </h2>
               <StudentTaskList
                 items={pending}
@@ -117,12 +114,9 @@ export default async function StudentTasksPage({
             >
               <h2
                 id="student-upcoming-tasks"
-                className="mb-3 flex items-center gap-2 text-base font-semibold"
+                className="mb-3 text-lg font-semibold"
               >
                 待开放安排
-                <span className="bg-brand-soft text-brand-strong rounded-full px-2 py-0.5 text-xs font-medium">
-                  {upcoming.length}
-                </span>
               </h2>
               <ul className="divide-y divide-slate-100">
                 {upcoming.map((item) => (
@@ -158,7 +152,7 @@ export default async function StudentTasksPage({
           className={activityCardClass}
           aria-labelledby="student-task-records"
         >
-          <h2 id="student-task-records" className="text-base font-semibold">
+          <h2 id="student-task-records" className="font-semibold">
             课程任务入口
           </h2>
           <ul className="mt-2 divide-y divide-slate-100">
@@ -168,7 +162,6 @@ export default async function StudentTasksPage({
                 icon: Icon,
                 color,
               } = STUDENT_TASK_PRESENTATION[kind];
-              const count = overview.counts[kind];
               return (
                 <li key={kind} id={kind} className="scroll-mt-24 py-1">
                   <Link
@@ -188,18 +181,8 @@ export default async function StudentTasksPage({
                     </span>
                     <span className="min-w-0 flex-1 text-sm">
                       <span className="block font-medium">{label}</span>
-                      {/*
-                        计数承担状态：有待办的入口用品牌色强调，
-                        没有待办的退为弱文本，避免四个入口看起来完全同权重。
-                      */}
-                      <span
-                        className={
-                          count > 0
-                            ? "text-brand-strong block text-xs font-medium"
-                            : "block text-xs text-neutral-500"
-                        }
-                      >
-                        {count > 0 ? `${count} 项待办` : "暂无待办"}
+                      <span className="block text-xs text-slate-600">
+                        {overview.counts[kind]} 项待办
                       </span>
                     </span>
                     <ArrowRight

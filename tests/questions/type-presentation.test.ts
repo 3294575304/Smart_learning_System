@@ -180,7 +180,8 @@ test("高级筛选默认折叠，已选知识点或课程目标时展开，筛�
     }),
   );
   assert.match(plain, /更多筛选/u);
-  assert.doesNotMatch(plain, /<details[^>]*open/u);
+  assert.match(plain, /aria-expanded="false"/u);
+  assert.match(plain, /<div hidden="" id=/u);
   const selected = render(
     React.createElement(QuestionFilters, {
       query: questionListQuerySchema.parse({ defaultObjectiveKind: "ABILITY" }),
@@ -188,6 +189,7 @@ test("高级筛选默认折叠，已选知识点或课程目标时展开，筛�
       categories: [],
     }),
   );
-  assert.match(selected, /<details[^>]*open/u);
+  assert.match(selected, /aria-expanded="true"/u);
+  assert.doesNotMatch(selected, /<div hidden="" id=/u);
   assert.match(selected, /value="ABILITY" selected/u);
 });

@@ -5,6 +5,7 @@ import { MoreHorizontal, School, SearchX, Users } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { DeleteClassroomButton } from "./delete-classroom-button";
+import { ClassroomStatusBadge } from "./classroom-status-badge";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
 import {
@@ -148,14 +149,16 @@ export function TeacherClassroomList({
 
   return (
     <section>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">全部班级</h2>
-        <span className="text-muted-foreground text-sm">
-          {isFiltered
-            ? `筛选出 ${visibleClassrooms.length} / ${classrooms.length} 个`
-            : `共 ${classrooms.length} 个`}
-        </span>
-      </div>
+      {classrooms.length === 0 ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">全部班级</h2>
+          <span className="text-muted-foreground text-sm">
+            {isFiltered
+              ? `筛选出 ${visibleClassrooms.length} / ${classrooms.length} 个`
+              : `共 ${classrooms.length} 个`}
+          </span>
+        </div>
+      ) : null}
 
       {classrooms.length === 0 ? (
         createEntry ? null : (
@@ -169,6 +172,16 @@ export function TeacherClassroomList({
         <>
           <div className="mb-4">
             <ListFilterBar
+              leading={
+                <div className="flex shrink-0 items-center gap-2">
+                  <h2 className="font-semibold">全部班级</h2>
+                  <span className="text-muted-foreground text-xs">
+                    {isFiltered
+                      ? `筛选出 ${visibleClassrooms.length} / ${classrooms.length} 个`
+                      : `共 ${classrooms.length} 个`}
+                  </span>
+                </div>
+              }
               filters={[
                 {
                   key: "status",
@@ -233,9 +246,7 @@ export function TeacherClassroomList({
                         {classroom.description ?? "暂无班级说明"}
                       </p>
                     </Link>
-                    <span className="shrink-0 rounded-full bg-sky-50 px-2.5 py-1 text-xs text-sky-800">
-                      {CLASSROOM_STATUS_LABELS[classroom.status]}
-                    </span>
+                    <ClassroomStatusBadge status={classroom.status} />
                     <details className="relative shrink-0">
                       <summary
                         aria-label={`更多操作：${classroom.name}`}

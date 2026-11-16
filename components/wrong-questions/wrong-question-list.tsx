@@ -54,12 +54,9 @@ export function WrongQuestionList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="st-review-list">
       {items.map((item) => (
-        <article
-          className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-          key={item.id}
-        >
+        <article className="st-review-row flex min-w-0 flex-col" key={item.id}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap gap-2 text-xs">
@@ -129,7 +126,7 @@ export function WrongQuestionList({
             </Link>
           </div>
 
-          <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-5">
+          <div className="st-review-actions mt-auto flex flex-wrap items-center gap-3 pt-4">
             <Link
               aria-label={`查看错题 ${item.title} 详情并重新练习`}
               className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
@@ -137,7 +134,7 @@ export function WrongQuestionList({
               title="查看详情并重新练习"
             >
               <BookOpenCheck aria-hidden="true" className="size-4" />
-              查看详情与重新练习
+              查看与练习
               <ArrowRight aria-hidden="true" className="size-4" />
             </Link>
             <FavoriteButton

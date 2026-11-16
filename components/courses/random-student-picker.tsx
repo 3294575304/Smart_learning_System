@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import styles from "./random-student-picker.module.css";
 
 interface Candidate {
   id: string;
@@ -75,7 +76,7 @@ export function RandomStudentPicker({ students }: { students: Candidate[] }) {
       <div
         aria-live={isDrawing ? "off" : "polite"}
         aria-busy={isDrawing}
-        className={`mt-5 flex min-h-36 flex-col items-center justify-center rounded-xl border p-6 text-center transition-colors ${isDrawing ? "border-sky-300 bg-gradient-to-br from-sky-50 via-cyan-50 to-indigo-50" : "border-sky-200 bg-sky-50"}`}
+        className={`${styles.stage} mt-5 flex min-h-36 flex-col items-center justify-center rounded-xl border p-6 text-center transition-colors`}
       >
         {displayedStudent ? (
           <>
@@ -83,7 +84,7 @@ export function RandomStudentPicker({ students }: { students: Candidate[] }) {
               {isDrawing ? "正在抽取…" : "本次抽中"}
             </p>
             <p
-              className={`mt-2 text-3xl font-semibold ${isDrawing ? "text-sky-700 motion-safe:animate-pulse" : "text-slate-900"}`}
+              className={`${styles.name} mt-2 text-3xl font-semibold ${isDrawing ? "motion-safe:animate-pulse" : ""}`}
             >
               {displayedStudent.name}
             </p>
