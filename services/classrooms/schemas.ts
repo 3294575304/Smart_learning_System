@@ -10,6 +10,7 @@ const classroomDescriptionSchema = z
   .string()
   .trim()
   .max(500, "班级描述不能超过 500 个字符")
+  .nullable()
   .transform((description) => description || null);
 
 export const classroomIdSchema = z.string().cuid("班级 ID 格式无效");
