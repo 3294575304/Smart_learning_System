@@ -159,6 +159,9 @@ function applyDeterministicWarnings(
   output: SyllabusParseOutput,
 ): SyllabusParseOutput {
   const warnings = new Set(output.warnings);
+  output.forwardAssessmentTable?.warnings.forEach((warning) =>
+    warnings.add(warning),
+  );
   const weights = output.assessments.map((item) => item.weight);
   if (weights.length > 0 && weights.every((weight) => weight !== null)) {
     const total = weights.reduce<number>(
@@ -170,7 +173,11 @@ function applyDeterministicWarnings(
         `Assessment weights total ${total}%, not 100%; teacher review required.`,
       );
   }
-  if (output.assessments.length > 0 && output.objectives.length > 0) {
+  if (
+    output.assessmentMethod !== "FORWARD_DECOMPOSITION" &&
+    output.assessments.length > 0 &&
+    output.objectives.length > 0
+  ) {
     const expected = output.assessments.length * output.objectives.length;
     const numeric = output.objectiveAssessmentMappings.filter(
       (item) => item.allocationRate !== null,
@@ -233,6 +240,23 @@ function enrichObjectiveAssessmentMatrix(
   output: SyllabusParseOutput,
   input: SyllabusParseInput,
 ): SyllabusParseOutput {
+  if (
+    input.assessmentMethodHint === "FORWARD_DECOMPOSITION" ||
+    input.forwardAssessmentTable
+  ) {
+    return {
+      ...output,
+      assessmentMethod: "FORWARD_DECOMPOSITION",
+      forwardAssessmentTable: input.forwardAssessmentTable,
+      objectiveAssessmentMappings: [],
+      warnings: input.forwardAssessmentTable
+        ? output.warnings
+        : [
+            ...output.warnings,
+            "检测到正向分解考核表，但无法核对完整行列与分值；请对照原文补充，不得按总评成绩估算课程目标。",
+          ],
+    };
+  }
   const extracted = extractObjectiveAssessmentMatrix(
     input.pages,
     output.objectives.length,
@@ -246,6 +270,7 @@ function enrichObjectiveAssessmentMatrix(
   }));
   return {
     ...output,
+    assessmentMethod: "REVERSE_MATRIX",
     objectiveAssessmentMappings: output.objectives.flatMap(
       (objective, objectiveIndex) =>
         output.assessments.map((assessment, assessmentIndex) => ({
