@@ -6,8 +6,12 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import {
+  assistantPositionKey,
+  defaultAssistantPosition,
+  subscribeToAssistantPreference,
+} from "./teacher-assistant-preferences";
 
-const positionKey = "zhixue:teacher-assistant:position:v1";
 export const ASSISTANT_SIZE = 52;
 const margin = 12;
 const dockDistance = 22;
@@ -51,14 +55,15 @@ function dockSide(point: Point, view: Viewport) {
   return leftDistance < rightDistance ? "left" : "right";
 }
 
-export function useAssistantPosition() {
+export function useAssistantPosition(teacherId: string) {
+  const positionKey = assistantPositionKey(teacherId);
   const [layout, setLayout] = useState<{
     position: Point;
     viewport: Viewport;
   } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState("");
-  const ratio = useRef<Point>({ x: 1, y: 0.5 });
+  const ratio = useRef<Point>(defaultAssistantPosition);
   const latest = useRef<Point>({ x: 0, y: 0 });
   const view = useRef<Viewport>({ width: 0, height: 0, left: 0, top: 0 });
   const gesture = useRef<{
@@ -71,28 +76,6 @@ export function useAssistantPosition() {
   const suppressClick = useRef(false);
 
   useEffect(() => {
-    try {
-      const saved: unknown = JSON.parse(
-        localStorage.getItem(positionKey) ?? "null",
-      );
-      if (
-        saved &&
-        typeof saved === "object" &&
-        "x" in saved &&
-        "y" in saved &&
-        typeof saved.x === "number" &&
-        typeof saved.y === "number" &&
-        Number.isFinite(saved.x) &&
-        Number.isFinite(saved.y)
-      ) {
-        ratio.current = {
-          x: Math.max(0, Math.min(1, saved.x)),
-          y: Math.max(0, Math.min(1, saved.y)),
-        };
-      }
-    } catch {
-      /* The default position also works when browser storage is unavailable. */
-    }
     const resize = () => {
       view.current = viewport();
       const box = bounds(view.current);
@@ -109,17 +92,48 @@ export function useAssistantPosition() {
       frame.current = null;
       setLayout({ position: latest.current, viewport: view.current });
     };
-    resize();
+    function loadPosition() {
+      ratio.current = defaultAssistantPosition;
+      try {
+        const saved: unknown = JSON.parse(
+          localStorage.getItem(positionKey) ?? "null",
+        );
+        if (
+          saved &&
+          typeof saved === "object" &&
+          "x" in saved &&
+          "y" in saved &&
+          typeof saved.x === "number" &&
+          typeof saved.y === "number" &&
+          Number.isFinite(saved.x) &&
+          Number.isFinite(saved.y)
+        ) {
+          ratio.current = {
+            x: Math.max(0, Math.min(1, saved.x)),
+            y: Math.max(0, Math.min(1, saved.y)),
+          };
+        }
+      } catch {
+        /* Keep the default position when browser storage is unavailable. */
+      }
+      resize();
+    }
+    loadPosition();
+    const unsubscribe = subscribeToAssistantPreference(
+      positionKey,
+      loadPosition,
+    );
     window.addEventListener("resize", resize);
     window.visualViewport?.addEventListener("resize", resize);
     window.visualViewport?.addEventListener("scroll", resize);
     return () => {
+      unsubscribe();
       window.removeEventListener("resize", resize);
       window.visualViewport?.removeEventListener("resize", resize);
       window.visualViewport?.removeEventListener("scroll", resize);
       if (frame.current !== null) cancelAnimationFrame(frame.current);
     };
-  }, []);
+  }, [positionKey]);
 
   function commit(point: Point) {
     const next = clamp(point, view.current);

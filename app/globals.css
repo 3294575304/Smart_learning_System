@@ -450,3 +450,26 @@ html {
     font-size: 1.375rem;
   }
 }
+
+.workspace-back-to-top {
+  inset-inline-end: max(1.5rem, env(safe-area-inset-right));
+  bottom: calc(1.5rem + env(safe-area-inset-bottom));
+}
+
+body:has([data-back-to-top-toolbar]) .workspace-back-to-top {
+  bottom: calc(7.5rem + env(safe-area-inset-bottom));
+}
+
+body:has([data-teacher-assistant-near-bottom]) .workspace-back-to-top {
+  inset-inline-end: max(9rem, env(safe-area-inset-right));
+}
+
+body:has(
+    dialog[open],
+    [aria-modal="true"],
+    [data-teacher-assistant-panel],
+    [data-back-to-top-hidden]
+  )
+  .workspace-back-to-top {
+  display: none;
+}

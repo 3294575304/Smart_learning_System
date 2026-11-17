@@ -42,3 +42,19 @@ test("过期、损坏和外部地址的记忆均不恢复", () => {
     assert.equal(parsePageMemory(value, now), null);
   assert.deepEqual(parsePageMemory(saved, now), saved);
 });
+
+test("班级管理允许恢复列表筛选，但历史视图不能替代班级列表", () => {
+  const path = "/teacher/classrooms";
+  assert.equal(
+    rememberedReturnUrl(
+      { ...saved, url: `${path}?view=history&status=ACTIVE` },
+      path,
+      now,
+    ),
+    null,
+  );
+  assert.equal(
+    rememberedReturnUrl({ ...saved, url: `${path}?status=ACTIVE` }, path, now),
+    `${path}?status=ACTIVE`,
+  );
+});

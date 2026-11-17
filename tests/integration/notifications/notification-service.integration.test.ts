@@ -20,6 +20,10 @@ import {
   publishAnnouncement,
 } from "../../../services/announcements/service";
 import { ResourceNotFoundError } from "../../../services/auth/policy";
+import {
+  getTeacherTeachingPreferences,
+  setTeacherTeachingPreferences,
+} from "../../../services/dashboard/teacher-settings";
 import { notifyAssignmentGraded } from "../../../services/notifications/events/assignment";
 import { runAssignmentDueReminders } from "../../../services/notifications/reminders";
 import {
@@ -30,6 +34,121 @@ import {
   markNotificationRead,
 } from "../../../services/notifications/service";
 import { integrationPrisma } from "../recommendations/database";
+import { deliverQualityReportNotifications } from "../../../services/quality-reports/notifications";
+
+test("teacher preferences mute report review notifications and preserve failure delivery", async (t) => {
+  const tag = randomUUID();
+  const teacher = await integrationPrisma.user.create({
+    data: {
+      email: `${tag}@example.test`,
+      role: Role.TEACHER,
+      passwordHash: "integration-test-only",
+    },
+  });
+  const template = await integrationPrisma.courseTemplate.create({
+    data: { code: tag, name: tag },
+  });
+  const category = await integrationPrisma.questionCourseCategory.create({
+    data: { name: tag, normalizedName: tag },
+  });
+  const course = await integrationPrisma.course.create({
+    data: {
+      teacherId: teacher.id,
+      name: tag,
+      courseNo: tag,
+      term: "2026-2027-1",
+      templateId: template.id,
+      questionCategoryId: category.id,
+    },
+  });
+  t.after(async () => {
+    await integrationPrisma.notification.deleteMany({
+      where: { recipientId: teacher.id },
+    });
+    await integrationPrisma.courseQualityReport.deleteMany({
+      where: { courseId: course.id },
+    });
+    await integrationPrisma.course.delete({ where: { id: course.id } });
+    await integrationPrisma.courseTemplate.delete({
+      where: { id: template.id },
+    });
+    await integrationPrisma.questionCourseCategory.delete({
+      where: { id: category.id },
+    });
+    await integrationPrisma.user.delete({ where: { id: teacher.id } });
+  });
+
+  const createReport = (
+    versionNumber: number,
+    status: "SUCCEEDED" | "FAILED",
+  ) =>
+    integrationPrisma.courseQualityReport.create({
+      data: {
+        courseId: course.id,
+        requestedById: teacher.id,
+        versionNumber,
+        sourceType: "UPLOAD",
+        sourceSnapshotJson: {},
+        inputFingerprint: String(versionNumber).padStart(64, "0"),
+        calculationRuleVersion: "test",
+        promptVersion: "test",
+        templateVersion: "test",
+        templateChecksumSha256: "a".repeat(64),
+        completedAt: new Date(),
+        notificationPending: true,
+        status,
+      },
+    });
+  const savedDefaults = await getTeacherTeachingPreferences(teacher.id);
+  assert.deepEqual(savedDefaults, {
+    assignmentDueDays: null,
+    allowAssignmentResubmission: false,
+    notifyQualityReportReady: true,
+  });
+  const initialSuccess = await createReport(1, "SUCCEEDED");
+  await deliverQualityReportNotifications();
+
+  const muted = {
+    assignmentDueDays: 14,
+    allowAssignmentResubmission: true,
+    notifyQualityReportReady: false,
+  };
+  await setTeacherTeachingPreferences(teacher.id, muted);
+  assert.deepEqual(await getTeacherTeachingPreferences(teacher.id), muted);
+  const mutedSuccess = await createReport(2, "SUCCEEDED");
+  const failure = await createReport(3, "FAILED");
+  await deliverQualityReportNotifications();
+
+  await setTeacherTeachingPreferences(teacher.id, savedDefaults);
+  const newSuccess = await createReport(4, "SUCCEEDED");
+  await deliverQualityReportNotifications();
+  await deliverQualityReportNotifications();
+
+  const notices = await integrationPrisma.notification.findMany({
+    where: {
+      recipientId: teacher.id,
+      type: NotificationType.QUALITY_REPORT_RESULT,
+    },
+    select: { sourceId: true, priority: true },
+  });
+  assert.equal(notices.length, 3);
+  assert.deepEqual(
+    new Map(notices.map(({ sourceId, priority }) => [sourceId, priority])),
+    new Map([
+      [initialSuccess.id, NotificationPriority.NORMAL],
+      [failure.id, NotificationPriority.IMPORTANT],
+      [newSuccess.id, NotificationPriority.NORMAL],
+    ]),
+  );
+  assert.equal(
+    (
+      await integrationPrisma.courseQualityReport.findUniqueOrThrow({
+        where: { id: mutedSuccess.id },
+      })
+    ).notificationPending,
+    false,
+  );
+});
 
 test("PostgreSQL notification workflow enforces ownership, expiry, role targeting and idempotency", async (t) => {
   const suffix = randomUUID().replaceAll("-", "");

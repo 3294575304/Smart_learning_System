@@ -9,6 +9,37 @@ const labels = {
   syllabus: "教学大纲",
 };
 
+test("教师和学生的设置页使用统一面包屑名称", () => {
+  for (const path of ["/teacher/settings", "/student/settings"]) {
+    assert.equal(buildBreadcrumbs(path).at(-1)?.label, "设置");
+  }
+});
+
+test("历史班级面包屑链接带筛选返回班级管理", () => {
+  const list = "/teacher/classrooms";
+  const crumbs = buildBreadcrumbs(list, undefined, {
+    view: "history",
+    classroomListFilters: {
+      keyword: " python ",
+      status: "ACTIVE",
+      courseId: "course-a",
+    },
+  });
+  assert.deepEqual(crumbs.slice(1), [
+    {
+      href: `${list}?keyword=python&status=ACTIVE&courseId=course-a`,
+      label: "班级管理",
+      linkable: true,
+    },
+    {
+      href: `${list}?view=history&keyword=python&status=ACTIVE&courseId=course-a`,
+      label: "历史班级",
+      linkable: false,
+    },
+  ]);
+  assert.equal(buildBreadcrumbs(list).at(-1)?.label, "班级管理");
+});
+
 test("新建与导入页面保留自己的名称，不被当作资源详情", () => {
   for (const pathname of [
     "/teacher/questions/new",

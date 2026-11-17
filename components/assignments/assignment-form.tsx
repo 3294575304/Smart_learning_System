@@ -110,6 +110,7 @@ interface AssignmentFormProps {
     }>;
   };
   defaultDueDays?: number;
+  defaultAllowResubmission?: boolean;
   initialClassroomId?: string;
   lastPublishedByClassroom?: Record<
     string,
@@ -149,6 +150,7 @@ export function AssignmentForm({
   assignment,
   batch,
   defaultDueDays = 7,
+  defaultAllowResubmission = false,
   initialClassroomId,
   lastPublishedByClassroom,
 }: AssignmentFormProps) {
@@ -312,7 +314,8 @@ export function AssignmentForm({
       classroomId: defaultClassroomId,
       publishedAt: datetimeLocal(defaultPublishedAt),
       dueAt: datetimeLocal(defaultDueAt),
-      allowResubmission: assignment?.allowResubmission ?? false,
+      allowResubmission:
+        assignment?.allowResubmission ?? defaultAllowResubmission,
     },
   });
 
@@ -1857,7 +1860,10 @@ export function AssignmentForm({
             ) : null}
           </div>
         ) : null}
-        <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white/95 px-5 py-3 shadow-[0_-4px_16px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+        <div
+          data-back-to-top-toolbar
+          className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white/95 px-5 py-3 shadow-[0_-4px_16px_rgba(15,23,42,0.06)] backdrop-blur-sm"
+        >
           <p className="text-sm text-slate-600">
             {assignmentType === "task" ? "直接任务" : `${selected.length}道题`}{" "}
             · 总分{" "}

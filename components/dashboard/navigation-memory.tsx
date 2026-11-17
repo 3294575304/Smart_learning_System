@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { backToTopEvent } from "./back-to-top";
+import { isTeacherClassroomHistory } from "@/lib/teacher-classroom-list-route";
 
 import {
   parsePageMemory,
@@ -88,6 +90,10 @@ export function NavigationMemory({ userId }: { userId: string }) {
     const url = `${pathname}${query ? `?${query}` : ""}`;
     const key = `${PREFIX}${userId}:page:${url}`;
     const lastKey = `${PREFIX}${userId}:last:${pathname}`;
+    const classroomHistory = isTeacherClassroomHistory(
+      pathname,
+      new URLSearchParams(query).get("view"),
+    );
     const saved = parsePageMemory(read<unknown>(key));
     const detailsKey = (item: HTMLDetailsElement) => {
       if (item.id) return item.id;
@@ -147,7 +153,8 @@ export function NavigationMemory({ userId }: { userId: string }) {
           .filter(Boolean),
       };
       write(key, memory);
-      write(lastKey, memory);
+      // 历史视图与班级列表共用路径，但只保存它自己的页面滚动位置。
+      if (!classroomHistory) write(lastKey, memory);
     };
     const scheduleSave = () => {
       window.clearTimeout(timer);
@@ -175,7 +182,12 @@ export function NavigationMemory({ userId }: { userId: string }) {
       save();
       if (!link.textContent?.includes("返回")) return;
       const target = new URL(link.href, location.origin);
-      if (target.origin !== location.origin || target.search || target.hash)
+      if (
+        target.origin !== location.origin ||
+        target.search ||
+        target.hash ||
+        (classroomHistory && target.pathname === pathname)
+      )
         return;
       const previous = read<PageMemory>(
         `${PREFIX}${userId}:last:${target.pathname}`,
@@ -192,6 +204,7 @@ export function NavigationMemory({ userId }: { userId: string }) {
     window.addEventListener("wheel", stopRestoring, { passive: true });
     window.addEventListener("pointerdown", stopRestoring, { passive: true });
     window.addEventListener("keydown", stopRestoring);
+    window.addEventListener(backToTopEvent, stopRestoring);
     root.addEventListener("toggle", scheduleSave, true);
     document.addEventListener("click", click, true);
     return () => {
@@ -204,6 +217,7 @@ export function NavigationMemory({ userId }: { userId: string }) {
       window.removeEventListener("wheel", stopRestoring);
       window.removeEventListener("pointerdown", stopRestoring);
       window.removeEventListener("keydown", stopRestoring);
+      window.removeEventListener(backToTopEvent, stopRestoring);
       root.removeEventListener("toggle", scheduleSave, true);
       document.removeEventListener("click", click, true);
     };

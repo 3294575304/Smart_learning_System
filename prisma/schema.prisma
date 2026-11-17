@@ -694,6 +694,11 @@ enum RecommendationStatus {
 }
 
 model User {
+  teacherAssignmentDueDays Int?
+  teacherAssignmentAllowResubmission Boolean @default(false)
+  teacherNotifyQualityReportReady Boolean @default(true)
+  teacherDefaultCourseId String?
+  teacherDefaultCourse Course? @relation("TeacherDefaultCourse", fields: [teacherDefaultCourseId], references: [id], onDelete: SetNull)
   examSessions         ExamSession[]           @relation("ExamTeacher")
   examPaperDrafts      ExamPaperDraft[]        @relation("ExamDraftTeacher")
   makeupGrantsReceived AssignmentMakeupGrant[] @relation("MakeupStudent")
@@ -1143,6 +1148,7 @@ model QuestionCourseCategory {
 }
 
 model Course {
+  defaultForTeachers User[] @relation("TeacherDefaultCourse")
   examSessions                            ExamSession[]
   examPaperDrafts                         ExamPaperDraft[]
   questionObjectiveMappings               QuestionCourseObjective[]

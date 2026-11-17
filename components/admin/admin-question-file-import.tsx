@@ -950,7 +950,10 @@ export function QuestionFileImport({
               </div>
             ) : null}
 
-            <div className="sticky bottom-4 rounded-xl border bg-white/95 p-4 shadow-lg backdrop-blur">
+            <div
+              data-back-to-top-toolbar
+              className="sticky bottom-4 rounded-xl border bg-white/95 p-4 shadow-lg backdrop-blur"
+            >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-slate-600">
                   {invalidCount

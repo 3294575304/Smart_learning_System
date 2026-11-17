@@ -1,22 +1,24 @@
 import { Role } from "@prisma/client";
 import { Archive } from "lucide-react";
-import Link from "next/link";
 
 import { ClassroomForm } from "@/components/classrooms/classroom-form";
 import { TeacherClassroomList } from "@/components/classrooms/teacher-classroom-list";
+import { TeacherClassroomListNavigation } from "@/components/classrooms/teacher-classroom-list-navigation";
 import {
   CreateEntry,
   CreateEntryProvider,
 } from "@/components/dashboard/create-entry";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { readAllowedParam, readTextParam } from "@/lib/list-filter";
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
+import {
+  readTeacherClassroomListFilters,
+  teacherClassroomListHref,
+} from "@/lib/teacher-classroom-list-route";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
   listTeacherClassrooms,
   listTeacherHistoricalClassrooms,
 } from "@/services/classrooms/service";
-
-const CLASSROOM_STATUS_VALUES = ["ACTIVE", "COMPLETED", "CLOSED"] as const;
 
 async function HistoricalClassrooms({ teacherId }: { teacherId: string }) {
   const classrooms = await listTeacherHistoricalClassrooms(teacherId);
@@ -78,13 +80,7 @@ async function HistoricalClassrooms({ teacherId }: { teacherId: string }) {
 export default async function TeacherClassroomsPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    deleted?: string;
-    keyword?: string;
-    status?: string;
-    courseId?: string;
-    view?: string;
-  }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
   const params = await searchParams;
@@ -92,11 +88,7 @@ export default async function TeacherClassroomsPage({
   const deleted = !history && params.deleted === "1";
 
   // 筛选条件从链接读回，保证刷新和分享链接能还原同一份结果
-  const initialFilters = {
-    keyword: readTextParam(params.keyword),
-    status: readAllowedParam(params.status, CLASSROOM_STATUS_VALUES),
-    courseId: readTextParam(params.courseId, 64),
-  };
+  const initialFilters = readTeacherClassroomListFilters(params);
 
   const classrooms = history ? [] : await listTeacherClassrooms(teacher.id);
   const activeClassrooms = classrooms.filter(
@@ -117,6 +109,11 @@ export default async function TeacherClassroomsPage({
           班级已删除，列表已更新。学生账号及历史教学记录已保留。
         </p>
       )}
+      {history && (
+        <TeacherBackLink href={teacherClassroomListHref(initialFilters)}>
+          返回班级管理
+        </TeacherBackLink>
+      )}
       <header className="tt-phead">
         <div className="min-w-0">
           <h1 className="tt-h1">{history ? "历史班级" : "班级管理"}</h1>
@@ -126,22 +123,17 @@ export default async function TeacherClassroomsPage({
               : `共 ${classrooms.length} 个班级 · ${activeClassrooms} 个进行中 · 合计 ${totalStudents} 名学生`}
           </p>
         </div>
-        <div className="tt-phead-act">
-          <Link
-            className="tt-btn-line"
-            href={
-              history
-                ? "/teacher/classrooms"
-                : "/teacher/classrooms?view=history"
-            }
-          >
-            {history ? "返回班级列表" : "历史班级"}
-          </Link>
-          {history ? null : <CreateEntry tone="cta" />}
-        </div>
+        {!history && (
+          <div className="tt-phead-act">
+            <CreateEntry tone="cta" />
+          </div>
+        )}
       </header>
       {history ? (
-        <HistoricalClassrooms teacherId={teacher.id} />
+        <>
+          <TeacherClassroomListNavigation filters={initialFilters} history />
+          <HistoricalClassrooms teacherId={teacher.id} />
+        </>
       ) : (
         <TeacherClassroomList
           initialClassrooms={classrooms}

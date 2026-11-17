@@ -61,16 +61,22 @@ export default async function QuestionDetailPage({
   const classroom = classroomIdSchema.safeParse(classroomId);
   const createPreview = from === "assignment-create";
   const editPreview = from === "assignment-edit" && editId.success;
-  const backHref = createPreview
-    ? `/teacher/assignments/new${classroom.success ? `?classroomId=${classroom.data}` : ""}#assignment-editor`
-    : editPreview
-      ? `/teacher/assignments/${editId.data}/edit`
-      : "/teacher/questions";
-  const backLabel = createPreview
-    ? "返回创建作业"
-    : editPreview
-      ? "返回编辑作业"
-      : "返回题库";
+  // 从「新建考试」的选题区进来：返回时回到同一个表单（内容由答题草稿恢复）
+  const examPreview = from === "exam-create";
+  const backHref = examPreview
+    ? "/teacher/exams/new"
+    : createPreview
+      ? `/teacher/assignments/new${classroom.success ? `?classroomId=${classroom.data}` : ""}#assignment-editor`
+      : editPreview
+        ? `/teacher/assignments/${editId.data}/edit`
+        : "/teacher/questions";
+  const backLabel = examPreview
+    ? "返回新建考试"
+    : createPreview
+      ? "返回创建作业"
+      : editPreview
+        ? "返回编辑作业"
+        : "返回题库";
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">

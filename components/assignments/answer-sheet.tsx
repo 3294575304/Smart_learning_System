@@ -851,7 +851,7 @@ export function AnswerSheet({
   );
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-4" data-back-to-top-hidden={exam || undefined}>
       {workLocked && !exam && (
         <p
           role="status"

@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import {
   ArrowRight,
   CalendarClock,
+  CheckCircle2,
   ClipboardList,
   Plus,
   Upload,
@@ -110,8 +111,20 @@ export default async function TeacherExamsPage({
       );
     }
   }
+  const createdTitle = typeof query.created === "string" ? query.created : "";
   return (
     <section className="space-y-5">
+      {createdTitle ? (
+        <div
+          role="status"
+          className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+        >
+          <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            「{createdTitle}」已创建并发布，学生可在对应班级的考试列表中看到。
+          </span>
+        </div>
+      ) : null}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-slate-950">考试管理</h1>
         <div className="flex flex-wrap gap-2">
