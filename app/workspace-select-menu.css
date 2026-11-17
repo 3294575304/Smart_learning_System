@@ -1,9 +1,9 @@
-/* 师生端下拉选项共用外观；不改关闭态的内边距，保留前置图标让位。 */
+/* 各角色下拉选项共用外观；不改关闭态的内边距，保留前置图标让位。 */
 @supports (appearance: base-select) {
   :is(
-    [data-shell-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-shell-role="STUDENT"],
-    #dashboard-main[data-workspace-role="TEACHER"],
+    #dashboard-main[data-workspace-theme="staff"],
     #dashboard-main[data-workspace-role="STUDENT"]
   ) {
     select:not([multiple]):not([size])::picker(select) {

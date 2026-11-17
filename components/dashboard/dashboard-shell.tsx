@@ -263,8 +263,8 @@ export function DashboardShell({
   const navigationGroups = NAVIGATION[user.role];
   const userName = displayUserName(user);
   const schoolName = user.schoolName?.trim() || platformName;
-  // 教师使用远端窄侧栏，其余角色保留原宽度。
-  const compactWorkspace = user.role === Role.TEACHER;
+  // 教师与管理工作区共用紧凑侧栏，学生端保留学习导航宽度。
+  const compactWorkspace = user.role !== Role.STUDENT;
   const railClass = compactWorkspace ? "w-56" : "w-64";
   const railOffsetClass = compactWorkspace ? "lg:pl-56" : "lg:pl-64";
   const currentPageTitle = useMemo(
@@ -399,7 +399,11 @@ export function DashboardShell({
   }, [joinClassroomDialogOpen]);
 
   return (
-    <div className="bg-background min-h-screen" data-shell-role={user.role}>
+    <div
+      className="bg-background min-h-screen"
+      data-shell-role={user.role}
+      data-workspace-theme={compactWorkspace ? "staff" : undefined}
+    >
       {/* 键盘用户可直接跳过整组侧栏导航，不必每页 Tab 穿过全部入口。 */}
       <a
         href="#dashboard-main"
@@ -416,7 +420,7 @@ export function DashboardShell({
         <div
           className={
             user.role === Role.SUPER_ADMIN
-              ? "flex h-16 items-center border-b px-6"
+              ? "workspace-brand-row flex h-16 items-center border-b px-6"
               : "workspace-brand-row flex h-16 items-center justify-start border-b px-6"
           }
         >
@@ -425,7 +429,7 @@ export function DashboardShell({
               className="flex items-center gap-2 font-semibold"
               href="/dashboard"
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-emerald-500 text-white">
+              <span className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded">
                 <GraduationCap className="h-5 w-5" />
               </span>
               <span>{platformName}</span>
@@ -496,7 +500,7 @@ export function DashboardShell({
                   href="/dashboard"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-emerald-500 text-white">
+                  <span className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded">
                     <GraduationCap className="h-5 w-5" />
                   </span>
                   <span>{platformName}</span>
@@ -730,6 +734,7 @@ export function DashboardShell({
           id="dashboard-main"
           tabIndex={-1}
           data-workspace-role={user.role}
+          data-workspace-theme={compactWorkspace ? "staff" : undefined}
           className={cn(
             "mx-auto w-full min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8",
             user.role === Role.STUDENT

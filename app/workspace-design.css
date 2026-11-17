@@ -1,5 +1,5 @@
-/* 第二版「全浅墨青」的尺寸与层级。以角色为边界，不影响管理端与登录页。 */
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"]) {
+/* 第二版「全浅墨青」的尺寸与层级。以角色为边界，覆盖师生与管理工作区，不影响登录页。 */
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"]) {
   font-family:
     system-ui,
     -apple-system,
@@ -11,12 +11,12 @@
   font-size: 13px;
   line-height: 1.55;
 }
-[data-shell-role="TEACHER"] .workspace-brand-row,
-[data-shell-role="TEACHER"] .workspace-topbar > div {
+[data-workspace-theme="staff"] .workspace-brand-row,
+[data-workspace-theme="staff"] .workspace-topbar > div {
   height: 56px;
   padding-inline: 24px;
 }
-[data-shell-role="TEACHER"] aside nav a {
+[data-workspace-theme="staff"] aside nav a {
   min-height: 36px;
   padding-block: 8px;
   border-radius: 5px;
@@ -25,43 +25,43 @@
   font-weight: 500;
   box-shadow: none;
 }
-[data-shell-role="TEACHER"] aside nav a svg {
+[data-workspace-theme="staff"] aside nav a svg {
   width: 15px;
   height: 15px;
   opacity: 0.65;
 }
-[data-shell-role="TEACHER"] aside nav a[aria-current="page"] {
+[data-workspace-theme="staff"] aside nav a[aria-current="page"] {
   font-weight: 600;
 }
-[data-shell-role="TEACHER"] aside nav a[aria-current="page"] svg {
+[data-workspace-theme="staff"] aside nav a[aria-current="page"] svg {
   opacity: 1;
 }
-[data-shell-role="TEACHER"] aside nav p {
+[data-workspace-theme="staff"] aside nav p {
   font-size: 10.5px;
   letter-spacing: 0.08em;
   margin-bottom: 4px;
 }
-[data-shell-role="TEACHER"] aside nav > div + div {
+[data-workspace-theme="staff"] aside nav > div + div {
   margin-top: 12px;
 }
-[data-shell-role="TEACHER"] .workspace-topbar :where(button, a) {
+[data-workspace-theme="staff"] .workspace-topbar :where(button, a) {
   border-radius: 5px;
   font-size: 12px;
   box-shadow: none;
 }
-[data-shell-role="TEACHER"] .workspace-topbar button > span.rounded-full {
+[data-workspace-theme="staff"] .workspace-topbar button > span.rounded-full {
   width: 26px;
   height: 26px;
   font-size: 11px;
 }
 #dashboard-main:is(
-  [data-workspace-role="TEACHER"],
+  [data-workspace-theme="staff"],
   [data-workspace-role="STUDENT"]
 ) {
   padding: 20px 24px 24px;
 }
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :where(h1) {
@@ -71,21 +71,21 @@
   letter-spacing: -0.012em;
 }
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :where(.rounded-2xl, .rounded-xl, .rounded-lg) {
   border-radius: 6px;
 }
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :where(.shadow-sm, .shadow-md, .shadow) {
   box-shadow: none;
 }
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   .workspace-page-header {
@@ -96,7 +96,7 @@
   gap: 16px;
 }
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   .workspace-page-header
@@ -107,7 +107,7 @@
   line-height: 1.6;
 }
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   .workspace-panel {
@@ -117,7 +117,7 @@
   box-shadow: none;
 }
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   .workspace-panel
@@ -127,7 +127,7 @@
   font-weight: 650;
 }
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :where(.workspace-panel, .workspace-page-header)
@@ -208,7 +208,7 @@
   border-color: #eff3f5;
 }
 #dashboard-main[data-workspace-role="STUDENT"] .st-course-cover,
-[data-shell-role="TEACHER"] .tt-course-cover {
+[data-workspace-theme="staff"] .tt-course-cover {
   min-height: 56px;
   height: 56px;
   padding: 8px 12px;
@@ -220,10 +220,10 @@
     ),
     linear-gradient(100deg, #dce9ec, #f3f8f8);
 }
-[data-shell-role="TEACHER"] .tt-course-body {
+[data-workspace-theme="staff"] .tt-course-body {
   padding: 11px 12px;
 }
-[data-shell-role="TEACHER"] .tt-course-facts {
+[data-workspace-theme="staff"] .tt-course-facts {
   border-top: 1px solid #eff3f5;
   padding-top: 9px;
   gap: 6px 12px;
@@ -231,7 +231,7 @@
 }
 @media (min-width: 640px) {
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     :where(button, a):is(.min-h-10, .min-h-11, .h-10, .h-11) {
@@ -240,14 +240,14 @@
     font-size: 12.2px;
   }
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     :where(button, a):is(.h-10, .h-11) {
     height: 32px;
   }
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size]) {
@@ -258,13 +258,13 @@
 }
 @media (max-width: 639px) {
   #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   ) {
     padding: 16px;
   }
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     .workspace-page-header {
@@ -272,7 +272,7 @@
     gap: 12px;
   }
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     :where(button, a):is(.tt-btn, .tt-btn-cta, .st-btn-cta) {
