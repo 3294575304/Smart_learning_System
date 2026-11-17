@@ -67,9 +67,9 @@ interface DraftQuestion {
   type: QuestionType;
   sortOrder: number;
   points: number;
-  /** 编程题才有：冻结配置里的第一条公开用例，隐藏用例不会下发。 */
+  /** 编程题才有：冻结配置里的公开检查点，隐藏用例不会下发。 */
   programming?: {
-    sample: { stdin: string; expectedOutput: string };
+    samples: Array<{ name: string; stdin: string; expectedOutput: string }>;
   } | null;
   options: Array<{
     id: string;
@@ -777,7 +777,7 @@ export function AnswerSheet({
           prompt={
             <>
               <ProgrammingStatement
-                sample={question.programming?.sample ?? null}
+                samples={question.programming?.samples ?? []}
                 text={question.content}
               />
               {question.images?.map((image) => (
@@ -797,6 +797,7 @@ export function AnswerSheet({
           <ProgrammingQuestionInput
             assignmentQuestionId={question.id}
             disabled={editingDisabled}
+            fillHeight
             code={answer.value}
             onChange={(code) =>
               changeAnswer(question.id, { kind: "CODE", value: code })

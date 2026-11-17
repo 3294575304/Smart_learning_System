@@ -10,6 +10,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { RefreshOverview } from "@/components/super-admin/refresh-overview";
 import { SuperAdminSystemHealth } from "@/components/super-admin/system-health";
@@ -31,23 +32,16 @@ export function SuperAdminOverview({ data }: { data: SuperAdminOverviewData }) {
   });
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-5 rounded-2xl border border-sky-100 bg-gradient-to-r from-sky-50 via-white to-emerald-50 p-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-sky-700">超级管理员工作台</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
-            平台运行概览
-          </h1>
-          <p className="text-muted-foreground mt-2 text-sm">
-            查看学校接入、账号规模与教学资源的当前情况。
-          </p>
-          <p className="text-muted-foreground mt-3 text-xs">
-            更新于 {updatedAt}（北京时间）
-          </p>
-        </div>
-        <div className="shrink-0">
-          <RefreshOverview />
-        </div>
-      </header>
+      <div>
+        <PageHeader
+          title="平台运行概览"
+          description="查看学校接入、账号规模与教学资源的当前情况。"
+          actions={<RefreshOverview />}
+        />
+        <p className="text-muted-foreground mt-3 text-xs">
+          更新于 {updatedAt}（北京时间）
+        </p>
+      </div>
 
       <section
         aria-label="平台核心指标"

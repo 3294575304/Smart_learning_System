@@ -215,16 +215,16 @@ export function ProgrammingAnswerLayout({
 }) {
   return (
     <div className="border-line-soft @container mt-4 min-w-0 border-t pt-4">
-      <div className="grid min-w-0 items-start gap-4 @min-[45rem]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid min-w-0 items-stretch gap-4 @min-[45rem]:h-[40rem] @min-[45rem]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @min-[45rem]:grid-rows-[minmax(0,1fr)]">
         <section
           aria-label="题目说明"
           tabIndex={0}
-          className="border-line bg-page focus-visible:outline-brand min-w-0 rounded-xl border p-4 focus-visible:outline-2 @min-[45rem]:col-start-2 @min-[45rem]:row-start-1 @min-[45rem]:max-h-[32rem] @min-[45rem]:overflow-auto @min-[45rem]:overscroll-contain"
+          className="border-line bg-page focus-visible:outline-brand min-w-0 rounded-xl border p-4 focus-visible:outline-2 @min-[45rem]:col-start-2 @min-[45rem]:row-start-1 @min-[45rem]:h-full @min-[45rem]:overflow-auto @min-[45rem]:overscroll-contain"
         >
           <h3 className="text-ink mb-3 text-sm font-semibold">题目说明</h3>
           {prompt}
         </section>
-        <div className="min-w-0 @min-[45rem]:col-start-1 @min-[45rem]:row-start-1">
+        <div className="min-w-0 @min-[45rem]:col-start-1 @min-[45rem]:row-start-1 @min-[45rem]:h-full @min-[45rem]:min-h-0 @min-[45rem]:overflow-hidden">
           {children}
         </div>
       </div>

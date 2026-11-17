@@ -17,7 +17,7 @@ export default async function TeacherLayout({
   return (
     // 外层再挂一次 data-shell-role：ToastHost 与教师助手浮层渲染在
     // DashboardShell 之外，需要同一作用域才能继承教师皮肤令牌。
-    <div data-shell-role={Role.TEACHER}>
+    <div data-shell-role={Role.TEACHER} data-workspace-theme="staff">
       <DashboardShell
         platformAnnouncement={config.platformAnnouncement}
         platformName={config.platformName}

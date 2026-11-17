@@ -31,12 +31,14 @@ export function ProgrammingQuestionInput({
   assignmentQuestionId,
   code,
   disabled,
+  fillHeight = false,
   onChange,
   submissionId,
 }: {
   assignmentQuestionId: string;
   code: string;
   disabled?: boolean;
+  fillHeight?: boolean;
   onChange: (code: string) => void;
   submissionId: string;
 }) {
@@ -144,8 +146,11 @@ export function ProgrammingQuestionInput({
   }
 
   return (
-    <div className="min-w-0 space-y-3">
+    <div
+      className={`min-w-0 space-y-3 ${fillHeight ? "@min-[45rem]:flex @min-[45rem]:h-full @min-[45rem]:min-h-0 @min-[45rem]:flex-col @min-[45rem]:overflow-hidden" : ""}`}
+    >
       <PythonCodeEditor
+        fillHeight={fillHeight}
         disabled={disabled || running}
         onChange={(next) => {
           if (next === code) return;
@@ -180,38 +185,46 @@ export function ProgrammingQuestionInput({
         }
       />
 
-      {attempt && !terminal.has(attempt.status) ? (
-        <p className="text-ink-soft text-sm" role="status">
-          {error ? "状态查询中断，请重试查询" : `执行中 · ${attempt.progress}%`}
-        </p>
-      ) : null}
-
-      {error ? (
-        <p className="bg-bad-soft text-bad rounded-lg p-3 text-sm">
-          {error}{" "}
-          {attemptId ? (
-            <button
-              className="underline"
-              onClick={() => void load(attemptId)}
-              type="button"
-            >
-              重试查询
-            </button>
+      {attempt || error ? (
+        <div
+          className={`space-y-3 ${fillHeight ? "@min-[45rem]:max-h-[45%] @min-[45rem]:shrink-0 @min-[45rem]:overflow-y-auto @min-[45rem]:overscroll-contain" : ""}`}
+        >
+          {attempt && !terminal.has(attempt.status) ? (
+            <p className="text-ink-soft text-sm" role="status">
+              {error
+                ? "状态查询中断，请重试查询"
+                : `执行中 · ${attempt.progress}%`}
+            </p>
           ) : null}
-        </p>
-      ) : null}
 
-      {attempt?.status === "SYSTEM_ERROR" ? (
-        <p className="bg-warn-soft text-warn rounded-lg p-3 text-sm">
-          判题服务暂时不可用，本次不计分。请稍后重试。
-        </p>
-      ) : null}
+          {error ? (
+            <p className="bg-bad-soft text-bad rounded-lg p-3 text-sm">
+              {error}{" "}
+              {attemptId ? (
+                <button
+                  className="underline"
+                  onClick={() => void load(attemptId)}
+                  type="button"
+                >
+                  重试查询
+                </button>
+              ) : null}
+            </p>
+          ) : null}
 
-      {attempt?.status === "SUCCEEDED" && attempt.cases.length === 0 ? (
-        <p className="text-ink-soft text-sm">暂无公开样例结果。</p>
-      ) : null}
+          {attempt?.status === "SYSTEM_ERROR" ? (
+            <p className="bg-warn-soft text-warn rounded-lg p-3 text-sm">
+              判题服务暂时不可用，本次不计分。请稍后重试。
+            </p>
+          ) : null}
 
-      {attempt ? <ProgrammingTestResults cases={attempt.cases} /> : null}
+          {attempt?.status === "SUCCEEDED" && attempt.cases.length === 0 ? (
+            <p className="text-ink-soft text-sm">暂无公开样例结果。</p>
+          ) : null}
+
+          {attempt ? <ProgrammingTestResults cases={attempt.cases} /> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

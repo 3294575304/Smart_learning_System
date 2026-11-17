@@ -436,13 +436,7 @@ export async function getProgrammingAttemptPayload(attemptId: string) {
       attempt.configSnapshot?.configRevision ?? attempt.configRevision;
     if (!config) throw new AssignmentOperationError("判题配置不存在", 409);
     const allCases = config.testCases;
-    const selectedCases =
-      attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
-        ? allCases.filter(
-            (testCase) =>
-              testCase.visibility === ProgrammingTestVisibility.PUBLIC,
-          )
-        : allCases;
+    const selectedCases = allCases;
     return {
       attemptId: attempt.id,
       kind: attempt.kind,
@@ -552,13 +546,7 @@ async function projectJudgeResult(
     attempt.configSnapshot?.configRevision ?? attempt.configRevision;
   if (!config) throw new AssignmentOperationError("判题配置不存在", 409);
   const allCases = config.testCases;
-  const expectedCases =
-    attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
-      ? allCases.filter(
-          (testCase) =>
-            testCase.visibility === ProgrammingTestVisibility.PUBLIC,
-        )
-      : allCases;
+  const expectedCases = allCases;
   const resultByCase = new Map(
     result.cases.map((item) => [item.testCaseId, item]),
   );
@@ -820,9 +808,6 @@ function studentAttemptDto(
         const usage = sandboxResourceUsageSchema.safeParse(item.resourceUsage);
         return usage.success ? usage.data : null;
       })(),
-      ...(attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
-        ? { stdout: item.stdout ?? "", stderr: item.stderr ?? "" }
-        : {}),
     })),
   };
 }

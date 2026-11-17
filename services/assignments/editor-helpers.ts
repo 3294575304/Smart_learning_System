@@ -21,6 +21,74 @@ export function distributeAssignmentPoints(
   );
 }
 
+export function distributeAssignmentPointsByType(
+  questions: readonly {
+    type: string;
+    programmingTotalPoints?: number | null;
+  }[],
+  target: number,
+): number[] {
+  if (questions.length === 0) return [];
+
+  const targetCents = Math.round(target * 100);
+  if (
+    !Number.isFinite(target) ||
+    target <= 0 ||
+    target > 10_000 ||
+    Math.abs(targetCents / 100 - target) > 1e-8 ||
+    targetCents < questions.length
+  )
+    throw new Error("目标总分须精确到0.01分，且每题至少0.01分");
+
+  const bigIndexes = questions.flatMap((question, index) =>
+    question.type === "SHORT_ANSWER" || question.type === "PYTHON_PROGRAMMING"
+      ? [index]
+      : [],
+  );
+  const smallIndexes = questions.flatMap((question, index) =>
+    question.type === "SHORT_ANSWER" || question.type === "PYTHON_PROGRAMMING"
+      ? []
+      : [index],
+  );
+  const bigCents =
+    bigIndexes.length && smallIndexes.length
+      ? Math.round(targetCents * 0.6)
+      : bigIndexes.length
+        ? targetCents
+        : 0;
+  const smallCents = targetCents - bigCents;
+  const result = Array<number>(questions.length).fill(0);
+
+  function assignGroup(
+    indexes: number[],
+    cents: number,
+    preferInteger: boolean,
+  ) {
+    if (!indexes.length) return;
+    if (cents < indexes.length)
+      throw new Error("目标总分不足以为每道题分配至少0.01分");
+
+    const wholePoints = Math.floor(cents / 100);
+    const points =
+      preferInteger && wholePoints >= indexes.length
+        ? indexes.map(
+            (_, index) =>
+              Math.floor(wholePoints / indexes.length) +
+              Number(index < wholePoints % indexes.length) +
+              (index === 0 ? (cents % 100) / 100 : 0),
+          )
+        : distributeAssignmentPoints(indexes.length, cents / 100);
+
+    indexes.forEach((questionIndex, index) => {
+      result[questionIndex] = points[index];
+    });
+  }
+
+  assignGroup(bigIndexes, bigCents, true);
+  assignGroup(smallIndexes, smallCents, false);
+  return result;
+}
+
 export function selectAssignmentQuestions<T extends { id: string }>(
   candidates: readonly T[],
   excludedIds: readonly string[],

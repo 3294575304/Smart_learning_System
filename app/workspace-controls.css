@@ -1,14 +1,14 @@
-/* 师生工作区共用控件：主操作蓝色，次操作白底，危险操作保留红色。 */
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"]) {
+/* 各角色工作区共用控件：主操作蓝色，次操作白底，危险操作保留红色。 */
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"]) {
   --progress-track: #dfe6e9;
   --destructive: #a83239;
   --tt-ink-3: #63798a;
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :where(button, a, input, select, textarea):focus-visible {
   outline-color: var(--brand-strong);
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :where(button, a):where(
     .bg-primary,
     .bg-sky-500,
@@ -26,7 +26,7 @@
   border-color: var(--brand-strong);
   color: #fff;
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :where(button, a):where(
     .bg-primary,
     .bg-sky-500,
@@ -42,7 +42,7 @@
   background-color: var(--brand-strong);
   border-color: var(--brand-strong);
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :where(button, a):where(
     .bg-primary,
     .bg-sky-500,
@@ -53,36 +53,36 @@
   ):active:not(:disabled) {
   background-color: var(--brand-strong);
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :where(button):disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 /* 保留创建入口的强强调层级，覆盖旧组件附带的 bg-sky-* 工具类。 */
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   button:is(.tt-btn-cta, .st-btn-cta) {
   background: var(--brand);
   border-color: var(--brand);
   color: #fff;
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   button:is(.tt-btn-cta, .st-btn-cta):hover:not(:disabled) {
   background: var(--brand-strong);
   border-color: var(--brand-strong);
 }
 
 /* 选项菜单按内容展开，不能用窄触发器的宽度把学期拆成竖排。 */
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   select:not([multiple]):not([size]) {
   min-height: 36px;
   line-height: 1.5;
   white-space: nowrap;
 }
 @supports (appearance: base-select) {
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size]),
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size]) {
@@ -96,10 +96,10 @@
     font-size: 13px;
     box-shadow: none;
   }
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size])::picker(select),
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size])::picker(select) {
@@ -117,11 +117,11 @@
     color: #3f5768;
     box-shadow: 0 8px 24px rgb(21 45 62 / 12%);
   }
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size])
     option,
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size])
@@ -138,11 +138,11 @@
     font-size: 13px;
     color: #3f5768;
   }
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size])
     option:checked,
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size])
@@ -151,11 +151,11 @@
     color: var(--brand-strong);
     font-weight: 600;
   }
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size])
     option:is(:hover, :focus-visible),
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size])
@@ -163,11 +163,11 @@
     background: var(--page);
     color: var(--brand-strong);
   }
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size])
     option::checkmark,
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size])
@@ -175,19 +175,19 @@
     color: var(--brand-strong);
     margin-inline-start: auto;
   }
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size])::picker-icon,
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size])::picker-icon {
     color: #63798a;
   }
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size]):is(:open, :focus-visible),
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size]):is(:open, :focus-visible) {
@@ -198,10 +198,10 @@
   }
 }
 /* 显式主行动优先于既有页面的 sky 工具类与 ID 作用域兜底规则。 */
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :is(button, a):is(.tt-btn-cta, .st-btn-cta),
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :is(button, a):is(.tt-btn-cta, .st-btn-cta) {
@@ -209,43 +209,43 @@
   border-color: var(--brand);
   color: #fff;
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :is(button, a):is(.tt-btn-cta, .st-btn-cta):hover:not(:disabled),
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :is(button, a):is(.tt-btn-cta, .st-btn-cta):hover:not(:disabled) {
   background: var(--brand-strong);
   border-color: var(--brand-strong);
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :is(button, a):is(.tt-btn-cta, .st-btn-cta):active:not(:disabled),
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :is(button, a):is(.tt-btn-cta, .st-btn-cta):active:not(:disabled) {
   background: var(--color-sky-900);
   border-color: var(--color-sky-900);
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :is(button, a):is(.tt-btn-cta, .st-btn-cta):focus-visible,
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :is(button, a):is(.tt-btn-cta, .st-btn-cta):focus-visible {
   outline: 2px solid var(--brand-strong);
   outline-offset: 3px;
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :is(button, a):is(.tt-btn-cta, .st-btn-cta):is(
     :disabled,
     [aria-disabled="true"]
   ),
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :is(button, a):is(.tt-btn-cta, .st-btn-cta):is(
@@ -256,19 +256,19 @@
   cursor: not-allowed;
 }
 @supports (appearance: base-select) {
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size]):hover:not(:disabled),
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size]):hover:not(:disabled) {
     border-color: var(--brand);
   }
-  :is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+  :is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
     select:not([multiple]):not([size]):disabled,
   #dashboard-main:is(
-      [data-workspace-role="TEACHER"],
+      [data-workspace-theme="staff"],
       [data-workspace-role="STUDENT"]
     )
     select:not([multiple]):not([size]):disabled {
@@ -279,7 +279,7 @@
   }
 }
 /* 青绿主按钮的状态层级；珊瑚主行动有独立的状态色。 */
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :is(button, a):where(
     .tt-btn,
     .bg-primary,
@@ -290,7 +290,7 @@
     .bg-sky-900
   ):not(:is(.tt-btn-cta, .st-btn-cta)):hover:not(:disabled),
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :is(button, a):where(
@@ -306,7 +306,7 @@
   border-color: var(--brand-strong);
   color: #fff;
 }
-:is([data-shell-role="TEACHER"], [data-shell-role="STUDENT"])
+:is([data-workspace-theme="staff"], [data-shell-role="STUDENT"])
   :is(button, a):where(
     .tt-btn,
     .bg-primary,
@@ -317,7 +317,7 @@
     .bg-sky-900
   ):not(:is(.tt-btn-cta, .st-btn-cta)):active:not(:disabled),
 #dashboard-main:is(
-    [data-workspace-role="TEACHER"],
+    [data-workspace-theme="staff"],
     [data-workspace-role="STUDENT"]
   )
   :is(button, a):where(

@@ -661,12 +661,13 @@ async function main(): Promise<void> {
     assert.equal(publicResult.status, ProgrammingAttemptStatus.SUCCEEDED);
     assert.equal(publicResult.kind, "PUBLIC_RUN");
     assert.equal(publicResult.score, null);
-    assert.equal(publicResult.cases.length, 1);
-    assert.equal(
-      publicResult.cases[0]?.stdout,
-      "4\n",
-      JSON.stringify(publicResult),
-    );
+    assert.equal(publicResult.cases.length, 2);
+    const publicJson = JSON.stringify(publicResult);
+    assert.equal(publicJson.includes('"stdout"'), false);
+    assert.equal(publicJson.includes('"stderr"'), false);
+    assert.equal(publicJson.includes('"stdin"'), false);
+    assert.equal(publicJson.includes('"expectedOutput"'), false);
+    assert.equal(publicJson.includes("隐藏用例-不得泄露"), false);
 
     const saveResponse = await requestJson(
       `/api/student/submissions/${submission.data.id}/answers`,

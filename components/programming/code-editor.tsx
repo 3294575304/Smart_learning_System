@@ -48,6 +48,20 @@ const TOKEN_COLORS = HighlightStyle.define([
   { tag: tags.meta, color: "#ffcb6b" },
 ]);
 
+const LIGHT_TOKEN_COLORS = HighlightStyle.define([
+  { tag: tags.keyword, color: "#7c3aed", fontWeight: "600" },
+  { tag: [tags.string, tags.character], color: "#15803d" },
+  { tag: [tags.number, tags.bool, tags.null], color: "#c2410c" },
+  { tag: tags.comment, color: "#64748b", fontStyle: "italic" },
+  {
+    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
+    color: "#0369a1",
+  },
+  { tag: [tags.typeName, tags.className], color: "#0f766e" },
+  { tag: tags.operator, color: "#475569" },
+  { tag: tags.meta, color: "#a16207" },
+]);
+
 const EDITOR_THEME = EditorView.theme(
   {
     "&": {
@@ -94,6 +108,68 @@ const EDITOR_THEME = EditorView.theme(
   { dark: true },
 );
 
+const LIGHT_EDITOR_THEME = EditorView.theme(
+  {
+    "&": {
+      backgroundColor: "#f8fafc",
+      color: "#0f172a",
+      fontSize: "14px",
+    },
+    ".cm-scroller": {
+      fontFamily: "Consolas, 'Courier New', monospace",
+      lineHeight: "1.75",
+      overflow: "auto",
+      minHeight: "288px",
+      maxHeight: "560px",
+    },
+    ".cm-content": {
+      padding: "14px 0",
+      minHeight: "288px",
+      caretColor: "transparent",
+    },
+    ".cm-line": { padding: "0 14px" },
+    ".cm-gutters": {
+      backgroundColor: "#f1f5f9",
+      color: "#64748b",
+      borderRight: "1px solid #e2e8f0",
+      minHeight: "288px !important",
+      userSelect: "none",
+    },
+    ".cm-lineNumbers": {
+      minWidth: "3em",
+      fontVariantNumeric: "tabular-nums",
+    },
+    ".cm-lineNumbers .cm-gutterElement": {
+      padding: "0 10px 0 8px",
+      textAlign: "right",
+    },
+    ".cm-activeLineGutter": {
+      backgroundColor: "#e0f2fe",
+      color: "#0369a1",
+    },
+    ".cm-activeLine": { backgroundColor: "rgba(14, 165, 233, 0.06)" },
+    "&.cm-focused": { outline: "2px solid #38bdf8", outlineOffset: "-2px" },
+  },
+  { dark: false },
+);
+
+const FILL_EDITOR_THEME = EditorView.theme({
+  "&": { height: "100%", minHeight: "0" },
+  ".cm-scroller": {
+    alignItems: "stretch !important",
+    flex: "1 1 0%",
+    height: "100%",
+    maxHeight: "none",
+    minHeight: "0",
+  },
+  ".cm-content": { minHeight: "100%" },
+  ".cm-gutters": {
+    alignSelf: "stretch !important",
+    height: "auto",
+    minHeight: "100% !important",
+  },
+});
+
 export function PythonCodeEditor({
   value,
   onChange,
@@ -102,6 +178,10 @@ export function PythonCodeEditor({
   label = "Python 代码",
   onRun,
   progress,
+  variant = "dark",
+  showToolbar = true,
+  muteWhenDisabled = true,
+  fillHeight = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -112,6 +192,11 @@ export function PythonCodeEditor({
   onRun?: () => void;
   /** 0-100；有值时在顶栏下方显示一条进度线。 */
   progress?: number | null;
+  variant?: "dark" | "light";
+  showToolbar?: boolean;
+  muteWhenDisabled?: boolean;
+  /** Fill a fixed-height two-column question panel. */
+  fillHeight?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -119,17 +204,19 @@ export function PythonCodeEditor({
   callback.current = onChange;
   const runRef = useRef(onRun);
   runRef.current = onRun;
-  const initial = useRef({ value, disabled, label });
+  const initial = useRef({ value, disabled, label, variant, fillHeight });
   const compartments = useRef({
     editable: new Compartment(),
     label: new Compartment(),
   });
 
   useEffect(() => {
-    if (!host.current) return;
+    const hostElement = host.current;
+    if (!hostElement) return;
     const config = compartments.current;
+    let scheduleFillerUpdate = () => {};
     const editor = new EditorView({
-      parent: host.current,
+      parent: hostElement,
       state: EditorState.create({
         doc: initial.current.value,
         extensions: [
@@ -151,7 +238,11 @@ export function PythonCodeEditor({
           indentOnInput(),
           highlightActiveLine(),
           highlightActiveLineGutter(),
-          syntaxHighlighting(TOKEN_COLORS),
+          syntaxHighlighting(
+            initial.current.variant === "light"
+              ? LIGHT_TOKEN_COLORS
+              : TOKEN_COLORS,
+          ),
           EditorState.tabSize.of(4),
           python(),
           config.editable.of([
@@ -167,15 +258,114 @@ export function PythonCodeEditor({
             }),
           ),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged)
+            if (update.docChanged) {
               callback.current(update.state.doc.toString());
+              scheduleFillerUpdate();
+            }
           }),
-          EDITOR_THEME,
+          initial.current.variant === "light"
+            ? LIGHT_EDITOR_THEME
+            : EDITOR_THEME,
+          initial.current.fillHeight ? FILL_EDITOR_THEME : [],
         ],
       }),
     });
     view.current = editor;
+    const filler = initial.current.fillHeight
+      ? document.createElement("div")
+      : null;
+    if (filler) {
+      filler.className = "cm-line-number-filler";
+      filler.setAttribute("aria-hidden", "true");
+      hostElement.appendChild(filler);
+    }
+    let animationFrame = 0;
+    const updateFiller = () => {
+      if (!filler) return;
+      filler.replaceChildren();
+      filler.style.display = "none";
+
+      const scroller = editor.scrollDOM;
+      if (
+        scroller.scrollTop + scroller.clientHeight <
+        scroller.scrollHeight - 2
+      )
+        return;
+
+      const gutter = editor.dom.querySelector<HTMLElement>(".cm-lineNumbers");
+      const line = editor.dom.querySelector<HTMLElement>(".cm-line");
+      if (!gutter || !line) return;
+
+      let lastNumber: HTMLElement | null = null;
+      const lineCount = editor.state.doc.lines;
+      for (const element of gutter.querySelectorAll<HTMLElement>(
+        ".cm-gutterElement",
+      )) {
+        if (element.textContent?.trim() === String(lineCount)) {
+          lastNumber = element;
+          break;
+        }
+      }
+      if (!lastNumber) return;
+
+      const lineHeight = Number.parseFloat(getComputedStyle(line).lineHeight);
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0) return;
+      const hostRect = hostElement.getBoundingClientRect();
+      const gutterRect = gutter.getBoundingClientRect();
+      const lastNumberRect = lastNumber.getBoundingClientRect();
+      const rowCount = Math.floor(
+        (scroller.getBoundingClientRect().bottom - lastNumberRect.bottom + 1) /
+          lineHeight,
+      );
+      if (rowCount <= 0) return;
+
+      const numberStyle = getComputedStyle(lastNumber);
+      filler.style.position = "absolute";
+      filler.style.top = `${lastNumberRect.bottom - hostRect.top}px`;
+      filler.style.left = `${gutterRect.left - hostRect.left}px`;
+      filler.style.width = `${gutterRect.width}px`;
+      filler.style.display = "flex";
+      filler.style.flexDirection = "column";
+      filler.style.pointerEvents = "none";
+      filler.style.zIndex = "300";
+      for (let index = 1; index <= rowCount; index++) {
+        const row = document.createElement("div");
+        row.className = "cm-gutterElement";
+        row.textContent = String(lineCount + index);
+        row.style.boxSizing = "border-box";
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+        row.style.justifyContent = "flex-end";
+        row.style.flex = `0 0 ${lineHeight}px`;
+        row.style.height = `${lineHeight}px`;
+        row.style.padding = numberStyle.padding;
+        row.style.color = numberStyle.color;
+        row.style.fontFamily = numberStyle.fontFamily;
+        row.style.fontSize = numberStyle.fontSize;
+        row.style.fontWeight = numberStyle.fontWeight;
+        row.style.lineHeight = numberStyle.lineHeight;
+        row.style.fontVariantNumeric = numberStyle.fontVariantNumeric;
+        row.style.textAlign = numberStyle.textAlign;
+        filler.appendChild(row);
+      }
+    };
+    scheduleFillerUpdate = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(updateFiller);
+    };
+    const resizeObserver =
+      filler && typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(scheduleFillerUpdate)
+        : null;
+    resizeObserver?.observe(hostElement);
+    resizeObserver?.observe(editor.scrollDOM);
+    editor.scrollDOM.addEventListener("scroll", scheduleFillerUpdate);
+    scheduleFillerUpdate();
     return () => {
+      window.cancelAnimationFrame(animationFrame);
+      resizeObserver?.disconnect();
+      editor.scrollDOM.removeEventListener("scroll", scheduleFillerUpdate);
+      filler?.remove();
       editor.destroy();
       view.current = null;
     };
@@ -212,18 +402,22 @@ export function PythonCodeEditor({
   }, [label]);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border border-slate-800">
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-[#162a3e] px-3 py-2">
-        <div className="flex items-center gap-2 font-mono text-xs text-slate-300">
-          <span>main.py</span>
-          <span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-slate-400">
-            Python 3
-          </span>
+    <div
+      className={`min-w-0 overflow-hidden rounded-xl border ${variant === "light" ? "border-slate-200" : "border-slate-800"} ${fillHeight ? "flex min-h-0 flex-1 flex-col" : ""}`}
+    >
+      {showToolbar ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-[#162a3e] px-3 py-2">
+          <div className="flex items-center gap-2 font-mono text-xs text-slate-300">
+            <span>main.py</span>
+            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-slate-400">
+              Python 3
+            </span>
+          </div>
+          {toolbar ? (
+            <div className="flex flex-wrap items-center gap-2">{toolbar}</div>
+          ) : null}
         </div>
-        {toolbar ? (
-          <div className="flex flex-wrap items-center gap-2">{toolbar}</div>
-        ) : null}
-      </div>
+      ) : null}
       {typeof progress === "number" ? (
         <div className="h-0.5 w-full bg-sky-950" role="presentation">
           <div
@@ -232,7 +426,10 @@ export function PythonCodeEditor({
           />
         </div>
       ) : null}
-      <div className={`min-w-0 ${disabled ? "opacity-70" : ""}`} ref={host} />
+      <div
+        className={`relative min-w-0 ${fillHeight ? "min-h-0 flex-1" : ""} ${disabled && muteWhenDisabled ? "opacity-70" : ""}`}
+        ref={host}
+      />
     </div>
   );
 }

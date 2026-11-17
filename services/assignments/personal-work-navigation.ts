@@ -5,7 +5,7 @@ import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
 
 export const personalWorkQuerySchema = z.object({
   filter: z
-    .enum(["ALL", "WRONG", "PENDING_REVIEW"])
+    .enum(["ALL", "WRONG", "CORRECT", "INCORRECT", "PENDING", "PENDING_REVIEW"])
     .default("ALL")
     .transform((value) => (value === "PENDING_REVIEW" ? "ALL" : value)),
   returnTo: z.string().max(8000).optional(),
