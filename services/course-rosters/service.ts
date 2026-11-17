@@ -10,20 +10,25 @@ async function courseScope(
   db: Prisma.TransactionClient,
   teacherId: string,
   courseId: string,
+  readOnly = false,
 ) {
   const course = await db.course.findFirst({
     where: {
       id: courseId,
       teacherId,
-      status: { not: "ARCHIVED" },
+      ...(readOnly ? {} : { status: { not: "ARCHIVED" as const } }),
       teacher: { role: "TEACHER", status: "ACTIVE" },
     },
     select: {
       id: true,
       name: true,
+      status: true,
       classrooms: {
-        where: { teacherId, status: "ACTIVE" },
-        select: { id: true, name: true },
+        where: {
+          teacherId,
+          ...(readOnly ? {} : { status: "ACTIVE" as const }),
+        },
+        select: { id: true, name: true, status: true },
       },
     },
   });
@@ -37,7 +42,7 @@ export async function listCourseRoster(
   raw: unknown,
 ) {
   const input = rosterQuerySchema.parse(raw);
-  const course = await courseScope(prisma, teacherId, courseId);
+  const course = await courseScope(prisma, teacherId, courseId, true);
   if (
     input.classroomId &&
     !course.classrooms.some((c) => c.id === input.classroomId)
@@ -97,6 +102,11 @@ export async function listCourseRoster(
       kind: "MEMBER" as const,
       classroomId: m.classroomId,
       classroomName: m.classroom.name,
+      canManage:
+        course.status !== "ARCHIVED" &&
+        course.classrooms.some(
+          (c) => c.id === m.classroomId && c.status === "ACTIVE",
+        ),
       name: m.student.profile?.displayName ?? "未设置姓名",
       studentNo: m.student.profile?.studentNo ?? "",
       status: m.status === "ACTIVE" ? "ACTIVE" : "REMOVED",
@@ -104,6 +114,10 @@ export async function listCourseRoster(
       identityUpdatedAt:
         m.student.profile?.updatedAt.toISOString() ?? m.updatedAt.toISOString(),
       canEdit:
+        course.status !== "ARCHIVED" &&
+        course.classrooms.some(
+          (c) => c.id === m.classroomId && c.status === "ACTIVE",
+        ) &&
         m.status === "ACTIVE" &&
         Boolean(m.student.profile) &&
         m.student.classMemberships.every(
@@ -115,12 +129,21 @@ export async function listCourseRoster(
       kind: "PENDING" as const,
       classroomId: a.classroomId,
       classroomName: a.classroom.name,
+      canManage:
+        course.status !== "ARCHIVED" &&
+        course.classrooms.some(
+          (c) => c.id === a.classroomId && c.status === "ACTIVE",
+        ),
       name: a.studentIdentity.name,
       studentNo: a.studentIdentity.studentNo,
       status: a.withdrawnAt ? "REMOVED" : "PENDING",
       updatedAt: a.updatedAt.toISOString(),
       identityUpdatedAt: a.studentIdentity.updatedAt.toISOString(),
       canEdit:
+        course.status !== "ARCHIVED" &&
+        course.classrooms.some(
+          (c) => c.id === a.classroomId && c.status === "ACTIVE",
+        ) &&
         !a.withdrawnAt &&
         a.studentIdentity.assignments.every(
           (x) => x.classroom.teacherId === teacherId,
@@ -148,6 +171,10 @@ export async function listCourseRoster(
   return {
     course: { id: course.id, name: course.name },
     classrooms: course.classrooms,
+    editableClassrooms:
+      course.status === "ARCHIVED"
+        ? []
+        : course.classrooms.filter((c) => c.status === "ACTIVE"),
     counts,
     total: filtered.length,
     page,

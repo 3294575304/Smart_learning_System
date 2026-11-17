@@ -104,7 +104,11 @@ export async function buildStudentAnalysisInput(
   submissionId: string,
 ): Promise<StudentAnalysisBatch> {
   const submission = await prisma.submission.findFirst({
-    where: { id: submissionId, studentId },
+    where: {
+      id: submissionId,
+      studentId,
+      assignment: { deletedAt: null, status: { not: "REVOKED" } },
+    },
     include: {
       student: { include: { profile: true } },
       answers: {

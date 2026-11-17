@@ -1,6 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import {
+  ChevronDown,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react";
+import { useId, useState } from "react";
 
 import {
   QUESTION_TYPE_GROUPS,
@@ -36,6 +42,22 @@ export function QuestionFilters({
 }: QuestionFiltersProps) {
   const [keyword, setKeyword] = useState(query.keyword ?? "");
   const [pending, setPending] = useState(false);
+  const advancedFilterCount = [
+    query.courseConceptId,
+    query.defaultObjectiveKind,
+    query.objectiveCode,
+  ].filter(Boolean).length;
+  const [advancedOpen, setAdvancedOpen] = useState(advancedFilterCount > 0);
+  const advancedId = useId();
+  const hasFilters = Boolean(
+    keyword.trim() ||
+    query.keyword ||
+    query.categoryId ||
+    query.type ||
+    query.courseId ||
+    query.knowledgePointId ||
+    advancedFilterCount,
+  );
   const selectedCourse = courses.find((course) =>
     course.courseIds.includes(query.courseId ?? ""),
   );
@@ -92,33 +114,39 @@ export function QuestionFilters({
     <fieldset
       disabled={pending}
       aria-busy={pending}
-      className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2 lg:grid-cols-3"
+      aria-label="题库搜索与筛选"
+      className="min-w-0 space-y-2.5"
     >
-      <form
-        className="flex w-full gap-2 sm:col-span-2 lg:col-span-3 lg:max-w-2xl"
-        onSubmit={submitSearch}
-      >
-        <label className="min-w-0 flex-1 space-y-1">
-          <span className="text-xs font-medium">搜索题目</span>
+      <div className="tt-fbar">
+        <form
+          className="tt-search"
+          style={{ flex: "1 1 16rem" }}
+          onSubmit={submitSearch}
+          role="search"
+        >
+          <Search
+            aria-hidden="true"
+            className="size-3.5 shrink-0 text-slate-400"
+          />
           <input
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            aria-label="搜索题目"
+            autoComplete="off"
             maxLength={120}
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder="输入标题、题干或完整标签"
+            placeholder="搜索标题、题干或完整标签"
+            type="search"
             value={keyword}
           />
-        </label>
-        <button
-          className="mt-5 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white"
-          type="submit"
-        >
-          搜索
-        </button>
-      </form>
-      <label className="space-y-1">
-        <span className="text-xs font-medium">课程分类</span>
+          <button
+            className="shrink-0 text-xs font-medium text-sky-700 hover:text-sky-900"
+            type="submit"
+          >
+            搜索
+          </button>
+        </form>
         <select
-          className="w-full rounded-md border px-3 py-2"
+          aria-label="课程分类"
+          className="max-w-full sm:max-w-48"
           value={query.categoryId ?? ""}
           onChange={(event) => update("categoryId", event.target.value)}
         >
@@ -129,11 +157,9 @@ export function QuestionFilters({
             </option>
           ))}
         </select>
-      </label>
-      <label className="space-y-1">
-        <span className="text-xs font-medium">题型</span>
         <select
-          className="w-full rounded-md border px-3 py-2"
+          aria-label="题型"
+          className="max-w-full sm:max-w-40"
           value={query.type ?? ""}
           onChange={(event) => update("type", event.target.value)}
         >
@@ -148,49 +174,57 @@ export function QuestionFilters({
             </optgroup>
           ))}
         </select>
-      </label>
-      <>
-        <label className="space-y-1">
-          <span className="text-xs font-medium">课程</span>
-          <select
-            className="w-full rounded-md border px-3 py-2"
-            value={selectedCourse?.id ?? ""}
-            onChange={(event) => update("courseId", event.target.value)}
+        <select
+          aria-label="课程"
+          className="max-w-full sm:max-w-56"
+          value={selectedCourse?.id ?? ""}
+          onChange={(event) => update("courseId", event.target.value)}
+        >
+          <option value="">全部课程</option>
+          {courses.map((course) => (
+            <option key={course.id} value={course.id}>
+              {course.name}
+              {courses.filter((item) => item.name === course.name).length > 1
+                ? ` · ${course.term} · ${course.courseNo}`
+                : ""}
+            </option>
+          ))}
+        </select>
+        <button
+          aria-controls={advancedId}
+          aria-expanded={advancedOpen}
+          className="tt-btn-line shrink-0"
+          onClick={() => setAdvancedOpen((open) => !open)}
+          type="button"
+        >
+          <SlidersHorizontal aria-hidden="true" className="size-3.5" />
+          更多筛选{advancedFilterCount ? `（${advancedFilterCount}）` : ""}
+          <ChevronDown
+            aria-hidden="true"
+            className={`size-3.5 transition-transform ${advancedOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {hasFilters ? (
+          <button
+            type="button"
+            className="tt-btn-ghost shrink-0"
+            onClick={() => {
+              setKeyword("");
+              setPending(true);
+              window.location.assign("/teacher/questions");
+            }}
           >
-            <option value="">全部课程</option>
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.name}
-                {courses.filter((item) => item.name === course.name).length > 1
-                  ? ` · ${course.term} · ${course.courseNo}`
-                  : ""}
-              </option>
-            ))}
-          </select>
-          <span className="block text-xs text-slate-500">
-            {selectedCourse
-              ? `${selectedCourse.courseNo} · ${selectedCourse.term} · ${selectedCourse.classrooms.length} 个关联班级`
-              : "包含未关联课程的题目"}
-          </span>
-        </label>
-      </>
-      <details
-        open={Boolean(
-          query.courseConceptId ||
-          query.defaultObjectiveKind ||
-          query.objectiveCode,
-        )}
-        className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 sm:col-span-2 lg:col-span-3"
+            <RotateCcw aria-hidden="true" className="size-3.5" />
+            重置筛选
+          </button>
+        ) : null}
+      </div>
+      <div
+        hidden={!advancedOpen}
+        id={advancedId}
+        className="rounded-md border bg-white p-3"
       >
-        <summary className="text-xs font-medium text-sky-700">
-          更多筛选 · 知识点与课程目标
-          {query.courseConceptId ||
-          query.defaultObjectiveKind ||
-          query.objectiveCode
-            ? "（已启用）"
-            : ""}
-        </summary>
-        <div className="mt-3 grid max-w-2xl gap-3 sm:grid-cols-2">
+        <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
           <label className="space-y-1">
             <span className="text-xs font-medium">课程知识点</span>
             <select
@@ -252,31 +286,21 @@ export function QuestionFilters({
             )}
           </label>
         </div>
-      </details>
-      <div className="flex items-center gap-3 text-xs text-slate-500 sm:col-span-2 lg:col-span-3">
-        <button
-          type="button"
-          className="rounded-md border px-3 py-2 text-slate-700"
-          onClick={() => {
-            setKeyword("");
-            setPending(true);
-            window.location.assign("/teacher/questions");
-          }}
-        >
-          重置筛选
-        </button>
-        <span role="status">
-          {pending
-            ? "正在更新题目…"
-            : courses.length === 0
-              ? "暂无可筛选课程，可先创建课程；题型与通用目标仍可筛选。"
-              : query.courseId && !selectedCourse?.concepts.length
-                ? "该课程尚未发布正式知识图谱，暂不能按知识点筛选。"
-                : query.courseId
-                  ? "课程范围包含关联到课程、章节及知识点的题目；选择具体知识点后再精确筛选。"
-                  : "全部题目包含未关联课程的题目；切换课程会清空知识点条件。"}
-        </span>
       </div>
+      <p className="tt-hint" role="status">
+        {selectedCourse
+          ? `${selectedCourse.courseNo} · ${selectedCourse.term} · ${selectedCourse.classrooms.length} 个关联班级；`
+          : ""}
+        {pending
+          ? "正在更新题目…"
+          : courses.length === 0
+            ? "暂无可筛选课程，可先创建课程；题型与通用目标仍可筛选。"
+            : query.courseId && !selectedCourse?.concepts.length
+              ? "该课程尚未发布正式知识图谱，暂不能按知识点筛选。"
+              : query.courseId
+                ? "包含课程、章节及知识点关联题目，可展开更多筛选。"
+                : "包含未关联课程的题目，可按标题、题干或完整标签搜索。"}
+      </p>
     </fieldset>
   );
 }

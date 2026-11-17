@@ -50,52 +50,58 @@ export function StudentAssignmentRings({
               <StudentPageLink
                 key={item.classroom.id}
                 href={`/student/assignments?${new URLSearchParams({ courseId: item.course.id, classroomId: item.classroom.id })}`}
-                className={`border-border hover:bg-muted flex min-w-0 flex-[1_1_16rem] items-center gap-3 rounded-xl border px-3 py-3 ${FOCUS_RING}`}
+                className={`${dashboard ? "workspace-course-row" : "border-border rounded-xl border px-3 py-3"} hover:bg-muted flex min-w-0 flex-[1_1_16rem] items-center gap-3 ${FOCUS_RING}`}
               >
-                <div className="relative size-14 shrink-0">
-                  <svg
-                    viewBox="0 0 120 120"
-                    className="size-full -rotate-90"
-                    role="img"
-                    aria-label={`${studentEnrollmentLabel(item)}：${total ? parts.map((p) => `${p.label}${p.count}项`).join("，") : "暂无作业"}`}
-                  >
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r="47"
-                      fill="none"
-                      stroke="var(--progress-track)"
-                      strokeWidth="10"
-                    />
-                    {parts.map((p) => {
-                      const share = total ? (p.count / total) * 100 : 0;
-                      const start = offset;
-                      offset += share;
-                      return (
-                        <circle
-                          key={p.label}
-                          cx="60"
-                          cy="60"
-                          r="47"
-                          fill="none"
-                          pathLength="100"
-                          stroke={p.color}
-                          strokeWidth="10"
-                          strokeDasharray={`${share} ${100 - share}`}
-                          strokeDashoffset={-start}
-                        />
-                      );
-                    })}
-                  </svg>
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
-                  >
-                    <strong className="text-xs font-semibold text-neutral-950 tabular-nums">
-                      {total ? `${completion}%` : "—"}
-                    </strong>
+                {dashboard ? (
+                  <span className="workspace-course-code" aria-hidden="true">
+                    {item.course.name.slice(0, 2).toUpperCase()}
+                  </span>
+                ) : (
+                  <div className="relative size-14 shrink-0">
+                    <svg
+                      viewBox="0 0 120 120"
+                      className="size-full -rotate-90"
+                      role="img"
+                      aria-label={`${studentEnrollmentLabel(item)}：${total ? parts.map((p) => `${p.label}${p.count}项`).join("，") : "暂无作业"}`}
+                    >
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="47"
+                        fill="none"
+                        stroke="var(--progress-track)"
+                        strokeWidth="10"
+                      />
+                      {parts.map((p) => {
+                        const share = total ? (p.count / total) * 100 : 0;
+                        const start = offset;
+                        offset += share;
+                        return (
+                          <circle
+                            key={p.label}
+                            cx="60"
+                            cy="60"
+                            r="47"
+                            fill="none"
+                            pathLength="100"
+                            stroke={p.color}
+                            strokeWidth="10"
+                            strokeDasharray={`${share} ${100 - share}`}
+                            strokeDashoffset={-start}
+                          />
+                        );
+                      })}
+                    </svg>
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
+                    >
+                      <strong className="text-xs font-semibold text-neutral-950 tabular-nums">
+                        {total ? `${completion}%` : "—"}
+                      </strong>
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-medium [overflow-wrap:anywhere] text-neutral-900">
                     {item.course.name} · {item.classroom.name}
@@ -110,7 +116,7 @@ export function StudentAssignmentRings({
                           <span>未交未截止 {parts[1].count}</span>
                         )}
                         {overdue > 0 && (
-                          <span className="text-rose-700">
+                          <span className="st-danger-text">
                             逾期未交 {overdue}
                           </span>
                         )}
@@ -120,6 +126,16 @@ export function StudentAssignmentRings({
                     )}
                   </p>
                 </div>
+                {dashboard && (
+                  <div className="workspace-course-progress">
+                    <progress
+                      max={Math.max(total, 1)}
+                      value={submitted}
+                      aria-label={`${studentEnrollmentLabel(item)}作业提交进度`}
+                    />
+                    <span>{total ? `${completion}%` : "暂无作业"}</span>
+                  </div>
+                )}
               </StudentPageLink>
             );
           })}
@@ -134,7 +150,7 @@ export function StudentAssignmentRings({
   return (
     <section
       aria-labelledby="home-assignment-progress"
-      className="border-border bg-card flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5"
+      className="workspace-panel border-border bg-card flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5"
     >
       <header className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2">
         <div className="min-w-0">

@@ -151,7 +151,7 @@ export function StudentSurveyForm({
         </p>
       ) : null}
       <button
-        className="rounded-md bg-sky-700 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+        className="st-btn-cta rounded-md bg-sky-700 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
         disabled={busy}
         onClick={() => void submit()}
         type="button"

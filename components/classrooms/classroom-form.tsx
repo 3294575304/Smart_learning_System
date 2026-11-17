@@ -132,7 +132,7 @@ export function ClassroomForm({
         </p>
       ) : null}
       <button
-        className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60"
+        className="tt-btn-cta bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60"
         disabled={isSubmitting}
         type="submit"
       >

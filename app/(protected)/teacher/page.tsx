@@ -1,7 +1,7 @@
 import { Role } from "@prisma/client";
 import { ArrowRight, BookOpenCheck } from "lucide-react";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -29,8 +29,6 @@ export default async function TeacherPage({ searchParams }: Props) {
     if (error instanceof ResourceNotFoundError) notFound();
     throw error;
   }
-  if (query.data.classroomId && dashboard.workspace)
-    redirect(`/teacher?courseId=${dashboard.workspace.course.id}`);
   const workspace = dashboard.workspace;
   if (!workspace)
     return (

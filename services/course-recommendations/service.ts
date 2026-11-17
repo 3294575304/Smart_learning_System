@@ -50,6 +50,7 @@ import type {
 } from "@/services/course-recommendations/schemas";
 import { RecommendationOperationError } from "@/services/recommendations/errors";
 import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
+import { ensureLearnerProfileSnapshot } from "@/services/learner-profiles/service";
 
 function ownedCourseWhere(teacherId: string, courseId: string) {
   return { id: courseId, teacherId };
@@ -65,8 +66,8 @@ export async function getTeachingProgress(
     select: {
       id: true,
       classrooms: {
-        where: { status: "ACTIVE", teacherId },
-        select: { id: true, name: true },
+        where: { teacherId },
+        select: { id: true, name: true, status: true },
         orderBy: { name: "asc" },
       },
       currentPublishedKnowledgeGraphVersion: {
@@ -120,6 +121,11 @@ export async function getTeachingProgress(
     : null;
   return {
     classroomId: classroomId ?? null,
+    readOnly: Boolean(
+      classroomId &&
+      course.classrooms.find((item) => item.id === classroomId)?.status !==
+        "ACTIVE",
+    ),
     classrooms: course.classrooms,
     inherited: Boolean(
       classroomId && !scoped && course.currentTeachingProgressRevision,
@@ -787,6 +793,7 @@ export async function createCourseRecommendations(
           `单次最多推荐 ${policy.maxQuestionCount} 道题`,
           400,
         );
+      await ensureLearnerProfileSnapshot(transaction, actor.id, courseId);
       const [
         profile,
         masteryState,

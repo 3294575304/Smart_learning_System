@@ -71,6 +71,7 @@ export function SubmissionGradingWorkspace({
     count("MISSING");
   // Keep previously confirmed grades visible even when old per-question records are incomplete.
   const finished = ["GRADED", "PUBLISHED"].includes(submission.status);
+  const draft = submission.status === "IN_PROGRESS";
   const percentage = finished
     ? hundredPointScore(submission.score, submission.maxScore)
     : null;
@@ -102,7 +103,7 @@ export function SubmissionGradingWorkspace({
                 {submission.student.studentNo ?? "无学号"}
               </span>
               <span className="text-xs text-slate-500">
-                {finished ? "已批改" : "评分未完成"} ·{" "}
+                {draft ? "未提交草稿" : finished ? "已批改" : "评分未完成"} ·{" "}
                 {submission.status === "PUBLISHED"
                   ? "成绩已公布"
                   : "成绩未公布"}
@@ -117,15 +118,20 @@ export function SubmissionGradingWorkspace({
               </div>
               <div className="min-w-0">
                 <dt className="text-xs text-slate-500">
-                  提交记录 · 第 {submission.attemptNumber} 次 ·{" "}
-                  {submission.isLatestEffective ? "最新有效" : "历史只读"}
+                  {draft ? "保存的作答" : "提交记录"} · 第{" "}
+                  {submission.attemptNumber} 次 ·{" "}
+                  {draft
+                    ? "只读查看"
+                    : submission.isLatestEffective
+                      ? "最新有效"
+                      : "历史只读"}
                 </dt>
                 <dd className="mt-1 leading-6 text-slate-700 tabular-nums">
                   {(submission.submittedAt
                     ? new Date(submission.submittedAt).toLocaleString("zh-CN", {
                         timeZone: "Asia/Shanghai",
                       })
-                    : null) ?? "提交时间未记录"}
+                    : null) ?? (draft ? "尚未提交" : "提交时间未记录")}
                 </dd>
               </div>
             </dl>
@@ -142,7 +148,9 @@ export function SubmissionGradingWorkspace({
                 {percentage === null
                   ? finished
                     ? "—"
-                    : "待评分"
+                    : draft
+                      ? "未提交"
+                      : "待评分"
                   : percentage.toFixed(2)}
                 {percentage !== null && (
                   <span className="text-ink-muted ms-1 text-sm font-normal">

@@ -17,6 +17,7 @@ export async function readAssignmentQuestionImage(
           assignment: {
             select: {
               teacherId: true,
+              deletedAt: true,
               status: true,
               examSession: { select: { cancelledAt: true, startsAt: true } },
               classroom: {
@@ -50,7 +51,7 @@ export async function readAssignmentQuestionImage(
     assignment.examSession.startsAt <= new Date() &&
     (assignment.classroom.memberships.length > 0 ||
       assignment.submissions.length > 0);
-  if (!image || (!teacher && !student))
+  if (!image || assignment?.deletedAt || (!teacher && !student))
     throw new ResourceNotFoundError("题目图片不存在");
   return {
     mimeType: image.mimeType,

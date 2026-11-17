@@ -74,56 +74,62 @@ export async function listTeacherResultsOverview(
     ...(query.classroomId ? { classroomId: query.classroomId } : {}),
     ...(query.courseId ? { classroom: { courseId: query.courseId } } : {}),
   };
-  const [total, assignments] = await prisma.$transaction([
-    prisma.assignment.count({ where }),
-    prisma.assignment.findMany({
-      where,
-      orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-      select: {
-        id: true,
-        title: true,
-        examSession: { select: { type: true } },
-        status: true,
-        dueAt: true,
-        totalPoints: true,
-        classroom: {
-          select: {
-            id: true,
-            name: true,
-            memberships: {
-              where: { status: MembershipStatus.ACTIVE },
-              select: { studentId: true },
-            },
-            _count: {
-              select: {
-                memberships: { where: { status: MembershipStatus.ACTIVE } },
+  const { total, assignments, page, totalPages } = await prisma.$transaction(
+    async (transaction) => {
+      const total = await transaction.assignment.count({ where });
+      const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
+      const page = Math.min(query.page, totalPages);
+      const assignments = await transaction.assignment.findMany({
+        where,
+        orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+        skip: (page - 1) * query.pageSize,
+        take: query.pageSize,
+        select: {
+          id: true,
+          title: true,
+          examSession: { select: { type: true } },
+          status: true,
+          dueAt: true,
+          totalPoints: true,
+          classroom: {
+            select: {
+              id: true,
+              name: true,
+              memberships: {
+                where: { status: MembershipStatus.ACTIVE },
+                select: { studentId: true },
+              },
+              _count: {
+                select: {
+                  memberships: { where: { status: MembershipStatus.ACTIVE } },
+                },
               },
             },
           },
-        },
-        submissions: {
-          where: { status: { in: EFFECTIVE_SUBMISSION_STATUSES } },
-          orderBy: [
-            { attemptNumber: "desc" },
-            { submittedAt: "desc" },
-            { id: "desc" },
-          ],
-          select: {
-            id: true,
-            assignmentId: true,
-            attemptNumber: true,
-            submittedAt: true,
-            studentId: true,
-            status: true,
-            score: true,
-            maxScore: true,
+          submissions: {
+            where: { status: { in: EFFECTIVE_SUBMISSION_STATUSES } },
+            orderBy: [
+              { attemptNumber: "desc" },
+              { submittedAt: "desc" },
+              { id: "desc" },
+            ],
+            select: {
+              id: true,
+              assignmentId: true,
+              attemptNumber: true,
+              submittedAt: true,
+              studentId: true,
+              status: true,
+              score: true,
+              maxScore: true,
+            },
           },
         },
-      },
-    }),
-  ]);
+      });
+      return { total, assignments, page, totalPages };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+  );
   const publishedExamScores = includeExams
     ? await listPublishedExamScores(
         [...new Set(assignments.map((item) => item.classroom.id))],
@@ -221,10 +227,10 @@ export async function listTeacherResultsOverview(
       };
     }),
     pagination: {
-      page: query.page,
+      page,
       pageSize: query.pageSize,
       total,
-      totalPages: Math.ceil(total / query.pageSize),
+      totalPages,
     },
   };
 }
@@ -691,7 +697,10 @@ export async function getTeacherAssignmentResults(
         ORDER BY knowledge."nameSnapshot" ASC
       `);
 
-      const offset = (query.page - 1) * query.pageSize;
+      const studentCount = Number(summaryRow.studentCount);
+      const totalPages = Math.max(1, Math.ceil(studentCount / query.pageSize));
+      const page = Math.min(query.page, totalPages);
+      const offset = (page - 1) * query.pageSize;
       const studentRows = await transaction.$queryRaw<
         StudentScoreDatabaseRow[]
       >(
@@ -723,7 +732,6 @@ export async function getTeacherAssignmentResults(
         `,
       );
 
-      const studentCount = Number(summaryRow.studentCount);
       const submittedCount = Number(summaryRow.submittedCount);
       const questionAccuracy = questionRows.map(mapQuestionAccuracy);
       const knowledgePointAccuracy: KnowledgePointAccuracy[] =
@@ -792,10 +800,10 @@ export async function getTeacherAssignmentResults(
         frequentWrongQuestions: selectFrequentWrongQuestions(questionAccuracy),
         students: {
           items: studentRows.map(mapStudentScore),
-          page: query.page,
+          page,
           pageSize: query.pageSize,
           total: studentCount,
-          totalPages: Math.ceil(studentCount / query.pageSize),
+          totalPages,
         },
         selectedStudent,
       };

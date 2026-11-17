@@ -32,6 +32,7 @@ async function main(): Promise<void> {
     ...process.env,
     DATABASE_URL: isolatedDatabaseUrl(baseUrl, schema),
     COURSE_CLASSROOM_INTEGRATION_SCHEMA: schema,
+    SEED_SUPER_ADMIN_PASSWORD: `Test-${randomBytes(24).toString("base64url")}-Aa1!`,
   };
   try {
     run(

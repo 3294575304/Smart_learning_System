@@ -4,6 +4,10 @@ import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { FOCUS_RING, FOCUS_RING_TIGHT } from "./ui-focus";
 import {
+  knowledgeStateColor,
+  knowledgeStateDot,
+} from "@/components/ui/knowledge-state";
+import {
   STUDENT_KNOWLEDGE_STATES,
   type KnowledgeStatus,
 } from "@/services/learner-profiles/knowledge-status";
@@ -16,36 +20,11 @@ export type HomeKnowledgeChapter = {
     conceptId?: string | null;
     name: string;
     status: KnowledgeStatus;
+    /** 是否已纳入教学进度。传入后章节行会显式标注「已授 N」，避免与概况页的「达到掌握」口径混淆。 */
+    taught?: boolean;
     evidenceCount: number;
     masteryScore: number | null;
   }>;
-};
-
-const stateColor: Record<KnowledgeStatus, string> = {
-  MASTERED: "bg-emerald-600",
-  DEVELOPING: "bg-brand-strong",
-  NEEDS_SUPPORT: "bg-rose-600",
-  INSUFFICIENT: "bg-amber-500",
-  NO_EVIDENCE: "bg-neutral-400",
-};
-
-/**
- * 五态不能只靠颜色。色弱用户、灰度打印、以及截图降采样之后，
- * "已掌握（绿）"和"巩固中（蓝）"会退化成同一个灰点，等于没有区分。
- * 这里给每一态补一个形状，与颜色叠加成双重编码：
- *   已掌握 = 实心圆 · 巩固中 = 半实心圆 · 需加强 = 菱形
- *   待进一步评估 = 粗环 · 尚未评估 = 虚线环
- * 分布条高度只有 8px，承载不了形状，仍只用颜色；形状用在图例与概念行上，
- * 而那两处本来就紧挨着状态文字，形状是冗余提示而非唯一信息。
- */
-const stateDot: Record<KnowledgeStatus, string> = {
-  MASTERED: "rounded-full bg-emerald-600",
-  DEVELOPING:
-    "rounded-full border border-brand-strong bg-gradient-to-r from-brand-strong from-50% to-transparent to-50%",
-  NEEDS_SUPPORT: "rotate-45 rounded-[1px] bg-rose-600",
-  INSUFFICIENT: "rounded-full border-2 border-amber-500 bg-transparent",
-  NO_EVIDENCE:
-    "rounded-full border border-dashed border-neutral-400 bg-transparent",
 };
 
 export function HomeKnowledgeMatrix({
@@ -54,12 +33,19 @@ export function HomeKnowledgeMatrix({
   generatedAt,
   profileRevision,
   dashboard = false,
+  scroll = true,
 }: {
   chapters: HomeKnowledgeChapter[];
   profileHref: string;
   generatedAt: string | null;
   profileRevision: number | null;
   dashboard?: boolean;
+  /**
+   * 是否把章节列表限制在卡内滚动。
+   * 学习主页需要（页面很长），课程学习中心不需要 —— 那里再套一层滚动就是双层滚动，
+   * 手机上很难滚得动。默认 true 保持既有调用方行为不变。
+   */
+  scroll?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const concepts = [
@@ -67,7 +53,7 @@ export function HomeKnowledgeMatrix({
       chapters.flatMap((c) => c.concepts).map((c) => [c.key, c]),
     ).values(),
   ];
-  const distribution = (Object.keys(stateColor) as KnowledgeStatus[])
+  const distribution = (Object.keys(knowledgeStateColor) as KnowledgeStatus[])
     .map((status) => ({
       status,
       count: concepts.filter((concept) => concept.status === status).length,
@@ -82,20 +68,20 @@ export function HomeKnowledgeMatrix({
         {distribution.map(({ status, count }) => (
           <span
             key={status}
-            className={stateColor[status]}
+            className={knowledgeStateColor[status]}
             style={{ flexGrow: count, flexBasis: 0 }}
           />
         ))}
       </div>
       <ul
         aria-label="知识状态分布"
-        className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-neutral-700"
+        className="text-ink-body mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs"
       >
         {distribution.map(({ status, count }) => (
           <li key={status} className="flex items-center gap-1.5">
             <span
               aria-hidden="true"
-              className={`size-2.5 shrink-0 ${stateDot[status]}`}
+              className={`size-2.5 shrink-0 ${knowledgeStateDot[status]}`}
             />
             {STUDENT_KNOWLEDGE_STATES[status].label}
             <strong className="font-semibold tabular-nums">{count}</strong>
@@ -107,10 +93,10 @@ export function HomeKnowledgeMatrix({
   const matrix = (
     <>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-neutral-600">
+        <p className="text-ink-soft text-xs">
           共 {chapters.length} 章 · {concepts.length} 个知识点
         </p>
-        {chapters.length > 0 && (
+        {scroll && chapters.length > 0 && (
           <button
             type="button"
             aria-expanded={expanded}
@@ -129,7 +115,7 @@ export function HomeKnowledgeMatrix({
           role="region"
           aria-label="全部章节，展开章节查看知识点"
           tabIndex={0}
-          className={`${expanded ? "" : "max-h-56 overflow-y-auto overscroll-y-contain"} border-border [scrollbar-gutter:stable] rounded-xl border px-2 ${FOCUS_RING_TIGHT}`}
+          className={`${!scroll || expanded ? "" : "max-h-56 overflow-y-auto overscroll-y-contain"} border-border [scrollbar-gutter:stable] rounded-xl border px-2 ${FOCUS_RING_TIGHT}`}
         >
           {chapters.map((chapter) => {
             const assessed = chapter.concepts.filter(
@@ -143,6 +129,15 @@ export function HomeKnowledgeMatrix({
             const mastered = chapter.concepts.filter(
               (c) => c.status === "MASTERED",
             ).length;
+            // 概况页的「达到掌握」分母是稳定结论数，章节行的分母是已评估数，
+            // 两者写法一样但口径不同。顶层传了 taught 时把「已授」写出来区分。
+            const hasTaught = chapter.concepts.some(
+              (c) => c.taught !== undefined,
+            );
+            const taughtCount = chapter.concepts.filter((c) => c.taught).length;
+            const pillLabel = hasTaught
+              ? `已授 ${taughtCount} · 掌握 ${mastered}/${assessed}`
+              : `已掌握 ${mastered}/${assessed}`;
             return (
               <details
                 key={chapter.key}
@@ -151,7 +146,7 @@ export function HomeKnowledgeMatrix({
                 <summary
                   className={`group-open:bg-muted hover:bg-muted flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-md px-2 py-2 text-sm ${FOCUS_RING_TIGHT} [&::-webkit-details-marker]:hidden`}
                 >
-                  <span className="min-w-0 flex-1 font-medium [overflow-wrap:anywhere] text-neutral-800">
+                  <span className="text-ink min-w-0 flex-1 font-medium [overflow-wrap:anywhere]">
                     {chapter.name}
                   </span>
                   {/* 分母取「已评估」数：未评估章节不显示 0/N，避免被读成整章未掌握。 */}
@@ -159,21 +154,21 @@ export function HomeKnowledgeMatrix({
                     aria-label={
                       assessed === 0
                         ? `本章 ${chapter.concepts.length} 个知识点，${pendingLabel}`
-                        : `已掌握 ${mastered} 个，已评估 ${assessed} 个，共 ${chapter.concepts.length} 个知识点`
+                        : hasTaught
+                          ? `已授 ${taughtCount} 个，已掌握 ${mastered} 个，已评估 ${assessed} 个，共 ${chapter.concepts.length} 个知识点`
+                          : `已掌握 ${mastered} 个，已评估 ${assessed} 个，共 ${chapter.concepts.length} 个知识点`
                     }
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs tabular-nums ${
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs whitespace-nowrap tabular-nums ${
                       assessed === 0
-                        ? "bg-muted text-neutral-500"
-                        : "bg-muted text-neutral-700"
+                        ? "bg-muted text-ink-soft"
+                        : "bg-muted text-ink-body"
                     }`}
                   >
-                    {assessed === 0
-                      ? pendingLabel
-                      : `已掌握 ${mastered}/${assessed}`}
+                    {assessed === 0 ? pendingLabel : pillLabel}
                   </span>
                   <ChevronDown
                     aria-hidden="true"
-                    className="size-4 shrink-0 text-neutral-600 group-open:rotate-180"
+                    className="text-ink-soft size-4 shrink-0 group-open:rotate-180"
                   />
                 </summary>
                 <ul className="space-y-2 px-2 pt-2 pb-3">
@@ -183,13 +178,13 @@ export function HomeKnowledgeMatrix({
                         key={c.key}
                         className="bg-muted/65 rounded-md p-3 text-xs leading-5"
                       >
-                        <p className="font-medium [overflow-wrap:anywhere] text-neutral-900">
+                        <p className="text-ink font-medium [overflow-wrap:anywhere]">
                           {c.name}
                         </p>
-                        <p className="flex flex-wrap items-center gap-1 text-neutral-600">
+                        <p className="text-ink-soft flex flex-wrap items-center gap-1">
                           <span
                             aria-hidden="true"
-                            className={`mr-1 size-2.5 shrink-0 ${stateDot[c.status]}`}
+                            className={`mr-1 size-2.5 shrink-0 ${knowledgeStateDot[c.status]}`}
                           />
                           {STUDENT_KNOWLEDGE_STATES[c.status].label} ·{" "}
                           {c.evidenceCount} 条有效证据
@@ -213,9 +208,7 @@ export function HomeKnowledgeMatrix({
                       </li>
                     ))
                   ) : (
-                    <li className="text-xs text-neutral-600">
-                      本章尚无知识点。
-                    </li>
+                    <li className="text-ink-soft text-xs">本章尚无知识点。</li>
                   )}
                 </ul>
               </details>
@@ -223,28 +216,28 @@ export function HomeKnowledgeMatrix({
           })}
         </div>
       ) : (
-        <p className="bg-muted/65 rounded-xl p-5 text-sm text-neutral-600">
+        <p className="bg-muted/65 text-ink-soft rounded-xl p-5 text-sm">
           暂无章节，教师发布课程知识图谱后可在这里查看。
         </p>
       )}
       <details className="border-border bg-muted/65 mt-3 rounded-xl border p-3">
         <summary
-          className={`cursor-pointer rounded-md text-sm font-medium text-neutral-800 ${FOCUS_RING_TIGHT}`}
+          className={`text-ink cursor-pointer rounded-md text-sm font-medium ${FOCUS_RING_TIGHT}`}
         >
           计算依据
         </summary>
-        <div className="mt-3 space-y-2 text-xs leading-6 text-neutral-700">
+        <div className="text-ink-body mt-3 space-y-2 text-xs leading-6">
           <p>
-            掌握分值 = 有效评分证据得分之和 ÷ 对应满分之和 ×
-            100。证据来自本课程已评分的作业与练习。
+            掌握度按累计得分占对应满分的比例计算，统计本课程已公布的作业、考试成绩和练习评分。
           </p>
           <p>
-            没有证据时显示“尚未评估”；不足 3
-            条时显示“待进一步评估”。证据充足后，80 分及以上为已掌握，60–79
-            分为巩固中，低于 60 分为需加强。3 条证据不代表 3 次作业。
+            没有评分记录时显示“尚未评估”。少于 3
+            条时，先显示“待进一步评估”。记录充足后，掌握度达到 80%
+            算已掌握，低于 60%
+            需要加强，其余为巩固中。评分记录按题目统计，一次作业可以有多条。
           </p>
           <p>
-            知识画像按课程汇总；作业与教学进度按本班统计。出勤和自述不直接改变客观掌握度。尚未评估不算零分。
+            知识掌握按整门课统计。出勤和自我反思单独展示，尚未评估的知识点会保留为空。
           </p>
           <p>
             画像版本：{profileRevision ?? "暂无"} · 更新时间：
@@ -272,7 +265,7 @@ export function HomeKnowledgeMatrix({
   return (
     <div className="mt-3">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="text-sm font-medium text-neutral-800">
+        <p className="text-ink text-sm font-medium">
           {concepts.length ? `共 ${concepts.length} 个知识点` : "暂无知识点"}
         </p>
         {practice > 0 && (
@@ -283,7 +276,7 @@ export function HomeKnowledgeMatrix({
       </div>
       {distributionPanel}
       {!concepts.length && (
-        <p className="text-sm leading-5 text-neutral-600">
+        <p className="text-ink-soft text-sm leading-5">
           {chapters.length
             ? "本课程的章节还未配置知识点。"
             : "教师发布课程知识图谱后可在这里查看。"}

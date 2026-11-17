@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { pruneAIProviderAttemptLogs } from "@/services/ai/governance";
 import { finalizeExpiredExams } from "@/services/exams/expiry";
 import { publishDueExamResults } from "@/services/exams/result-management";
+import { deliverMissingAssignmentGradeNotifications } from "@/services/notifications/events/assignment";
 import {
   claimNextBackgroundJob,
   failBackgroundJob,
@@ -81,6 +82,20 @@ async function sweepQualityReportNotifications() {
   });
 }
 
+async function runRecoveryTask(name: string, task: () => Promise<unknown>) {
+  try {
+    await task();
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "long_task_recovery_failed",
+        task: name,
+        error: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
+  }
+}
+
 export class PersistentLongTaskWorker {
   private stopping = false;
   private wakeResolver: (() => void) | null = null;
@@ -113,17 +128,27 @@ export class PersistentLongTaskWorker {
           Date.now() - this.lastRecoveryAt >=
           this.config.recoveryIntervalMs
         ) {
-          await recoverExpiredBackgroundJobs();
+          await runRecoveryTask("expired_jobs", recoverExpiredBackgroundJobs);
           await sweepQualityReportNotifications();
           await pruneAIProviderAttemptLogs().catch(() => {
             console.error(
               JSON.stringify({ event: "ai_provider_log_prune_failed" }),
             );
           });
-          await deleteExpiredQuestionSourceFiles();
-          await finalizeExpiredExams();
-          await publishDueExamResults();
-          await enqueueMissingQuestionObjectiveJobs();
+          await runRecoveryTask(
+            "question_source_files",
+            deleteExpiredQuestionSourceFiles,
+          );
+          await runRecoveryTask("expired_exams", finalizeExpiredExams);
+          await runRecoveryTask("exam_results", publishDueExamResults);
+          await runRecoveryTask(
+            "grade_notifications",
+            deliverMissingAssignmentGradeNotifications,
+          );
+          await runRecoveryTask(
+            "question_objectives",
+            enqueueMissingQuestionObjectiveJobs,
+          );
           this.lastRecoveryAt = Date.now();
         }
         const job = await claimNextBackgroundJob({

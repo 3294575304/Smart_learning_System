@@ -68,7 +68,10 @@ test("教学大纲使用独立工作区并从课程详情提供入口", async ()
     ),
     "utf8",
   );
-  assert.match(courseDetail, /<CourseSetupChecklist courseId=\{course\.id\}/u);
+  assert.match(
+    courseDetail,
+    /<CourseSetupChecklist\s+courseId=\{course\.id\}/u,
+  );
   assert.match(navigation, /title: "教学大纲"/u);
   assert.doesNotMatch(
     navigation,

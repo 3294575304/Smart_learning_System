@@ -48,6 +48,7 @@ import {
   normalizeProgramOutput,
   programmingAttemptFingerprint,
 } from "@/services/programming-attempts/fingerprint";
+import { sandboxResourceUsageSchema } from "@/services/sandbox-executor/schemas";
 import {
   createPublicProgrammingRunSchema,
   createRecommendationProgrammingAttemptSchema,
@@ -632,7 +633,21 @@ async function projectJudgeResult(
         submission.assignmentId,
         attempt.studentId,
       );
-      if (access.reason) return;
+      if (access.reason) {
+        await transaction.programmingAttempt.update({
+          where: { id: attempt.id },
+          data: {
+            status: ProgrammingAttemptStatus.CANCELLED,
+            safeErrorSummary: `判题已完成，成绩未计入：${access.reason}`,
+          },
+        });
+        return {
+          attemptId: attempt.id,
+          score: null,
+          status: "CANCELLED",
+          reason: access.reason,
+        };
+      }
       await touchAssignmentLifecycle(transaction, submission.assignmentId);
     }
     const requiresScoreReview = rows.some((row) =>
@@ -800,6 +815,11 @@ function studentAttemptDto(
       maxScore: item.maxPoints.toNumber(),
       errorType: item.errorType,
       safeErrorSummary: item.safeErrorSummary,
+      // 耗时内存是学生自己那次运行的数据，不涉及隐藏用例内容。
+      resourceUsage: (() => {
+        const usage = sandboxResourceUsageSchema.safeParse(item.resourceUsage);
+        return usage.success ? usage.data : null;
+      })(),
       ...(attempt.kind === ProgrammingAttemptKind.PUBLIC_RUN
         ? { stdout: item.stdout ?? "", stderr: item.stderr ?? "" }
         : {}),
@@ -819,13 +839,18 @@ export async function getStudentProgrammingAttempt(
       studentAnswer: { select: { submission: { select: { status: true } } } },
       assignmentQuestion: {
         select: {
-          assignment: { select: { status: true, examSessionId: true } },
+          assignment: {
+            select: { status: true, examSessionId: true, deletedAt: true },
+          },
         },
       },
     },
   });
   if (!attempt) throw new ResourceNotFoundError("判题记录不存在");
-  if (attempt.assignmentQuestion?.assignment.status === "REVOKED")
+  if (
+    attempt.assignmentQuestion?.assignment.status === "REVOKED" ||
+    attempt.assignmentQuestion?.assignment.deletedAt
+  )
     throw new ResourceNotFoundError("判题记录不存在");
   if (
     attempt.assignmentQuestion?.assignment.examSessionId &&

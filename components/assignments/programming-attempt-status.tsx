@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
+import {
+  ProgrammingTestResults,
+  type ProgrammingTestResult,
+} from "@/components/programming/test-results";
 
 interface AttemptDto {
   id: string;
@@ -12,14 +16,7 @@ interface AttemptDto {
   maxScore: number;
   errorType: string | null;
   safeErrorSummary: string | null;
-  cases: Array<{
-    index: number;
-    passed: boolean;
-    score: number;
-    maxScore: number;
-    errorType: string;
-    safeErrorSummary: string | null;
-  }>;
+  cases: ProgrammingTestResult[];
 }
 
 const terminal = new Set(["SUCCEEDED", "SYSTEM_ERROR", "CANCELLED"]);
@@ -106,19 +103,10 @@ export function ProgrammingAttemptStatus({
       {attempt?.cases.length === 0 && attempt.status === "SUCCEEDED" ? (
         <p className="text-sm text-gray-500">没有可显示的用例结果。</p>
       ) : null}
-      {attempt?.cases.map((item) => (
-        <div
-          className="flex items-center justify-between rounded-md border p-3 text-sm"
-          key={item.index}
-        >
-          <span>
-            用例 {item.index} · {item.passed ? "通过" : item.safeErrorSummary}
-          </span>
-          <span>
-            {item.score} / {item.maxScore}
-          </span>
-        </div>
-      ))}
+      {/* 正式判题看每例得分，第二行显示 score/maxScore，与公开样例运行不同。 */}
+      {attempt ? (
+        <ProgrammingTestResults cases={attempt.cases} showScore />
+      ) : null}
     </article>
   );
 }

@@ -21,11 +21,27 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
 import { StudentPageHeader as PageHeader } from "@/components/dashboard/student-page-header";
 import { requirePageRole } from "@/services/auth/page-authorization";
 
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentCourseContext } from "@/services/courses/student-access";
+
+/**
+ * 状态取色与 exams/assignments 页同一套规则：
+ * brand = 可操作（待完成）、warn = 待开放、ok = 已提交、neutral = 已关闭/已截止。
+ */
+const surveyTone: Record<
+  keyof typeof COURSE_SURVEY_AVAILABILITY_LABELS,
+  StatusChipTone
+> = {
+  OPEN: "brand",
+  SCHEDULED: "warn",
+  SUBMITTED: "ok",
+  CLOSED: "neutral",
+  EXPIRED: "neutral",
+};
 
 export default async function StudentSurveysPage({
   searchParams,
@@ -103,27 +119,27 @@ export default async function StudentSurveysPage({
               key={survey.id}
             >
               <div className="flex items-start justify-between gap-3">
-                <h2 className="font-semibold">{survey.title}</h2>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs ${survey.submittedAt ? "bg-gray-100 text-gray-600" : survey.isOpen ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
-                >
+                <h2 className="font-semibold [overflow-wrap:anywhere]">
+                  {survey.title}
+                </h2>
+                <StatusChip tone={surveyTone[survey.availability]}>
                   {COURSE_SURVEY_AVAILABILITY_LABELS[survey.availability]}
-                </span>
+                </StatusChip>
               </div>
-              <p className="mt-2 text-sm text-gray-600">
+              <p className="text-ink-soft mt-2 text-sm">
                 {survey.course.name} · {survey.classroom.name} ·{" "}
                 {survey.mode === "ANONYMOUS" ? "匿名" : "实名"}
               </p>
               {survey.availability === "SCHEDULED" ? (
-                <p className="mt-2 text-sm font-medium text-amber-800">
+                <p className="text-warn mt-2 text-sm font-medium">
                   开放时间：{survey.opensAt.toLocaleString("zh-CN")}
                 </p>
               ) : null}
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="text-ink-muted mt-1 text-xs">
                 {survey._count.questions} 题 · 截止{" "}
                 {survey.dueAt.toLocaleString("zh-CN")}
               </p>
-              <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-700">
+              <span className="text-brand-strong mt-4 inline-flex items-center gap-1.5 text-sm font-medium">
                 {survey.submittedAt
                   ? "查看完成状态"
                   : survey.isOpen

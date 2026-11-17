@@ -234,12 +234,21 @@ export function CourseRosterManager({
             ref={addButton}
             type="button"
             className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white disabled:opacity-50"
-            disabled={!data.classrooms.length || busy || loading}
+            disabled={
+              !(filter.classroomId
+                ? data.editableClassrooms.some(
+                    (c) => c.id === filter.classroomId,
+                  )
+                : data.editableClassrooms.length) ||
+              busy ||
+              loading
+            }
             onClick={() => {
               setError("");
               setForm({
                 mode: "ADD",
-                classroomId: filter.classroomId || data.classrooms[0]?.id || "",
+                classroomId:
+                  filter.classroomId || data.editableClassrooms[0]?.id || "",
                 studentNo: "",
                 name: "",
               });
@@ -407,7 +416,7 @@ export function CourseRosterManager({
                       setForm({ ...form, classroomId: e.target.value })
                     }
                   >
-                    {data.classrooms.map((c) => (
+                    {data.editableClassrooms.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
@@ -561,7 +570,11 @@ export function CourseRosterManager({
                             编辑
                           </button>
                         )}
-                        {r.status === "REMOVED" ? (
+                        {!r.canManage ? (
+                          <span className="text-slate-500">
+                            历史名单 · 只读
+                          </span>
+                        ) : r.status === "REMOVED" ? (
                           <button
                             disabled={busy || loading}
                             className="text-sky-700"

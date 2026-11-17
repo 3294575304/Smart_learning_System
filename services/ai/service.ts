@@ -17,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_AI_TIMEOUT_MS,
   MAX_AI_TIMEOUT_MS,
+  MAX_AI_ATTEMPTS,
   STUDENT_ANALYSIS_PROMPT_VERSION,
 } from "@/services/ai/constants";
 import { AIAnalysisOperationError } from "@/services/ai/errors";
@@ -104,13 +105,17 @@ function insightRows(
   ];
 }
 
-async function existingAnalysis(requestKey: string): Promise<{
+async function existingAnalysis(
+  requestKey: string,
+  recover = false,
+): Promise<{
   analysis: StudentAnalysisOutput;
   metadata: LearningAnalysisMetadata;
 } | null> {
   const existing = await prisma.aIAnalysis.findUnique({
     where: { requestKey },
     select: {
+      id: true,
       status: true,
       rawResponse: true,
       model: true,
@@ -121,14 +126,30 @@ async function existingAnalysis(requestKey: string): Promise<{
     },
   });
   if (!existing) return null;
-  if (existing.status === AIRecordStatus.PENDING) {
-    throw new AIAnalysisOperationError("相同数据的学情分析正在处理中");
-  }
+  const pending = existing.status === AIRecordStatus.PENDING;
+  const expired =
+    pending &&
+    Date.now() - existing.updatedAt.getTime() >
+      MAX_AI_TIMEOUT_MS * MAX_AI_ATTEMPTS + 60_000;
+  if (pending && !expired)
+    throw new AIAnalysisOperationError("相同数据的学情分析正在处理中", 409);
   const parsed = studentAnalysisOutputSchema.safeParse(existing.rawResponse);
-  if (!parsed.success) {
-    throw new AIAnalysisOperationError(
-      "已有分析记录无法读取，请更新数据后重试",
-    );
+  if (pending || existing.status === AIRecordStatus.FAILED || !parsed.success) {
+    if (recover) {
+      // Keep the old record and its references, and fence off its former executor.
+      const released = await prisma.aIAnalysis.updateMany({
+        where: { id: existing.id, requestKey, updatedAt: existing.updatedAt },
+        data: {
+          requestKey: `${requestKey}:superseded:${existing.id}`,
+          status: AIRecordStatus.FAILED,
+          errorCode: expired
+            ? "ANALYSIS_TIMEOUT"
+            : "ANALYSIS_REGENERATION_REQUIRED",
+        },
+      });
+      if (!released.count) return existingAnalysis(requestKey);
+    }
+    return null;
   }
   return {
     analysis: parsed.data,
@@ -166,7 +187,7 @@ export async function createStudentAnalysis(
     batch.input,
     STUDENT_ANALYSIS_PROMPT_VERSION,
   );
-  const reused = await existingAnalysis(requestKey);
+  const reused = await existingAnalysis(requestKey, true);
   if (reused) return reused;
   const aiAnalysisEnabled = await getSystemConfigValue("aiAnalysisEnabled");
 
@@ -226,85 +247,102 @@ export async function createStudentAnalysis(
     }
   }
 
-  const execution = await executeConfiguredStudentAnalysis(
-    aiAnalysisEnabled,
-    provider,
-    batch.input,
-    configuredTimeoutMs(),
-  );
+  try {
+    const execution = await executeConfiguredStudentAnalysis(
+      aiAnalysisEnabled,
+      provider,
+      batch.input,
+      configuredTimeoutMs(),
+    );
 
-  const completedAt = new Date();
-  await prisma.$transaction(async (transaction) => {
-    await transaction.aIAnalysis.update({
-      where: { id: analysis.id },
-      data: {
-        status: execution.fallbackUsed
-          ? AIRecordStatus.FALLBACK
-          : AIRecordStatus.SUCCEEDED,
-        riskLevel: riskLevelFor(execution.output),
-        summary: summaryFor(execution.output),
-        provider: provider?.name ?? "rule",
-        model: provider?.model ?? "rule-fallback-v1",
-        retryCount: execution.retryCount,
-        fallbackUsed: execution.fallbackUsed,
-        rawResponse: toJsonValue(execution.output),
-        errorCode: execution.errorCode,
-        latencyMs: execution.latencyMs,
-        completedAt,
-        inputMetrics: {
-          sampleSize: batch.sampleSize,
-          correctRate: Number(batch.overallAccuracy.toFixed(4)),
-          responseTimeSampleSize: batch.input.answers.filter(
-            (answer) => answer.responseTimeMs !== null,
-          ).length,
-          historicalKnowledgePointCount:
-            batch.input.historicalKnowledgePointAccuracy.length,
-          recentErrorCount: batch.input.recentErrors.length,
-          tutoringSummaryCount: batch.input.tutoringSummaries.length,
+    const completedAt = new Date();
+    await prisma.$transaction(async (transaction) => {
+      const saved = await transaction.aIAnalysis.updateMany({
+        where: { id: analysis.id, requestKey, status: AIRecordStatus.PENDING },
+        data: {
+          status: execution.fallbackUsed
+            ? AIRecordStatus.FALLBACK
+            : AIRecordStatus.SUCCEEDED,
+          riskLevel: riskLevelFor(execution.output),
+          summary: summaryFor(execution.output),
+          provider: provider?.name ?? "rule",
+          model: provider?.model ?? "rule-fallback-v1",
+          retryCount: execution.retryCount,
+          fallbackUsed: execution.fallbackUsed,
+          rawResponse: toJsonValue(execution.output),
+          errorCode: execution.errorCode,
           latencyMs: execution.latencyMs,
+          completedAt,
+          inputMetrics: {
+            sampleSize: batch.sampleSize,
+            correctRate: Number(batch.overallAccuracy.toFixed(4)),
+            responseTimeSampleSize: batch.input.answers.filter(
+              (answer) => answer.responseTimeMs !== null,
+            ).length,
+            historicalKnowledgePointCount:
+              batch.input.historicalKnowledgePointAccuracy.length,
+            recentErrorCount: batch.input.recentErrors.length,
+            tutoringSummaryCount: batch.input.tutoringSummaries.length,
+            latencyMs: execution.latencyMs,
+          },
         },
+      });
+      if (saved.count !== 1)
+        throw new AIAnalysisOperationError(
+          "本次分析已被重新生成，请刷新查看最新结果",
+          409,
+        );
+      const rows = insightRows(analysis.id, execution.output);
+      const referenceIds = [
+        ...new Set([
+          ...rows.flatMap((row) =>
+            row.knowledgePointId ? [row.knowledgePointId] : [],
+          ),
+          ...analysisKnowledgePointIds(
+            rows.flatMap((row) => [row.detail, row.recommendedAction ?? null]),
+          ),
+        ]),
+      ];
+      const points = await transaction.knowledgePoint.findMany({
+        where: { id: { in: referenceIds } },
+        select: { id: true, name: true },
+      });
+      const names = new Map(points.map((point) => [point.id, point.name]));
+      for (const row of rows) {
+        row.detail = presentAnalysisText(row.detail, names);
+        if (row.recommendedAction)
+          row.recommendedAction = presentAnalysisText(
+            row.recommendedAction,
+            names,
+          );
+      }
+      if (rows.length > 0) {
+        await transaction.aIAnalysisInsight.createMany({ data: rows });
+      }
+    });
+
+    const stored = await existingAnalysis(requestKey);
+    if (!stored) {
+      throw new AIAnalysisOperationError("学情分析结果保存失败", 500);
+    }
+    try {
+      await notifyLearningAnalysisReady({
+        recipientId: studentId,
+        analysisId: analysis.id,
+      });
+    } catch {
+      logNotificationFailure("learning_analysis_ready", analysis.id);
+    }
+    return stored;
+  } catch (error) {
+    await prisma.aIAnalysis.updateMany({
+      where: { id: analysis.id, requestKey, status: AIRecordStatus.PENDING },
+      data: {
+        status: AIRecordStatus.FAILED,
+        errorCode: "ANALYSIS_EXECUTION_FAILED",
+        completedAt: new Date(),
       },
     });
-    const rows = insightRows(analysis.id, execution.output);
-    const referenceIds = [
-      ...new Set([
-        ...rows.flatMap((row) =>
-          row.knowledgePointId ? [row.knowledgePointId] : [],
-        ),
-        ...analysisKnowledgePointIds(
-          rows.flatMap((row) => [row.detail, row.recommendedAction ?? null]),
-        ),
-      ]),
-    ];
-    const points = await transaction.knowledgePoint.findMany({
-      where: { id: { in: referenceIds } },
-      select: { id: true, name: true },
-    });
-    const names = new Map(points.map((point) => [point.id, point.name]));
-    for (const row of rows) {
-      row.detail = presentAnalysisText(row.detail, names);
-      if (row.recommendedAction)
-        row.recommendedAction = presentAnalysisText(
-          row.recommendedAction,
-          names,
-        );
-    }
-    if (rows.length > 0) {
-      await transaction.aIAnalysisInsight.createMany({ data: rows });
-    }
-  });
-
-  const stored = await existingAnalysis(requestKey);
-  if (!stored) {
-    throw new AIAnalysisOperationError("学情分析结果保存失败", 500);
+    throw error;
   }
-  try {
-    await notifyLearningAnalysisReady({
-      recipientId: studentId,
-      analysisId: analysis.id,
-    });
-  } catch {
-    logNotificationFailure("learning_analysis_ready", analysis.id);
-  }
-  return stored;
 }

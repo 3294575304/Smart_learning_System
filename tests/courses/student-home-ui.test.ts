@@ -3,10 +3,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { StudentKnowledgeSummary } from "@/components/dashboard/student-knowledge-summary";
 import { StudentHomeView } from "@/components/dashboard/student-home-view";
+import { StudentHomeInsights } from "@/components/dashboard/student-home-insights";
+import type { StudentHomePulse } from "@/services/dashboard/student-home-pulse";
 import type { StudentTaskOverview } from "@/services/dashboard/student-task-overview";
 
 Object.assign(globalThis, { React });
+
 function overview(count = 0): StudentTaskOverview {
   const items: StudentTaskOverview["items"] = Array.from(
     { length: count },
@@ -40,62 +44,68 @@ function overview(count = 0): StudentTaskOverview {
   };
 }
 
-test("首页合并待办，优先任务只出现一次，保留两个学习入口", () => {
+const emptyPulse: StudentHomePulse = {
+  weekly: { minutes: 0, previousMinutes: 0 },
+  streak: { days: 0, longest: 0 },
+  lastActiveAt: null,
+  wrongBook: { open: 0, newInWeek: 0, lastReviewedAt: null },
+  pendingPractice: 0,
+  inProgress: [],
+  finished: [],
+};
+
+const now = new Date("2026-11-15T12:00:00+08:00");
+
+test("页头给出时间坐标、欠交份数与两个入口", () => {
   const html = renderToStaticMarkup(
     React.createElement(StudentHomeView, {
       name: "测试同学",
-      overview: overview(1),
+      now,
+      overview: overview(2),
+      week: 11,
     }),
   );
-  for (const label of ["自主练习", "我的题库", "查看全部任务", "优先处理"])
-    assert.ok(html.includes(label));
-  assert.equal((html.match(/>任务 0</gu) ?? []).length, 1);
-  assert.match(
-    html,
-    /aria-label="待办分布：共 1 项，作业 1、签到 0、问卷 0、考试 0"/u,
-  );
-  assert.doesNotMatch(
-    html,
-    /待办事项分布|当前优先任务|常用入口|练习中心|复习中心/u,
-  );
-  assert.match(html, /Python · 二班/u);
-  assert.match(html, /16:00/u);
+  assert.match(html, /周日 11-15/u);
+  assert.match(html, /第 11 周/u);
+  assert.match(html, /中午好，测试同学/u);
+  assert.match(html, /今天还有 2 份作业没交/u);
+  assert.ok(html.includes("学习计划"));
+  assert.ok(html.includes("继续学习"));
+  // 没有续播记录时，「继续学习」落到任务列表，而不是空链接。
+  assert.match(html, /href="\/student\/tasks"[^>]*>[\s\S]*?继续学习/u);
 });
 
-test("首页仅展示五项列表但保留完整待办数和全部任务入口", () => {
+test("待办列表最多四条，超出的交给全部任务入口", () => {
   const html = renderToStaticMarkup(
-    React.createElement(StudentHomeView, {
-      name: "同学",
+    React.createElement(StudentHomeInsights, {
+      chapters: [],
+      classes: [],
+      now,
       overview: overview(8),
+      pulse: emptyPulse,
     }),
   );
-  assert.equal((html.match(/<li\b/gu) ?? []).length, 5);
-  assert.match(html, /其余 3 项/u);
+  assert.equal((html.match(/class="st-agenda-row /gu) ?? []).length, 4);
+  assert.ok(html.includes("全部任务"));
   assert.match(html, /href="\/student\/tasks"/u);
-  assert.match(html, /我的待办/u);
-  assert.match(html, /8/u);
+  // 指标仍报完整待办数，不是列表里的 4 条。
+  assert.match(html, /待完成作业[\s\S]*?8/u);
 });
 
-test("无待办时显示课程入口和正常空状态，待开放问卷独立说明", () => {
-  const data = overview();
-  data.scheduledSurveys.push({
-    id: "q",
-    title: "预约问卷",
-    opensAt: new Date("2026-10-28T00:00:00Z"),
-    courseName: "Python",
-    classroomName: "二班",
-    href: "/student/surveys/q",
-  });
+test("无待办时给出可执行的下一步，而不是空白卡片", () => {
   const html = renderToStaticMarkup(
-    React.createElement(StudentHomeView, { name: "同学", overview: data }),
+    React.createElement(StudentHomeInsights, {
+      chapters: [],
+      classes: [],
+      now,
+      overview: overview(),
+      pulse: emptyPulse,
+    }),
   );
-  assert.match(html, /暂无待办/u);
-  // 零待办时收敛成一行状态，不再渲染 0 项的分布环图。
-  assert.doesNotMatch(html, /aria-label="待办分布/u);
-  assert.match(html, /进入我的课程/u);
-  assert.match(html, /暂不计入待办/u);
-  assert.match(html, /不计入成绩/u);
-  assert.match(html, /问卷开放预告/u);
+  assert.match(html, /今天没有待办/u);
+  assert.match(html, /自主练习/u);
+  assert.match(html, /没有待交作业/u);
+  assert.doesNotMatch(html, /st-agenda-row/u);
 });
 
 test("首页与任务中心只消费同一聚合服务，首页不再加载旧图表数据", async () => {
@@ -108,7 +118,7 @@ test("首页与任务中心只消费同一聚合服务，首页不再加载旧�
       source,
       path.includes("/tasks/")
         ? /loadActivityTasks\(student.id, query\)/u
-        : /getStudentTaskOverview\(student.id(?:,\s*now)?\)/u,
+        : /getStudentTaskOverviewShared\(student.id, nowMs\)/u,
     );
     assert.doesNotMatch(
       source,
@@ -121,4 +131,63 @@ test("首页与任务中心只消费同一聚合服务，首页不再加载旧�
     "utf8",
   );
   assert.match(activity, /getStudentTaskOverview\(studentId, now,/u);
+});
+
+test("章节进度保留未评估与真实零分的区别，不把缺少证据计入平均", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(StudentKnowledgeSummary, {
+      chapters: [
+        {
+          key: "new",
+          name: "未评估章节",
+          concepts: [
+            {
+              key: "a",
+              name: "尚未作答",
+              status: "NO_EVIDENCE",
+              evidenceCount: 0,
+              masteryScore: null,
+            },
+          ],
+        },
+        {
+          key: "zero",
+          name: "零分章节",
+          concepts: [
+            {
+              key: "b",
+              name: "已有作答",
+              status: "NEEDS_SUPPORT",
+              evidenceCount: 3,
+              masteryScore: 0,
+            },
+          ],
+        },
+        {
+          key: "mixed",
+          name: "部分评估章节",
+          concepts: [
+            {
+              key: "c",
+              name: "有证据",
+              status: "DEVELOPING",
+              evidenceCount: 3,
+              masteryScore: 70,
+            },
+            {
+              key: "d",
+              name: "无证据",
+              status: "NO_EVIDENCE",
+              evidenceCount: 0,
+              masteryScore: null,
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  assert.match(html, /未评估章节：证据不足，未评估/u);
+  assert.match(html, /零分章节：掌握度 0%/u);
+  assert.match(html, /部分评估章节：掌握度 70%/u);
+  assert.match(html, /已评估 2 \/ 3 章/u);
 });

@@ -20,7 +20,10 @@ import {
   studentTaskContext,
   studentTaskDate,
 } from "@/services/dashboard/student-task-overview";
-import { activityHref } from "@/services/student-experience/activity-query";
+import {
+  activityHref,
+  withAssignmentTaskReturn,
+} from "@/services/student-experience/activity-query";
 import {
   readActivityPage,
   readActivityPageQuery,
@@ -45,14 +48,24 @@ export default async function StudentTasksPage({
     readActivityPage(() => loadActivityTasks(student.id, query)),
     listStudentTaskClassrooms(student.id, query.courseId),
   ]);
-  const pending = overview.items.filter((item) => item.status === "TODO");
+  const returnTo = activityHref("tasks", {
+    ...query,
+    page: overview.pagination.page,
+  });
+  const pending = overview.items
+    .filter((item) => item.status === "TODO")
+    .map((item) =>
+      item.kind === "assignment"
+        ? { ...item, href: withAssignmentTaskReturn(item.href, returnTo) }
+        : item,
+    );
   const upcoming = overview.items.filter((item) => item.status === "UPCOMING");
   return (
     <section className="space-y-4">
       <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
       <StudentPageHeader
         title="学习任务"
-        description="查看待办、考试预告和问卷开放安排。"
+        description="作业、考试、签到与问卷都在这一个列表里，按截止时间排。"
       />
       <StudentActivityFilters
         view="tasks"
@@ -152,10 +165,13 @@ export default async function StudentTasksPage({
               return (
                 <li key={kind} id={kind} className="scroll-mt-24 py-1">
                   <Link
-                    href={activityHref(view, {
-                      courseId: query.courseId,
-                      classroomId: query.classroomId,
-                    })}
+                    href={withAssignmentTaskReturn(
+                      activityHref(view, {
+                        courseId: query.courseId,
+                        classroomId: query.classroomId,
+                      }),
+                      kind === "assignment" ? returnTo : undefined,
+                    )}
                     className="flex min-h-12 items-center gap-3 rounded-lg px-1 py-2 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-700"
                   >
                     <span

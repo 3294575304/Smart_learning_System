@@ -484,7 +484,7 @@ export function NotificationCenter({
           <select
             disabled={mutating}
             aria-label="通知类型"
-            className="w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pr-9 pl-9 text-sm text-slate-700 transition hover:border-slate-300 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+            className="workspace-select-with-icon w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pr-9 pl-9 text-sm text-slate-700 transition hover:border-slate-300 focus:border-sky-500 focus:outline-none disabled:opacity-50"
             onChange={(event) =>
               applyFilter("type", event.target.value as Filters["type"])
             }
@@ -510,7 +510,7 @@ export function NotificationCenter({
           <select
             disabled={mutating}
             aria-label="通知优先级"
-            className="w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pr-9 pl-9 text-sm text-slate-700 transition hover:border-slate-300 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+            className="workspace-select-with-icon w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pr-9 pl-9 text-sm text-slate-700 transition hover:border-slate-300 focus:border-sky-500 focus:outline-none disabled:opacity-50"
             onChange={(event) =>
               applyFilter("priority", event.target.value as Filters["priority"])
             }

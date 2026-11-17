@@ -4,6 +4,10 @@ import {
   studentTaskScopeSchema,
   studentTaskHref,
 } from "@/services/student-experience/task-scope";
+import {
+  assignmentTaskReturn,
+  withAssignmentTaskReturn,
+} from "@/services/student-experience/activity-query";
 import { assertAssignmentTaskScope } from "@/services/student-experience/task-scope-access";
 import { Role, SubmissionStatus } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
@@ -23,7 +27,8 @@ interface Props {
 export default async function AnswerPage({ params, searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const { submissionId } = await params;
-  const scope = studentTaskScopeSchema.safeParse(await searchParams);
+  const query = await searchParams;
+  const scope = studentTaskScopeSchema.safeParse(query);
   if (!scope.success) notFound();
   try {
     const [submission, autosaveDelayMs] = await Promise.all([
@@ -39,7 +44,25 @@ export default async function AnswerPage({ params, searchParams }: Props) {
         ),
       );
     const answerSheet = { scope: scope.data, autosaveDelayMs, submission };
-    if (!submission.examSessionId) return <AnswerSheet {...answerSheet} />;
+    if (!submission.examSessionId) {
+      const returnTo = assignmentTaskReturn(query.returnTo, scope.data);
+      return (
+        <AnswerSheet
+          {...answerSheet}
+          exitHref={
+            returnTo
+              ? withAssignmentTaskReturn(
+                  studentTaskHref(
+                    "/student/assignments?status=TODO",
+                    scope.data,
+                  ),
+                  returnTo,
+                )
+              : undefined
+          }
+        />
+      );
+    }
     const initial = await getStudentExamAttemptStatus(student.id, submissionId);
     return (
       <ExamMonitor
