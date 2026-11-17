@@ -41,6 +41,13 @@ test("班级表单清理名称和空描述", () => {
     description: null,
     allowStudentLeave: true,
   });
+
+  const serialized = JSON.parse(JSON.stringify(parsed));
+  assert.deepEqual(createClassroomSchema.parse(serialized), parsed);
+  assert.equal(
+    createClassroomSchema.parse({ ...parsed, description: "" }).description,
+    null,
+  );
 });
 
 test("班级名称和描述长度受到限制", () => {

@@ -18,7 +18,7 @@ import {
   SYLLABUS_RULE_VERSION,
 } from "@/services/syllabus-parsing/constants";
 import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
-import { extractTextFromPdf } from "@/services/syllabus-parsing/pdf-extractor";
+import { extractSyllabusText } from "@/services/syllabus-parsing/source-extractor";
 import {
   parseSyllabusStructure,
   verifyAndEnrichObjectiveTexts,
@@ -211,7 +211,7 @@ export async function createTeacherSyllabusParse(
         "SYLLABUS_STORAGE_READ_FAILED",
       );
     }
-    const extracted = await extractTextFromPdf(data);
+    const extracted = await extractSyllabusText(data, syllabus.originalName);
     if (!provider) {
       const { createAIProvider } =
         await import("@/services/ai/provider-factory");
@@ -233,6 +233,11 @@ export async function createTeacherSyllabusParse(
       },
       timeoutMs(dependencies.timeoutMs),
     );
+    if (!syllabus.originalName.toLowerCase().endsWith(".pdf")) {
+      execution.output.warnings.push(
+        "Word 文档无法可靠还原实际页码，来源页 1 代表全文；请对照原文件核对引用内容。",
+      );
+    }
     if (dependencies.failSuccessWriteForTest) {
       throw new Error("Injected success write failure");
     }
@@ -499,7 +504,7 @@ export async function getTeacherSyllabusParses(
   ) {
     try {
       const data = await getStorageService().read(syllabus.storageKey);
-      const extracted = await extractTextFromPdf(data);
+      const extracted = await extractSyllabusText(data, syllabus.originalName);
       current.result = verifyAndEnrichObjectiveTexts(
         storedSyllabusParseOutputSchema.parse(current.result),
         {

@@ -27,6 +27,7 @@ import {
 } from "@/services/courses/service";
 import { LocalStorageService } from "@/services/storage/local-storage";
 import { extractTextFromPdf } from "@/services/syllabus-parsing/pdf-extractor";
+import { extractSyllabusText } from "@/services/syllabus-parsing/source-extractor";
 import { parseSyllabusStructure } from "@/services/syllabus-parsing/parser";
 import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
 import { markParseSucceeded } from "@/services/syllabus-parsing/repository";
@@ -168,6 +169,26 @@ test("PDF extractor reads normal text and rejects invalid or empty PDFs", async 
   emptyDocument.addPage();
   const emptyPdf = Buffer.from(await emptyDocument.save());
   await assert.rejects(() => extractTextFromPdf(emptyPdf), /没有可提取文本/u);
+});
+
+test("Word syllabus extraction accepts DOCX and rejects mismatched or damaged Word files", async () => {
+  const data = await fs.readFile(
+    new URL(
+      "../questions/fixtures/chinese-stream-boundary.docx",
+      import.meta.url,
+    ),
+  );
+  const extracted = await extractSyllabusText(data, "教学大纲.docx");
+  assert.equal(extracted.pageCount, 1);
+  assert.match(extracted.pages[0]?.text ?? "", /答案：正确/u);
+  await assert.rejects(
+    () => extractSyllabusText(data, "教学大纲.doc"),
+    /已损坏/u,
+  );
+  await assert.rejects(
+    () => extractSyllabusText(Buffer.from("PKbroken"), "教学大纲.docx"),
+    /已损坏/u,
+  );
 });
 
 test(

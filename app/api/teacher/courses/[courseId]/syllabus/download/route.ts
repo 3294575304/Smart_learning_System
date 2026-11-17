@@ -41,7 +41,7 @@ export async function GET(_request: Request, context: RouteContext) {
     return new Response(new Uint8Array(data), {
       status: 200,
       headers: {
-        "content-type": "application/pdf",
+        "content-type": syllabus.mimeType,
         "content-disposition": encodedContentDisposition(syllabus.originalName),
         "cache-control": "private, no-store",
       },

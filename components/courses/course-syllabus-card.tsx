@@ -30,11 +30,19 @@ function formatFileSize(sizeBytes: number): string {
 function clientFileError(file: File): string | null {
   if (file.size <= 0) return "教学大纲文件不能为空。";
   if (file.size > MAX_FILE_SIZE_BYTES) return "教学大纲文件不能超过 20 MB。";
-  if (!file.name.toLowerCase().endsWith(".pdf")) {
-    return "教学大纲仅支持 PDF 文件。";
-  }
-  if (file.type !== "application/pdf") {
-    return "教学大纲文件 MIME 类型必须为 application/pdf。";
+  const extension = file.name.toLowerCase().match(/\.(pdf|docx|doc)$/u)?.[1];
+  const mimeTypes: Record<string, string> = {
+    pdf: "application/pdf",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    doc: "application/msword",
+  };
+  if (!extension) return "教学大纲仅支持 PDF、DOCX 和 DOC 文件。";
+  if (
+    file.type &&
+    file.type !== mimeTypes[extension] &&
+    file.type !== "application/octet-stream"
+  ) {
+    return "教学大纲文件类型与扩展名不匹配。";
   }
   return null;
 }
@@ -113,7 +121,8 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
         <div>
           <h2 className="font-semibold">教学大纲</h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            课程已创建，请先上传教学大纲。当前仅支持 PDF，文件大小不超过 20 MB。
+            课程已创建，请先上传教学大纲。支持 PDF、DOCX、DOC，文件大小不超过 20
+            MB。
           </p>
         </div>
         <button
@@ -137,7 +146,7 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
       </div>
 
       <input
-        accept=".pdf,application/pdf"
+        accept=".pdf,.docx,.doc,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         className="sr-only"
         disabled={isUploading}
         onChange={(event) => {
@@ -213,7 +222,8 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
               <div>
                 <h3 className="font-medium">教学大纲未上传</h3>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  请选择文本型 PDF 文件。上传成功后可在这里查看文件信息并下载。
+                  请选择文本型 PDF、DOCX 或 DOC
+                  文件。上传成功后可在这里查看文件信息并下载。
                 </p>
               </div>
             </div>
@@ -224,7 +234,7 @@ export function CourseSyllabusCard({ courseId }: { courseId: string }) {
               type="button"
             >
               <Upload className="h-4 w-4" />
-              选择 PDF
+              选择文件
             </button>
           </div>
         </div>

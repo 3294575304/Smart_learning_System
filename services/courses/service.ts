@@ -9,6 +9,7 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { PDFDocument } from "pdf-lib";
+import { extractQuestionFile } from "@/services/question-import/file-extractor";
 
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -66,6 +67,12 @@ function isKnownPrismaError(error: unknown, code: string): boolean {
 const SYLLABUS_MAX_SIZE_BYTES = 20 * 1024 * 1024;
 const PDF_MIME_TYPE = "application/pdf";
 const PDF_HEADER = Buffer.from("%PDF-");
+const SYLLABUS_MIME_TYPES: Record<string, string> = {
+  ".pdf": PDF_MIME_TYPE,
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".doc": "application/msword",
+};
 
 async function assertReadablePdf(data: Buffer): Promise<void> {
   try {
@@ -103,8 +110,8 @@ interface ValidatedSyllabusFile {
   data: Buffer;
 }
 
-function generatedSyllabusStorageKey(): string {
-  return `course-syllabi/${randomUUID()}.pdf`;
+function generatedSyllabusStorageKey(extension: string): string {
+  return `course-syllabi/${randomUUID()}${extension}`;
 }
 
 function originalFileBaseName(name: string): string {
@@ -115,7 +122,7 @@ async function validatedSyllabusFile(
   file: CourseSyllabusUploadFile | null | undefined,
 ): Promise<ValidatedSyllabusFile> {
   if (!file) {
-    throw new CourseOperationError("请上传教学大纲 PDF。", 400);
+    throw new CourseOperationError("请上传教学大纲 PDF、DOCX 或 DOC。", 400);
   }
 
   const originalName = originalFileBaseName(file.name);
@@ -123,15 +130,20 @@ async function validatedSyllabusFile(
     throw new CourseOperationError("教学大纲文件名不能为空。", 400);
   }
 
-  if (!originalName.toLowerCase().endsWith(".pdf")) {
-    throw new CourseOperationError("教学大纲仅支持 PDF 文件。", 400);
-  }
-
-  if (file.type !== PDF_MIME_TYPE) {
+  const extension = path.extname(originalName).toLowerCase();
+  const mimeType = SYLLABUS_MIME_TYPES[extension];
+  if (!mimeType) {
     throw new CourseOperationError(
-      "教学大纲文件 MIME 类型必须为 application/pdf。",
+      "教学大纲仅支持 PDF、DOCX 和 DOC 文件。",
       400,
     );
+  }
+  if (
+    file.type &&
+    file.type !== mimeType &&
+    file.type !== "application/octet-stream"
+  ) {
+    throw new CourseOperationError("教学大纲文件类型与扩展名不匹配。", 400);
   }
 
   if (!Number.isSafeInteger(file.size) || file.size <= 0) {
@@ -151,14 +163,29 @@ async function validatedSyllabusFile(
     throw new CourseOperationError("教学大纲文件不能超过 20 MB。", 413);
   }
 
-  if (!data.subarray(0, PDF_HEADER.length).equals(PDF_HEADER)) {
-    throw new CourseOperationError("教学大纲文件内容不是合法 PDF。", 400);
+  if (extension === ".pdf") {
+    if (!data.subarray(0, PDF_HEADER.length).equals(PDF_HEADER)) {
+      throw new CourseOperationError("教学大纲文件内容不是合法 PDF。", 400);
+    }
+    await assertReadablePdf(data);
+  } else {
+    try {
+      const extracted = await extractQuestionFile(
+        new File([new Uint8Array(data)], originalName),
+      );
+      if (extracted.format !== extension.slice(1).toUpperCase())
+        throw new Error("Invalid Word format");
+    } catch {
+      throw new CourseOperationError(
+        "教学大纲 Word 文件已损坏或没有可提取文本。",
+        400,
+      );
+    }
   }
-  await assertReadablePdf(data);
 
   return {
     originalName,
-    mimeType: PDF_MIME_TYPE,
+    mimeType,
     sizeBytes: data.length,
     data,
   };
@@ -637,7 +664,10 @@ export async function uploadTeacherCourseSyllabus(
   const storage = dependencies.storage ?? getStorageService();
   const logger = dependencies.logger ?? console;
   const storageKey =
-    dependencies.storageKeyFactory?.() ?? generatedSyllabusStorageKey();
+    dependencies.storageKeyFactory?.() ??
+    generatedSyllabusStorageKey(
+      path.extname(upload.originalName).toLowerCase(),
+    );
 
   try {
     await storage.save(storageKey, upload.data);
