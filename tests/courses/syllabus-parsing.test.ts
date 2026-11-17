@@ -685,7 +685,8 @@ test("syllabus prompt requires compact page-only references by default", () => {
   assert.match(messages[0]?.content ?? "", /不要输出 quote/u);
   assert.match(messages[0]?.content ?? "", /完整性优先/u);
   assert.match(messages[0]?.content ?? "", /allocationRate/u);
-  assert.match(messages[0]?.content ?? "", /合计必须为 100/u);
+  assert.match(messages[0]?.content ?? "", /每列合计 100/u);
+  assert.match(messages[0]?.content ?? "", /正向分解/u);
   assert.match(messages[0]?.content ?? "", /逐字保留原文中的完整课程目标/u);
   assert.match(messages[0]?.content ?? "", /不得摘要、改写、合并、拆分或省略/u);
   assert.match(messages[0]?.content ?? "", /下一级具体小知识点/u);

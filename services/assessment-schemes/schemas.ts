@@ -53,6 +53,8 @@ const componentSchema = z
     sortOrder: z.number().int().positive(),
     enabled: z.boolean(),
     description: z.string().trim().max(4_000).nullable(),
+    sourceGroup: z.string().trim().max(300).optional(),
+    sourcePoints: z.number().finite().positive().max(100).optional(),
     sourceRefs: sourceRefsSchema,
     mappings: z.array(mappingSchema).max(100),
     rubricBands: z.array(rubricBandSchema).max(20),
@@ -62,6 +64,10 @@ const componentSchema = z
 
 export const assessmentSchemeStructureSchema = z
   .object({
+    calculationMethod: z
+      .enum(["REVERSE_MATRIX", "FORWARD_DECOMPOSITION"])
+      .optional(),
+    thresholdConfirmed: z.boolean().optional(),
     outcomes: z.array(outcomeSchema).max(100),
     components: z.array(componentSchema).max(100),
     warnings: z.array(z.string().trim().min(1).max(1_000)).max(100),
@@ -124,6 +130,13 @@ export const assessmentSchemeStructureSchema = z
 
 export const publishableAssessmentSchemeSchema =
   assessmentSchemeStructureSchema.superRefine((value, context) => {
+    if (value.calculationMethod && value.thresholdConfirmed !== true) {
+      context.addIssue({
+        code: "custom",
+        path: ["thresholdConfirmed"],
+        message: "请确认课程目标达成线和计算方法",
+      });
+    }
     if (value.outcomes.length === 0) {
       context.addIssue({
         code: "custom",
@@ -150,6 +163,16 @@ export const publishableAssessmentSchemeSchema =
     }
     enabled.forEach((component) => {
       const index = value.components.indexOf(component);
+      if (
+        value.calculationMethod === "FORWARD_DECOMPOSITION" &&
+        component.sourceType !== GradeSourceType.MANUAL
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["components", index, "sourceType"],
+          message: "正向分解计分项须逐项录入成绩",
+        });
+      }
       if (component.fullScore === null) {
         context.addIssue({
           code: "custom",

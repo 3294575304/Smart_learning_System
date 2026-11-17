@@ -816,7 +816,67 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                 </div>
               ))}
             </div>
-            {structure.objectives.length && structure.assessments.length ? (
+            {structure.assessmentMethod === "FORWARD_DECOMPOSITION" &&
+            structure.forwardAssessmentTable ? (
+              <div className="mt-5 overflow-x-auto rounded-md border">
+                <table className="min-w-full border-collapse text-sm">
+                  <caption className="bg-sky-50/60 px-3 py-2 text-left font-medium">
+                    正向分解法 · 原文第{" "}
+                    {structure.forwardAssessmentTable.tableNumber}{" "}
+                    张表的计分项与课程目标分值（DOCX 来源单元 1）
+                  </caption>
+                  <thead>
+                    <tr className="border-t bg-sky-50/60">
+                      <th className="border-r px-3 py-2 text-left">计分项</th>
+                      <th className="border-r px-3 py-2 text-left">分组</th>
+                      {structure.objectives.map((objective) => (
+                        <th className="border-r px-3 py-2" key={objective.code}>
+                          {objective.title}
+                        </th>
+                      ))}
+                      <th className="px-3 py-2">分值</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {structure.forwardAssessmentTable.items.map((item) => (
+                      <tr className="border-t" key={item.code}>
+                        <td className="border-r px-3 py-2">{item.name}</td>
+                        <td className="border-r px-3 py-2">{item.group}</td>
+                        {item.objectivePoints.map((points, index) => (
+                          <td
+                            className="border-r px-3 py-2 text-center"
+                            key={index}
+                          >
+                            {points}
+                          </td>
+                        ))}
+                        <td className="px-3 py-2 text-center">{item.points}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t bg-sky-50/60 font-medium">
+                      <td className="border-r px-3 py-2">目标可得分值</td>
+                      <td className="border-r px-3 py-2" />
+                      {structure.forwardAssessmentTable.objectiveTotals.map(
+                        (points, index) => (
+                          <td
+                            className="border-r px-3 py-2 text-center"
+                            key={index}
+                          >
+                            {points}
+                          </td>
+                        ),
+                      )}
+                      <td className="px-3 py-2 text-center">
+                        {structure.forwardAssessmentTable.totalPoints}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            {structure.assessmentMethod !== "FORWARD_DECOMPOSITION" &&
+            structure.objectives.length &&
+            structure.assessments.length ? (
               <div className="mt-5 overflow-x-auto rounded-md border">
                 <table className="min-w-full border-collapse text-sm">
                   <caption className="bg-sky-50/60 px-3 py-2 text-left font-medium">
@@ -922,10 +982,12 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                 </table>
               </div>
             ) : null}
-            <p className="text-muted-foreground mt-3 text-sm">
-              每种考核方式下的课程目标占比必须合计
-              100%。这些数值将进入正式考核方案和课程目标达成度计算；空白表示尚未确认。
-            </p>
+            {structure.assessmentMethod !== "FORWARD_DECOMPOSITION" ? (
+              <p className="text-muted-foreground mt-3 text-sm">
+                每种考核方式下的课程目标占比必须合计
+                100%。这些数值将进入正式考核方案和课程目标达成度计算；空白表示尚未确认。
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-lg border p-4">

@@ -45,9 +45,23 @@ test("缺失证据排除，免修映射从分母剔除", () => {
   );
   assert.equal(exempt.score?.toFixed(4), "80.0000");
 });
+test("零分配比例的其他目标计分项缺失不阻断当前目标", () => {
+  const result = calculateStudentOutcome(
+    [
+      { componentId: "a", status: "COMPLETE", score: "80" },
+      { componentId: "b", status: "INCOMPLETE", score: null },
+    ],
+    [
+      { componentId: "a", componentWeight: d(40), allocationRate: d(100) },
+      { componentId: "b", componentWeight: d(60), allocationRate: d(0) },
+    ],
+    d(60),
+  );
+  assert.equal(result.score?.toFixed(4), "80.0000");
+});
 test("班级均值、阈值和达成指数使用 Decimal", () => {
   const result = calculateClassOutcome([d("59.995"), d("60.005")], d(60));
   assert.equal(result.meanScore?.toFixed(4), "60.0000");
-  assert.equal(result.attainmentIndex?.toFixed(4), "1.0000");
+  assert.equal(result.attainmentIndex?.toFixed(4), "0.6000");
   assert.equal(result.attained, true);
 });

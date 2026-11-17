@@ -189,6 +189,33 @@ const objectiveAssessmentMappingSchema = z
   })
   .strict();
 
+const forwardAssessmentTableSchema = z
+  .object({
+    method: z.literal("FORWARD_DECOMPOSITION"),
+    sourceRefs: sourceRefsSchema,
+    tableNumber: z.number().int().positive(),
+    items: z
+      .array(
+        z
+          .object({
+            code: codeSchema,
+            name: nameSchema,
+            group: nameSchema,
+            points: z.number().positive().max(100),
+            objectivePoints: z
+              .array(z.number().nonnegative().max(100))
+              .max(100),
+            sourceColumn: z.number().int().positive(),
+          })
+          .strict(),
+      )
+      .max(100),
+    objectiveTotals: z.array(z.number().nonnegative().max(100)).max(100),
+    totalPoints: z.number().positive().max(100),
+    warnings: z.array(z.string().trim().min(1).max(1_000)).max(100),
+  })
+  .strict();
+
 const syllabusMaterialSchema = z
   .object({
     code: codeSchema,
@@ -225,11 +252,71 @@ export const syllabusParseOutputSchema = z
     objectiveAssessmentMappings: z
       .array(objectiveAssessmentMappingSchema)
       .max(500),
+    assessmentMethod: z
+      .enum(["REVERSE_MATRIX", "FORWARD_DECOMPOSITION"])
+      .optional(),
+    forwardAssessmentTable: forwardAssessmentTableSchema.optional(),
     materials: z.array(syllabusMaterialSchema).max(200),
     warnings: z.array(z.string().trim().min(1).max(1_000)).max(100),
   })
   .strict()
   .superRefine((value, context) => {
+    if (
+      value.assessmentMethod === "FORWARD_DECOMPOSITION" &&
+      value.forwardAssessmentTable
+    ) {
+      const table = value.forwardAssessmentTable;
+      if (
+        table.objectiveTotals.length !== value.objectives.length ||
+        table.items.some(
+          (item) => item.objectivePoints.length !== value.objectives.length,
+        )
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["forwardAssessmentTable"],
+          message: "分解表与课程目标数量不一致",
+        });
+      } else {
+        for (let index = 0; index < value.objectives.length; index += 1) {
+          const total = table.items.reduce(
+            (sum, item) => sum + (item.objectivePoints[index] ?? 0),
+            0,
+          );
+          if (Math.abs(total - table.objectiveTotals[index]!) > 0.000001)
+            context.addIssue({
+              code: "custom",
+              path: ["forwardAssessmentTable", "objectiveTotals", index],
+              message: "课程目标分值合计不一致",
+            });
+        }
+        table.items.forEach((item, index) => {
+          const total = item.objectivePoints.reduce(
+            (sum, part) => sum + part,
+            0,
+          );
+          if (Math.abs(total - item.points) > 0.000001)
+            context.addIssue({
+              code: "custom",
+              path: ["forwardAssessmentTable", "items", index],
+              message: "计分项分值合计不一致",
+            });
+        });
+      }
+      if (
+        Math.abs(
+          table.items.reduce((sum, item) => sum + item.points, 0) -
+            table.totalPoints,
+        ) > 0.000001 ||
+        Math.abs(table.totalPoints - 100) > 0.000001
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["forwardAssessmentTable", "totalPoints"],
+          message: "考核总分必须为 100",
+        });
+      }
+    }
     addDuplicateIssue(
       value.objectives.map((item) => item.code),
       ["objectives"],
@@ -391,9 +478,11 @@ export const publishableSyllabusStructureSchema =
         });
       }
     });
-    const hasNumericAllocation = value.objectiveAssessmentMappings.some(
-      (item) => item.allocationRate !== null,
-    );
+    const hasNumericAllocation =
+      value.assessmentMethod !== "FORWARD_DECOMPOSITION" &&
+      value.objectiveAssessmentMappings.some(
+        (item) => item.allocationRate !== null,
+      );
     if (hasNumericAllocation) {
       value.assessments.forEach((assessment, assessmentIndex) => {
         const mappings = value.objectiveAssessmentMappings.filter(
@@ -423,7 +512,10 @@ export const publishableSyllabusStructureSchema =
         }
       });
     }
-    if (value.assessments.length > 0) {
+    if (
+      value.assessmentMethod !== "FORWARD_DECOMPOSITION" &&
+      value.assessments.length > 0
+    ) {
       if (value.assessments.some((item) => item.weight === null)) {
         context.addIssue({
           code: "custom",
@@ -499,6 +591,8 @@ export const syllabusParseInputSchema = z
       )
       .min(1)
       .max(200),
+    forwardAssessmentTable: forwardAssessmentTableSchema.optional(),
+    assessmentMethodHint: z.literal("FORWARD_DECOMPOSITION").optional(),
   })
   .strict();
 
