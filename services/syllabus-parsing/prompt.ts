@@ -37,7 +37,7 @@ warnings=string[]。Ref={page:正整数,verified:false}，仅在必要时增加 
 9. 稳定编码使用 OBJ-1、CH-1、KP-1-1、ASSESS-1 等短格式。
 10. 所有引用编码必须真实存在：映射引用 objectives/assessments 的 code，先修和 Topic 引用 knowledgePoints 的 code，practiceItems.relatedChapterCodes 引用 chapters 的 code。
 11. 同类 code 和章节 order 不得重复。JSON 必须完整闭合，完整性优先；不得通过删减课程目标原文来避免截断，必要时优先减少非目标字段的重复描述和 quote。
-12. 课程目标—考核方式占比表按课程目标行、考核方式列读取；每种考核方式下所有课程目标的 allocationRate 合计必须为 100。无法确定具体数值时用 null，不得把各考核方式占总成绩权重误填为 allocationRate。${repair}`,
+12. 仅当原文明确给出“每种考核方式内各目标占比”矩阵时，按目标行、考核方式列读取 allocationRate，每列合计 100。若原文是把总评 100 分正向分解到作业、题目及课程目标的分值表，不得把分值误写为 allocationRate；此时 objectiveAssessmentMappings 返回空数组，结构化分值由程序从原表另行核验。无法确定具体数值时用 null，不得把各考核方式占总成绩权重误填为 allocationRate。${repair}`,
     },
     {
       role: "user",

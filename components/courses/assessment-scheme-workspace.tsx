@@ -203,6 +203,33 @@ export function AssessmentSchemeWorkspace({ courseId }: { courseId: string }) {
             </div>
           ) : null}
 
+          <div className="rounded-lg border bg-sky-50/60 p-4 text-sm">
+            <p className="font-medium">
+              {structure.calculationMethod === "FORWARD_DECOMPOSITION"
+                ? "正向分解法"
+                : "逆向矩阵法"}
+            </p>
+            <p className="text-muted-foreground mt-1">
+              课程目标达成度 = 目标实际得分 ÷ 目标可得满分；每个考核项目满分默认
+              100 分，总评按项目权重计算。
+              {structure.calculationMethod === "FORWARD_DECOMPOSITION"
+                ? "每个最小计分项单独录入成绩，分组与分值来自大纲原表。"
+                : "每个考核方式内的课程目标分配比例合计为 100%。"}
+            </p>
+            <label className="mt-3 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={structure.thresholdConfirmed === true}
+                onChange={(event) => {
+                  const next = structuredClone(structure);
+                  next.thresholdConfirmed = event.target.checked;
+                  setStructure(next);
+                }}
+              />
+              我已对照大纲核对计分分值、计算方法及各课程目标的达成线（默认 60%）
+            </label>
+          </div>
+
           <div className="space-y-3">
             <h3 className="text-sm font-semibold">课程目标与达成阈值</h3>
             {structure.outcomes.map((outcome, outcomeIndex) => (
@@ -232,6 +259,7 @@ export function AssessmentSchemeWorkspace({ courseId }: { courseId: string }) {
                       const next = structuredClone(structure);
                       next.outcomes[outcomeIndex]!.attainmentThreshold =
                         numberOrNull(event.target.value);
+                      next.thresholdConfirmed = false;
                       setStructure(next);
                     }}
                   />
@@ -262,7 +290,7 @@ export function AssessmentSchemeWorkspace({ courseId }: { courseId: string }) {
                     />
                   </label>
                   <label className="text-sm">
-                    满分
+                    项目满分（默认 100）
                     <input
                       className="mt-1 w-full rounded-md border px-3 py-2"
                       inputMode="decimal"
@@ -306,7 +334,11 @@ export function AssessmentSchemeWorkspace({ courseId }: { courseId: string }) {
                       }}
                     >
                       <option value="">请选择</option>
-                      {SOURCE_OPTIONS.map(([value, label]) => (
+                      {SOURCE_OPTIONS.filter(
+                        ([value]) =>
+                          structure.calculationMethod !==
+                            "FORWARD_DECOMPOSITION" || value === "MANUAL",
+                      ).map(([value, label]) => (
                         <option key={value} value={value}>
                           {label}
                         </option>
@@ -356,6 +388,12 @@ export function AssessmentSchemeWorkspace({ courseId }: { courseId: string }) {
                     大纲来源页：
                     {component.sourceRefs.map((ref) => ref.page).join("、") ||
                       "无"}
+                    {component.sourceGroup
+                      ? ` · 原表分组：${component.sourceGroup}`
+                      : ""}
+                    {component.sourcePoints
+                      ? ` · 原表总评分值：${component.sourcePoints}`
+                      : ""}
                   </p>
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">

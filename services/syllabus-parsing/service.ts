@@ -18,6 +18,7 @@ import {
   SYLLABUS_RULE_VERSION,
 } from "@/services/syllabus-parsing/constants";
 import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
+import { extractForwardAssessmentTable } from "@/services/syllabus-parsing/docx-assessment-table";
 import { extractSyllabusText } from "@/services/syllabus-parsing/source-extractor";
 import {
   parseSyllabusStructure,
@@ -230,6 +231,19 @@ export async function createTeacherSyllabusParse(
           term: syllabus.course.term,
         },
         pages: extracted.pages,
+        ...(syllabus.originalName.toLowerCase().endsWith(".docx")
+          ? {
+              forwardAssessmentTable:
+                extractForwardAssessmentTable(data) ?? undefined,
+              ...(extracted.pages.some(
+                (page) =>
+                  /课程目标序号/u.test(page.text) &&
+                  /成绩比例/u.test(page.text),
+              )
+                ? { assessmentMethodHint: "FORWARD_DECOMPOSITION" as const }
+                : {}),
+            }
+          : {}),
       },
       timeoutMs(dependencies.timeoutMs),
     );

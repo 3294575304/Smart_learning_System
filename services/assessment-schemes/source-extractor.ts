@@ -104,17 +104,95 @@ function gradingBands(pages: readonly ExtractedPdfPage[]) {
   };
 }
 
+function buildForwardScheme(
+  syllabus: SyllabusParseOutput,
+): AssessmentSchemeStructure {
+  const table = syllabus.forwardAssessmentTable;
+  const warnings = [
+    ...syllabus.warnings,
+    ...(syllabus.forwardAssessmentTable?.warnings ?? []),
+  ];
+  if (
+    !table ||
+    table.objectiveTotals.length !== syllabus.objectives.length ||
+    table.items.some(
+      (item) => item.objectivePoints.length !== syllabus.objectives.length,
+    )
+  ) {
+    warnings.push(
+      "正向分解表未能与课程目标逐项核对，请教师对照原文补充考核细项；不得用总评成绩估算目标成绩。",
+    );
+    return {
+      calculationMethod: "FORWARD_DECOMPOSITION",
+      thresholdConfirmed: false,
+      outcomes: syllabus.objectives.map((objective, index) => ({
+        code: objective.code,
+        title: objective.title,
+        description: objective.description,
+        attainmentThreshold: 60,
+        sortOrder: index + 1,
+        sourceRefs: objective.sourceRefs,
+      })),
+      components: [],
+      warnings,
+    };
+  }
+  const duplicateNames = new Map<string, number>();
+  return {
+    calculationMethod: "FORWARD_DECOMPOSITION",
+    thresholdConfirmed: false,
+    outcomes: syllabus.objectives.map((objective, index) => ({
+      code: objective.code,
+      title: objective.title,
+      description: objective.description,
+      attainmentThreshold: 60,
+      sortOrder: index + 1,
+      sourceRefs: objective.sourceRefs,
+    })),
+    components: table.items.map((item, index) => {
+      const baseName =
+        item.group === item.name ? item.name : `${item.group} · ${item.name}`;
+      const occurrence = (duplicateNames.get(baseName) ?? 0) + 1;
+      duplicateNames.set(baseName, occurrence);
+      return {
+        code: item.code,
+        name: occurrence === 1 ? baseName : `${baseName}（${occurrence}）`,
+        type: componentType(`${item.group} ${item.name}`),
+        fullScore: 100,
+        weight: item.points,
+        sourceType: null,
+        sortOrder: index + 1,
+        enabled: true,
+        description: null,
+        sourceGroup: item.group,
+        sourcePoints: item.points,
+        sourceRefs: table.sourceRefs,
+        mappings: syllabus.objectives.map((objective, objectiveIndex) => ({
+          objectiveCode: objective.code,
+          allocationRate:
+            (item.objectivePoints[objectiveIndex]! / item.points) * 100,
+          sourceRefs: table.sourceRefs,
+        })),
+        rubricBands: [],
+      };
+    }),
+    warnings,
+  };
+}
+
 export function buildAssessmentSchemeFromSyllabus(
   syllabus: SyllabusParseOutput,
   pages: readonly ExtractedPdfPage[],
 ): AssessmentSchemeStructure {
-  const mapping =
-    structuredMappingPercentages(syllabus) ??
-    extractObjectiveAssessmentMatrix(
-      pages,
-      syllabus.objectives.length,
-      syllabus.assessments.length,
-    );
+  if (syllabus.assessmentMethod === "FORWARD_DECOMPOSITION") {
+    return buildForwardScheme(syllabus);
+  }
+  const extractedMatrix = extractObjectiveAssessmentMatrix(
+    pages,
+    syllabus.objectives.length,
+    syllabus.assessments.length,
+  );
+  const mapping = extractedMatrix ?? structuredMappingPercentages(syllabus);
   const rubric = gradingBands(pages);
   const warnings: string[] = [];
   if (!mapping && syllabus.objectiveAssessmentMappings.length > 0) {
@@ -124,20 +202,30 @@ export function buildAssessmentSchemeFromSyllabus(
   }
   if (!rubric) {
     warnings.push(
-      "未能从正式大纲原文确定性提取完整评分分档，满分和达成阈值需要教师补充。",
+      "未能从正式大纲原文确定性提取完整评分分档；考核项目满分默认 100，默认 60% 达成线须教师确认。",
     );
   }
-  const mappingRefs = (mapping?.sourcePages ?? []).map((page, index) => ({
-    page,
-    ...(index === 0 ? { quote: "课程目标在各考核方式中占比" } : {}),
-    verified: true,
-  }));
+  const mappingRefs = extractedMatrix
+    ? extractedMatrix.sourcePages.map((page, index) => ({
+        page,
+        ...(index === 0 ? { quote: "课程目标在各考核方式中占比" } : {}),
+        verified: true,
+      }))
+    : [
+        ...new Map(
+          syllabus.objectiveAssessmentMappings
+            .flatMap((item) => item.sourceRefs)
+            .map((ref) => [JSON.stringify(ref), ref]),
+        ).values(),
+      ];
   return {
+    calculationMethod: "REVERSE_MATRIX",
+    thresholdConfirmed: false,
     outcomes: syllabus.objectives.map((objective, index) => ({
       code: objective.code,
       title: objective.title,
       description: objective.description,
-      attainmentThreshold: rubric?.threshold ?? null,
+      attainmentThreshold: 60,
       sortOrder: index + 1,
       sourceRefs: objective.sourceRefs,
     })),
@@ -151,7 +239,7 @@ export function buildAssessmentSchemeFromSyllabus(
         code: assessment.code,
         name: assessment.name,
         type: componentType(`${assessment.type} ${assessment.name}`),
-        fullScore: rubric?.fullScore ?? null,
+        fullScore: rubric?.fullScore ?? 100,
         weight: assessment.weight,
         sourceType: null,
         sortOrder: assessmentIndex + 1,

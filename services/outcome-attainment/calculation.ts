@@ -1,6 +1,6 @@
 import { OutcomeStudentStatus, Prisma } from "@prisma/client";
 
-export const OUTCOME_ATTAINMENT_RULE_VERSION = "course-outcome-attainment-v1";
+export const OUTCOME_ATTAINMENT_RULE_VERSION = "course-outcome-attainment-v2";
 export interface ComponentScore {
   componentId: string;
   status: "COMPLETE" | "INCOMPLETE" | "EXEMPT";
@@ -18,10 +18,12 @@ export function calculateStudentOutcome(
   threshold: Prisma.Decimal,
 ) {
   const byId = new Map(componentScores.map((item) => [item.componentId, item]));
-  const evidence = mappings.map((mapping) => ({
-    mapping,
-    component: byId.get(mapping.componentId) ?? null,
-  }));
+  const evidence = mappings
+    .filter((mapping) => mapping.allocationRate.greaterThan(0))
+    .map((mapping) => ({
+      mapping,
+      component: byId.get(mapping.componentId) ?? null,
+    }));
   if (
     evidence.some(
       (item) => !item.component || item.component.status === "INCOMPLETE",
@@ -87,7 +89,7 @@ export function calculateClassOutcome(
   return {
     meanScore,
     attainmentIndex: meanScore
-      .div(threshold)
+      .div(100)
       .toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP),
     attained: meanScore.greaterThanOrEqualTo(threshold),
   };

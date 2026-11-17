@@ -141,7 +141,7 @@ test("从正式大纲原文确定性提取目标比例、百分制满分和达�
   );
 });
 
-test("正式大纲结构中的数值占比优先于 PDF 文本回退", () => {
+test("原文数值优先；缺少原文时使用已审核结构化占比", () => {
   const structured = structuredClone(syllabus);
   const rates = [
     [50, 60, 60, 50, 60],
@@ -176,6 +176,7 @@ test("发布校验区分来源待确认并验证权重与目标比例", () => {
     false,
   );
   const confirmed = structuredClone(draft);
+  confirmed.thresholdConfirmed = true;
   confirmed.components.forEach((component) => {
     component.sourceType = GradeSourceType.MANUAL;
   });
@@ -196,13 +197,14 @@ test("发布校验区分来源待确认并验证权重与目标比例", () => {
   );
 });
 
-test("缺少原文表格时不编造比例、满分或达成阈值", () => {
+test("缺少原文表格时不编造比例，项目满分默认 100 且达成线仍需确认", () => {
   const result = buildAssessmentSchemeFromSyllabus(syllabus, []);
   assert.ok(
-    result.outcomes.every((outcome) => outcome.attainmentThreshold === null),
+    result.outcomes.every((outcome) => outcome.attainmentThreshold === 60),
   );
+  assert.equal(result.thresholdConfirmed, false);
   assert.ok(
-    result.components.every((component) => component.fullScore === null),
+    result.components.every((component) => component.fullScore === 100),
   );
   assert.ok(
     result.components.every((component) =>
