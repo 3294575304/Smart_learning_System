@@ -14,6 +14,7 @@ import {
 } from "@/services/concept-mastery/constants";
 import { conceptMasteryFingerprint } from "@/services/concept-mastery/fingerprint";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { runAssignmentSerializable } from "@/services/assignments/transactions";
 
 type EffectiveEvidence = Prisma.StudentAnswerConceptEvidenceGetPayload<{
   include: {
@@ -48,7 +49,12 @@ async function latestConceptEvidence(
   courseId: string,
 ): Promise<EffectiveEvidence[]> {
   const rows = await transaction.studentAnswerConceptEvidence.findMany({
-    where: { studentId, courseId, assignment: { status: { not: "REVOKED" } } },
+    where: {
+      studentId,
+      courseId,
+      assignment: { status: { not: "REVOKED" } },
+      submission: { status: "PUBLISHED", publishedAt: { not: null } },
+    },
     orderBy: [
       { studentAnswerId: "asc" },
       { conceptId: "asc" },
@@ -294,6 +300,13 @@ async function assertTeacherStudentCourseAccess(
 }
 
 async function masteryView(studentId: string, courseId: string) {
+  // Rebuild legacy cached revisions under the publication rule before exposing them.
+  await runAssignmentSerializable(
+    (transaction) =>
+      recalculateStudentCourseConceptMastery(transaction, studentId, courseId),
+    "掌握度正在更新，请刷新后重试",
+    30_000,
+  );
   const [course, state] = await Promise.all([
     prisma.course.findUnique({
       where: { id: courseId },

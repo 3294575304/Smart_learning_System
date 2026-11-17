@@ -57,7 +57,7 @@ export function WrongQuestionFilters({
     <section
       aria-label="错题筛选"
       aria-busy={pending}
-      className="max-w-4xl rounded-xl border border-sky-100 bg-white p-3"
+      className="st-review-filter st-study-filter rounded-xl border border-sky-100 bg-white p-3"
     >
       <fieldset
         disabled={pending}

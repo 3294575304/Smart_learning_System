@@ -138,11 +138,10 @@ export default async function AssignmentResultsPage({
       parsedId.data,
       parsedQuery.data,
     );
-    if (
-      results.students.totalPages > 0 &&
-      results.students.page > results.students.totalPages
-    ) {
-      notFound();
+    if (parsedQuery.data.page !== results.students.page) {
+      redirect(
+        `${base}/results?page=${results.students.page}&pageSize=${parsedQuery.data.pageSize}`,
+      );
     }
 
     const publication = await getAssignmentPublicationState(

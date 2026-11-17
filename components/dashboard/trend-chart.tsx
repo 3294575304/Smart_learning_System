@@ -41,9 +41,9 @@ export function TrendChart({
             title={point.detail ?? `${point.label}：${point.value}%`}
           >
             <span className="mb-2 text-xs font-medium">{point.value}%</span>
-            <div className="flex h-32 w-10 items-end rounded-md bg-sky-100/70 px-1 sm:w-12">
+            <div className="bg-muted flex h-32 w-10 items-end rounded-md px-1 sm:w-12">
               <div
-                className="w-full rounded-sm bg-sky-600 transition-[height]"
+                className="bg-brand w-full rounded-sm transition-[height]"
                 style={{
                   height: `${Math.max(0, Math.min(100, point.value))}%`,
                 }}
@@ -56,19 +56,19 @@ export function TrendChart({
           </div>
         ))}
       </div>
-      <p className="mt-2 text-xs leading-5 text-slate-500">
+      <p className="text-ink-soft mt-2 text-xs leading-5">
         {caption ??
           `仅统计已有百分比成绩的 ${points.length} 条记录；未评估或待批改不按 0 分计算。`}
       </p>
       {showDetails ? (
-        <details className="mt-3 rounded-lg border bg-slate-50/60 px-3 py-2 text-xs">
-          <summary className="cursor-pointer font-medium text-sky-800">
+        <details className="border-line bg-muted/60 mt-3 rounded-lg border px-3 py-2 text-xs">
+          <summary className="text-brand-strong cursor-pointer font-medium">
             查看 {points.length} 条数据的来源与时间
           </summary>
-          <ol className="mt-2 space-y-2 text-slate-600">
+          <ol className="text-ink-soft mt-2 space-y-2">
             {points.map((point, index) => (
               <li key={index} className="leading-5">
-                <strong className="mr-2 text-slate-900 tabular-nums">
+                <strong className="text-ink mr-2 tabular-nums">
                   {point.value}%
                 </strong>
                 {point.detail ?? point.label}

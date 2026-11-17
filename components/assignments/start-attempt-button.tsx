@@ -5,6 +5,7 @@ import {
   type StudentTaskScope,
 } from "@/services/student-experience/task-scope";
 
+import { withAssignmentTaskReturn } from "@/services/student-experience/activity-query";
 import { useRef, useState } from "react";
 
 import { notifyStudentExamStarted } from "@/components/student-assistant/use-availability";
@@ -14,6 +15,7 @@ interface Props {
   assignmentId: string;
   disabled?: boolean;
   scope?: StudentTaskScope;
+  returnTo?: string;
   label?: string;
   className?: string;
 }
@@ -22,6 +24,7 @@ export function StartAttemptButton({
   assignmentId,
   disabled = false,
   scope = {},
+  returnTo,
   label = "开始作答",
   className,
 }: Props) {
@@ -52,7 +55,13 @@ export function StartAttemptButton({
     }
     if (response.data.examSessionId) notifyStudentExamStarted();
     window.location.assign(
-      studentTaskHref(`/student/submissions/${response.data.id}/answer`, scope),
+      withAssignmentTaskReturn(
+        studentTaskHref(
+          `/student/submissions/${response.data.id}/answer`,
+          scope,
+        ),
+        returnTo,
+      ),
     );
   }
 
@@ -61,7 +70,7 @@ export function StartAttemptButton({
       <button
         className={
           className ??
-          "inline-flex min-h-11 items-center rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
+          "st-btn-cta inline-flex min-h-11 items-center rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:opacity-50"
         }
         disabled={disabled || pending}
         onClick={start}

@@ -15,6 +15,7 @@ import { calculateAttendanceRate } from "@/services/attendance/calculation";
 import {
   getStudentCourseConceptMastery,
   getTeacherStudentCourseConceptMastery,
+  recalculateStudentCourseConceptMastery,
 } from "@/services/concept-mastery/service";
 import { LEARNER_PROFILE_RULE_VERSION } from "@/services/learner-profiles/constants";
 import {
@@ -70,6 +71,11 @@ export async function ensureLearnerProfileSnapshot(
   studentId: string,
   courseId: string,
 ) {
+  await recalculateStudentCourseConceptMastery(
+    transaction,
+    studentId,
+    courseId,
+  );
   const [course, masteryState, watermark, attendanceRecords] =
     await Promise.all([
       transaction.course.findUniqueOrThrow({
@@ -286,6 +292,7 @@ async function ensureSnapshot(studentId: string, courseId: string) {
     (transaction) =>
       ensureLearnerProfileSnapshot(transaction, studentId, courseId),
     "画像正在更新，请稍后重试",
+    30_000,
   );
 }
 
@@ -557,7 +564,7 @@ export async function listTeacherCourseLearnerProfiles(
 ) {
   const course = await assertTeacherAccess(teacherId, courseId);
   const classrooms = await prisma.classroom.findMany({
-    where: { courseId, teacherId, status: "ACTIVE" },
+    where: { courseId, teacherId },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -572,7 +579,6 @@ export async function listTeacherCourseLearnerProfiles(
       classroom: {
         courseId,
         teacherId,
-        status: "ACTIVE",
         ...(options.classroomId ? { id: options.classroomId } : {}),
       },
     },

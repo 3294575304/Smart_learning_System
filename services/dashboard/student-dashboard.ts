@@ -6,6 +6,7 @@ import "server-only";
 
 import {
   AIRecordStatus,
+  AssignmentStatus,
   MembershipStatus,
   RecommendationStatus,
   SubmissionStatus,
@@ -209,7 +210,15 @@ export async function listStudentResults(
   const where = {
     studentId,
     assignment: {
-      status: { not: "ARCHIVED" as const },
+      status: { notIn: [AssignmentStatus.ARCHIVED, AssignmentStatus.REVOKED] },
+      deletedAt: null,
+      /*
+       * 考试也是 Assignment（靠 examSessionId 关联 ExamSession），
+       * 这里有过滤会让考试的提交混进「我的作业 › 提交记录与成绩」。
+       * 考试有自己的入口（/student/exams）与成绩口径，不该在这里重复出现。
+       * 作业列表（student-list-query.ts）一直有这条过滤，此处是漏的。
+       */
+      examSessionId: null,
       ...(classroomId ? { classroomId } : {}),
       ...(courseId ? { classroom: { courseId } } : {}),
     },

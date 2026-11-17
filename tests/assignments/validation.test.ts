@@ -225,20 +225,24 @@ test("人工评分只接受非负有限数字", () => {
   }
 });
 
-test("教师提交列表只接受可批改和已发布状态", () => {
+test("教师提交列表支持未提交草稿的只读筛选，并拒绝撤回状态", () => {
   assert.deepEqual(teacherSubmissionListQuerySchema.parse({}), {
     page: 1,
     pageSize: 20,
   });
-  for (const status of ["PENDING_REVIEW", "GRADED", "PUBLISHED"]) {
+  for (const status of [
+    "IN_PROGRESS",
+    "PENDING_REVIEW",
+    "GRADED",
+    "PUBLISHED",
+  ]) {
     assert.equal(
       teacherSubmissionListQuerySchema.safeParse({ status }).success,
       true,
     );
   }
   assert.equal(
-    teacherSubmissionListQuerySchema.safeParse({ status: "IN_PROGRESS" })
-      .success,
+    teacherSubmissionListQuerySchema.safeParse({ status: "WITHDRAWN" }).success,
     false,
   );
 });

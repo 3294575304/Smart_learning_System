@@ -10,8 +10,12 @@ Object.assign(globalThis, { React });
 const data = {
   course: { id: "course-a", name: "测试课程" },
   classrooms: [
-    { id: "class-a", name: "一班" },
-    { id: "class-b", name: "二班" },
+    { id: "class-a", name: "一班", status: "ACTIVE" as const },
+    { id: "class-b", name: "二班", status: "ACTIVE" as const },
+  ],
+  editableClassrooms: [
+    { id: "class-a", name: "一班", status: "ACTIVE" as const },
+    { id: "class-b", name: "二班", status: "ACTIVE" as const },
   ],
   counts: { active: 0, pending: 0, removed: 0 },
   total: 0,

@@ -4,6 +4,7 @@ import { PageIndex } from "./page-index";
 import type { StudentClassroomOption } from "./student-classroom-filter";
 import {
   activityHref,
+  withAssignmentTaskReturn,
   activityKindLabels,
   activityStatusLabels,
   activityStatusOptions,
@@ -12,18 +13,20 @@ import {
 } from "@/services/student-experience/activity-query";
 
 export const activityCardClass =
-  "min-w-0 rounded-xl border border-sky-100 bg-white p-4 sm:p-5";
+  "st-activity-card min-w-0 rounded-xl border border-sky-100 bg-white p-4 sm:p-5";
 export const activityActionClass =
   "inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
 const control =
   "min-h-10 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-700";
 
 export function StudentActivityFilters({
+  returnTo,
   view,
   query,
   classrooms,
   total,
 }: {
+  returnTo?: string;
   view: ActivityView;
   query: ActivityQuery;
   classrooms: StudentClassroomOption[];
@@ -40,6 +43,7 @@ export function StudentActivityFilters({
       aria-label="列表筛选"
       className={activityCardClass}
     >
+      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
       {query.courseId && (
         <input type="hidden" name="courseId" value={query.courseId} />
       )}
@@ -119,10 +123,13 @@ export function StudentActivityFilters({
           (query.classroomId && !fixed)) && (
           <Link
             className="rounded px-2 py-1 font-medium text-sky-800 hover:bg-sky-50 focus-visible:outline-2"
-            href={activityHref(view, {
-              courseId: query.courseId,
-              classroomId: fixed ? query.classroomId : undefined,
-            })}
+            href={withAssignmentTaskReturn(
+              activityHref(view, {
+                courseId: query.courseId,
+                classroomId: fixed ? query.classroomId : undefined,
+              }),
+              returnTo,
+            )}
           >
             重置筛选
           </Link>
@@ -133,10 +140,12 @@ export function StudentActivityFilters({
 }
 
 export function StudentActivityPagination({
+  returnTo,
   view,
   query,
   pagination,
 }: {
+  returnTo?: string;
   view: ActivityView;
   query: ActivityQuery;
   pagination: { page: number; totalPages: number };
@@ -146,7 +155,10 @@ export function StudentActivityPagination({
       {...pagination}
       ariaLabel="列表分页"
       hrefForPage={(page) =>
-        activityHref(view, { ...query, focus: undefined, page })
+        withAssignmentTaskReturn(
+          activityHref(view, { ...query, focus: undefined, page }),
+          returnTo,
+        )
       }
       nativeNavigation
     />

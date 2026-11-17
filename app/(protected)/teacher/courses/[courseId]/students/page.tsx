@@ -45,15 +45,17 @@ export default async function CourseStudentsPage({
             <TeacherBackLink href={`/teacher/courses/${id.data}`}>
               返回课程
             </TeacherBackLink>
-            <Link
-              className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
-              href={withClassroomQuery(
-                `/teacher/courses/${id.data}/students/import`,
-                classroom?.id,
-              )}
-            >
-              批量导入名单
-            </Link>
+            {(!classroom || classroom.status === "ACTIVE") && (
+              <Link
+                className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
+                href={withClassroomQuery(
+                  `/teacher/courses/${id.data}/students/import`,
+                  classroom?.id,
+                )}
+              >
+                批量导入名单
+              </Link>
+            )}
           </div>
         }
       />

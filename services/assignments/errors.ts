@@ -3,7 +3,7 @@ import { getErrorStatus, getSafeErrorMessage } from "@/services/auth/policy";
 export class AssignmentOperationError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 409 | 410 = 409,
+    readonly status: 400 | 409 | 410 | 413 = 409,
   ) {
     super(message);
     this.name = "AssignmentOperationError";

@@ -106,6 +106,42 @@ export function activityHref(
   return `/student/${view}${params.size ? `?${params}` : ""}`;
 }
 
+export function assignmentTaskReturn(
+  value: unknown,
+  scope: Pick<ActivityQuery, "courseId" | "classroomId">,
+): string | undefined {
+  if (
+    typeof value !== "string" ||
+    value.length > 1000 ||
+    (value !== "/student/tasks" && !value.startsWith("/student/tasks?"))
+  )
+    return;
+
+  const url = new URL(value, "http://localhost");
+  if (url.hash) return;
+  const entries = [...url.searchParams];
+  if (new Set(entries.map(([key]) => key)).size !== entries.length) return;
+
+  const query = activityQuerySchema("tasks").safeParse(
+    Object.fromEntries(entries),
+  );
+  if (
+    !query.success ||
+    (query.data.courseId && query.data.courseId !== scope.courseId) ||
+    (query.data.classroomId && query.data.classroomId !== scope.classroomId)
+  )
+    return;
+  return activityHref("tasks", query.data);
+}
+
+export function withAssignmentTaskReturn(href: string, returnTo?: string) {
+  if (!returnTo) return href;
+  const [pathname, search] = href.split("?");
+  const params = new URLSearchParams(search);
+  params.set("returnTo", returnTo);
+  return `${pathname}?${params}`;
+}
+
 export const activityPageSize = 8;
 
 export function examListReturn(value: unknown, scope: Partial<ActivityQuery>) {

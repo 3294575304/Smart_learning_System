@@ -1,60 +1,78 @@
-import { StudentPageLink } from "./student-page-link";
-import { PageContainer } from "@/components/ui/workspace";
+import { ArrowRight, CalendarClock, PlayCircle } from "lucide-react";
 import React, { type ReactNode } from "react";
-import { StudentHomeTasks } from "./student-home-tasks";
+
+import { StudentPageLink } from "./student-page-link";
 import { FOCUS_RING } from "./ui-focus";
+import { greeting, kickerDate, relativeTime } from "./student-time";
+import type { StudentHomePulse } from "@/services/dashboard/student-home-pulse";
 import type { StudentTaskOverview } from "@/services/dashboard/student-task-overview";
 
 export function StudentHomeView({
   name,
   overview,
+  pulse,
+  week = null,
+  now = new Date(),
   insights,
 }: {
   name: string;
   overview: StudentTaskOverview;
+  pulse?: StudentHomePulse;
+  week?: number | null;
+  now?: Date;
   insights?: ReactNode;
 }) {
+  const pendingAssignments = overview.pendingItems.filter(
+    (item) => item.kind === "assignment",
+  );
+  const lastActive = pulse?.lastActiveAt ?? null;
+  const continueHref =
+    pulse?.inProgress[0]?.href ?? pulse?.finished[0]?.href ?? "/student/tasks";
+
   return (
-    <PageContainer
-      width="wide"
-      className="student-home-dashboard text-foreground @container space-y-3"
-    >
-      {/*
-        页头补一行副标题：原先标题下直接是两个等权按钮，
-        学生进门第一眼看到的是"自主练习/我的题库"两个入口，
-        而不是"我还有几件事"。副标题把待办总量翻到标题下方，
-        两个入口用同色系的描边与实底区分主次。
-      */}
-      <header className="flex flex-wrap items-end justify-between gap-3">
+    <section className="workspace-home text-foreground @container min-w-0">
+      <header className="workspace-page-header flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="min-w-0 text-[26px] leading-tight font-semibold [overflow-wrap:anywhere]">
-            {name}，你好
+          <p className="st-kicker">
+            {kickerDate(now)}
+            {week ? <em>· 第 {week} 周</em> : null}
+          </p>
+          <h1 className="min-w-0 text-[26px] leading-tight font-semibold tracking-[-0.02em] [overflow-wrap:anywhere]">
+            {greeting(now)}，{name}
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            {overview.total > 0
-              ? `还有 ${overview.total} 项待办`
-              : "当前没有待办，可以按自己的节奏练习"}
+            {pendingAssignments.length > 0
+              ? `今天还有 ${pendingAssignments.length} 份作业没交`
+              : overview.total > 0
+                ? `还有 ${overview.total} 项待办要处理`
+                : "今天的作业都交齐了"}
+            {lastActive
+              ? `，最近一次学习在${relativeTime(lastActive, now)}。`
+              : "，可以从一次练习开始。"}
           </p>
         </div>
         <p className="sr-only">
-          先处理近期任务，再查看学习进展。待办较多时，可在列表内滚动。
+          先处理临近截止的任务，再看学习进展。首页最多展示 4 项待办。
         </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <StudentPageLink
-            href="/student/wrong-questions"
-            className={`text-brand-strong border-brand bg-card hover:bg-muted inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium ${FOCUS_RING}`}
-          >
-            我的题库
-          </StudentPageLink>
+        <div className="flex flex-wrap items-center gap-2">
           <StudentPageLink
             href="/student/recommendations"
-            className={`bg-brand hover:bg-brand-strong border-brand inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium text-white ${FOCUS_RING}`}
+            className={`border-border bg-card hover:bg-muted inline-flex min-h-11 items-center gap-1.5 rounded-md border px-3.5 text-sm font-medium text-neutral-800 ${FOCUS_RING}`}
           >
-            自主练习
+            <CalendarClock aria-hidden="true" className="size-3.5" />
+            学习计划
+          </StudentPageLink>
+          <StudentPageLink
+            href={continueHref}
+            className={`st-btn-cta bg-brand hover:bg-brand-strong border-brand inline-flex min-h-11 items-center gap-1.5 rounded-md border px-3.5 text-sm font-medium text-white ${FOCUS_RING}`}
+          >
+            <PlayCircle aria-hidden="true" className="size-3.5" />
+            继续学习
+            <ArrowRight aria-hidden="true" className="size-3.5" />
           </StudentPageLink>
         </div>
       </header>
-      {insights ?? <StudentHomeTasks overview={overview} />}
-    </PageContainer>
+      {insights ?? null}
+    </section>
   );
 }

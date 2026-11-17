@@ -28,6 +28,7 @@ async function main() {
     DATABASE_URL: isolatedDatabaseUrl(base, schema),
     LOCAL_UPLOAD_ROOT: resolve(".data", "teaching-tests", schema),
     AI_PROVIDER: "mock",
+    SEED_SUPER_ADMIN_PASSWORD: `Test-${randomBytes(24).toString("base64url")}-Aa1!`,
   };
   const cli = resolve("node_modules/prisma/build/index.js");
   try {

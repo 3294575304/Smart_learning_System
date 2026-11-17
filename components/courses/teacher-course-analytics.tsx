@@ -1,9 +1,4 @@
-import {
-  ArrowRight,
-  CheckCircle2,
-  FileChartColumn,
-  Sparkles,
-} from "lucide-react";
+import { ArrowRight, FileChartColumn } from "lucide-react";
 import Link from "next/link";
 
 import { CourseChapterMastery } from "@/components/courses/course-chapter-mastery";
@@ -437,10 +432,6 @@ export function TeacherCourseAnalyticsView({
   if (classroomId) assignmentParams.set("classroomId", classroomId);
   if (data.reportingSection !== "ALL")
     assignmentParams.set("section", data.reportingSection);
-  const showCurrentTasks =
-    data.reportingSection !== "HISTORY" &&
-    (!data.reportingClassroomStatus ||
-      data.reportingClassroomStatus === "ACTIVE");
 
   return (
     <div className="space-y-6">
@@ -702,56 +693,6 @@ export function TeacherCourseAnalyticsView({
           />
         </div>
       </section>
-
-      {showCurrentTasks && (
-        <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-5 sm:p-6">
-          <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-sky-700 shadow-sm">
-              <Sparkles aria-hidden="true" className="size-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-semibold text-slate-900">
-                本阶段教学待办
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                系统按课程建设、学习证据和结课评价的依赖顺序排列。
-              </p>
-            </div>
-          </div>
-          {data.nextActions.length > 0 ? (
-            <div className="mt-5 grid gap-3 lg:grid-cols-2">
-              {data.nextActions.map((action, index) => (
-                <Link
-                  key={action.key}
-                  href={action.href}
-                  className="group flex gap-3 rounded-xl border border-white bg-white/90 p-4 shadow-sm transition hover:border-sky-200 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
-                >
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-700">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="font-medium text-slate-900">
-                      {action.title}
-                    </span>
-                    <span className="mt-1 block text-sm leading-5 text-slate-500">
-                      {action.detail}
-                    </span>
-                  </span>
-                  <ArrowRight
-                    aria-hidden="true"
-                    className="mt-1 size-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-sky-700"
-                  />
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-5 flex items-center gap-3 rounded-xl bg-white/90 p-4 text-sm text-emerald-800 shadow-sm">
-              <CheckCircle2 aria-hidden="true" className="size-5" />
-              当前课程关键环节均已完成，可继续观察学生学习变化。
-            </div>
-          )}
-        </section>
-      )}
     </div>
   );
 }

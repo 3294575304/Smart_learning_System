@@ -527,25 +527,47 @@ export async function syncTeacherPlatformAssignmentGrades(
         select: { id: true, title: true, totalPoints: true, category: true },
       });
       if (!assignment) throw new ResourceNotFoundError("作业不存在。");
-      const categoryIssue = assignmentSyncIssue(assignment.category, component);
+      const categoryIssue = exam
+        ? !component.enabled
+          ? "考核项目尚未启用，请先确认考核方案。"
+          : null
+        : assignmentSyncIssue(assignment.category, component);
       if (categoryIssue)
         throw new GradebookOperationError(
           categoryIssue,
           409,
           "ASSIGNMENT_CATEGORY_RULE_REQUIRED",
         );
-      const incompatibleItems = await transaction.gradeItem.count({
+      const componentItems = await transaction.gradeItem.findMany({
         where: {
           gradebookId,
           componentId,
-          OR: [
-            { sourceType: { not: "PLATFORM_ASSIGNMENT" } },
-            { itemWeight: { not: 1 } },
-            { assignment: { category: { not: assignment.category } } },
-          ],
+        },
+        select: {
+          sourceKey: true,
+          sourceType: true,
+          assignmentId: true,
+          itemWeight: true,
+          assignment: { select: { category: true } },
+          _count: { select: { entries: true } },
         },
       });
-      if (incompatibleItems)
+      const incompatible = componentItems.some((item) => {
+        if (
+          exam &&
+          item.sourceKey === `component:${componentId}:default` &&
+          item._count.entries === 0
+        )
+          return false;
+        return (
+          item.sourceType !== GradeSourceType.PLATFORM_ASSIGNMENT ||
+          !item.itemWeight.equals(1) ||
+          (exam
+            ? item.assignmentId !== assignmentId
+            : item.assignment?.category !== assignment.category)
+        );
+      });
+      if (incompatible)
         throw new GradebookOperationError(
           "当前项目已有其他来源、不同类别或非等权成绩项，请先核对原台账；系统不会覆盖或重分配。",
           409,

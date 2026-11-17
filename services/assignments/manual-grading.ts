@@ -39,8 +39,8 @@ import { writeTeachingAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { appendAssessmentLearningEventsAndProjectEvidence } from "@/services/learning-events/assessment";
-import { notifyAssignmentGraded } from "@/services/notifications/events/assignment";
-import { logNotificationFailure } from "@/services/notifications/logging";
+import { recalculateStudentCourseConceptMastery } from "@/services/concept-mastery/service";
+import { notifyAssignmentGradesPublished } from "@/services/notifications/events/assignment";
 
 const submittedStatuses: SubmissionStatus[] = [
   SubmissionStatus.SUBMITTED,
@@ -214,8 +214,11 @@ async function loadTeacherSubmission(
     where: {
       id: submissionId,
       assignmentId,
-      assignment: { teacherId },
-      status: { in: submittedStatuses },
+      assignment: { teacherId, deletedAt: null },
+      OR: [
+        { status: { in: submittedStatuses } },
+        { status: "IN_PROGRESS", assignment: { examSessionId: null } },
+      ],
     },
     include: gradingDetailInclude,
   });
@@ -233,6 +236,11 @@ export async function listTeacherAssignmentSubmissions(
     select: {
       id: true,
       title: true,
+      examSessionId: true,
+      makeupGrants: {
+        where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
+        select: { studentId: true },
+      },
       totalPoints: true,
       questions: { select: { id: true, typeSnapshot: true, points: true } },
       status: true,
@@ -256,6 +264,8 @@ export async function listTeacherAssignmentSubmissions(
     },
   });
   if (!assignment) throw new ResourceNotFoundError("作业不存在");
+  if (assignment.examSessionId && query.status === "IN_PROGRESS")
+    throw new ResourceNotFoundError("提交记录不存在");
 
   const where: Prisma.SubmissionWhereInput = {
     assignmentId,
@@ -265,53 +275,62 @@ export async function listTeacherAssignmentSubmissions(
         ? { in: [SubmissionStatus.GRADED, SubmissionStatus.PUBLISHED] }
         : (query.status ?? { in: submittedStatuses }),
   };
-  const [total, submissions, latestSubmissions] = await prisma.$transaction([
-    prisma.submission.count({ where }),
-    prisma.submission.findMany({
-      where,
-      orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-      select: {
-        id: true,
-        attemptNumber: true,
-        status: true,
-        submittedAt: true,
-        gradedAt: true,
-        publishedAt: true,
-        score: true,
-        maxScore: true,
-        student: {
+  const { total, submissions, latestSubmissions, page, totalPages } =
+    await prisma.$transaction(
+      async (transaction) => {
+        const total = await transaction.submission.count({ where });
+        const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
+        const page = Math.min(query.page, totalPages);
+        const submissions = await transaction.submission.findMany({
+          where,
+          orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+          skip: (page - 1) * query.pageSize,
+          take: query.pageSize,
           select: {
             id: true,
-            email: true,
-            profile: { select: { displayName: true, studentNo: true } },
-          },
-        },
-        answers: {
-          select: {
+            attemptNumber: true,
+            status: true,
+            submittedAt: true,
+            gradedAt: true,
+            publishedAt: true,
             score: true,
-            isCorrect: true,
-            assignmentQuestionId: true,
-            programmingAttempts: {
-              where: { kind: "FORMAL_JUDGE" },
-              orderBy: { revisionNumber: "desc" },
-              take: 1,
-              select: { status: true },
+            maxScore: true,
+            student: {
+              select: {
+                id: true,
+                email: true,
+                profile: { select: { displayName: true, studentNo: true } },
+              },
             },
-            gradingStatus: true,
-            assignmentQuestion: { select: { typeSnapshot: true } },
+            answers: {
+              select: {
+                score: true,
+                isCorrect: true,
+                assignmentQuestionId: true,
+                programmingAttempts: {
+                  where: { kind: "FORMAL_JUDGE" },
+                  orderBy: { revisionNumber: "desc" },
+                  take: 1,
+                  select: { status: true },
+                },
+                gradingStatus: true,
+                assignmentQuestion: { select: { typeSnapshot: true } },
+              },
+            },
           },
-        },
-      },
-    }),
-    prisma.$queryRaw<Array<{ id: string }>>`
+        });
+        const latestSubmissions = await transaction.$queryRaw<
+          Array<{ id: string }>
+        >`
       SELECT DISTINCT ON ("studentId") id FROM "Submission"
       WHERE "assignmentId" = ${assignmentId}
       AND status::text IN ('SUBMITTED', 'PENDING_REVIEW', 'GRADED', 'PUBLISHED')
       ORDER BY "studentId", "attemptNumber" DESC, "submittedAt" DESC NULLS LAST, id DESC
-    `,
-  ]);
+    `;
+        return { total, submissions, latestSubmissions, page, totalPages };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
 
   return {
     totalSubmitted: assignment._count.submissions,
@@ -324,6 +343,9 @@ export async function listTeacherAssignmentSubmissions(
     items: submissions.map((submission) => ({
       id: submission.id,
       gradingBlockedReason:
+        (submission.status === "IN_PROGRESS"
+          ? "这份作答尚未提交，仅供查看，不能批改或公布成绩"
+          : null) ??
         assignmentCapabilities(assignment).gradingBlockedReason ??
         (assignment.classroom.memberships.some(
           (member) => member.studentId === submission.student.id,
@@ -360,6 +382,19 @@ export async function listTeacherAssignmentSubmissions(
         })),
         submission.status,
       ),
+      ...(submission.status === "IN_PROGRESS"
+        ? {
+            displayStatus:
+              assignment.dueAt &&
+              assignment.dueAt <= new Date() &&
+              !assignment.makeupGrants.some(
+                (grant) => grant.studentId === submission.student.id,
+              )
+                ? "已截止未提交"
+                : "尚未提交",
+            objectivePercentage: null,
+          }
+        : {}),
       currentScore: decimalNumber(submission.score),
       maxScore:
         decimalNumber(submission.maxScore) ?? assignment.totalPoints.toNumber(),
@@ -373,10 +408,10 @@ export async function listTeacherAssignmentSubmissions(
       ),
     })),
     pagination: {
-      page: query.page,
+      page,
       pageSize: query.pageSize,
       total,
-      totalPages: Math.ceil(total / query.pageSize),
+      totalPages,
     },
   };
 }
@@ -416,6 +451,9 @@ export async function getTeacherSubmissionForGrading(
   });
   const isLatestEffective = attempts[0]?.id === record.id;
   const blockedReason =
+    (record.status === "IN_PROGRESS"
+      ? "这份作答尚未提交，仅供查看。学生获准补交后可以继续原稿。"
+      : null) ??
     assignmentCapabilities(record.assignment).gradingBlockedReason ??
     (membership?.status === "ACTIVE"
       ? null
@@ -798,248 +836,255 @@ export async function completeSubmissionGrading(
   return getTeacherSubmissionForGrading(teacherId, assignmentId, submissionId);
 }
 
-interface PublishTransactionResult extends PublishAssignmentResultsResult {
-  notifications: Array<{
-    recipientId: string;
-    submissionId: string;
-    assignmentTitle: string;
-  }>;
-}
-
 export async function publishAssignmentResults(
   teacherId: string,
   assignmentId: string,
   auditContext: AuditRequestContext,
   automaticExamRevision?: string,
 ): Promise<PublishAssignmentResultsResult> {
-  const result = await runAssignmentSerializable<PublishTransactionResult>(
-    async (transaction) => {
-      const lifecycle = await lockAssignmentLifecycle(
-        transaction,
-        assignmentId,
-        teacherId,
-      );
-      if (lifecycle.examSessionId) {
-        const exam = await transaction.examSession.findUnique({
-          where: { id: lifecycle.examSessionId },
-          select: {
-            endsAt: true,
-            cancelledAt: true,
-            teacher: { select: { status: true } },
-          },
-        });
-        const policy = await transaction.examResultPublication.findUnique({
-          where: { assignmentId },
-        });
-        const now = new Date();
-        if (!exam || exam.cancelledAt || exam.endsAt > now)
-          throw new AssignmentOperationError("考试结束后才能公布成绩", 409);
-        if (automaticExamRevision) {
-          if (
-            !policy ||
-            exam.teacher.status !== "ACTIVE" ||
-            policy.completedAt ||
-            policy.revision !== automaticExamRevision ||
-            (policy.scheduledAt && policy.scheduledAt > now)
-          )
+  const result =
+    await runAssignmentSerializable<PublishAssignmentResultsResult>(
+      async (transaction) => {
+        const lifecycle = await lockAssignmentLifecycle(
+          transaction,
+          assignmentId,
+          teacherId,
+        );
+        if (lifecycle.examSessionId) {
+          const exam = await transaction.examSession.findUnique({
+            where: { id: lifecycle.examSessionId },
+            select: {
+              endsAt: true,
+              cancelledAt: true,
+              teacher: { select: { status: true } },
+            },
+          });
+          const policy = await transaction.examResultPublication.findUnique({
+            where: { assignmentId },
+          });
+          const now = new Date();
+          if (!exam || exam.cancelledAt || exam.endsAt > now)
+            throw new AssignmentOperationError("考试结束后才能公布成绩", 409);
+          if (automaticExamRevision) {
+            if (
+              !policy ||
+              exam.teacher.status !== "ACTIVE" ||
+              policy.completedAt ||
+              policy.revision !== automaticExamRevision ||
+              (policy.scheduledAt && policy.scheduledAt > now)
+            )
+              throw new AssignmentOperationError(
+                "考试公布计划已变化或未到公布时间",
+                409,
+              );
+          } else if (policy && !policy.completedAt) {
             throw new AssignmentOperationError(
-              "考试公布计划已变化或未到公布时间",
+              "当前班级已启用自动公布，请先在考试监考页切换为手动公布",
               409,
             );
-        } else if (policy && !policy.completedAt) {
+          }
+          const collecting = await transaction.submission.findFirst({
+            where: {
+              assignmentId,
+              status: "IN_PROGRESS",
+              student: {
+                classMemberships: {
+                  some: {
+                    classroomId: lifecycle.classroom.id,
+                    status: "ACTIVE",
+                  },
+                },
+              },
+            },
+            select: { id: true },
+          });
+          if (collecting)
+            throw new AssignmentOperationError(
+              "仍有考试答卷待收卷，请稍后再公布",
+              409,
+            );
+        } else if (automaticExamRevision) {
+          throw new ResourceNotFoundError("考试不存在");
+        }
+        const capability = assignmentCapabilities({
+          ...lifecycle,
+          activeMakeupCount: await countUsableGrants(transaction, assignmentId),
+        });
+        if (!capability.canPublishResults)
           throw new AssignmentOperationError(
-            "当前班级已启用自动公布，请先在考试监考页切换为手动公布",
+            capability.publicationBlockedReason ?? "当前状态不能公布成绩",
             409,
+          );
+        await touchAssignmentLifecycle(transaction, assignmentId);
+        const assignment = await transaction.assignment.findFirst({
+          where: { id: assignmentId, teacherId, deletedAt: null },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            classroom: {
+              select: {
+                memberships: {
+                  where: { status: "ACTIVE" },
+                  select: { studentId: true },
+                },
+              },
+            },
+            submissions: {
+              where: { status: { in: submittedStatuses } },
+              select: {
+                id: true,
+                studentId: true,
+                attemptNumber: true,
+                submittedAt: true,
+                status: true,
+                score: true,
+                maxScore: true,
+                gradedAt: true,
+                publishedAt: true,
+                answers: {
+                  where: {
+                    gradingStatus: GradingStatus.MANUAL_REVIEW_REQUIRED,
+                  },
+                  select: { id: true },
+                },
+              },
+            },
+          },
+        });
+        if (!assignment) throw new ResourceNotFoundError("作业不存在");
+        if (!["PUBLISHED", "CLOSED"].includes(assignment.status))
+          throw new AssignmentOperationError("仅已发布作业可以公布成绩", 409);
+        const members = new Set(
+          assignment.classroom.memberships.map((member) => member.studentId),
+        );
+        const latest = latestEffectiveSubmissions(
+          assignment.submissions.filter((item) => members.has(item.studentId)),
+        );
+        if (latest.length === 0) {
+          throw new AssignmentOperationError("当前作业暂无可发布的提交");
+        }
+        const unfinished = latest.filter(
+          (submission) =>
+            submission.status === SubmissionStatus.SUBMITTED ||
+            submission.status === SubmissionStatus.PENDING_REVIEW ||
+            submission.answers.length > 0,
+        );
+        if (unfinished.length > 0) {
+          throw new AssignmentOperationError(
+            `仍有 ${unfinished.length} 份提交未完成全部人工批改`,
           );
         }
-        const collecting = await transaction.submission.findFirst({
+        const invalidGraded = latest.filter(
+          (submission) =>
+            submission.status === SubmissionStatus.GRADED &&
+            (submission.score === null ||
+              submission.maxScore === null ||
+              submission.gradedAt === null),
+        );
+        if (invalidGraded.length > 0) {
+          throw new AssignmentOperationError(
+            "部分提交缺少完整批改结果，不能发布",
+          );
+        }
+
+        const alreadyPublished = latest.filter(
+          (submission) => submission.status === SubmissionStatus.PUBLISHED,
+        );
+        const publishable = latest.filter(
+          (submission) => submission.status === SubmissionStatus.GRADED,
+        );
+        // The notification and published grade commit together. Repeating publication
+        // also repairs a missing historical notification through its existing dedup key.
+        await notifyAssignmentGradesPublished(
+          [...alreadyPublished, ...publishable].map((submission) => ({
+            recipientId: submission.studentId,
+            submissionId: submission.id,
+            assignmentTitle: assignment.title,
+          })),
+          transaction,
+        );
+        if (publishable.length === 0) {
+          return {
+            assignmentId,
+            status: "PUBLISHED",
+            publishedCount: 0,
+            alreadyPublishedCount: alreadyPublished.length,
+            publishedAt:
+              alreadyPublished
+                .map((submission) => submission.publishedAt)
+                .filter((value): value is Date => value !== null)
+                .sort((left, right) => right.getTime() - left.getTime())[0] ??
+              null,
+          };
+        }
+
+        const now = new Date();
+        const updated = await transaction.submission.updateMany({
           where: {
             assignmentId,
-            status: "IN_PROGRESS",
-            student: {
-              classMemberships: {
-                some: { classroomId: lifecycle.classroom.id, status: "ACTIVE" },
-              },
-            },
+            id: { in: publishable.map((submission) => submission.id) },
+            status: SubmissionStatus.GRADED,
           },
-          select: { id: true },
+          data: {
+            status: SubmissionStatus.PUBLISHED,
+            publishedAt: now,
+          },
         });
-        if (collecting)
+        if (updated.count !== publishable.length) {
           throw new AssignmentOperationError(
-            "仍有考试答卷待收卷，请稍后再公布",
-            409,
+            "成绩发布状态已发生变化，请刷新后重试",
           );
-      } else if (automaticExamRevision) {
-        throw new ResourceNotFoundError("考试不存在");
-      }
-      const capability = assignmentCapabilities({
-        ...lifecycle,
-        activeMakeupCount: await countUsableGrants(transaction, assignmentId),
-      });
-      if (!capability.canPublishResults)
-        throw new AssignmentOperationError(
-          capability.publicationBlockedReason ?? "当前状态不能公布成绩",
-          409,
-        );
-      await touchAssignmentLifecycle(transaction, assignmentId);
-      const assignment = await transaction.assignment.findFirst({
-        where: { id: assignmentId, teacherId, deletedAt: null },
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          classroom: {
-            select: {
-              memberships: {
-                where: { status: "ACTIVE" },
-                select: { studentId: true },
-              },
-            },
+        }
+        const classroom = await transaction.classroom.findUniqueOrThrow({
+          where: { id: lifecycle.classroom.id },
+          select: { courseId: true },
+        });
+        if (classroom.courseId) {
+          for (const submission of publishable) {
+            await recalculateStudentCourseConceptMastery(
+              transaction,
+              submission.studentId,
+              classroom.courseId,
+            );
+          }
+        }
+        if (automaticExamRevision) {
+          await transaction.examResultPublication.update({
+            where: { assignmentId, revision: automaticExamRevision },
+            data: { completedAt: now },
+          });
+        }
+        await writeTeachingAuditLog(transaction, {
+          actorId: teacherId,
+          action: AuditAction.ASSIGNMENT_RESULTS_PUBLISHED,
+          targetType: AuditTargetType.ASSIGNMENT,
+          targetId: assignmentId,
+          summary: `正式公布${lifecycle.examSessionId ? "考试" : "作业"}“${assignment.title}”的 ${updated.count} 份成绩`,
+          beforeData: {
+            gradedCount: publishable.length,
+            publishedCount: alreadyPublished.length,
           },
-          submissions: {
-            where: { status: { in: submittedStatuses } },
-            select: {
-              id: true,
-              studentId: true,
-              attemptNumber: true,
-              submittedAt: true,
-              status: true,
-              score: true,
-              maxScore: true,
-              gradedAt: true,
-              publishedAt: true,
-              answers: {
-                where: {
-                  gradingStatus: GradingStatus.MANUAL_REVIEW_REQUIRED,
-                },
-                select: { id: true },
-              },
-            },
+          afterData: {
+            newlyPublishedCount: updated.count,
+            publishedCount: alreadyPublished.length + updated.count,
+            publishedAt: now.toISOString(),
           },
-        },
-      });
-      if (!assignment) throw new ResourceNotFoundError("作业不存在");
-      if (!["PUBLISHED", "CLOSED"].includes(assignment.status))
-        throw new AssignmentOperationError("仅已发布作业可以公布成绩", 409);
-      const members = new Set(
-        assignment.classroom.memberships.map((member) => member.studentId),
-      );
-      const latest = latestEffectiveSubmissions(
-        assignment.submissions.filter((item) => members.has(item.studentId)),
-      );
-      if (latest.length === 0) {
-        throw new AssignmentOperationError("当前作业暂无可发布的提交");
-      }
-      const unfinished = latest.filter(
-        (submission) =>
-          submission.status === SubmissionStatus.SUBMITTED ||
-          submission.status === SubmissionStatus.PENDING_REVIEW ||
-          submission.answers.length > 0,
-      );
-      if (unfinished.length > 0) {
-        throw new AssignmentOperationError(
-          `仍有 ${unfinished.length} 份提交未完成全部人工批改`,
-        );
-      }
-      const invalidGraded = latest.filter(
-        (submission) =>
-          submission.status === SubmissionStatus.GRADED &&
-          (submission.score === null ||
-            submission.maxScore === null ||
-            submission.gradedAt === null),
-      );
-      if (invalidGraded.length > 0) {
-        throw new AssignmentOperationError(
-          "部分提交缺少完整批改结果，不能发布",
-        );
-      }
+          context: auditContext,
+        });
 
-      const alreadyPublished = latest.filter(
-        (submission) => submission.status === SubmissionStatus.PUBLISHED,
-      );
-      const publishable = latest.filter(
-        (submission) => submission.status === SubmissionStatus.GRADED,
-      );
-      if (publishable.length === 0) {
         return {
           assignmentId,
           status: "PUBLISHED",
-          publishedCount: 0,
+          publishedCount: updated.count,
           alreadyPublishedCount: alreadyPublished.length,
-          publishedAt:
-            alreadyPublished
-              .map((submission) => submission.publishedAt)
-              .filter((value): value is Date => value !== null)
-              .sort((left, right) => right.getTime() - left.getTime())[0] ??
-            null,
-          notifications: [],
-        };
-      }
-
-      const now = new Date();
-      const updated = await transaction.submission.updateMany({
-        where: {
-          assignmentId,
-          id: { in: publishable.map((submission) => submission.id) },
-          status: SubmissionStatus.GRADED,
-        },
-        data: {
-          status: SubmissionStatus.PUBLISHED,
           publishedAt: now,
-        },
-      });
-      if (updated.count !== publishable.length) {
-        throw new AssignmentOperationError(
-          "成绩发布状态已发生变化，请刷新后重试",
-        );
-      }
-      if (automaticExamRevision) {
-        await transaction.examResultPublication.update({
-          where: { assignmentId, revision: automaticExamRevision },
-          data: { completedAt: now },
-        });
-      }
-      await writeTeachingAuditLog(transaction, {
-        actorId: teacherId,
-        action: AuditAction.ASSIGNMENT_RESULTS_PUBLISHED,
-        targetType: AuditTargetType.ASSIGNMENT,
-        targetId: assignmentId,
-        summary: `正式公布${lifecycle.examSessionId ? "考试" : "作业"}“${assignment.title}”的 ${updated.count} 份成绩`,
-        beforeData: {
-          gradedCount: publishable.length,
-          publishedCount: alreadyPublished.length,
-        },
-        afterData: {
-          newlyPublishedCount: updated.count,
-          publishedCount: alreadyPublished.length + updated.count,
-          publishedAt: now.toISOString(),
-        },
-        context: auditContext,
-      });
+        };
+      },
+      "成绩发布状态已发生变化，请刷新后重试",
+      30_000,
+    );
 
-      return {
-        assignmentId,
-        status: "PUBLISHED",
-        publishedCount: updated.count,
-        alreadyPublishedCount: alreadyPublished.length,
-        publishedAt: now,
-        notifications: publishable.map((submission) => ({
-          recipientId: submission.studentId,
-          submissionId: submission.id,
-          assignmentTitle: assignment.title,
-        })),
-      };
-    },
-    "成绩发布状态已发生变化，请刷新后重试",
-  );
-
-  for (const notification of result.notifications) {
-    try {
-      await notifyAssignmentGraded(notification);
-    } catch {
-      logNotificationFailure("assignment_graded", notification.submissionId);
-    }
-  }
   return {
     assignmentId: result.assignmentId,
     status: result.status,

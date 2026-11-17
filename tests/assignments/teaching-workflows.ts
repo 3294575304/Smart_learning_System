@@ -14,6 +14,7 @@ import { manageAssignmentDraft } from "@/services/assignments/draft-management";
 import {
   extendAssignmentDeadline,
   issueAssignmentMakeup,
+  revokeAssignmentMakeup,
 } from "@/services/assignments/makeup-service";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -70,6 +71,30 @@ import {
   listTeacherQuestions,
 } from "@/services/questions/service";
 import { questionListQuerySchema } from "@/services/questions/schemas";
+import { getStudentCourseConceptMastery } from "@/services/concept-mastery/service";
+import { getStudentLearnerProfile } from "@/services/learner-profiles/service";
+import {
+  listCourseRoster,
+  mutateCourseRoster,
+} from "@/services/course-rosters/service";
+import { createStudentAnalysis } from "@/services/ai/service";
+import { createAnalysisRequestKey } from "@/services/ai/request-key";
+import { buildStudentAnalysisInput } from "@/services/ai/input-builder";
+import { STUDENT_ANALYSIS_PROMPT_VERSION } from "@/services/ai/constants";
+import { MockAIProvider } from "@/services/ai/mock-provider";
+import { generateRuleBasedAnalysis } from "@/services/ai/fallback";
+import {
+  createTeacherCourseGradebook,
+  syncTeacherPlatformAssignmentGrades,
+} from "@/services/gradebook/service";
+import { saveStudentAnswers } from "@/services/assignments/service";
+import { listTeacherAssignmentSubmissions } from "@/services/assignments/manual-grading";
+import { getTeacherAssignmentResults } from "@/services/assignment-results/service";
+import { getStudentCourseLearningCenter } from "@/services/learner-profiles/learning-center";
+import { getStudentSubmissionDraft } from "@/services/assignments/service";
+import { listStudentResults } from "@/services/dashboard/student-dashboard";
+import { studentResultsQuerySchema } from "@/services/assignments/schemas";
+import { deliverMissingAssignmentGradeNotifications } from "@/services/notifications/events/assignment";
 
 async function main() {
   const target = new URL(process.env.DATABASE_URL ?? "");
@@ -384,6 +409,76 @@ async function main() {
     1,
     concepts.map((item) => item.id),
   );
+  const graphFields = {
+    description: null,
+    importance: null,
+    isKeyTopic: false,
+    isDifficultTopic: false,
+    objectiveMappings: [],
+    assessmentMappings: [],
+    sourceType: "TEACHER",
+    sourceRefs: [],
+    confidence: null,
+    sourcePath: null,
+  };
+  await prisma.publishedKnowledgeGraphVersion.update({
+    where: { id: graph.id },
+    data: {
+      structureJson: {
+        nodes: [
+          {
+            ...graphFields,
+            key: "course",
+            conceptKey: "course-root",
+            type: "COURSE",
+            code: "COURSE",
+            name: "教学闭环测试",
+            sortOrder: 0,
+          },
+          {
+            ...graphFields,
+            key: "chapter",
+            conceptKey: "chapter-root",
+            type: "CHAPTER",
+            code: "CH1",
+            name: "测试章节",
+            sortOrder: 1,
+          },
+          ...graph.nodes.map((node, index) => ({
+            ...graphFields,
+            key: node.id,
+            conceptKey: concepts[index].stableKey,
+            type: "KNOWLEDGE_POINT",
+            code: node.code,
+            name: node.name,
+            sortOrder: index + 2,
+          })),
+        ],
+        edges: [
+          {
+            key: "course-chapter",
+            type: "CONTAINS",
+            from: "course",
+            to: "chapter",
+            description: null,
+            sourceType: "TEACHER",
+            sourceRefs: [],
+            confidence: null,
+          },
+          ...graph.nodes.map((node) => ({
+            key: `chapter-${node.id}`,
+            type: "CONTAINS",
+            from: "chapter",
+            to: node.id,
+            description: null,
+            sourceType: "TEACHER",
+            sourceRefs: [],
+            confidence: null,
+          })),
+        ],
+      },
+    },
+  });
   await updateTeachingProgress(
     teacher.id,
     course.id,
@@ -751,7 +846,7 @@ async function main() {
     studentId_courseId: { studentId: student.id, courseId: course.id },
   };
   const beforeMastery =
-    await prisma.studentCourseConceptMasteryState.findUniqueOrThrow({
+    await prisma.studentCourseConceptMasteryState.findUnique({
       where: masteryWhere,
       include: {
         revisions: {
@@ -762,7 +857,7 @@ async function main() {
       },
     });
   assert.ok(
-    beforeMastery.revisions[0].entries.some(
+    !beforeMastery?.revisions[0]?.entries.some(
       (entry) => entry.conceptId === concept.id,
     ),
   );
@@ -877,8 +972,8 @@ async function main() {
     }),
     1,
   );
-  const afterMastery =
-    await prisma.studentCourseConceptMasteryState.findUniqueOrThrow({
+  const afterMastery = await prisma.studentCourseConceptMasteryState.findUnique(
+    {
       where: masteryWhere,
       include: {
         revisions: {
@@ -887,15 +982,16 @@ async function main() {
           include: { entries: true },
         },
       },
-    });
+    },
+  );
   assert.ok(
-    !afterMastery.revisions[0].entries.some(
+    !afterMastery?.revisions[0]?.entries.some(
       (entry) => entry.conceptId === concept.id,
     ),
   );
-  assert.ok(
-    afterMastery.revisions[0].revisionNumber >
-      beforeMastery.revisions[0].revisionNumber,
+  assert.equal(
+    afterMastery?.revisions[0]?.revisionNumber ?? 0,
+    beforeMastery?.revisions[0]?.revisionNumber ?? 0,
   );
 
   const missingVersion = (
@@ -1429,6 +1525,802 @@ async function main() {
     "PASS assignment assembly scope, history, alternatives, preflight, score target, and history copy",
   );
   assert.equal(actor(student).role, Role.STUDENT);
+
+  const knowledgePoint = await prisma.knowledgePoint.findFirstOrThrow();
+  const largeQuestions = [];
+  for (let index = 0; index < 50; index += 1) {
+    const question = await bankQuestion(
+      `批量提交回归 ${index}`,
+      concepts[1].id,
+      "TRUE_FALSE",
+    );
+    await prisma.questionKnowledgePoint.create({
+      data: {
+        questionId: question.id,
+        knowledgePointId: knowledgePoint.id,
+        weight: 1,
+      },
+    });
+    largeQuestions.push({
+      questionId: question.id,
+      points: 2,
+      sortOrder: index + 1,
+    });
+  }
+  const large = await createDraftAssignment(
+    teacher.id,
+    assignmentUpsertSchema.parse({
+      title: "50题提交与发布可见性回归",
+      classroomId: first.id,
+      publishedAt: new Date(Date.now() - 1000),
+      dueAt: new Date(Date.now() + 3600_000),
+      questions: largeQuestions,
+    }),
+  );
+  await publishAssignment(teacher.id, large.id);
+  const largeAttempt = await startOrResumeAttempt(
+    student.id,
+    large.id,
+    randomUUID(),
+  );
+  await saveStudentAnswers(student.id, largeAttempt.id, {
+    version: largeAttempt.version,
+    answers: largeAttempt.questions.map((q) => ({
+      assignmentQuestionId: q.id,
+      kind: "BOOLEAN",
+      value: true,
+    })),
+  });
+  const submissionStarted = Date.now();
+  await Promise.all([
+    submitStudentAssignment(student.id, largeAttempt.id),
+    submitStudentAssignment(student.id, largeAttempt.id),
+  ]);
+  assert.equal(
+    await prisma.studentAnswer.count({
+      where: { submissionId: largeAttempt.id },
+    }),
+    50,
+  );
+  const beforePublication = await getStudentCourseConceptMastery(
+    student.id,
+    course.id,
+  );
+  assert.ok(
+    !beforePublication.concepts.some((c) => c.conceptId === concepts[1].id),
+  );
+  await getStudentLearnerProfile(student.id, course.id);
+  const learningBeforePublication = await getStudentCourseLearningCenter(
+    student.id,
+    course.id,
+    first.id,
+  );
+  assert.deepEqual(
+    learningBeforePublication.progressSteps.map((step) => [
+      step.numerator,
+      step.denominator,
+    ]),
+    [
+      [0, 2],
+      [0, 0],
+      [0, 0],
+    ],
+  );
+  await prisma.assignment.update({
+    where: { id: large.id },
+    data: { dueAt: new Date(Date.now() - 1) },
+  });
+  await publishAssignmentResults(teacher.id, large.id, context);
+  const afterPublication = await getStudentCourseConceptMastery(
+    student.id,
+    course.id,
+  );
+  const publishedConcept = afterPublication.concepts.find(
+    (c) => c.conceptId === concepts[1].id,
+  );
+  assert.equal(publishedConcept?.evidenceCount, 50);
+  assert.equal(publishedConcept?.masteryScore, 100);
+  const learningAfterPublication = await getStudentCourseLearningCenter(
+    student.id,
+    course.id,
+    first.id,
+  );
+  assert.deepEqual(
+    learningAfterPublication.progressSteps.map((step) => [
+      step.numerator,
+      step.denominator,
+    ]),
+    [
+      [1, 2],
+      [1, 1],
+      [1, 1],
+    ],
+  );
+  assert.equal(
+    learningAfterPublication.learningPath.mastered[0]?.conceptId,
+    concepts[1].id,
+  );
+  assert.equal(
+    learningAfterPublication.learningPath.next[0]?.conceptId,
+    concepts[0].id,
+  );
+  assert.equal(
+    afterPublication.currentRevision?.calculationRuleVersion,
+    "concept-mastery-v2-published",
+  );
+  await getStudentLearnerProfile(student.id, course.id);
+  console.log(
+    `PASS 50-question concurrent submission, publication-gated mastery/profile (${Date.now() - submissionStarted}ms including publication)`,
+  );
+
+  const batchInputForAnalysis = await buildStudentAnalysisInput(
+    student.id,
+    largeAttempt.id,
+  );
+  const analysisKey = createAnalysisRequestKey(
+    batchInputForAnalysis.input,
+    STUDENT_ANALYSIS_PROMPT_VERSION,
+  );
+  await createStudentAnalysis(student.id, largeAttempt.id);
+  const oldAnalysis = await prisma.aIAnalysis.findUniqueOrThrow({
+    where: { requestKey: analysisKey },
+  });
+  await prisma.aIAnalysis.update({
+    where: { id: oldAnalysis.id },
+    data: { status: "PENDING", updatedAt: new Date(Date.now() - 300_000) },
+  });
+  await createStudentAnalysis(student.id, largeAttempt.id);
+  let currentAnalysis = await prisma.aIAnalysis.findUniqueOrThrow({
+    where: { requestKey: analysisKey },
+  });
+  assert.notEqual(currentAnalysis.id, oldAnalysis.id);
+  assert.equal(
+    (
+      await prisma.aIAnalysis.findUniqueOrThrow({
+        where: { id: oldAnalysis.id },
+      })
+    ).status,
+    "FAILED",
+  );
+  await prisma.aIAnalysis.update({
+    where: { id: currentAnalysis.id },
+    data: { rawResponse: { legacy: true } },
+  });
+  await createStudentAnalysis(student.id, largeAttempt.id);
+  currentAnalysis = await prisma.aIAnalysis.findUniqueOrThrow({
+    where: { requestKey: analysisKey },
+  });
+  await prisma.aIAnalysis.update({
+    where: { id: currentAnalysis.id },
+    data: { status: "PENDING" },
+  });
+  await assert.rejects(
+    createStudentAnalysis(student.id, largeAttempt.id),
+    /正在处理中/,
+  );
+  await prisma.aIAnalysis.update({
+    where: { id: currentAnalysis.id },
+    data: { status: "FAILED" },
+  });
+  const started = Promise.withResolvers<void>();
+  const delayed = Promise.withResolvers<unknown>();
+  const oldExecution = createStudentAnalysis(
+    student.id,
+    largeAttempt.id,
+    new MockAIProvider(() => {
+      started.resolve();
+      return delayed.promise;
+    }),
+  );
+  await started.promise;
+  const staleOwner = await prisma.aIAnalysis.findUniqueOrThrow({
+    where: { requestKey: analysisKey },
+  });
+  await prisma.aIAnalysis.update({
+    where: { id: staleOwner.id },
+    data: { updatedAt: new Date(Date.now() - 300_000) },
+  });
+  await createStudentAnalysis(student.id, largeAttempt.id);
+  delayed.resolve(generateRuleBasedAnalysis(batchInputForAnalysis.input));
+  await assert.rejects(oldExecution, /重新生成/);
+  assert.notEqual(
+    (
+      await prisma.aIAnalysis.findUniqueOrThrow({
+        where: { requestKey: analysisKey },
+      })
+    ).id,
+    staleOwner.id,
+  );
+  console.log(
+    "PASS expired AI analysis reclaim, legacy response regeneration and active-request conflict",
+  );
+
+  const questionPage = await listTeacherQuestions(
+    teacher.id,
+    questionListQuerySchema.parse({ courseId: course.id, page: 999999 }),
+  );
+  assert.equal(
+    questionPage.pagination.page,
+    questionPage.pagination.totalPages,
+  );
+  assert.ok(questionPage.items.length > 0);
+  const submissionPage = await listTeacherAssignmentSubmissions(
+    teacher.id,
+    large.id,
+    { page: 999999, pageSize: 20 },
+  );
+  assert.equal(submissionPage.pagination.page, 1);
+  assert.equal(submissionPage.items.length, 1);
+  const resultsPage = await getTeacherAssignmentResults(teacher.id, large.id, {
+    page: 999999,
+    pageSize: 20,
+  });
+  assert.equal(resultsPage.students.page, 1);
+  assert.equal(resultsPage.students.items.length, 1);
+
+  const syllabus = await prisma.publishedSyllabusStructure.findFirstOrThrow({
+    where: { courseId: course.id },
+  });
+  const schemeDraft = await prisma.assessmentSchemeDraft.create({
+    data: {
+      courseId: course.id,
+      createdById: teacher.id,
+      structureJson: {},
+      sourceFingerprint: "a".repeat(64),
+    },
+  });
+  const schemeReview = await prisma.assessmentSchemeReviewRevision.create({
+    data: {
+      draftId: schemeDraft.id,
+      courseId: course.id,
+      editedById: teacher.id,
+      revisionNumber: 1,
+      structureJson: {},
+      sourceFingerprint: "a".repeat(64),
+    },
+  });
+  const scheme = await prisma.publishedAssessmentScheme.create({
+    data: {
+      courseId: course.id,
+      reviewRevisionId: schemeReview.id,
+      sourcePublishedSyllabusStructureId: syllabus.id,
+      publishedById: teacher.id,
+      versionNumber: 1,
+      structureJson: {},
+      sourceFingerprint: "a".repeat(64),
+      calculationRuleVersion: "test",
+      components: {
+        create: ["MIDTERM_EXAM", "FINAL_EXAM"].map((type, index) => ({
+          code: type,
+          name: type,
+          type: type as "MIDTERM_EXAM" | "FINAL_EXAM",
+          fullScore: 100,
+          weight: 50,
+          sourceType: "MANUAL",
+          sortOrder: index + 1,
+          sourceJson: [],
+          rubricJson: [],
+        })),
+      },
+    },
+    include: { components: true },
+  });
+  await prisma.course.update({
+    where: { id: course.id },
+    data: { currentPublishedAssessmentSchemeId: scheme.id },
+  });
+  const book = await createTeacherCourseGradebook(
+    teacher.id,
+    course.id,
+    first.id,
+    context,
+  );
+  for (const type of ["MIDTERM", "FINAL"] as const) {
+    const exam = await prisma.examSession.create({
+      data: {
+        teacherId: teacher.id,
+        courseId: course.id,
+        questionCategoryId: course.questionCategoryId!,
+        type,
+        requestId: randomUUID(),
+        requestFingerprint: "a".repeat(64),
+        title: `同步回归 ${type}`,
+        startsAt: new Date(Date.now() - 120_000),
+        endsAt: new Date(Date.now() - 60_000),
+        assignments: {
+          create: {
+            teacherId: teacher.id,
+            classroomId: first.id,
+            title: `考试 ${type}`,
+            status: "CLOSED",
+            publishedAt: new Date(Date.now() - 120_000),
+            totalPoints: 100,
+            submissions: {
+              create: {
+                studentId: student.id,
+                status: "PUBLISHED",
+                idempotencyKey: randomUUID(),
+                score: 88,
+                maxScore: 100,
+                percentage: 88,
+                startedAt: new Date(Date.now() - 60_000),
+                publishedAt: new Date(),
+                gradedAt: new Date(),
+                submittedAt: new Date(),
+              },
+            },
+          },
+        },
+      },
+      include: { assignments: true },
+    });
+    const component = scheme.components.find((c) => c.type === `${type}_EXAM`)!;
+    const synced = await syncTeacherPlatformAssignmentGrades(
+      teacher.id,
+      book.id,
+      component.id,
+      exam.assignments[0].id,
+      context,
+    );
+    assert.equal(synced.syncedCount, 1);
+    const repeatedSync = await syncTeacherPlatformAssignmentGrades(
+      teacher.id,
+      book.id,
+      component.id,
+      exam.assignments[0].id,
+      context,
+    );
+    assert.equal(repeatedSync.reusedCount, 1);
+    await assert.rejects(
+      syncTeacherPlatformAssignmentGrades(
+        otherTeacher.id,
+        book.id,
+        component.id,
+        exam.assignments[0].id,
+        context,
+      ),
+    );
+    const otherComponent = scheme.components.find(
+      (c) => c.id !== component.id,
+    )!;
+    await assert.rejects(
+      syncTeacherPlatformAssignmentGrades(
+        teacher.id,
+        book.id,
+        otherComponent.id,
+        exam.assignments[0].id,
+        context,
+      ),
+    );
+  }
+  console.log(
+    "PASS exam synchronization for midterm/final, idempotency, type and ownership checks; pagination fallback",
+  );
+
+  const overdueTask = await createDraftAssignment(teacher.id, {
+    ...draftInput,
+    title: "逾期草稿与可靠通知回归",
+    publishedAt: new Date(Date.now() - 1000),
+    dueAt: new Date(Date.now() + 60_000),
+  });
+  await publishAssignment(teacher.id, overdueTask.id);
+  const overdueDraft = await startOrResumeAttempt(
+    student.id,
+    overdueTask.id,
+    randomUUID(),
+  );
+  const overdueSaved = await saveStudentAnswers(student.id, overdueDraft.id, {
+    version: overdueDraft.version,
+    answers: [
+      {
+        assignmentQuestionId: overdueDraft.questions[0].id,
+        kind: "TEXT",
+        value: "截止前已保存",
+      },
+    ],
+  });
+  await prisma.assignment.update({
+    where: { id: overdueTask.id },
+    data: { dueAt: new Date(Date.now() - 1000) },
+  });
+  const lockedDraft = await getStudentSubmissionDraft(
+    student.id,
+    overdueDraft.id,
+  );
+  assert.equal(lockedDraft.canWrite, false);
+  assert.equal(lockedDraft.answers[0].textAnswer, "截止前已保存");
+  assert.equal(
+    (await getStudentAssignment(student.id, overdueTask.id)).canWrite,
+    false,
+  );
+  await assert.rejects(
+    saveStudentAnswers(student.id, overdueDraft.id, {
+      version: overdueSaved.version,
+      answers: [
+        {
+          assignmentQuestionId: overdueDraft.questions[0].id,
+          kind: "TEXT",
+          value: "截止后修改",
+        },
+      ],
+    }),
+    /已截止/,
+  );
+  await assert.rejects(
+    submitStudentAssignment(student.id, overdueDraft.id),
+    /已截止/,
+  );
+  const draftList = await listTeacherAssignmentSubmissions(
+    teacher.id,
+    overdueTask.id,
+    {
+      status: "IN_PROGRESS",
+      page: 1,
+      pageSize: 20,
+    },
+  );
+  assert.equal(draftList.totalSubmitted, 0);
+  assert.equal(draftList.items[0].displayStatus, "已截止未提交");
+  assert.equal(draftList.items[0].objectivePercentage, null);
+  const draftDetail = await getTeacherSubmissionForGrading(
+    teacher.id,
+    overdueTask.id,
+    overdueDraft.id,
+  );
+  assert.equal(draftDetail.canManageGrading, false);
+  await assert.rejects(
+    completeSubmissionGrading(
+      teacher.id,
+      overdueTask.id,
+      overdueDraft.id,
+      context,
+    ),
+  );
+  await assert.rejects(
+    saveManualAnswerGrade(
+      teacher.id,
+      overdueTask.id,
+      overdueDraft.id,
+      draftDetail.answers[0].id,
+      { score: 10, feedback: "" },
+    ),
+  );
+  await assert.rejects(getStudentSubmissionDraft(outsider.id, overdueDraft.id));
+  await assert.rejects(
+    getTeacherSubmissionForGrading(
+      otherTeacher.id,
+      overdueTask.id,
+      overdueDraft.id,
+    ),
+  );
+  const reopened = await issueAssignmentMakeup(
+    teacher.id,
+    overdueTask.id,
+    {
+      requestId: randomUUID(),
+      studentIds: [student.id],
+      expiresAt: new Date(Date.now() + 60_000),
+    },
+    context,
+  );
+  assert.equal(
+    (await getStudentAssignment(student.id, overdueTask.id)).canWrite,
+    true,
+  );
+  assert.equal(
+    (await startOrResumeAttempt(student.id, overdueTask.id, randomUUID())).id,
+    overdueDraft.id,
+  );
+  assert.equal(
+    (await getStudentSubmissionDraft(student.id, overdueDraft.id)).answers[0]
+      .textAnswer,
+    "截止前已保存",
+  );
+  assert.equal(
+    (
+      await listTeacherAssignmentSubmissions(teacher.id, overdueTask.id, {
+        status: "IN_PROGRESS",
+        page: 1,
+        pageSize: 20,
+      })
+    ).items[0].displayStatus,
+    "尚未提交",
+  );
+  await revokeAssignmentMakeup(
+    teacher.id,
+    overdueTask.id,
+    reopened.grants[0].id,
+    { reason: "回归验证撤销" },
+    context,
+  );
+  assert.equal(
+    (await getStudentSubmissionDraft(student.id, overdueDraft.id)).canWrite,
+    false,
+  );
+  await extendAssignmentDeadline(
+    teacher.id,
+    overdueTask.id,
+    {
+      requestId: randomUUID(),
+      dueAt: new Date(Date.now() + 120_000),
+    },
+    context,
+  );
+  assert.equal(
+    (await startOrResumeAttempt(student.id, overdueTask.id, randomUUID())).id,
+    overdueDraft.id,
+  );
+  await prisma.assignment.update({
+    where: { id: overdueTask.id },
+    data: { status: "CLOSED" },
+  });
+  assert.equal(
+    (await getStudentSubmissionDraft(student.id, overdueDraft.id)).canWrite,
+    false,
+  );
+  await prisma.assignment.update({
+    where: { id: overdueTask.id },
+    data: { status: "PUBLISHED", deletedAt: new Date() },
+  });
+  await assert.rejects(
+    getStudentAssignment(student.id, overdueTask.id),
+    /不存在/,
+  );
+  assert.equal(
+    (
+      await notifyAssignmentsDueSoon([
+        {
+          recipientId: student.id,
+          assignmentId: overdueTask.id,
+          assignmentTitle: "已删除任务提醒",
+          dueAt: new Date(Date.now() + 60_000),
+        },
+      ])
+    ).createdCount,
+    0,
+  );
+  await assert.rejects(
+    getStudentSubmissionDraft(student.id, overdueDraft.id),
+    /不存在/,
+  );
+  await assert.rejects(
+    startOrResumeAttempt(student.id, overdueTask.id, randomUUID()),
+    /不存在/,
+  );
+  await assert.rejects(
+    submitStudentAssignment(student.id, overdueDraft.id),
+    /不存在/,
+  );
+  await assert.rejects(
+    getTeacherSubmissionForGrading(teacher.id, overdueTask.id, overdueDraft.id),
+    /不存在/,
+  );
+  await prisma.assignment.update({
+    where: { id: overdueTask.id },
+    data: { deletedAt: null },
+  });
+  await submitStudentAssignment(student.id, overdueDraft.id);
+  const pending = await getTeacherSubmissionForGrading(
+    teacher.id,
+    overdueTask.id,
+    overdueDraft.id,
+  );
+  await saveManualAnswerGrade(
+    teacher.id,
+    overdueTask.id,
+    overdueDraft.id,
+    pending.answers[0].id,
+    { score: 90, feedback: "完成" },
+  );
+  await completeSubmissionGrading(
+    teacher.id,
+    overdueTask.id,
+    overdueDraft.id,
+    context,
+  );
+  assert.equal(
+    (await getStudentAssignment(student.id, overdueTask.id)).attempts[0].score,
+    null,
+  );
+  await prisma.assignment.update({
+    where: { id: overdueTask.id },
+    data: { dueAt: new Date(Date.now() - 1) },
+  });
+
+  // This isolated schema deliberately rejects notifications to verify atomic rollback.
+  await prisma.$executeRawUnsafe(
+    `CREATE FUNCTION reject_grade_notification() RETURNS trigger AS $$ BEGIN IF NEW.type::text = 'ASSIGNMENT_GRADED' THEN RAISE EXCEPTION 'test_notification_failure'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`,
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE TRIGGER reject_grade_notification BEFORE INSERT ON "Notification" FOR EACH ROW EXECUTE FUNCTION reject_grade_notification()`,
+  );
+  try {
+    await assert.rejects(
+      publishAssignmentResults(teacher.id, overdueTask.id, context),
+    );
+    assert.equal(
+      (
+        await prisma.submission.findUniqueOrThrow({
+          where: { id: overdueDraft.id },
+        })
+      ).status,
+      "GRADED",
+    );
+    assert.equal(
+      await prisma.notification.count({
+        where: { sourceId: overdueDraft.id, type: "ASSIGNMENT_GRADED" },
+      }),
+      0,
+    );
+  } finally {
+    await prisma.$executeRawUnsafe(
+      `DROP TRIGGER reject_grade_notification ON "Notification"`,
+    );
+    await prisma.$executeRawUnsafe(`DROP FUNCTION reject_grade_notification()`);
+  }
+  await publishAssignmentResults(teacher.id, overdueTask.id, context);
+  await publishAssignmentResults(teacher.id, overdueTask.id, context);
+  assert.equal(
+    await prisma.notification.count({
+      where: { sourceId: overdueDraft.id, type: "ASSIGNMENT_GRADED" },
+    }),
+    1,
+  );
+  await prisma.notification.deleteMany({
+    where: { sourceId: overdueDraft.id, type: "ASSIGNMENT_GRADED" },
+  });
+  await Promise.all([
+    deliverMissingAssignmentGradeNotifications(),
+    deliverMissingAssignmentGradeNotifications(),
+  ]);
+  assert.equal(
+    await prisma.notification.count({
+      where: { sourceId: overdueDraft.id, type: "ASSIGNMENT_GRADED" },
+    }),
+    1,
+  );
+  await prisma.notification.updateMany({
+    where: { sourceId: overdueDraft.id, type: "ASSIGNMENT_GRADED" },
+    data: { dismissedAt: new Date() },
+  });
+  await deliverMissingAssignmentGradeNotifications();
+  assert.equal(
+    await prisma.notification.count({
+      where: { sourceId: overdueDraft.id, type: "ASSIGNMENT_GRADED" },
+    }),
+    1,
+  );
+
+  // Legacy deleted records must be hidden through direct links as well as lists.
+  const resultsBeforeDeletion = await listStudentResults(
+    student.id,
+    studentResultsQuerySchema.parse({ pageSize: 30 }),
+  );
+  await prisma.assignment.update({
+    where: { id: draft.id },
+    data: { deletedAt: new Date() },
+  });
+  try {
+    await assert.rejects(
+      getStudentSubmissionResult(student.id, attempt.id),
+      /不存在/,
+    );
+    await assert.rejects(
+      listSubmissionAttachments(actor(student), attempt.id),
+      /不存在/,
+    );
+    await assert.rejects(
+      readSubmissionAttachment(
+        actor(teacher),
+        attempt.id,
+        retained.id,
+        context,
+      ),
+      /不存在/,
+    );
+    assert.ok(
+      !(
+        await listStudentResults(
+          student.id,
+          studentResultsQuerySchema.parse({ pageSize: 30 }),
+        )
+      ).items.some((item) => item.id === attempt.id),
+    );
+    assert.equal(
+      (
+        await listStudentResults(
+          student.id,
+          studentResultsQuerySchema.parse({ pageSize: 30 }),
+        )
+      ).pagination.total,
+      resultsBeforeDeletion.pagination.total - 1,
+    );
+  } finally {
+    await prisma.assignment.update({
+      where: { id: draft.id },
+      data: { deletedAt: null },
+    });
+  }
+  await prisma.assignment.update({
+    where: { id: overdueTask.id },
+    data: { status: "REVOKED" },
+  });
+  assert.equal(
+    (
+      await listStudentResults(
+        student.id,
+        studentResultsQuerySchema.parse({ pageSize: 30 }),
+      )
+    ).pagination.total,
+    resultsBeforeDeletion.pagination.total - 1,
+  );
+  await assert.rejects(
+    buildStudentAnalysisInput(student.id, overdueDraft.id),
+    /不存在/,
+  );
+  await prisma.assignment.update({
+    where: { id: large.id },
+    data: { deletedAt: new Date() },
+  });
+  try {
+    await assert.rejects(
+      buildStudentAnalysisInput(student.id, largeAttempt.id),
+      /不存在/,
+    );
+  } finally {
+    await prisma.assignment.update({
+      where: { id: large.id },
+      data: { deletedAt: null },
+    });
+  }
+  console.log(
+    "PASS overdue draft read-only access, teacher visibility, makeup/extension resumption, deleted-resource guards, hidden scores, atomic notification rollback, reconciliation and deduplication",
+  );
+
+  await prisma.assignment.update({
+    where: { id: large.id },
+    data: { status: "CLOSED" },
+  });
+  assert.equal(
+    (await getStudentAssignment(student.id, large.id)).canWrite,
+    false,
+  );
+  for (const status of ["COMPLETED", "CLOSED", "ARCHIVED"] as const) {
+    await prisma.classroom.update({
+      where: { id: first.id },
+      data: { status },
+    });
+    assert.equal(
+      (await getTeachingProgress(teacher.id, course.id, first.id)).readOnly,
+      true,
+    );
+    assert.equal(
+      (
+        await listTeacherCourseLearnerProfiles(teacher.id, course.id, {
+          classroomId: first.id,
+        })
+      ).items.length,
+      1,
+    );
+    const roster = await listCourseRoster(teacher.id, course.id, {
+      classroomId: first.id,
+    });
+    assert.ok(roster.items.every((row) => !row.canEdit && !row.canManage));
+    await assert.rejects(
+      mutateCourseRoster(teacher.id, course.id, {
+        action: "ADD",
+        classroomId: first.id,
+        name: "历史禁止新增",
+        studentNo: "readonly-test",
+      }),
+    );
+    await assert.rejects(
+      getTeachingProgress(otherTeacher.id, course.id, first.id),
+    );
+  }
+  console.log(
+    "PASS completed/closed/archived class progress, profiles and roster reads with write/ownership guards",
+  );
 }
 main()
   .catch((error: unknown) => {

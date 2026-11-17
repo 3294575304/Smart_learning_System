@@ -28,6 +28,42 @@ export type StudentHomeExamResult = {
   publishedSubmissionId: string | null;
 };
 
+/**
+ * 自主练习按天聚合。
+ *
+ * 练习记录来自课程级的推荐练习作答（RecommendationPracticeAnswer），口径与
+ * 教学班的作业/考试不同：按天合并为一根柱，只表达「当天正确率」与题量，
+ * 不并入成绩均分，也不参与提交率。前端需要明确标注这是练习口径。
+ *
+ * 取样口径是「最近有记录的 8 天」而不是「最近 N 天」：学生停练两三周后，
+ * 仍应看到上一次练习的痕迹，而不是一张空图。
+ */
+function shanghaiDayKey(date: Date) {
+  return new Date(date.getTime() + 8 * 3_600_000).toISOString().slice(5, 10);
+}
+function summarizePracticeDays(
+  answers: Array<{ createdAt: Date; isCorrect: boolean }>,
+) {
+  const days = new Map<string, { answered: number; correct: number }>();
+  for (const answer of answers) {
+    const key = shanghaiDayKey(answer.createdAt);
+    const day = days.get(key) ?? { answered: 0, correct: 0 };
+    day.answered += 1;
+    if (answer.isCorrect) day.correct += 1;
+    days.set(key, day);
+  }
+  return [...days.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(-8)
+    .map(([key, day]) => ({
+      id: `practice:${key}`,
+      label: key.replace("-", "/"),
+      answered: day.answered,
+      correct: day.correct,
+      rate: Math.round((day.correct / day.answered) * 100),
+    }));
+}
+
 export async function getStudentClassAnalytics(
   studentId: string,
   rawQuery: unknown,
@@ -52,60 +88,87 @@ export async function getStudentClassAnalytics(
       (!query.classroomId || x.classroom.id === query.classroomId),
   );
   const ids = visible.map((x) => x.classroom.id);
-  const [assignments, attendance, publishedExamScores] = ids.length
-    ? await Promise.all([
-        prisma.assignment.findMany({
-          where: {
-            classroomId: { in: ids },
-            deletedAt: null,
-            ...assignmentReportingWhere("ALL", now),
-            OR: [
-              { examSessionId: null },
-              {
-                status: { in: ["PUBLISHED", "CLOSED"] },
-                examSession: { cancelledAt: null, endsAt: { lte: now } },
-              },
-            ],
-          },
-          select: {
-            id: true,
-            classroomId: true,
-            title: true,
-            dueAt: true,
-            examSession: {
-              select: { id: true, type: true, endsAt: true, courseId: true },
-            },
-            submissions: {
-              where: { studentId },
-              select: {
-                id: true,
-                studentId: true,
-                attemptNumber: true,
-                status: true,
-                submittedAt: true,
-                score: true,
-                maxScore: true,
-              },
-            },
-          },
-        }),
-        prisma.attendanceRecord.findMany({
-          where: {
-            studentId,
-            session: {
+  const courseIds = [...new Set(visible.map((x) => x.course.id))];
+  const [assignments, attendance, publishedExamScores, practiceAnswers] =
+    ids.length
+      ? await Promise.all([
+          prisma.assignment.findMany({
+            where: {
               classroomId: { in: ids },
-              status: { not: "CANCELLED" },
-              startsAt: { lte: now },
+              deletedAt: null,
+              ...assignmentReportingWhere("ALL", now),
+              OR: [
+                { examSessionId: null },
+                {
+                  status: { in: ["PUBLISHED", "CLOSED"] },
+                  examSession: { cancelledAt: null, endsAt: { lte: now } },
+                },
+              ],
             },
-          },
-          select: {
-            currentStatus: true,
-            session: { select: { classroomId: true } },
-          },
-        }),
-        listPublishedExamScores(ids, studentId, now),
-      ])
-    : [[], [], []];
+            select: {
+              id: true,
+              classroomId: true,
+              title: true,
+              dueAt: true,
+              examSession: {
+                select: { id: true, type: true, endsAt: true, courseId: true },
+              },
+              submissions: {
+                where: { studentId },
+                select: {
+                  id: true,
+                  studentId: true,
+                  attemptNumber: true,
+                  status: true,
+                  submittedAt: true,
+                  score: true,
+                  maxScore: true,
+                },
+              },
+            },
+          }),
+          prisma.attendanceRecord.findMany({
+            where: {
+              studentId,
+              session: {
+                classroomId: { in: ids },
+                status: { not: "CANCELLED" },
+                startsAt: { lte: now },
+              },
+            },
+            select: {
+              currentStatus: true,
+              session: { select: { classroomId: true } },
+            },
+          }),
+          listPublishedExamScores(ids, studentId, now),
+          prisma.recommendationPracticeAnswer.findMany({
+            where: {
+              createdAt: { lte: now },
+              recommendation: {
+                studentId,
+                courseCycle: { is: { courseId: { in: courseIds } } },
+              },
+            },
+            select: {
+              createdAt: true,
+              isCorrect: true,
+              recommendation: {
+                select: { courseCycle: { select: { courseId: true } } },
+              },
+            },
+            orderBy: { createdAt: "asc" },
+          }),
+        ])
+      : [[], [], [], []];
+  const practiceByCourse = new Map<string, typeof practiceAnswers>();
+  for (const answer of practiceAnswers) {
+    const courseId = answer.recommendation.courseCycle?.courseId;
+    if (!courseId) continue;
+    const list = practiceByCourse.get(courseId) ?? [];
+    list.push(answer);
+    practiceByCourse.set(courseId, list);
+  }
   const examResults: StudentHomeExamResult[] = [];
   const examScores: number[] = [];
   const classes = visible.map((context) => {
@@ -213,6 +276,49 @@ export async function getStudentClassAnalytics(
       ...graded.map((item) => item.percentage ?? 0),
       ...gradeOnlyScored.map((item) => item.percentage),
     ];
+    /**
+     * 成绩序列先合并、再按口径截取。
+     *
+     * 混在一起截取最近 8 项时，连续 8 份新作业会把已有考试挤出样本，
+     * 学生在「考试」视图里会看到空图并误以为没有考试。
+     * 这里保留一份完整序列（按时间升序），全部 / 作业 / 考试各自取最近 8 项。
+     * 只做内存分组，不额外查询。
+     */
+    const scoreTimeline = graded
+      .filter((x) => x.submission)
+      .flatMap((x) =>
+        x.submission && x.percentage !== null
+          ? [
+              {
+                id: x.submission.id,
+                title: x.assignment.title,
+                percentage: x.percentage,
+                submittedAt: x.submission.submittedAt,
+                kind: x.assignment.examSession?.type ?? "ASSIGNMENT",
+                href: x.grade
+                  ? `/student/results?view=course&courseId=${x.grade.courseId}&classroomId=${x.grade.classroomId}`
+                  : `/student/submissions/${x.submission.id}/result`,
+              },
+            ]
+          : [],
+      )
+      .concat(
+        gradeOnlyScored.map(({ item, percentage }) => ({
+          id: `grade:${item.id}`,
+          title: item.title,
+          percentage,
+          submittedAt: item.publishedAt,
+          kind: item.type,
+          href: `/student/results?view=course&courseId=${item.courseId}&classroomId=${item.classroomId}`,
+        })),
+      )
+      .sort(
+        (a, b) =>
+          (a.submittedAt?.getTime() ?? 0) - (b.submittedAt?.getTime() ?? 0) ||
+          a.id.localeCompare(b.id),
+      );
+    const isExamKind = (kind: string) => kind !== "ASSIGNMENT";
+    const lastEight = <T>(items: T[]) => items.slice(-8);
     const records = attendance.filter(
       (x) => x.session.classroomId === context.classroom.id,
     );
@@ -241,47 +347,24 @@ export async function getStudentClassAnalytics(
       publishedCount: rows.filter(
         (x) => x.submission && (x.submission.status === "PUBLISHED" || x.grade),
       ).length,
-      scoreHistory: graded
-        .filter((x) => x.submission)
-        .sort(
-          (a, b) =>
-            (b.submission?.submittedAt?.getTime() ?? 0) -
-              (a.submission?.submittedAt?.getTime() ?? 0) ||
-            a.assignment.id.localeCompare(b.assignment.id),
-        )
-        .slice(0, 8)
-        .reverse()
-        .flatMap((x) =>
-          x.submission && x.percentage !== null
-            ? [
-                {
-                  id: x.submission.id,
-                  title: x.assignment.title,
-                  percentage: x.percentage,
-                  submittedAt: x.submission.submittedAt,
-                  kind: x.assignment.examSession?.type ?? "ASSIGNMENT",
-                  href: x.grade
-                    ? `/student/results?view=course&courseId=${x.grade.courseId}&classroomId=${x.grade.classroomId}`
-                    : `/student/submissions/${x.submission.id}/result`,
-                },
-              ]
-            : [],
-        )
-        .concat(
-          gradeOnlyScored.map(({ item, percentage }) => ({
-            id: `grade:${item.id}`,
-            title: item.title,
-            percentage,
-            submittedAt: item.publishedAt,
-            kind: item.type,
-            href: `/student/results?view=course&courseId=${item.courseId}&classroomId=${item.classroomId}`,
-          })),
-        )
-        .sort(
-          (a, b) =>
-            (a.submittedAt?.getTime() ?? 0) - (b.submittedAt?.getTime() ?? 0),
-        )
-        .slice(-8),
+      scoreHistory: lastEight(scoreTimeline),
+      /*
+        按口径分组供页面切换使用：全部为混合最近 8 项，
+        作业 / 考试各自保留最近 8 项，避免互相挤出样本。
+      */
+      scoreHistoryByKind: {
+        assignment: lastEight(
+          scoreTimeline.filter((item) => !isExamKind(item.kind)),
+        ),
+        exam: lastEight(scoreTimeline.filter((item) => isExamKind(item.kind))),
+      },
+      /*
+        练习口径独立：课程级、按天聚合、不计入均分与提交率。
+        没有记录的课程返回空数组，由图表给出空态，不伪造 0 分。
+      */
+      practiceHistory: summarizePracticeDays(
+        practiceByCourse.get(context.course.id) ?? [],
+      ),
       awaitingRelease: rows.filter(
         (x) => x.submission && x.submission.status !== "PUBLISHED" && !x.grade,
       ).length,

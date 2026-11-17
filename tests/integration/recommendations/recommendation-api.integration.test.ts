@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -32,9 +32,12 @@ async function availablePort(): Promise<number> {
 }
 
 async function waitForServer(baseUrl: string, output: string[]): Promise<void> {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${baseUrl}/login`);
+      const response = await fetch(`${baseUrl}/login`, {
+        signal: AbortSignal.timeout(Math.min(90_000, deadline - Date.now())),
+      });
       if (response.ok) return;
     } catch {
       // The development server is still starting.
@@ -46,6 +49,13 @@ async function waitForServer(baseUrl: string, output: string[]): Promise<void> {
 
 async function stopServer(server: ChildProcess): Promise<void> {
   if (server.exitCode !== null) return;
+  if (process.platform === "win32" && server.pid) {
+    spawnSync("taskkill", ["/PID", String(server.pid), "/T", "/F"], {
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    return;
+  }
   server.kill();
   await Promise.race([
     once(server, "exit"),
@@ -87,12 +97,26 @@ test("authenticated API executes through service and repository against PostgreS
   const port = await availablePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const nextCli = resolve("node_modules/next/dist/bin/next");
+  const productionDist = process.env.INTEGRATION_NEXT_DIST;
   const server = spawn(
     process.execPath,
-    [nextCli, "dev", "--hostname", "127.0.0.1", "--port", String(port)],
+    [
+      nextCli,
+      productionDist ? "start" : "dev",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      String(port),
+    ],
     {
       cwd: process.cwd(),
-      env: { ...process.env, NODE_ENV: "development" },
+      env: {
+        ...process.env,
+        NODE_ENV: productionDist ? "production" : "development",
+        NEXT_DIST_DIR:
+          productionDist ??
+          `.data/recommendation-api-${process.env.RECOMMENDATION_INTEGRATION_SCHEMA}`,
+      },
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     },

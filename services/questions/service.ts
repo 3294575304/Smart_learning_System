@@ -520,16 +520,22 @@ export async function listTeacherQuestions(
         }
       : {}),
   };
-  const [total, records] = await prisma.$transaction([
-    prisma.question.count({ where }),
-    prisma.question.findMany({
-      where,
-      include: questionInclude,
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-    }),
-  ]);
+  const { total, records, page, totalPages } = await prisma.$transaction(
+    async (transaction) => {
+      const total = await transaction.question.count({ where });
+      const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
+      const page = Math.min(query.page, totalPages);
+      const records = await transaction.question.findMany({
+        where,
+        include: questionInclude,
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        skip: (page - 1) * query.pageSize,
+        take: query.pageSize,
+      });
+      return { total, records, page, totalPages };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+  );
 
   const courseBindings = query.courseId
     ? await prisma.questionKnowledgeGraphBinding.findMany({
@@ -602,10 +608,10 @@ export async function listTeacherQuestions(
         : {}),
     })),
     pagination: {
-      page: query.page,
+      page,
       pageSize: query.pageSize,
       total,
-      totalPages: Math.ceil(total / query.pageSize),
+      totalPages,
     },
   };
 }

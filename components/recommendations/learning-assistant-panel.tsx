@@ -247,7 +247,7 @@ function LearningAssistantContent({
     );
   return (
     <section
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+      className="st-practice-assistant rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
       id="learning-assistant-conversation"
       aria-label="AI 课程学习助手"
       aria-busy={pending}

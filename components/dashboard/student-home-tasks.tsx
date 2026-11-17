@@ -53,7 +53,7 @@ function PendingTaskDistribution({
     >
       <span
         aria-hidden="true"
-        className="bg-card grid size-11 place-items-center rounded-full text-lg font-semibold text-neutral-950 tabular-nums"
+        className="bg-card text-ink grid size-11 place-items-center rounded-full text-lg font-semibold tabular-nums"
       >
         {total}
       </span>
@@ -72,6 +72,10 @@ export function StudentHomeTasks({
 }) {
   const scopedHref = (path: string) =>
     scope ? `${path}?${new URLSearchParams(scope)}` : path;
+  // 练习入口还要带 view=generate，不能直接复用 scopedHref 的单问号拼接。
+  const practiceHref = scope
+    ? `/student/recommendations?${new URLSearchParams({ ...scope, view: "generate" })}`
+    : "/student/recommendations?view=generate";
   const [kind, setKind] = useState<StudentTaskKind | "all">("all");
   const items = overview.pendingItems.filter(
     (item) => kind === "all" || item.kind === kind,
@@ -80,16 +84,16 @@ export function StudentHomeTasks({
   return (
     <section
       aria-labelledby="pending-tasks-heading"
-      className="border-border bg-card flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5"
+      className="workspace-panel border-border bg-card flex min-w-0 flex-col rounded-[1.25rem] border p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2
           id="pending-tasks-heading"
-          className={`font-semibold text-neutral-950 ${dashboard ? "text-xl" : "text-base"}`}
+          className={`text-ink font-semibold ${dashboard ? "text-xl" : "text-base"}`}
         >
           我的待办{" "}
           {((scope && !dashboard) || overview.total > 0) && (
-            <span className="text-sm font-normal text-neutral-600">
+            <span className="text-ink-soft text-sm font-normal">
               {dashboard ? "· " : ""}
               {overview.total} 项
             </span>
@@ -119,14 +123,14 @@ export function StudentHomeTasks({
               layout="home"
             />
           ) : (
-            <p className="border-border border-t py-3 text-sm text-neutral-600">
+            <p className="border-border text-ink-soft border-t py-3 text-sm">
               此类暂无待办
             </p>
           )}
         </div>
       )}
       {dashboard && items.length > 5 && (
-        <p className="mt-2 text-xs text-neutral-600">
+        <p className="text-ink-soft mt-2 text-xs">
           其余 {items.length - 5} 项可在全部任务中查看。
         </p>
       )}
@@ -160,7 +164,7 @@ export function StudentHomeTasks({
                 aria-hidden="true"
                 className="size-5 shrink-0 text-emerald-700"
               />
-              <p className="text-sm font-medium text-neutral-800">
+              <p className="text-ink text-sm font-medium">
                 暂无待办，当前没有需要处理的考试、作业、签到或问卷
               </p>
               <StudentPageLink
@@ -204,7 +208,7 @@ export function StudentHomeTasks({
                   type="button"
                   aria-pressed={kind === filter.id}
                   onClick={() => setKind(filter.id)}
-                  className={`min-h-10 rounded-md border px-3 text-sm font-medium ${FOCUS_RING} ${kind === filter.id ? "border-brand bg-brand text-white" : "border-border bg-card hover:bg-muted text-neutral-700"}`}
+                  className={`min-h-10 rounded-md border px-3 text-sm font-medium ${FOCUS_RING} ${kind === filter.id ? "border-brand bg-brand text-white" : "border-border bg-card hover:bg-muted text-ink-body"}`}
                 >
                   {!scope && filter.id !== "all" && (
                     <span
@@ -245,18 +249,36 @@ export function StudentHomeTasks({
               showContext={!scope}
             />
           ) : (
-            <div className="bg-muted/65 flex items-center gap-2 rounded-xl p-3">
-              <CheckCircle2
-                aria-hidden="true"
-                className="size-5 shrink-0 text-emerald-700"
-              />
-              <p className="text-sm font-medium text-neutral-800">
-                {overview.total === 0 ? "暂无待办" : "此类暂无待办"}
-              </p>
+            <div className="bg-muted/65 rounded-xl p-3">
+              <div className="flex items-start gap-2">
+                <CheckCircle2
+                  aria-hidden="true"
+                  className="mt-0.5 size-5 shrink-0 text-emerald-700"
+                />
+                <p className="text-ink text-sm font-medium">
+                  {overview.total === 0
+                    ? "本课程暂无待办：作业、考试、签到、问卷都已处理完"
+                    : "此类暂无待办"}
+                </p>
+              </div>
+              {/*
+                带课程上下文时，空态原来只有一行"暂无待办"就结束了：
+                完整引导分支的条件是 !scope，学生从课程里进来永远看不到出口。
+                这里补一条下一步，避免空态变成死胡同。
+              */}
+              {scope && overview.total === 0 ? (
+                <StudentPageLink
+                  href={practiceHref}
+                  className={`text-brand-strong mt-1 inline-flex min-h-10 items-center gap-1 rounded-md text-sm font-medium ${FOCUS_RING}`}
+                >
+                  去自主练习
+                  <ArrowRight aria-hidden="true" className="size-4" />
+                </StudentPageLink>
+              ) : null}
             </div>
           )}
           {items.length > 5 && (
-            <p className="mt-3 text-xs text-neutral-600">
+            <p className="text-ink-soft mt-3 text-xs">
               其余 {items.length - 5} 项可在
               {scope ? "课程记录" : "全部任务"}中查看。
             </p>
@@ -266,18 +288,18 @@ export function StudentHomeTasks({
       {overview.scheduledSurveys.length > 0 && (
         <details className="border-border mt-4 border-t pt-3">
           <summary
-            className={`cursor-pointer rounded-md text-sm font-medium text-neutral-700 ${FOCUS_RING_TIGHT}`}
+            className={`text-ink-body cursor-pointer rounded-md text-sm font-medium ${FOCUS_RING_TIGHT}`}
           >
             问卷开放预告 · {overview.scheduledSurveys.length} 份
           </summary>
-          <p className="mt-2 text-xs text-neutral-600">
+          <p className="text-ink-soft mt-2 text-xs">
             暂不计入待办，问卷不计入成绩。
           </p>
           <ul className="mt-2 space-y-2">
             {overview.scheduledSurveys.slice(0, 2).map((survey) => (
               <li
                 key={survey.id}
-                className="bg-muted/65 rounded-md p-3 text-xs text-neutral-600"
+                className="bg-muted/65 text-ink-soft rounded-md p-3 text-xs"
               >
                 <StudentPageLink
                   href={survey.href}

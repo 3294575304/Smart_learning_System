@@ -34,7 +34,7 @@ export function LearnerProfileDetail({
   const mastery = profile.dimensions.objectiveMastery as Dimension;
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border bg-white p-5">
+      <section className="border-line bg-card rounded-xl border p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-semibold">
@@ -49,7 +49,7 @@ export function LearnerProfileDetail({
             </p>
           </div>
         </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <DimensionCard
             detail={
               attendance.rate === null || attendance.rate === undefined
@@ -58,24 +58,6 @@ export function LearnerProfileDetail({
             }
             label={studentView ? "我的出勤" : "出勤"}
             state={attendance.evidenceState}
-          />
-          <DimensionCard
-            detail={
-              activity.sourceStatus === "NOT_COLLECTED"
-                ? "尚未接入画像计算，不代表没有学习活动"
-                : "—"
-            }
-            label="活跃度"
-            state={activity.evidenceState}
-          />
-          <DimensionCard
-            detail={
-              reflection.sourceStatus === "NOT_COLLECTED"
-                ? "尚未接入画像计算；已保存反思仍独立保留"
-                : "—"
-            }
-            label="自我反思"
-            state={reflection.evidenceState}
           />
           <DimensionCard
             detail={
@@ -88,18 +70,54 @@ export function LearnerProfileDetail({
             state={mastery.evidenceState}
           />
         </div>
+        {/*
+          活跃度和自我反思目前恒为 NOT_COLLECTED，两个等宽格子永远在展示"没数据"，
+          占了四格版式的一半。合并成一行说明：既不补造图形，也不让空占位抢注意力。
+          这两项接入画像计算后，把下面两个 DimensionCard 放回上面的两列栅格即可。
+        */}
+        <p className="text-ink-soft mt-3 text-xs leading-5">
+          知识点掌握度按已公布评分证据的累计得分与满分计算，再汇总达到证据门槛的概念。课程总评按考核项目权重计算；两项指标采用各自的统计口径。
+        </p>
+        <details className="border-line mt-3 rounded-lg border px-3 py-2">
+          <summary className="text-ink-body min-h-9 cursor-pointer content-center rounded-md text-sm font-medium">
+            活跃度与自我反思尚未接入画像计算
+            <span className="text-ink-soft ml-1 font-normal">
+              （不代表没有学习活动）
+            </span>
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <DimensionCard
+              detail={
+                activity.sourceStatus === "NOT_COLLECTED"
+                  ? "尚未接入画像计算，不代表没有学习活动"
+                  : "—"
+              }
+              label="活跃度"
+              state={activity.evidenceState}
+            />
+            <DimensionCard
+              detail={
+                reflection.sourceStatus === "NOT_COLLECTED"
+                  ? "尚未接入画像计算；已保存反思仍独立保留"
+                  : "—"
+              }
+              label="自我反思"
+              state={reflection.evidenceState}
+            />
+          </div>
+        </details>
       </section>
 
       <figure
-        className="rounded-xl border bg-white p-5"
+        className="border-line bg-card rounded-xl border p-5"
         aria-label="各章节熟练度与评估覆盖图"
       >
         <figcaption className="font-semibold">章节熟练度与评估覆盖</figcaption>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="text-ink-soft mt-1 text-sm">
           熟练度取本章已有评分知识点的平均值，仅作参考；下方覆盖条按本章知识点总数展示证据状态。未评估不计为零分。
         </p>
         <div
-          className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-600"
+          className="text-ink-soft mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs"
           aria-label="评估覆盖图例"
         >
           <span className="inline-flex items-center gap-1.5">
@@ -162,9 +180,9 @@ export function LearnerProfileDetail({
                     {chapter.name}
                   </span>
                   <div className="min-w-0">
-                    <div className="mb-1 flex items-center justify-between gap-2 text-xs text-slate-500">
+                    <div className="text-ink-soft mb-1 flex items-center justify-between gap-2 text-xs">
                       <span>参考熟练度</span>
-                      <strong className="text-sm text-slate-800">
+                      <strong className="text-ink text-sm">
                         {average === null ? "未评估" : `${average}%`}
                       </strong>
                     </div>
@@ -189,7 +207,7 @@ export function LearnerProfileDetail({
                   </a>
                 </div>
                 <div className="mt-3">
-                  <div className="mb-1 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-slate-500">
+                  <div className="text-ink-soft mb-1 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs">
                     <span>证据覆盖</span>
                     <span>
                       有证据 {stable + insufficient}/{points.length} · 充分{" "}
@@ -231,9 +249,9 @@ export function LearnerProfileDetail({
         </div>
       </figure>
 
-      <section className="rounded-xl border bg-white p-5">
+      <section className="border-line bg-card rounded-xl border p-5">
         <h2 className="font-semibold">章节掌握与证据</h2>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="text-ink-soft mt-1 text-sm">
           按课程章节查看，展开了解各知识点熟练度。无证据不计为零分。
         </p>
         <div className="mt-5 space-y-3">
@@ -269,7 +287,7 @@ export function LearnerProfileDetail({
                 <summary className="cursor-pointer p-4">
                   <div className="inline-flex w-[calc(100%-1.5rem)] flex-wrap items-center justify-between gap-2 align-middle">
                     <h3 className="font-medium">{chapter.name}</h3>
-                    <span className="text-xs text-slate-500">
+                    <span className="text-ink-soft text-xs">
                       有评分 {scored.length}/{concepts.length} ·{" "}
                       {average === null ? "尚未评估" : `参考熟练度 ${average}%`}
                     </span>
@@ -315,7 +333,7 @@ export function LearnerProfileDetail({
                           style={{ width: `${concept.masteryScore ?? 0}%` }}
                         />
                       </div>
-                      <p className="mt-2 text-xs text-slate-500">
+                      <p className="text-ink-soft mt-2 text-xs">
                         {evidenceLabels[concept.evidenceState]} ·{" "}
                         {concept.evidenceCount} 条评分证据 · 置信度{" "}
                         {Math.round(concept.confidence * 100)}%
@@ -346,7 +364,7 @@ export function LearnerProfileDetail({
                                       {item.score}/{item.maxScore} 分
                                     </span>
                                   </div>
-                                  <p className="mt-1 text-xs text-slate-500">
+                                  <p className="text-ink-soft mt-1 text-xs">
                                     {item.gradedAt.toLocaleString("zh-CN")} ·
                                     评分修订 {item.revision} · 图谱版本{" "}
                                     {item.sourceGraphVersionNumber ??
@@ -365,17 +383,17 @@ export function LearnerProfileDetail({
             );
           })}
           {!profile.chapters.length && (
-            <p className="py-6 text-center text-sm text-slate-500">
+            <p className="text-ink-soft py-6 text-center text-sm">
               暂无正式章节结构，请等待教师发布课程图谱。
             </p>
           )}
         </div>
-        <p className="mt-4 text-xs text-slate-500">
+        <p className="text-ink-soft mt-4 text-xs">
           章节熟练度按已有评分知识点取平均，仅供学习参考；证据不足时不形成稳定结论。
         </p>
       </section>
 
-      <details className="text-xs text-slate-500">
+      <details className="text-ink-soft text-xs">
         <summary className="cursor-pointer">查看画像版本信息</summary>
         <p className="mt-2 break-all">
           规则版本 {profile.ruleVersion} · 图谱版本{" "}

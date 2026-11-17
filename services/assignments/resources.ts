@@ -61,7 +61,7 @@ async function resourceAccess(actor: Actor, assignmentId: string) {
       ...(actor.role === Role.TEACHER
         ? { teacherId: actor.id }
         : {
-            status: { in: ["PUBLISHED", "CLOSED"] },
+            status: { in: ["PUBLISHED", "CLOSED", "ARCHIVED"] },
             publishedAt: { lte: new Date() },
             classroom: {
               memberships: { some: { studentId: actor.id, status: "ACTIVE" } },

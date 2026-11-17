@@ -7,7 +7,11 @@ export async function finalizeExpiredExams(now = new Date()) {
   const due = await prisma.submission.findMany({
     where: {
       status: "IN_PROGRESS",
-      assignment: { examSession: { cancelledAt: null, endsAt: { lte: now } } },
+      assignment: {
+        deletedAt: null,
+        status: { in: ["PUBLISHED", "CLOSED"] },
+        examSession: { cancelledAt: null, endsAt: { lte: now } },
+      },
     },
     select: { id: true, studentId: true },
     take: 100,

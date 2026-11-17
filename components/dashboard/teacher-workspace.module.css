@@ -1,16 +1,16 @@
 .card {
-  border-color: #e2e8f0;
-  border-radius: 16px;
-  box-shadow: 0 2px 8px rgb(15 23 42 / 3%);
+  border-color: var(--tt-line, #dfe6e9);
+  border-radius: 4px;
+  box-shadow: none;
 }
 
 .heading {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #1e293b;
-  font-size: 15px;
-  line-height: 24px;
+  color: var(--tt-ink, #152d3e);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .heading::before {
@@ -18,26 +18,30 @@
   flex: 0 0 3px;
   height: 14px;
   border-radius: 4px;
-  background: #0d9488;
+  background: var(--tt-brand, #328f96);
+}
+
+.todoHeading::before {
+  background: var(--color-rose-600, #a83239);
 }
 
 .toolbar {
-  border-color: #cfe5e2;
-  border-radius: 16px;
-  background: linear-gradient(110deg, #f0fdfa, #fff 50%);
-  box-shadow: 0 2px 8px rgb(15 23 42 / 3%);
+  border-color: var(--tt-line, #dfe6e9);
+  border-radius: 4px;
+  background: var(--card);
+  box-shadow: none;
 }
 
 .scrollArea {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 #f8fafc;
+  scrollbar-color: #c7d3d9 #f8fafb;
   overscroll-behavior: contain;
 }
 
 .shortcut {
-  border-color: #e8edf3;
-  background: #fff;
-  border-radius: 12px;
+  border-color: var(--tt-line-2, #eff3f5);
+  background: var(--card);
+  border-radius: 4px;
   transition:
     background-color 150ms,
     border-color 150ms,
@@ -45,23 +49,33 @@
 }
 
 .shortcut:hover {
-  border-color: #99d4cc;
-  background: #f4fbf9;
-  box-shadow: 0 3px 10px rgb(13 148 136 / 7%);
+  border-color: var(--tt-line);
+  background: var(--card);
+  box-shadow: none;
+}
+
+/* 所有快捷入口使用一致的图标底色，交互强调交给焦点环与箭头。 */
+.shortcutIcon {
+  background: var(--surface);
+  color: #496b50;
+  box-shadow: none;
+  --color-sky-50: var(--tt-brand-soft);
+  --color-sky-100: var(--tt-brand-soft);
+  --color-sky-700: var(--tt-brand-ink);
 }
 
 .metric {
-  border-color: #edf1f5;
-  border-radius: 12px;
-  background: linear-gradient(145deg, #f8fafc, #fff);
+  border-color: var(--tt-line-2, #eff3f5);
+  border-radius: 4px;
+  background: var(--card);
   transition:
     border-color 150ms,
     background-color 150ms;
 }
 
 .metric:hover {
-  border-color: #a7d9d2;
-  background: #f0fdfa;
+  border-color: var(--tt-brand);
+  background: var(--tt-brand-soft, #eaf6f4);
 }
 
 @media (prefers-reduced-motion: reduce) {
