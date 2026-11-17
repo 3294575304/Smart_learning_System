@@ -48,6 +48,9 @@ test("教师图谱提供可平移缩放的图形视图和文字图例", async ()
   assert.match(source, /PREREQUISITE/u);
   assert.match(source, /RELATED/u);
   assert.match(source, /linkCurvature=\{0\}/u, "所有关系保持直线");
+  assert.match(source, /aria-pressed=\{breathing\}/u);
+  assert.match(source, /aria-pressed=\{autoRotate\}/u);
+  assert.match(source, /呼吸与自动旋转可独立开启/u);
 });
 
 test("学生只查看有成员权限课程的正式图谱并复用图谱画布", async () => {
