@@ -1881,7 +1881,7 @@ export function AssignmentForm({
               )}
             </button>
             <button
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-sky-700 px-4 text-sm text-white transition hover:bg-sky-800 active:scale-[0.98] active:bg-sky-800 disabled:opacity-50"
+              className="tt-btn-cta inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-sky-700 px-4 text-sm text-white transition hover:bg-sky-800 active:scale-[0.98] active:bg-sky-800 disabled:opacity-50"
               disabled={busy}
               onClick={form.handleSubmit((v) => persist(v, true))}
               type="button"
@@ -2039,7 +2039,7 @@ export function AssignmentForm({
               </button>
               <button
                 type="button"
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-sky-700 px-4 text-sm text-white transition hover:bg-sky-800 active:scale-[0.98] active:bg-sky-800 disabled:opacity-50"
+                className="tt-btn-cta inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-sky-700 px-4 text-sm text-white transition hover:bg-sky-800 active:scale-[0.98] active:bg-sky-800 disabled:opacity-50"
                 disabled={busy}
                 onClick={() => void execute(confirmation)}
               >

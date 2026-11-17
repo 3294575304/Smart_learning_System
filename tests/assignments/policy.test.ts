@@ -13,7 +13,45 @@ import {
   assertAssignmentAcceptsWork,
   assertCanStartAttempt,
   assertTeacherOwnsClassroom,
+  assertAssignmentIsVisible,
 } from "../../services/assignments/policy";
+
+test("已关闭及归档作业可读，继续拒绝写入、草稿和预约未开放内容", () => {
+  const now = new Date();
+  for (const status of [AssignmentStatus.CLOSED, AssignmentStatus.ARCHIVED]) {
+    const assignment = {
+      status,
+      publishedAt: new Date(now.getTime() - 1000),
+      dueAt: new Date(now.getTime() + 10000),
+    };
+    assert.doesNotThrow(() => assertAssignmentIsVisible(assignment, now, true));
+    assert.throws(
+      () => assertAssignmentAcceptsWork(assignment, now),
+      ResourceNotFoundError,
+    );
+  }
+  assert.throws(
+    () =>
+      assertAssignmentIsVisible(
+        { status: AssignmentStatus.DRAFT, publishedAt: now },
+        now,
+        true,
+      ),
+    ResourceNotFoundError,
+  );
+  assert.throws(
+    () =>
+      assertAssignmentIsVisible(
+        {
+          status: AssignmentStatus.CLOSED,
+          publishedAt: new Date(now.getTime() + 1000),
+        },
+        now,
+        true,
+      ),
+    ResourceNotFoundError,
+  );
+});
 
 test("teacher may only publish to an owned active classroom", () => {
   assert.doesNotThrow(() =>

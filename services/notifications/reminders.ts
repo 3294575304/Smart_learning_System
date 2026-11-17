@@ -47,6 +47,7 @@ export async function runAssignmentDueReminders(
     const assignments = await prisma.assignment.findMany({
       where: {
         status: AssignmentStatus.PUBLISHED,
+        deletedAt: null,
         publishedAt: { lte: now },
         dueAt: { gt: now, lte: dueBefore },
         classroom: { status: ClassroomStatus.ACTIVE },
@@ -107,6 +108,7 @@ export async function runAssignmentDueReminders(
         student: { role: "STUDENT", status: "ACTIVE" },
         assignment: {
           status: "PUBLISHED",
+          deletedAt: null,
           publishedAt: { lte: now },
           classroom: { status: "ACTIVE" },
           submissions: { none: publishedResultsWhere },

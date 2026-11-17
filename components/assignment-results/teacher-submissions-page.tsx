@@ -33,6 +33,7 @@ const filters: Array<{
   { label: "全部", status: undefined },
   { label: "待批改", status: SubmissionStatus.PENDING_REVIEW },
   { label: "已批改", status: SubmissionStatus.GRADED },
+  { label: "未提交草稿", status: SubmissionStatus.IN_PROGRESS },
 ];
 
 function pageHref(
@@ -87,11 +88,8 @@ export default async function TeacherSubmissionsPage({
       assignmentId.data,
       query.data,
     );
-    if (
-      result.pagination.totalPages > 0 &&
-      result.pagination.page > result.pagination.totalPages
-    ) {
-      notFound();
+    if (query.data.page !== result.pagination.page) {
+      redirect(pageHref(base, query.data, result.pagination.page));
     }
     const publication = await getAssignmentPublicationState(
       teacher.id,
@@ -134,50 +132,60 @@ export default async function TeacherSubmissionsPage({
           active="submissions"
           examSessionId={examSessionId}
         />
-        {result.totalSubmitted > 0 ? (
+        {result.totalSubmitted > 0 || !examSessionId ? (
           <nav
             aria-label="提交状态筛选"
             className="flex flex-wrap items-center gap-2"
           >
             <span className="mr-1 text-xs text-slate-500">提交状态</span>
-            {filters.map((filter) => {
-              const active = filter.status === query.data.status;
-              const href = filter.status
-                ? `${base}/submissions?status=${filter.status}`
-                : `${base}/submissions`;
-              return (
-                <Link
-                  aria-current={active ? "page" : undefined}
-                  className={
-                    active
-                      ? "rounded-full bg-sky-700 px-4 py-2 text-sm text-white"
-                      : "rounded-full border bg-white px-4 py-2 text-sm"
-                  }
-                  href={href}
-                  key={filter.label}
-                >
-                  {filter.label}
-                </Link>
-              );
-            })}
+            {filters
+              .filter(
+                (filter) =>
+                  !examSessionId ||
+                  filter.status !== SubmissionStatus.IN_PROGRESS,
+              )
+              .map((filter) => {
+                const active = filter.status === query.data.status;
+                const href = filter.status
+                  ? `${base}/submissions?status=${filter.status}`
+                  : `${base}/submissions`;
+                return (
+                  <Link
+                    aria-current={active ? "page" : undefined}
+                    className={
+                      active
+                        ? "rounded-full bg-sky-700 px-4 py-2 text-sm text-white"
+                        : "rounded-full border bg-white px-4 py-2 text-sm"
+                    }
+                    href={href}
+                    key={filter.label}
+                  >
+                    {filter.label}
+                  </Link>
+                );
+              })}
           </nav>
         ) : null}
 
         {result.items.length === 0 ? (
           <div className="rounded-xl border border-dashed bg-white p-8 text-center">
             <h2 className="font-medium text-slate-800">
-              {result.totalSubmitted === 0
-                ? examSessionId
-                  ? "学生尚未交卷"
-                  : "学生尚未提交作业"
-                : "该状态下暂无提交记录"}
+              {query.data.status === SubmissionStatus.IN_PROGRESS
+                ? "暂无未提交草稿"
+                : result.totalSubmitted === 0
+                  ? examSessionId
+                    ? "学生尚未交卷"
+                    : "学生尚未提交作业"
+                  : "该状态下暂无提交记录"}
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              {result.totalSubmitted === 0
-                ? examSessionId
-                  ? "交卷后可在这里查看答卷与批改记录。"
-                  : "这里展示学生提交后的作答与批改记录。作业题目和任务要求可在“作业内容”中查看。"
-                : "可切换其他提交状态，或查看全部提交记录。"}
+              {query.data.status === SubmissionStatus.IN_PROGRESS
+                ? "这里保留学生已保存、尚未提交的作答，截止后仍可只读查看。草稿不计入已交数量和成绩。"
+                : result.totalSubmitted === 0
+                  ? examSessionId
+                    ? "交卷后可在这里查看答卷与批改记录。"
+                    : "这里展示学生提交后的作答与批改记录。作业题目和任务要求可在“作业内容”中查看。"
+                  : "可切换其他提交状态，或查看全部提交记录。"}
             </p>
             <Link
               className="mt-4 inline-flex rounded-lg border border-sky-200 px-4 py-2 text-sm text-sky-800"

@@ -1,5 +1,7 @@
 import type { RecommendationDetailView } from "@/services/recommendations/types";
 import { QuestionText } from "@/components/assignments/question-text";
+import { AnswerQuestionHeading } from "@/components/assignments/student-answer-workspace";
+import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import { PracticeChoiceReview } from "./practice-choice-review";
 import {
   practiceDraftFilled,
@@ -40,6 +42,17 @@ export function PracticeHistoryQuestion({
           : "错误"
         : draft.value
     : null;
+  const title = item.title || "题目标题未保存";
+  const status = (
+    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+      {item.status === "COMPLETED"
+        ? "已完成"
+        : item.status === "EXPIRED"
+          ? "已过期"
+          : "已结束"}{" "}
+      · 只读
+    </span>
+  );
   return (
     <article
       className={
@@ -48,19 +61,29 @@ export function PracticeHistoryQuestion({
       }
       aria-label="历史题目只读回看"
     >
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="min-w-0 flex-1 font-semibold [overflow-wrap:anywhere] break-words">
-          {item.title || "题目标题未保存"}
-        </h2>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-          {item.status === "COMPLETED"
-            ? "已完成"
-            : item.status === "EXPIRED"
-              ? "已过期"
-              : "已结束"}{" "}
-          · 只读
-        </span>
-      </header>
+      {embedded ? (
+        <AnswerQuestionHeading
+          title={title}
+          type={QUESTION_TYPE_LABELS[item.type]}
+          points={item.assignedPoints}
+          detail={
+            item.knowledgePoints.length > 0 && (
+              <span className="[overflow-wrap:anywhere]">
+                知识点 ·{" "}
+                {item.knowledgePoints.map((point) => point.name).join("、")}
+              </span>
+            )
+          }
+          actions={status}
+        />
+      ) : (
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <h2 className="min-w-0 flex-1 font-semibold [overflow-wrap:anywhere] break-words">
+            {title}
+          </h2>
+          {status}
+        </header>
+      )}
       <QuestionText
         text={item.content || "未保存题目内容，暂时无法回看题干。"}
       />

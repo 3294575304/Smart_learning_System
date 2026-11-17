@@ -64,7 +64,7 @@ function FavoriteRow({
     onChange();
   }
   return (
-    <article className="space-y-2 px-4 py-4 transition-colors hover:bg-slate-50/60 sm:px-5">
+    <article className="st-favorite-row space-y-2 px-4 py-4 transition-colors hover:bg-slate-50/60 sm:px-5">
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 basis-full sm:flex-1 sm:basis-0">
           <p className="text-xs text-slate-500">
@@ -255,7 +255,7 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
           主动收藏想复习的题目；取消收藏不影响错题与掌握状态，备注仅自己可见。
         </p>
       </header>
-      <div className="grid max-w-4xl gap-3 rounded-xl border border-sky-100 bg-white p-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+      <div className="st-favorite-filter st-study-filter grid gap-3 rounded-xl border border-sky-100 bg-white p-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
         <div className="grid gap-3 sm:grid-cols-1">
           <select
             aria-label="收藏课程"
@@ -407,7 +407,7 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
             : "暂无收藏。在题目右上角点击“收藏”，即可在这里集中复习。"}
         </div>
       )}
-      <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="st-favorite-list divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {result?.items.map((item) => (
           <FavoriteRow
             key={`${item.id}:${item.revision}`}

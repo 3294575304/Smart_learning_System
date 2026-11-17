@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { StatusChip } from "@/components/ui/status-chip";
 import { FOCUS_RING } from "./ui-focus";
 import {
   studentTaskContext,
@@ -65,7 +66,7 @@ export function StudentTaskList({
 }) {
   if (layout === "home") {
     return (
-      <ul className="divide-border border-border divide-y border-t">
+      <ul className="workspace-task-list divide-border border-border divide-y border-t">
         {items.map((item) => {
           const start = item.kind === "exam" ? item.opensAt : undefined;
           const time = start ?? item.dueAt;
@@ -86,6 +87,9 @@ export function StudentTaskList({
                   {item.id === priorityId && (
                     <span className="sr-only"> 优先处理</span>
                   )}
+                  <span className="workspace-task-meta">
+                    {studentTaskContext(item)}
+                  </span>
                 </span>
                 <span className="col-start-2 text-sm text-neutral-600 sm:col-start-auto sm:text-end">
                   {start
@@ -151,55 +155,48 @@ export function StudentTaskList({
                     </span>
                   )}
                 </p>
-                <span
-                  className={cn(
-                    "text-xs text-neutral-600",
-                    workspace && "rounded-full bg-neutral-100 px-2 py-0.5",
-                  )}
-                >
-                  {item.state}
-                </span>
+                {/*
+                  列表里的 state 只有开放态（待完成/进行中/签到中/待开考/考试中），
+                  全部表示「可继续操作」，统一走 StatusChip 的 brand 色，
+                  与 exams/assignments 页的状态色规则保持一致（色块 + 文字同现）。
+                */}
+                <StatusChip tone="brand">{item.state}</StatusChip>
                 {workspace && priority && items.length > 1 && (
                   <span className="bg-brand/10 text-brand-strong rounded-full px-2 py-0.5 text-xs font-medium">
                     优先处理
                   </span>
                 )}
               </div>
-              {showContext && (
-                <p className="mt-1 text-xs leading-5 [overflow-wrap:anywhere] text-neutral-600">
-                  {studentTaskContext(item)}
-                </p>
-              )}
-              <p
-                className={cn(
-                  "text-xs leading-5 text-neutral-600",
-                  workspace && "mt-0.5",
-                )}
-              >
-                {workspace && (
-                  <Clock3
-                    aria-hidden="true"
-                    className="mr-1 inline size-3.5 align-text-bottom"
-                  />
-                )}
-                {item.kind === "exam" && item.opensAt ? (
+              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs leading-5 [overflow-wrap:anywhere] text-neutral-600">
+                {showContext && (
                   <>
-                    开考{" "}
-                    <time dateTime={item.opensAt.toISOString()}>
-                      {studentTaskDate(item.opensAt)}
-                    </time>
-                    {item.windowMinutes !== undefined &&
-                      ` · 限时 ${item.windowMinutes} 分钟`}
-                  </>
-                ) : (
-                  <>
-                    {item.kind === "attendance" ? "结束签到" : "截止"}{" "}
-                    <time dateTime={item.dueAt.toISOString()}>
-                      {studentTaskDate(item.dueAt)}
-                    </time>
+                    <span className="min-w-0">{studentTaskContext(item)}</span>
+                    <span aria-hidden="true">·</span>
                   </>
                 )}
-                {item.kind === "survey" ? " · 不计入成绩" : ""}
+                <span className="inline-flex items-center gap-1 font-medium whitespace-nowrap text-neutral-700">
+                  {workspace && (
+                    <Clock3 aria-hidden="true" className="size-3.5" />
+                  )}
+                  {item.kind === "exam" && item.opensAt ? (
+                    <>
+                      开考{" "}
+                      <time dateTime={item.opensAt.toISOString()}>
+                        {studentTaskDate(item.opensAt)}
+                      </time>
+                      {item.windowMinutes !== undefined &&
+                        ` · 限时 ${item.windowMinutes} 分钟`}
+                    </>
+                  ) : (
+                    <>
+                      {item.kind === "attendance" ? "结束签到" : "截止"}{" "}
+                      <time dateTime={item.dueAt.toISOString()}>
+                        {studentTaskDate(item.dueAt)}
+                      </time>
+                    </>
+                  )}
+                  {item.kind === "survey" ? " · 不计入成绩" : ""}
+                </span>
               </p>
             </div>
             <Link

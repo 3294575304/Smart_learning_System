@@ -27,6 +27,8 @@ function sample(): StudentClassAnalysis {
     gradedCount: 0,
     publishedCount: 0,
     scoreHistory: [],
+    scoreHistoryByKind: { assignment: [], exam: [] },
+    practiceHistory: [],
     awaitingRelease: 0,
     attendance: {
       present: 0,

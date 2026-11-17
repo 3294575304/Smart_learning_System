@@ -33,7 +33,7 @@ const course = {
   updatedAt: new Date("2026-07-31T00:00:00.000Z"),
 };
 
-test("课程卡片的详情链接与直接删除按钮使用独立交互区域", () => {
+test("课程卡片的详情链接与删除按钮使用独立交互区域", () => {
   const markup = renderToStaticMarkup(
     React.createElement(TeacherCourseList, {
       initialCourses: [course],

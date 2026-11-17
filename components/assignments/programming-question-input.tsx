@@ -1,9 +1,14 @@
 "use client";
 
 import { Play } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
+import { PythonCodeEditor } from "@/components/programming/code-editor";
+import {
+  ProgrammingTestResults,
+  type ProgrammingTestResult,
+} from "@/components/programming/test-results";
 
 interface AttemptDto {
   id: string;
@@ -12,17 +17,15 @@ interface AttemptDto {
   score: number | null;
   maxScore: number;
   safeErrorSummary: string | null;
-  cases: Array<{
-    index: number;
-    passed: boolean;
-    errorType: string;
-    safeErrorSummary: string | null;
-    stdout?: string;
-    stderr?: string;
-  }>;
+  cases: ProgrammingTestResult[];
 }
 
 const terminal = new Set(["SUCCEEDED", "SYSTEM_ERROR", "CANCELLED"]);
+
+/** 前 5 秒按 1 秒一次抓细粒度进度，之后降到 2.5 秒，避免长时间空转请求。 */
+const FAST_POLL_MS = 1_000;
+const SLOW_POLL_MS = 2_500;
+const FAST_POLL_WINDOW_MS = 5_000;
 
 export function ProgrammingQuestionInput({
   assignmentQuestionId,
@@ -41,33 +44,62 @@ export function ProgrammingQuestionInput({
   const [attempt, setAttempt] = useState<AttemptDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
-  const attemptStatus = attempt?.status;
+  /**
+   * 轮询可能让在途响应变成过期数据（重跑、改代码之后）。
+   * 只认当前这次运行的结果，避免旧响应把新结果覆盖回去。
+   */
+  const activeAttemptId = useRef<string | null>(null);
+  const running =
+    starting || (attempt !== null && !terminal.has(attempt.status));
 
+  /** 返回 true 表示已到终态，调用方不必再轮询。 */
   const load = useCallback(async (id: string) => {
     const response = await requestAssignmentApi<AttemptDto>(
       `/api/student/programming-attempts/${id}`,
     );
+    if (activeAttemptId.current !== id) return true;
     if (!response.success) {
       setError(response.error);
-      return;
+      return false;
     }
     setAttempt(response.data);
     setError(null);
+    return terminal.has(response.data.status);
   }, []);
 
   useEffect(() => {
     if (!attemptId) return;
-    void load(attemptId);
-    const timer = window.setInterval(() => {
-      if (!attemptStatus || !terminal.has(attemptStatus)) void load(attemptId);
-    }, 1_000);
-    return () => window.clearInterval(timer);
-  }, [attemptStatus, attemptId, load]);
+    let cancelled = false;
+    let timer = 0;
+    const startedAt = Date.now();
+    const tick = async () => {
+      const done = await load(attemptId);
+      if (cancelled || done) return;
+      const delay =
+        Date.now() - startedAt > FAST_POLL_WINDOW_MS
+          ? SLOW_POLL_MS
+          : FAST_POLL_MS;
+      timer = window.setTimeout(() => void tick(), delay);
+    };
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [attemptId, load]);
+
+  /** 结果一旦失效就整体清空，不能让学生把旧结果当成当前代码的结论。 */
+  const invalidate = useCallback(() => {
+    activeAttemptId.current = null;
+    setAttempt(null);
+    setAttemptId(null);
+  }, []);
 
   async function run() {
+    if (disabled || running) return;
     setStarting(true);
     setError(null);
-    setAttempt(null);
+    invalidate();
     const response = await requestAssignmentApi<{
       attemptId: string;
       status: string;
@@ -85,6 +117,16 @@ export function ProgrammingQuestionInput({
       setError(response.error);
       return;
     }
+    activeAttemptId.current = response.data.attemptId;
+    setAttempt({
+      id: response.data.attemptId,
+      status: "PENDING",
+      progress: 0,
+      score: null,
+      maxScore: 0,
+      safeErrorSummary: null,
+      cases: [],
+    });
     setAttemptId(response.data.attemptId);
   }
 
@@ -102,57 +144,50 @@ export function ProgrammingQuestionInput({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex min-h-10 flex-wrap items-center justify-between gap-2">
-        <h3 className="text-ink text-sm font-semibold">你的作答</h3>
-        <button
-          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-sky-700 disabled:opacity-50"
-          disabled={
-            disabled ||
-            starting ||
-            (attempt !== null && !terminal.has(attempt.status))
-          }
-          onClick={() => void run()}
-          type="button"
-        >
-          <Play className="size-4" aria-hidden="true" />
-          {starting ? "正在创建运行…" : "运行公开样例"}
-        </button>
-      </div>
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-[#0e1c2b]">
-        <div className="flex items-center justify-between gap-2 bg-[#162a3e] px-4 py-2.5 font-mono text-xs text-slate-200">
-          <span>main.py</span>
-          <span>Python</span>
-        </div>
-        <textarea
-          aria-label="Python 代码"
-          className="block min-h-72 w-full resize-y bg-transparent px-4 py-3 font-mono text-sm leading-6 text-slate-100 caret-sky-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-400 disabled:opacity-60 xl:min-h-96"
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          value={code}
-        />
-      </div>
-      {attempt && !terminal.has(attempt.status) && (
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            className="rounded-md border border-red-200 px-4 py-2 text-sm text-red-700"
-            onClick={() => void cancel()}
-            type="button"
-          >
-            取消运行
-          </button>
-          <span role="status" className="text-sm text-gray-500">
-            {error
-              ? "状态查询中断，请重试查询"
-              : `执行中 · ${attempt.progress}%`}
-          </span>
-        </div>
-      )}
+    <div className="min-w-0 space-y-3">
+      <PythonCodeEditor
+        disabled={disabled || running}
+        onChange={(next) => {
+          if (next === code) return;
+          invalidate();
+          onChange(next);
+        }}
+        onRun={() => void run()}
+        progress={running ? (attempt?.progress ?? 0) : null}
+        value={code}
+        toolbar={
+          <>
+            {attempt && !terminal.has(attempt.status) ? (
+              <button
+                className="inline-flex h-9 items-center rounded-md border border-rose-400/40 px-2.5 text-xs font-medium text-rose-200 hover:bg-rose-500/15 focus-visible:outline-2 focus-visible:outline-rose-300 disabled:opacity-50"
+                onClick={() => void cancel()}
+                type="button"
+              >
+                取消运行
+              </button>
+            ) : null}
+            <button
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-sky-500 px-3 text-xs font-semibold text-slate-900 transition-colors hover:bg-sky-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:opacity-50"
+              disabled={disabled || running}
+              onClick={() => void run()}
+              title="运行公开样例（Ctrl / Cmd + Enter）"
+              type="button"
+            >
+              <Play className="size-3.5" aria-hidden="true" />
+              {starting ? "正在运行…" : "运行样例"}
+            </button>
+          </>
+        }
+      />
+
+      {attempt && !terminal.has(attempt.status) ? (
+        <p className="text-ink-soft text-sm" role="status">
+          {error ? "状态查询中断，请重试查询" : `执行中 · ${attempt.progress}%`}
+        </p>
+      ) : null}
+
       {error ? (
-        <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <p className="bg-bad-soft text-bad rounded-lg p-3 text-sm">
           {error}{" "}
           {attemptId ? (
             <button
@@ -165,34 +200,18 @@ export function ProgrammingQuestionInput({
           ) : null}
         </p>
       ) : null}
+
       {attempt?.status === "SYSTEM_ERROR" ? (
-        <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+        <p className="bg-warn-soft text-warn rounded-lg p-3 text-sm">
           判题服务暂时不可用，本次不计分。请稍后重试。
         </p>
       ) : null}
-      {attempt?.cases.length === 0 && attempt.status === "SUCCEEDED" ? (
-        <p className="text-sm text-gray-500">暂无公开样例结果。</p>
+
+      {attempt?.status === "SUCCEEDED" && attempt.cases.length === 0 ? (
+        <p className="text-ink-soft text-sm">暂无公开样例结果。</p>
       ) : null}
-      {attempt?.cases.map((item) => (
-        <div
-          className={`rounded-md border p-3 text-sm ${item.passed ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
-          key={item.index}
-        >
-          <p className="font-medium">
-            样例 {item.index} · {item.passed ? "通过" : item.safeErrorSummary}
-          </p>
-          {item.stdout ? (
-            <pre className="mt-2 overflow-auto rounded bg-white/70 p-2 whitespace-pre-wrap">
-              输出：{item.stdout}
-            </pre>
-          ) : null}
-          {item.stderr ? (
-            <pre className="mt-2 overflow-auto rounded bg-white/70 p-2 whitespace-pre-wrap text-red-700">
-              错误：{item.stderr}
-            </pre>
-          ) : null}
-        </div>
-      ))}
+
+      {attempt ? <ProgrammingTestResults cases={attempt.cases} /> : null}
     </div>
   );
 }

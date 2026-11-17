@@ -4,9 +4,16 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StudentHomeInsights } from "../../components/dashboard/student-home-insights";
 import type { StudentClassAnalysis } from "../../services/dashboard/student-class-analytics";
-import type { StudentTaskOverview } from "../../services/dashboard/student-task-overview";
+import type { StudentHomePulse } from "../../services/dashboard/student-home-pulse";
+import type {
+  StudentTaskItem,
+  StudentTaskOverview,
+} from "../../services/dashboard/student-task-overview";
 import { StudentAssignmentRings } from "../../components/dashboard/student-assignment-rings";
-const overview: StudentTaskOverview = {
+
+const now = new Date("2026-11-15T12:00:00+08:00");
+
+const emptyOverview: StudentTaskOverview = {
   total: 0,
   counts: { exam: 0, examUpcoming: 0, assignment: 0, attendance: 0, survey: 0 },
   items: [],
@@ -15,6 +22,17 @@ const overview: StudentTaskOverview = {
   nextExam: null,
   nextChangeAt: null,
 };
+
+const emptyPulse: StudentHomePulse = {
+  weekly: { minutes: 0, previousMinutes: 0 },
+  streak: { days: 0, longest: 0 },
+  lastActiveAt: null,
+  wrongBook: { open: 0, newInWeek: 0, lastReviewedAt: null },
+  pendingPractice: 0,
+  inProgress: [],
+  finished: [],
+};
+
 function item(
   id: string,
   total: number,
@@ -42,6 +60,8 @@ function item(
     publishedCount: 0,
     awaitingRelease: submitted,
     scoreHistory: [],
+    scoreHistoryByKind: { assignment: [], exam: [] },
+    practiceHistory: [],
     attendance: {
       total: 0,
       present: 0,
@@ -54,59 +74,104 @@ function item(
     recent: [],
   };
 }
-test("主页空看板不补造学习时长、成绩或知识评估", () => {
+
+function task(
+  id: string,
+  kind: StudentTaskItem["kind"],
+  dueAt: Date,
+): StudentTaskItem {
+  return {
+    id: `${kind}:${id}`,
+    kind,
+    title: `任务${id}`,
+    courseName: "Python",
+    classroomName: "班级one",
+    dueAt,
+    status: "TODO",
+    href: `/student/tasks?${id}`,
+    action: "查看",
+    state: "待完成",
+  };
+}
+
+test("空看板不补造学习时长、连续天数或知识评估", () => {
   const html = renderToStaticMarkup(
-    React.createElement(StudentHomeInsights, { classes: [], overview }),
+    React.createElement(StudentHomeInsights, {
+      chapters: [],
+      classes: [],
+      now,
+      overview: emptyOverview,
+      pulse: emptyPulse,
+    }),
   );
-  assert.match(html, /学习主页数据看板/);
-  assert.match(html, /暂无已开放任务/);
-  assert.match(html, /暂无已公布的线上考试成绩/);
-  const summary = html.match(/<ul aria-label="学习概览"[\s\S]*?<\/ul>/u)?.[0];
-  assert.ok(summary);
-  for (const href of ["courses", "tasks", "analytics", "exams"]) {
-    assert.ok(summary.includes(`href="/student/${href}"`));
-  }
-  assert.match(summary, /暂无成绩/);
-  assert.match(html, /暂无待办/);
-  assert.match(html, /暂无安排/u);
-  assert.match(html, /暂无考试记录/u);
-  assert.match(html, /课程知识掌握/u);
-  assert.match(html, /作业提交进度/u);
-  assert.doesNotMatch(html, /NaN|Infinity|学习时长|AI互动次数|累计登录/);
+  assert.match(html, /学习中心数据看板/);
+  assert.match(html, /待完成作业/);
+  assert.match(html, /本周学习/);
+  assert.match(html, /知识掌握/);
+  assert.match(html, /连续学习/);
+  assert.match(html, /没有待交作业/);
+  assert.match(html, /本周还没有学习记录/);
+  assert.match(html, /还没有可评估的知识点/);
+  assert.match(html, /今天开始记录/);
+  assert.match(html, /今天没有待办/);
+  // 没有待办时，"待完成作业"这张卡不能着红。
+  assert.doesNotMatch(html, /st-metric is-alert/);
+  assert.doesNotMatch(html, /NaN|Infinity|累计登录/);
 });
-test("同名课程分别展示，结课记录不混入当前汇总，待办分布使用完整聚合", () => {
+
+test("同名课程分别展示，待办数与最近截止都来自同一次统计", () => {
   const classes = [
     item("one", 2, 1),
     item("two", 2, 2),
     item("old", 100, 100, "ARCHIVED"),
   ];
+  const overview: StudentTaskOverview = {
+    ...emptyOverview,
+    total: 2,
+    counts: {
+      exam: 0,
+      examUpcoming: 0,
+      assignment: 2,
+      attendance: 0,
+      survey: 0,
+    },
+    items: [
+      task("a", "assignment", new Date("2026-11-16T23:59:00+08:00")),
+      task("b", "assignment", new Date("2026-11-18T23:59:00+08:00")),
+    ],
+    pendingItems: [
+      task("a", "assignment", new Date("2026-11-16T23:59:00+08:00")),
+      task("b", "assignment", new Date("2026-11-18T23:59:00+08:00")),
+    ],
+  };
+  const pulse: StudentHomePulse = {
+    ...emptyPulse,
+    weekly: { minutes: 192, previousMinutes: 168 },
+    streak: { days: 9, longest: 12 },
+  };
   const html = renderToStaticMarkup(
     React.createElement(StudentHomeInsights, {
+      chapters: [],
       classes,
-      selected: classes[1],
+      now,
       overview,
+      pulse,
+      selected: classes[1],
     }),
   );
-  assert.match(html, /75%/);
-  assert.match(html, /已交 3\/4 项/);
-  assert.doesNotMatch(html, /含已结束考试/);
-  const tasksHtml = renderToStaticMarkup(
-    React.createElement(StudentHomeInsights, {
-      classes,
-      overview: {
-        ...overview,
-        total: 4,
-        counts: { ...overview.counts, assignment: 2, attendance: 1, survey: 1 },
-      },
-    }),
-  );
-  assert.match(tasksHtml, /作业 2/);
-  assert.match(tasksHtml, /签到 1/);
-  assert.match(tasksHtml, /问卷 1/);
+  // 两张待完成作业卡：2 份、最近截止明天 23:59，且这一格着红。
+  assert.match(html, /st-metric is-alert/);
+  assert.match(html, /最近截止 明天 23:59/);
+  // 3.2 小时、较上周 +0.4；连续 9 天、最长 12 天。
+  assert.match(html, /3\.2/);
+  assert.match(html, /较上周 \+0\.4/);
+  assert.match(html, /最长记录 12 天/);
+  // 多门课时给出课程选择器，默认选中当前课程。
   assert.ok(html.includes('value="one"'));
-  assert.match(html, /<option(?=[^>]*value="two")(?=[^>]*selected="")[^>]*>/u);
-  assert.match(html, /Python · 班级one/);
-  assert.match(html, /Python · 班级two/);
+  assert.match(
+    html,
+    /<option(?=[^>]*\bvalue="two")(?=[^>]*\bselected="")[^>]*>/u,
+  );
 });
 
 test("作业环图区分未到期、逾期和已交，无作业不显示零提交率", () => {

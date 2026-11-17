@@ -22,6 +22,7 @@ export interface ListFilterSelect {
 }
 
 interface ListFilterBarProps {
+  leading?: React.ReactNode;
   keyword: string;
   onKeywordChange: (value: string) => void;
   /** 搜索框上方的字段名，例如「搜索班级」 */
@@ -44,6 +45,7 @@ interface ListFilterBarProps {
  * 纯前端本地过滤，数据量级是「一个教师的班级 / 课程」，无需请求服务端。
  */
 export function ListFilterBar({
+  leading,
   keyword,
   onKeywordChange,
   searchLabel,
@@ -71,6 +73,7 @@ export function ListFilterBar({
       className="bg-card space-y-3 rounded-xl border p-4"
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:items-end">
+        {leading}
         <form
           className="min-w-0 sm:col-span-2 lg:flex-1"
           onSubmit={(event) => event.preventDefault()}

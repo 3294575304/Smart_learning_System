@@ -17,15 +17,7 @@ import type { RefObject } from "react";
 import type { ForceGraphMethods, ForceGraphProps } from "react-force-graph-3d";
 import * as THREE from "three";
 import type { TrackballControls } from "three/addons/controls/TrackballControls.js";
-import {
-  expandableSphereLayout,
-  sphereNodeVisible,
-  wheelExpansion,
-} from "@/components/courses/knowledge-graph-expandable-layout";
-import {
-  hobermanMotion,
-  scissorPairPose,
-} from "@/components/courses/knowledge-graph-hoberman-motion";
+import { sphericalGraphLayout } from "@/components/courses/knowledge-graph-sphere-layout";
 import { chapterGraphLayout } from "@/components/courses/knowledge-graph-presentation";
 import { KnowledgeGraphNodeVisual } from "@/components/courses/knowledge-graph-node-visual";
 import {
@@ -138,14 +130,6 @@ export function KnowledgeGraphCanvas3D({
   const nodeVisuals = useRef(
     new WeakMap<ForceNode, KnowledgeGraphNodeVisual>(),
   );
-  const currentExpansion = useRef(0);
-  const previousExpansion = useRef(0);
-  const scissorVisuals = useRef<{
-    group: THREE.Group;
-    rods: THREE.InstancedMesh;
-    pivots: THREE.InstancedMesh;
-    ends: THREE.InstancedMesh;
-  } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 720 });
   const [graphReady, setGraphReady] = useState(false);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
@@ -153,7 +137,6 @@ export function KnowledgeGraphCanvas3D({
   const [onlyRelated, setOnlyRelated] = useState(false);
   const [fullscreenError, setFullscreenError] = useState("");
   const [layoutMode, setLayoutMode] = useState<"CHAPTER" | "SPHERE">("SPHERE");
-  const [expansion, setExpansion] = useState(0);
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(
@@ -166,10 +149,6 @@ export function KnowledgeGraphCanvas3D({
   }, []);
   function changeLayout(mode: "CHAPTER" | "SPHERE") {
     setLayoutMode(mode);
-    if (mode === "SPHERE") {
-      currentExpansion.current = 0;
-      setExpansion(0);
-    }
     try {
       window.localStorage.setItem("zhixue:knowledge-graph:layout", mode);
     } catch {
@@ -195,25 +174,18 @@ export function KnowledgeGraphCanvas3D({
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
-  const sphere = useMemo(
-    () => expandableSphereLayout(structure ?? { nodes, edges }),
-    [structure, nodes, edges],
-  );
   const layout = useMemo(
     () =>
-      layoutMode === "SPHERE"
-        ? sphere.expanded
-        : chapterGraphLayout(structure ?? { nodes, edges }),
-    [structure, nodes, edges, layoutMode, sphere],
+      (layoutMode === "SPHERE" ? sphericalGraphLayout : chapterGraphLayout)(
+        structure ?? { nodes, edges },
+      ),
+    [structure, nodes, edges, layoutMode],
   );
   const graphData = useMemo(() => {
     const visible = new Set(nodes.map((node) => node.key));
     return {
       nodes: nodes.map<ForceNode>((node) => {
-        const position = (layoutMode === "SPHERE"
-          ? sphere.collapsed
-          : layout
-        ).get(node.key) ?? {
+        const position = layout.get(node.key) ?? {
           x: 0,
           y: 0,
           z: 0,
@@ -238,7 +210,7 @@ export function KnowledgeGraphCanvas3D({
           color: relationColor[edge.type],
         })),
     };
-  }, [nodes, edges, layout, layoutMode, sphere, nodeColorByKey]);
+  }, [nodes, edges, layout, nodeColorByKey]);
   const neighborhoods = useMemo(
     () =>
       graphNeighborhoods(
@@ -251,24 +223,20 @@ export function KnowledgeGraphCanvas3D({
   const selectedNeighbors = selectedNode
     ? neighborhoods.get(selectedNode.id)
     : undefined;
-  const focusKey =
-    hoverKey ?? (selectedNode?.type === "CHAPTER" ? selectedKey : null);
+  const focusKey = hoverKey;
   const highlighted = focusKey ? neighborhoods.get(focusKey) : undefined;
   const nodeVisible = useCallback(
     (node: ForceNode) =>
-      (layoutMode !== "SPHERE" ||
-        sphereNodeVisible(node.type, currentExpansion.current)) &&
-      (!onlyRelated || !selectedNeighbors || selectedNeighbors.has(node.id)),
-    [layoutMode, onlyRelated, selectedNeighbors],
+      !onlyRelated || !selectedNeighbors || selectedNeighbors.has(node.id),
+    [onlyRelated, selectedNeighbors],
   );
   const linkVisible = useCallback(
     (link: ForceLink) =>
-      (layoutMode !== "SPHERE" || currentExpansion.current > 0.45) &&
-      (!onlyRelated ||
-        !selectedNeighbors ||
-        (selectedNeighbors.has(linkEndpoint(link.source)) &&
-          selectedNeighbors.has(linkEndpoint(link.target)))),
-    [layoutMode, onlyRelated, selectedNeighbors],
+      !onlyRelated ||
+      !selectedNeighbors ||
+      (selectedNeighbors.has(linkEndpoint(link.source)) &&
+        selectedNeighbors.has(linkEndpoint(link.target))),
+    [onlyRelated, selectedNeighbors],
   );
   const updateNodeVisuals = useCallback(() => {
     for (const node of graphData.nodes) {
@@ -362,7 +330,6 @@ export function KnowledgeGraphCanvas3D({
     const controls = fg.controls() as TrackballControls;
     const planar = layoutMode === "CHAPTER";
     controls.noRotate = planar;
-    controls.noZoom = !planar;
     controls.panSpeed = planar ? 0.12 : 0.3;
     // 平面阅读取消惯性滑行，松手即停，避免一次轻拖后画布继续漂移。
     controls.staticMoving = planar;
@@ -370,191 +337,6 @@ export function KnowledgeGraphCanvas3D({
     if (planar) fg.camera().up.set(0, 1, 0);
     controls.update();
   }, [graphReady, layoutMode]);
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || layoutMode !== "SPHERE") return;
-    const handleWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      needsFit.current = false;
-      setExpansion((value) => wheelExpansion(value, event.deltaY));
-    };
-    container.addEventListener("wheel", handleWheel, { passive: false });
-    return () => container.removeEventListener("wheel", handleWheel);
-  }, [layoutMode]);
-  useEffect(() => {
-    const fg = fgRef.current;
-    if (
-      !graphReady ||
-      !fg ||
-      layoutMode !== "SPHERE" ||
-      !sphere.scissors.length
-    )
-      return;
-    const group = new THREE.Group();
-    group.name = "Decorative scissor sphere frame";
-    const rodGeometry = new THREE.CylinderGeometry(2.7, 2.7, 1, 7);
-    const pivotGeometry = new THREE.SphereGeometry(4.5, 10, 8);
-    const endGeometry = new THREE.SphereGeometry(3.1, 8, 6);
-    const rodMaterial = new THREE.MeshPhongMaterial({
-      color: "#ffffff",
-      shininess: 95,
-    });
-    const jointMaterial = new THREE.MeshPhongMaterial({
-      color: "#fb704b",
-      shininess: 80,
-    });
-    const rods = new THREE.InstancedMesh(
-      rodGeometry,
-      rodMaterial,
-      sphere.scissors.length * 4,
-    );
-    const pivots = new THREE.InstancedMesh(
-      pivotGeometry,
-      jointMaterial,
-      sphere.scissors.length,
-    );
-    const ends = new THREE.InstancedMesh(
-      endGeometry,
-      jointMaterial,
-      sphere.scissors.length * 4,
-    );
-    // Instance transforms move each frame; avoid stale bounds hiding the shell.
-    rods.frustumCulled = false;
-    pivots.frustumCulled = false;
-    ends.frustumCulled = false;
-    rods.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    pivots.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    ends.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    sphere.scissors.forEach((pair, index) => {
-      const color = new THREE.Color(pair.color).lerp(
-        new THREE.Color("#ffffff"),
-        0.38,
-      );
-      for (let arm = 0; arm < 4; arm++) rods.setColorAt(index * 4 + arm, color);
-    });
-    if (rods.instanceColor) rods.instanceColor.needsUpdate = true;
-    group.add(rods, pivots, ends);
-    fg.scene().add(group);
-    scissorVisuals.current = { group, rods, pivots, ends };
-    return () => {
-      fg.scene().remove(group);
-      scissorVisuals.current = null;
-      rods.dispose();
-      pivots.dispose();
-      ends.dispose();
-      rodGeometry.dispose();
-      pivotGeometry.dispose();
-      endGeometry.dispose();
-      rodMaterial.dispose();
-      jointMaterial.dispose();
-    };
-  }, [graphReady, layoutMode, sphere]);
-  useEffect(() => {
-    const fg = fgRef.current;
-    if (!graphReady || !fg || layoutMode !== "SPHERE") return;
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    let frame = 0;
-    const dummy = new THREE.Object3D();
-    const up = new THREE.Vector3(0, 1, 0);
-    const putRod = (
-      rods: THREE.InstancedMesh,
-      index: number,
-      from: THREE.Vector3,
-      to: THREE.Vector3,
-    ) => {
-      const delta = to.clone().sub(from);
-      dummy.position.copy(from).add(to).multiplyScalar(0.5);
-      dummy.quaternion.setFromUnitVectors(up, delta.clone().normalize());
-      dummy.scale.set(1, delta.length(), 1);
-      dummy.updateMatrix();
-      rods.setMatrixAt(index, dummy.matrix);
-    };
-    const putJoint = (
-      mesh: THREE.InstancedMesh,
-      index: number,
-      position: THREE.Vector3,
-    ) => {
-      dummy.position.copy(position);
-      dummy.quaternion.identity();
-      dummy.scale.setScalar(1);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(index, dummy.matrix);
-    };
-    const update = () => {
-      const current = currentExpansion.current;
-      const next =
-        reduced || Math.abs(expansion - current) < 0.002
-          ? expansion
-          : current + (expansion - current) * 0.18;
-      currentExpansion.current = next;
-      const motion = hobermanMotion(next);
-      for (const node of graphData.nodes) {
-        const start = sphere.collapsed.get(node.id);
-        const end = sphere.expanded.get(node.id);
-        if (!start || !end) continue;
-        node.x = node.fx = start.x + (end.x - start.x) * motion.radialFraction;
-        node.y = node.fy = start.y + (end.y - start.y) * motion.radialFraction;
-        node.z = node.fz = start.z + (end.z - start.z) * motion.radialFraction;
-        const visual = nodeVisuals.current.get(node);
-        if (visual && node.type === "KNOWLEDGE_POINT")
-          visual.scale.setScalar(
-            Math.max(0.001, Math.min(1, (next - 0.08) / 0.55)),
-          );
-      }
-      const visuals = scissorVisuals.current;
-      if (visuals) {
-        visuals.group.visible = graphData.nodes.length > 0;
-        sphere.scissors.forEach((pair, index) => {
-          const pose = scissorPairPose(pair, next);
-          const pivot = new THREE.Vector3(
-            pose.pivot.x,
-            pose.pivot.y,
-            pose.pivot.z,
-          );
-          const endpoints = pose.ends.map(
-            (end) => new THREE.Vector3(end.x, end.y, end.z),
-          );
-          putRod(visuals.rods, index * 4, endpoints[0], pivot);
-          putRod(visuals.rods, index * 4 + 1, pivot, endpoints[1]);
-          putRod(visuals.rods, index * 4 + 2, endpoints[2], pivot);
-          putRod(visuals.rods, index * 4 + 3, pivot, endpoints[3]);
-          putJoint(visuals.pivots, index, pivot);
-          endpoints.forEach((end, terminal) =>
-            putJoint(visuals.ends, index * 4 + terminal, end),
-          );
-        });
-        visuals.rods.instanceMatrix.needsUpdate = true;
-        visuals.pivots.instanceMatrix.needsUpdate = true;
-        visuals.ends.instanceMatrix.needsUpdate = true;
-      }
-      fg.refresh();
-      if (next !== expansion) frame = window.requestAnimationFrame(update);
-    };
-    update();
-    return () => window.cancelAnimationFrame(frame);
-  }, [graphReady, graphData.nodes, expansion, layoutMode, sphere]);
-  useEffect(() => {
-    if (layoutMode !== "SPHERE" || !graphReady) return;
-    const selected = graphData.nodes.find((node) => node.id === selectedKey);
-    if (
-      (selected && selected.type !== "CHAPTER") ||
-      (graphData.nodes.some((node) => node.type !== "CHAPTER") &&
-        !graphData.nodes.some((node) => node.type === "CHAPTER"))
-    )
-      setExpansion(1);
-  }, [graphReady, graphData.nodes, layoutMode, selectedKey]);
-  useEffect(() => {
-    const wasCollapsing = expansion < previousExpansion.current;
-    previousExpansion.current = expansion;
-    if (layoutMode !== "SPHERE" || !selectedKey || !wasCollapsing) return;
-    const selected = graphData.nodes.find((node) => node.id === selectedKey);
-    if (selected && !sphereNodeVisible(selected.type, expansion)) {
-      setOnlyRelated(false);
-      onClearSelection?.();
-    }
-  }, [expansion, graphData.nodes, layoutMode, onClearSelection, selectedKey]);
   useEffect(() => {
     const fg = fgRef.current;
     const container = containerRef.current;
@@ -594,12 +376,7 @@ export function KnowledgeGraphCanvas3D({
             1,
           );
       const frame = frameGraphNodes(
-        layoutMode === "SPHERE"
-          ? visibleNodes.map((node) => ({
-              ...node,
-              ...(sphere.expanded.get(node.id) ?? {}),
-            }))
-          : visibleNodes,
+        visibleNodes,
         canvasSize.width / canvasSize.height,
         fov,
         direction,
@@ -613,26 +390,17 @@ export function KnowledgeGraphCanvas3D({
             : duration,
         );
     },
-    [canvasSize, layoutMode, sphere],
+    [canvasSize, layoutMode],
   );
   const fitView = useCallback(
-    (duration = 500) =>
-      fitNodes(
-        layoutMode === "SPHERE"
-          ? graphData.nodes
-          : graphData.nodes.filter(nodeVisible),
-        duration,
-      ),
-    [fitNodes, graphData.nodes, nodeVisible, layoutMode],
+    (duration = 500) => fitNodes(graphData.nodes.filter(nodeVisible), duration),
+    [fitNodes, graphData.nodes, nodeVisible],
   );
   const resetNodeLayout = useCallback(() => {
     const fg = fgRef.current;
     if (!fg) return;
     for (const node of graphData.nodes) {
-      const position =
-        layoutMode === "SPHERE"
-          ? sphere.collapsed.get(node.id)
-          : layout.get(node.id);
+      const position = layout.get(node.id);
       if (!position) continue;
       node.x = position.x;
       node.y = position.y;
@@ -647,14 +415,8 @@ export function KnowledgeGraphCanvas3D({
     fg.d3ReheatSimulation();
     fg.refresh();
     needsFit.current = false;
-    if (layoutMode === "SPHERE") {
-      currentExpansion.current = 0;
-      setExpansion(0);
-      setOnlyRelated(false);
-      onClearSelection?.();
-    }
     fitView();
-  }, [graphData.nodes, layout, fitView, layoutMode, sphere, onClearSelection]);
+  }, [graphData.nodes, layout, fitView]);
   useEffect(() => {
     needsFit.current = true;
     setHoverKey(null);
@@ -687,13 +449,7 @@ export function KnowledgeGraphCanvas3D({
             position: new THREE.Vector3(node.x, node.y, node.z + distance),
             target: new THREE.Vector3(node.x, node.y, node.z),
           }
-        : focusGraphNode(
-            node.type === "KNOWLEDGE_POINT"
-              ? { ...node, ...(sphere.expanded.get(node.id) ?? {}) }
-              : node,
-            distance,
-            direction,
-          );
+        : focusGraphNode(node, distance, direction);
     fg.cameraPosition(
       position,
       target,
@@ -708,7 +464,6 @@ export function KnowledgeGraphCanvas3D({
     fitNodes,
     fitView,
     layoutMode,
-    sphere,
   ]);
   function zoomBy(factor: number) {
     const fg = fgRef.current;
@@ -778,7 +533,7 @@ export function KnowledgeGraphCanvas3D({
         >
           {(
             [
-              ["SPHERE", "伸缩球"],
+              ["SPHERE", "三维星图"],
               ["CHAPTER", "章节总览"],
             ] as const
           ).map(([mode, label]) => (
@@ -803,41 +558,6 @@ export function KnowledgeGraphCanvas3D({
           role="group"
           aria-label="图谱视野控制"
         >
-          {layoutMode === "SPHERE" ? (
-            <div
-              className="mr-2 flex items-center gap-2"
-              role="group"
-              aria-label="球体伸缩控制"
-            >
-              <button
-                type="button"
-                className={toolbarButton}
-                aria-label="收起球体"
-                onClick={() => setExpansion(0)}
-              >
-                收起
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={Math.round(expansion * 100)}
-                aria-label="球体展开程度"
-                className="w-20 accent-sky-400 sm:w-28"
-                onChange={(event) =>
-                  setExpansion(Number(event.target.value) / 100)
-                }
-              />
-              <button
-                type="button"
-                className={toolbarButton}
-                aria-label="展开球体"
-                onClick={() => setExpansion(1)}
-              >
-                展开
-              </button>
-            </div>
-          ) : null}
           <button
             aria-label="缩小图谱"
             title="缩小"
@@ -962,7 +682,7 @@ export function KnowledgeGraphCanvas3D({
                 <>
                   <p className="text-xs font-medium text-slate-200">
                     {layoutMode === "SPHERE"
-                      ? "滚轮向上展开球体，查看内部知识点"
+                      ? "探索知识之间的联系"
                       : "从课程核心探索章节网络"}
                   </p>
                   <p className="mt-1.5 text-[11px] text-slate-400">
@@ -975,27 +695,8 @@ export function KnowledgeGraphCanvas3D({
               className="shrink-0 rounded-full border border-slate-700/70 bg-[#111b2d]/95 px-3 py-1.5 text-[11px] text-slate-400"
               role="status"
             >
-              {layoutMode === "SPHERE"
-                ? graphData.nodes.filter(
-                    (node) =>
-                      sphereNodeVisible(node.type, expansion) &&
-                      (!onlyRelated ||
-                        !selectedNeighbors ||
-                        selectedNeighbors.has(node.id)),
-                  ).length
-                : graphData.nodes.filter(nodeVisible).length}{" "}
-              节点 /{" "}
-              {layoutMode === "SPHERE" && expansion <= 0.45
-                ? 0
-                : graphData.links.filter((link) =>
-                    layoutMode === "SPHERE"
-                      ? !onlyRelated ||
-                        !selectedNeighbors ||
-                        (selectedNeighbors.has(linkEndpoint(link.source)) &&
-                          selectedNeighbors.has(linkEndpoint(link.target)))
-                      : linkVisible(link),
-                  ).length}{" "}
-              关系
+              {graphData.nodes.filter(nodeVisible).length} 节点 /{" "}
+              {graphData.links.filter(linkVisible).length} 关系
             </span>
           </div>
         ) : null}
@@ -1057,7 +758,7 @@ export function KnowledgeGraphCanvas3D({
           {nodeColorHelp ?? "同章节点同色，点击节点平滑飞入查看。"}
           <span className="mx-2 text-slate-600">|</span>
           {layoutMode === "SPHERE"
-            ? "彩色骨架仅表示伸缩结构 · 左键旋转 · 右键平移 · 滚轮向上展开、向下收起 · 按钮缩放镜头"
+            ? "拖动节点移动 · 左键旋转 · 右键平移 · 滚轮缩放"
             : "拖动节点移动 · 拖动画布平移 · 滚轮缩放 · 正面视角已锁定"}
         </p>
         {fullscreenError ? (

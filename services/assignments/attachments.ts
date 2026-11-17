@@ -33,8 +33,8 @@ async function access(
     where: {
       id: submissionId,
       ...(actor.role === Role.STUDENT
-        ? { studentId: actor.id }
-        : { assignment: { teacherId: actor.id } }),
+        ? { studentId: actor.id, assignment: { deletedAt: null } }
+        : { assignment: { teacherId: actor.id, deletedAt: null } }),
     },
     include: {
       assignment: {
@@ -56,7 +56,10 @@ async function access(
     !submission ||
     (actor.role !== Role.STUDENT && actor.role !== Role.TEACHER) ||
     (actor.role === Role.STUDENT &&
-      !submission.assignment.classroom.memberships.length)
+      !submission.assignment.classroom.memberships.length &&
+      (edit ||
+        submission.status === SubmissionStatus.IN_PROGRESS ||
+        submission.status === SubmissionStatus.WITHDRAWN))
   )
     throw new ResourceNotFoundError("作答记录不存在");
   if (actor.role === Role.STUDENT && submission.assignment.status === "REVOKED")

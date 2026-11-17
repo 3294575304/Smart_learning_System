@@ -78,14 +78,8 @@ export class KnowledgeGraphNodeVisual extends THREE.Group {
     this.add(this.sphere);
   }
 
-  updateAppearance({
-    selected,
-    showLabel,
-    questionCount,
-  }: GraphNodeAppearance) {
+  updateAppearance({ showLabel, questionCount }: GraphNodeAppearance) {
     this.sphere.material.color.copy(this.baseColor);
-    this.sphere.material.emissive.set(selected ? this.baseColor : "#000000");
-    this.sphere.material.emissiveIntensity = selected ? 0.35 : 0;
     this.sphere.material.opacity = 1;
     this.sphere.scale.setScalar(1);
     if (showLabel && !this.label) {

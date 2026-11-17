@@ -140,7 +140,7 @@ export function CourseWorkspaceNavigation({
   return (
     <nav
       aria-label="课程功能"
-      className="workspace-panel bg-card rounded-xl border p-4 sm:p-6"
+      className="tc-course-navigation bg-card rounded-xl border p-5 sm:p-6"
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-3">
         <div

@@ -92,14 +92,14 @@ if (-not $SkipBuild) {
     $ErrorActionPreference = "Continue"
     & $npmExecutable run build 2>&1 | ForEach-Object { Write-Output ([string]$_) }
     $nextBuildExitCode = $LASTEXITCODE
-    if ($nextBuildExitCode -ne 0) {
-      throw "Next.js production build failed (exit code $nextBuildExitCode)"
-    }
     & $npmExecutable run build:programming-judge-worker 2>&1 | ForEach-Object { Write-Output ([string]$_) }
     $judgeWorkerBuildExitCode = $LASTEXITCODE
     & $npmExecutable run build:background-worker 2>&1 | ForEach-Object { Write-Output ([string]$_) }
     $backgroundWorkerBuildExitCode = $LASTEXITCODE
     $ErrorActionPreference = "Stop"
+    if ($nextBuildExitCode -ne 0) {
+      throw "Next.js production build failed"
+    }
     if ($judgeWorkerBuildExitCode -ne 0) {
       throw "Programming judge worker build failed"
     }

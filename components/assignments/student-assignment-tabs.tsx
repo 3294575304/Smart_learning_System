@@ -1,12 +1,15 @@
+import { withAssignmentTaskReturn } from "@/services/student-experience/activity-query";
 import { FeedbackLink } from "@/components/dashboard/feedback-link";
 export function StudentAssignmentTabs({
   view,
   courseId,
   classroomId,
+  returnTo,
 }: {
   view: "work" | "records";
   courseId?: string;
   classroomId?: string;
+  returnTo?: string;
 }) {
   return (
     <nav
@@ -25,7 +28,10 @@ export function StudentAssignmentTabs({
         return (
           <FeedbackLink
             key={tab.id}
-            href={`/student/assignments?${params}`}
+            href={withAssignmentTaskReturn(
+              `/student/assignments?${params}`,
+              returnTo,
+            )}
             current={view === tab.id}
             label={tab.label}
             arrow={false}

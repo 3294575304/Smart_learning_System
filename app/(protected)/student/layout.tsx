@@ -6,6 +6,10 @@ import { isStudyAssistantPilotStudent } from "@/services/student-assistant/pilot
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { getPublicSystemConfig } from "@/services/system-config/service";
+import {
+  getStudentTaskOverviewShared,
+  sharedNowMs,
+} from "@/services/dashboard/student-task-service";
 
 export default async function StudentLayout({
   children,
@@ -13,7 +17,11 @@ export default async function StudentLayout({
   children: ReactNode;
 }) {
   const user = await requirePageRole(Role.STUDENT);
-  const config = await getPublicSystemConfig();
+  const nowMs = sharedNowMs();
+  const [config, overview] = await Promise.all([
+    getPublicSystemConfig(),
+    getStudentTaskOverviewShared(user.id, nowMs),
+  ]);
   return (
     <DashboardShell
       headerAction={
@@ -21,6 +29,9 @@ export default async function StudentLayout({
           <StudyAssistantLauncher />
         ) : undefined
       }
+      navBadges={{
+        "/student/tasks": overview.counts.assignment + overview.counts.exam,
+      }}
       platformAnnouncement={config.platformAnnouncement}
       platformName={config.platformName}
       title="学生工作台"

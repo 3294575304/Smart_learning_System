@@ -33,6 +33,9 @@ import { integrationPrisma } from "../recommendations/database";
 
 test("PostgreSQL notification workflow enforces ownership, expiry, role targeting and idempotency", async (t) => {
   const suffix = randomUUID().replaceAll("-", "");
+  const school = await integrationPrisma.school.create({
+    data: { name: `Notification school ${suffix}`, key: `n${suffix}` },
+  });
   const users = await Promise.all(
     [
       [Role.ADMIN, UserStatus.ACTIVE, "Admin"],
@@ -45,6 +48,7 @@ test("PostgreSQL notification workflow enforces ownership, expiry, role targetin
         data: {
           email: `notification_${index}_${suffix}@example.test`,
           passwordHash: "integration-test-only",
+          schoolId: school.id,
           role: role as Role,
           status: status as UserStatus,
           profile: { create: { displayName: `${label}-${suffix}` } },
@@ -113,6 +117,7 @@ test("PostgreSQL notification workflow enforces ownership, expiry, role targetin
       where: { userId: { in: userIds } },
     });
     await integrationPrisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await integrationPrisma.school.delete({ where: { id: school.id } });
   });
 
   const firstRun = await runAssignmentDueReminders(now);

@@ -1,6 +1,8 @@
 import { getStudentExamTasks } from "./student-exam-tasks";
 import "server-only";
 
+import { cache } from "react";
+
 import { getStudentClassroomContext } from "@/services/courses/student-access";
 import {
   studentTaskScopeSchema,
@@ -83,4 +85,18 @@ export async function getStudentTaskOverview(
     },
     now,
   );
+}
+
+/**
+ * 页面与外壳在同一请求里都要这份统计（正文用明细、侧栏用待办数做徽标）。
+ * React 的 cache 以参数相等为命中条件，所以两边都传"取整到分钟"的毫秒数，
+ * 既共用同一次查询，又不会因为两次 new Date() 不同而各查一遍。
+ */
+export const getStudentTaskOverviewShared = cache(
+  async (studentId: string, nowMs: number) =>
+    getStudentTaskOverview(studentId, new Date(nowMs)),
+);
+
+export function sharedNowMs() {
+  return Math.floor(Date.now() / 60_000) * 60_000;
 }

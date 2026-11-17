@@ -85,7 +85,7 @@ export function JoinClassroomForm({
           placeholder="请输入邀请码"
         />
         <button
-          className={`bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60 ${
+          className={`st-btn-cta bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60 ${
             compact ? "w-full" : ""
           }`}
           disabled={isSubmitting}

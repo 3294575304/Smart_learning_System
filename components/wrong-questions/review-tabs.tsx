@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { Bookmark, NotebookPen } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { reviewTabHref } from "@/services/review/tab-navigation";
@@ -9,13 +10,17 @@ import {
 export function ReviewTabs({ favorites }: { favorites: boolean }) {
   const search = useSearchParams();
   return (
-    <nav aria-label="我的题库分类" className={SECTION_TABS_LIST}>
+    <nav
+      aria-label="我的题库分类"
+      className={`st-study-tabs ${SECTION_TABS_LIST}`}
+    >
       {[
         { id: "wrong", label: "错题本", icon: NotebookPen },
         { id: "favorites", label: "我的收藏", icon: Bookmark },
       ].map((tab) => {
         return (
-          <a
+          <Link
+            prefetch={false}
             key={tab.id}
             href={reviewTabHref(
               search.toString(),
@@ -32,7 +37,7 @@ export function ReviewTabs({ favorites }: { favorites: boolean }) {
           >
             <tab.icon className="size-4 shrink-0" aria-hidden="true" />
             <span>{tab.label}</span>
-          </a>
+          </Link>
         );
       })}
     </nav>

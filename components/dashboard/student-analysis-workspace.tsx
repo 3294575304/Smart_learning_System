@@ -10,13 +10,15 @@ import {
   ClipboardList,
   Clock3,
   Info,
-  Layers3,
   Lightbulb,
   Network,
   CalendarCheck2,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { StudentAnalyticsLink as Link } from "./student-analytics-link";
+import { ScoreTrendChart } from "./score-trend-chart";
+import { recordLabel, shortKindLabel } from "./record-label";
+import { StudentRecordLinks } from "./student-record-links";
 import type {
   StudentClassAnalysis,
   getStudentClassAnalytics,
@@ -26,7 +28,7 @@ type Contexts = Awaited<
   ReturnType<typeof getStudentClassAnalytics>
 >["contexts"];
 const panel =
-  "min-w-0 rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/30";
+  "workspace-panel min-w-0 rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/30";
 const panelAction =
   "inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-sky-50 px-3 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
 const specialGradeLabels: Record<string, string> = {
@@ -38,11 +40,6 @@ const specialGradeLabels: Record<string, string> = {
   OTHER: "特殊状态",
   NOT_ENTERED: "未录入",
 };
-function recordLabel(kind: string, href: string) {
-  if (kind === "ASSIGNMENT") return "作业";
-  const exam = kind === "MIDTERM" ? "期中考试" : "期末考试";
-  return `${exam} · ${href.startsWith("/student/results") ? "成绩台账" : "在线考试"}`;
-}
 function PanelTitle({
   icon,
   title,
@@ -276,10 +273,12 @@ export function StudentAnalysisWorkspace({
   selected: s,
   contexts,
   updatedAt,
+  initialChart = "all",
 }: {
   selected: StudentClassAnalysis;
   contexts: Contexts;
   updatedAt: Date;
+  initialChart?: "all" | "assignment" | "exam" | "practice";
 }) {
   const scope = new URLSearchParams({
     courseId: s.course.id,
@@ -287,8 +286,6 @@ export function StudentAnalysisWorkspace({
   });
   const assignments = `/student/assignments?${scope}`;
   const center = `/student/courses/${s.course.id}/learning-center?classroomId=${s.classroom.id}`;
-  const publishedPercent = s.total ? (s.publishedCount / s.total) * 100 : 0;
-  const submittedPercent = s.total ? (s.submitted / s.total) * 100 : 0;
   const attendance = [
     { label: "正常", value: s.attendance.present, color: "bg-sky-500" },
     { label: "迟到", value: s.attendance.late, color: "bg-amber-400" },
@@ -297,18 +294,25 @@ export function StudentAnalysisWorkspace({
     { label: "缺勤", value: s.attendance.absent, color: "bg-rose-400" },
     { label: "待确认", value: s.attendance.pending, color: "bg-slate-300" },
   ];
-  const tips = s.unsubmitted
+  const unsubmittedAssignments =
+    s.assignmentProgress.total - s.assignmentProgress.submitted;
+  const assignmentCompletion = s.assignmentProgress.total
+    ? Math.round(
+        (s.assignmentProgress.submitted / s.assignmentProgress.total) * 100,
+      )
+    : null;
+  const tips = unsubmittedAssignments
     ? [
         {
-          title: `我还有 ${s.unsubmitted} 项作业未提交`,
-          text: s.overdue
-            ? `其中 ${s.overdue} 项已截止，请到作业页查看任务状态和可提交范围。`
+          title: `我还有 ${unsubmittedAssignments} 项作业未提交`,
+          text: s.assignmentProgress.overdue
+            ? `其中 ${s.assignmentProgress.overdue} 项已截止，请到作业页查看任务状态和可提交范围。`
             : "先安排近期作业，再留出时间复习。",
           href: assignments,
           label: "查看作业",
         },
       ]
-    : s.total
+    : s.assignmentProgress.total
       ? [
           {
             title: "我已提交全部作业",
@@ -335,9 +339,9 @@ export function StudentAnalysisWorkspace({
           : "结合已公布作业反馈，先复习反复出错的内容。";
   const metrics = [
     {
-      label: "任务提交率",
-      value: s.completion === null ? "—" : `${s.completion}%`,
-      detail: `已提交 ${s.submitted} / ${s.total} 项${s.total > s.assignmentProgress.total ? " · 含已结束考试" : ""}`,
+      label: "作业提交率",
+      value: assignmentCompletion === null ? "—" : `${assignmentCompletion}%`,
+      detail: `已提交 ${s.assignmentProgress.submitted} / ${s.assignmentProgress.total} 项作业`,
       icon: CheckCheck,
       tint: "bg-sky-50 text-sky-600",
     },
@@ -351,11 +355,11 @@ export function StudentAnalysisWorkspace({
       tint: "bg-indigo-50 text-indigo-600",
     },
     {
-      label: "未提交在线任务",
-      value: s.unsubmitted,
-      detail: s.overdue
-        ? `${s.overdue} 项已截止`
-        : s.total
+      label: "未提交作业",
+      value: unsubmittedAssignments,
+      detail: s.assignmentProgress.overdue
+        ? `${s.assignmentProgress.overdue} 项已截止`
+        : s.assignmentProgress.total
           ? "当前教学班的正式作业"
           : "当前教学班暂无已开放作业",
       icon: ClipboardList,
@@ -373,7 +377,7 @@ export function StudentAnalysisWorkspace({
   ];
   return (
     <section
-      className="grid gap-5 pb-2 xl:grid-cols-[minmax(0,1fr)_22.5rem]"
+      className="grid gap-4 pb-2 xl:grid-cols-[minmax(0,1fr)_22.5rem]"
       aria-label="个人学情分析看板"
     >
       <div className="min-w-0 xl:col-span-2 xl:row-start-1">
@@ -427,9 +431,9 @@ export function StudentAnalysisWorkspace({
           </div>
         </div>
       </header>
-      <div className="grid grid-cols-2 gap-3 xl:col-span-2 xl:row-start-3 xl:grid-cols-4 xl:gap-5">
+      <div className="grid grid-cols-2 gap-3 xl:col-span-2 xl:row-start-3 xl:grid-cols-4 xl:gap-4">
         {metrics.map((m) => (
-          <article key={m.label} className={`${panel} p-4 sm:p-5 xl:p-6`}>
+          <article key={m.label} className={`${panel} p-4 sm:p-5 xl:p-5`}>
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-xs font-medium text-slate-500">{m.label}</h2>
               <span
@@ -445,14 +449,14 @@ export function StudentAnalysisWorkspace({
           </article>
         ))}
       </div>
-      <div className="grid items-start gap-5 lg:grid-cols-12 xl:contents">
+      <div className="grid gap-4 lg:grid-cols-12 xl:contents">
         <section
           className={`${panel} flex flex-col p-5 sm:p-6 lg:col-span-8 xl:col-span-1 xl:col-start-1 xl:row-start-4`}
         >
           <PanelTitle
             icon={<ChartNoAxesCombined className="size-4" />}
-            title="我的作业与考试成绩"
-            description="最近 8 项已公布作业与考试，按百分制展示"
+            title="我的学习记录"
+            description="切换统计口径，查看最近的成绩变化"
             action={
               <Link href={assignments} className={panelAction}>
                 作业记录
@@ -460,116 +464,184 @@ export function StudentAnalysisWorkspace({
               </Link>
             }
           />
-          <ScoreChart points={s.scoreHistory} />
-        </section>
-        <section
-          className={`${panel} flex flex-col p-5 sm:p-6 lg:col-span-4 xl:col-span-1 xl:col-start-2 xl:row-start-4`}
-        >
-          <PanelTitle
-            icon={<Layers3 className="size-4" />}
-            title="我的在线任务进度"
-            description="当前教学班的正式作业与已结束考试"
+          <ScoreTrendChart
+            initialTab={initialChart}
+            practice={s.practiceHistory}
+            practiceHref={`/student/practice?${scope}`}
+            series={{
+              all: s.scoreHistory,
+              assignment: s.scoreHistoryByKind.assignment,
+              exam: s.scoreHistoryByKind.exam,
+            }}
+            status={{
+              total: s.total,
+              published: s.publishedCount,
+              awaiting: s.awaitingRelease,
+              unsubmitted: s.unsubmitted,
+              examEnded: s.total - s.assignmentProgress.total,
+              examSubmitted: s.submitted - s.assignmentProgress.submitted,
+            }}
           />
-          <div className="mt-6 flex flex-1 flex-wrap items-center justify-center gap-5">
-            <div
-              className="flex size-32 shrink-0 items-center justify-center rounded-full"
-              role="img"
-              aria-label={
-                s.total
-                  ? `${s.total}项在线任务，已公布${s.publishedCount}项，待公布${s.awaitingRelease}项，未提交${s.unsubmitted}项`
-                  : "当前教学班暂无在线任务"
+        </section>
+        <div className="flex min-w-0 flex-col gap-4 lg:col-span-4 xl:col-span-1 xl:col-start-2 xl:row-span-2 xl:row-start-4">
+          <section className={`${panel} flex flex-col p-5 sm:p-6`}>
+            <PanelTitle
+              icon={<CalendarCheck2 className="size-4" />}
+              title="我的出勤记录"
+              action={
+                <Link
+                  href={`/student/attendance?${scope}`}
+                  className={panelAction}
+                >
+                  明细
+                  <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                </Link>
               }
-              style={{
-                background: s.total
-                  ? `conic-gradient(#0284c7 0% ${publishedPercent}%, #a5b4fc ${publishedPercent}% ${submittedPercent}%, #e2e8f0 ${submittedPercent}% 100%)`
-                  : "#f1f5f9",
-              }}
-            >
-              <div className="flex size-[104px] flex-col items-center justify-center rounded-full bg-white">
-                <strong className="text-2xl font-semibold text-slate-900">
-                  {s.total ? s.completion : "—"}
-                  {s.total ? <span className="text-sm">%</span> : null}
-                </strong>
-                <span className="mt-1 text-xs text-slate-500">
-                  {s.total ? "已提交" : "暂无任务"}
+            />
+            {s.attendance.total ? (
+              <>
+                <div
+                  className="mt-5 flex h-2 overflow-hidden rounded-full bg-slate-100"
+                  role="img"
+                  aria-label={attendance
+                    .map((a) => `${a.label}${a.value}次`)
+                    .join("，")}
+                >
+                  {attendance
+                    .filter((a) => a.value)
+                    .map((a) => (
+                      <div
+                        key={a.label}
+                        className={a.color}
+                        style={{
+                          width: `${(a.value / s.attendance.total) * 100}%`,
+                        }}
+                      />
+                    ))}
+                </div>
+                <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-4">
+                  {attendance.map((a) => (
+                    <div key={a.label}>
+                      <dt className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <span className={`size-1.5 rounded-full ${a.color}`} />
+                        {a.label}
+                      </dt>
+                      <dd className="mt-1 text-base font-semibold text-slate-700">
+                        {a.value}
+                        <span className="ml-1 text-xs font-normal text-slate-500">
+                          次
+                        </span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            ) : (
+              <p className="flex flex-1 items-center justify-center py-6 text-center text-sm text-slate-500">
+                我还没有出勤记录
+              </p>
+            )}
+          </section>
+          {/* 建议卡并入右栏并吸收剩余高度：上为行动建议、下为知识掌握入口，
+              两块内容分别贴顶与贴底，避免中间出现一条空带 */}
+          <section
+            className={`${panel} flex min-h-0 flex-1 flex-col bg-gradient-to-br from-white to-sky-50/70 p-5`}
+          >
+            <PanelTitle
+              icon={<Lightbulb className="size-4" />}
+              title="接下来可以做"
+            />
+            <div className="mt-3 flex min-h-0 flex-1 flex-col justify-between gap-4 overflow-y-auto overscroll-contain pr-1">
+              <div className="space-y-3">
+                {tips.map((tip) => (
+                  <div key={tip.title}>
+                    <h3 className="text-sm font-semibold text-slate-700">
+                      {tip.title}
+                    </h3>
+                    <p className="mt-1 text-xs leading-6 text-slate-500">
+                      {tip.text}
+                    </p>
+                    <Link
+                      href={tip.href}
+                      className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-sky-700"
+                    >
+                      {tip.label}
+                      <ArrowRight className="size-3" aria-hidden="true" />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+              <p className="border-t border-sky-100 pt-2.5 text-xs leading-6 text-slate-500">
+                {scoreTip}
+              </p>
+              <div className="flex items-start gap-3 border-t border-sky-100 pt-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-sky-600 shadow-sm shadow-slate-200/50">
+                  <Network aria-hidden="true" className="size-4" />
                 </span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-800">
+                    我的知识掌握
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    画像汇总我在这门课的评分记录，可进入课程学习中心查看图谱与学习路径。
+                  </p>
+                  <Link href={center} className={`${panelAction} mt-2 w-fit`}>
+                    <BookOpen className="size-4" aria-hidden="true" />
+                    课程学习中心
+                    <ArrowRight className="size-3.5" aria-hidden="true" />
+                  </Link>
+                </div>
               </div>
             </div>
-            <dl className="min-w-28 space-y-3 text-xs">
-              {[
-                {
-                  label: "已公布",
-                  value: s.publishedCount,
-                  color: "bg-sky-600",
-                },
-                {
-                  label: "待公布",
-                  value: s.awaitingRelease,
-                  color: "bg-indigo-300",
-                },
-                {
-                  label: "未提交",
-                  value: s.unsubmitted,
-                  color: "bg-slate-200",
-                },
-              ].map((x) => (
-                <div
-                  key={x.label}
-                  className="flex items-center justify-between gap-5"
-                >
-                  <dt className="flex items-center gap-2 text-slate-500">
-                    <span className={`size-2 rounded-full ${x.color}`} />
-                    {x.label}
-                  </dt>
-                  <dd className="font-semibold text-slate-800">{x.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-          <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
-            提交情况与评分状态分别统计，待公布成绩不计为零分。
-          </p>
-        </section>
+          </section>
+        </div>
       </div>
-      <div className="grid items-start gap-5 lg:grid-cols-12 xl:contents">
+      <div className="grid gap-4 lg:grid-cols-12 xl:contents">
         <section
-          className={`${panel} flex flex-col overflow-hidden lg:col-span-8 xl:col-span-1 xl:col-start-1 xl:row-start-5`}
+          className={`${panel} flex min-h-0 flex-col overflow-hidden lg:col-span-8 xl:col-span-1 xl:col-start-1 xl:row-start-5`}
         >
-          <div className="p-5 sm:px-6">
+          <div className="p-5 pb-3 sm:px-6">
             <PanelTitle
               icon={<ClipboardList className="size-4" />}
               title="我的作业与考试记录"
-              description="当前教学班最近 8 项有效提交"
+              description="当前教学班最近 8 项记录（含待公布成绩）"
               action={
-                <Link href={assignments} className={panelAction}>
-                  全部作业
-                  <ArrowUpRight className="size-3.5" aria-hidden="true" />
-                </Link>
+                <StudentRecordLinks
+                  assignmentsHref={assignments}
+                  examsHref={`/student/exams?${scope}`}
+                  triggerClassName={panelAction}
+                />
               }
             />
           </div>
           {s.recent.length ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-3 border-y border-slate-100 bg-slate-50/70 px-5 py-2 text-xs text-slate-500 sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:px-6">
+              <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_5rem] gap-3 border-y border-slate-100 bg-slate-50/95 px-5 py-2 text-xs text-slate-500 backdrop-blur-sm sm:grid-cols-[minmax(0,1fr)_4.5rem_6rem_6rem] sm:px-6">
                 <span>任务名称</span>
-                <span className="hidden sm:block">提交时间</span>
+                <span className="hidden sm:block">类型</span>
+                <span className="hidden sm:block">提交 / 发布时间</span>
                 <span className="text-right">成绩 / 状态</span>
               </div>
-              <ul className="flex-1 divide-y divide-slate-100">
+              {/* 记录条目超过卡片可用高度时在卡内滚动，页脚与页面对齐不被撑开 */}
+              <ul className="max-h-[19rem] min-h-0 flex-1 [scrollbar-gutter:stable] divide-y divide-slate-100 overflow-y-auto overscroll-contain">
                 {s.recent.map((row) => (
                   <li key={row.id}>
                     <Link
                       href={row.href}
-                      className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3 px-5 py-4 transition hover:bg-sky-50/50 sm:grid-cols-[minmax(0,1fr)_6rem_6rem] sm:px-6"
+                      className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3 px-5 py-3 transition hover:bg-sky-50/50 sm:grid-cols-[minmax(0,1fr)_4.5rem_6rem_6rem] sm:px-6"
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium text-slate-700">
-                          {recordLabel(row.kind, row.href)} · {row.title}
+                          {row.title}
                         </span>
                         <span className="mt-1 block text-xs text-slate-500 sm:hidden">
+                          {shortKindLabel(row.kind)} ·{" "}
                           {row.submittedAt?.toLocaleDateString("zh-CN") ??
                             "时间未记录"}
                         </span>
+                      </span>
+                      <span className="hidden text-xs text-slate-600 sm:block">
+                        {shortKindLabel(row.kind)}
                       </span>
                       <span className="hidden text-xs text-slate-500 sm:block">
                         {row.submittedAt?.toLocaleDateString("zh-CN", {
@@ -603,127 +675,18 @@ export function StudentAnalysisWorkspace({
                   </li>
                 ))}
               </ul>
+              <p className="mt-auto border-t border-slate-100 px-5 py-2.5 text-xs leading-5 text-slate-500 sm:px-6">
+                线上提交显示提交时间；台账录入的成绩显示发布时间。
+              </p>
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center px-6 pb-8 text-center text-sm text-slate-500">
-              我还没有提交作业
+              暂无作业与考试记录
             </div>
           )}
         </section>
-        <section
-          className={`${panel} flex flex-col p-5 sm:p-6 lg:col-span-4 xl:col-span-1 xl:col-start-2 xl:row-start-5`}
-        >
-          <PanelTitle
-            icon={<CalendarCheck2 className="size-4" />}
-            title="我的出勤记录"
-            action={
-              <Link
-                href={`/student/attendance?${scope}`}
-                className={panelAction}
-              >
-                明细
-                <ArrowUpRight className="size-3.5" aria-hidden="true" />
-              </Link>
-            }
-          />
-          {s.attendance.total ? (
-            <>
-              <div
-                className="mt-5 flex h-2 overflow-hidden rounded-full bg-slate-100"
-                role="img"
-                aria-label={attendance
-                  .map((a) => `${a.label}${a.value}次`)
-                  .join("，")}
-              >
-                {attendance
-                  .filter((a) => a.value)
-                  .map((a) => (
-                    <div
-                      key={a.label}
-                      className={a.color}
-                      style={{
-                        width: `${(a.value / s.attendance.total) * 100}%`,
-                      }}
-                    />
-                  ))}
-              </div>
-              <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-4">
-                {attendance.map((a) => (
-                  <div key={a.label}>
-                    <dt className="flex items-center gap-1.5 text-xs text-slate-500">
-                      <span className={`size-1.5 rounded-full ${a.color}`} />
-                      {a.label}
-                    </dt>
-                    <dd className="mt-1 text-base font-semibold text-slate-700">
-                      {a.value}
-                      <span className="ml-1 text-xs font-normal text-slate-500">
-                        次
-                      </span>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </>
-          ) : (
-            <p className="flex flex-1 items-center justify-center py-6 text-center text-sm text-slate-500">
-              我还没有出勤记录
-            </p>
-          )}
-        </section>
       </div>
-      <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-white to-sky-50/70 p-5 sm:p-6 xl:col-span-2 xl:row-start-6">
-        <PanelTitle
-          icon={<Lightbulb className="size-4" />}
-          title="接下来可以做"
-        />
-        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] xl:gap-7">
-          <div className="space-y-4">
-            {tips.map((tip) => (
-              <div key={tip.title}>
-                <h3 className="text-sm font-semibold text-slate-700">
-                  {tip.title}
-                </h3>
-                <p className="mt-1.5 text-xs leading-6 text-slate-500">
-                  {tip.text}
-                </p>
-                <Link
-                  href={tip.href}
-                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-sky-700"
-                >
-                  {tip.label}
-                  <ArrowRight className="size-3" aria-hidden="true" />
-                </Link>
-              </div>
-            ))}
-          </div>
-          <p className="border-t border-sky-100 pt-3 text-xs leading-6 text-slate-500 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-7">
-            {scoreTip}
-          </p>
-        </div>
-      </section>
-      <section
-        className={`${panel} flex flex-wrap items-center justify-between gap-4 p-5 xl:col-span-2 xl:row-start-7`}
-      >
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
-            <Network aria-hidden="true" className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-slate-800">
-              我的知识掌握
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              进入课程学习中心查看画像、知识图谱与学习路径。画像汇总我在这门课的评分记录。
-            </p>
-          </div>
-        </div>
-        <Link href={center} className={panelAction}>
-          <BookOpen className="size-4" aria-hidden="true" />
-          课程学习中心
-          <ArrowRight className="size-3.5" aria-hidden="true" />
-        </Link>
-      </section>
-      <footer className="flex flex-wrap items-start justify-between gap-2 px-1 text-[11px] leading-5 text-slate-500 xl:col-span-2 xl:row-start-8">
+      <footer className="flex flex-wrap items-start justify-between gap-2 px-1 text-[11px] leading-5 text-slate-500 xl:col-span-2 xl:row-start-7">
         <p className="inline-flex max-w-3xl items-start gap-1.5">
           <Info className="mt-1 size-3 shrink-0" aria-hidden="true" />
           均分取当前教学班已公布的作业与考试百分制成绩；同步到已发布台账的考试只计一次。仅台账录入的考试不计入提交率，自主练习和未评分项不计入均分。

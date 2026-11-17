@@ -170,22 +170,19 @@ test("课程列表渲染搜索框、状态与学期筛选以及结果摘要", ()
   assert.match(markup, /搜索课程/u);
   assert.match(markup, /课程名称、课程号或学期/u);
   assert.match(markup, /课程状态/u);
-  assert.match(markup, /全部状态/u);
+  assert.match(markup, /aria-label="课程状态"[^>]*role="tablist"/u);
+  assert.match(markup, /aria-selected="true"[^>]*role="tab"[^>]*>全部/u);
   assert.match(markup, /学期/u);
   assert.match(markup, /全部学期/u);
-  assert.match(markup, /重置筛选/u);
+  assert.doesNotMatch(markup, />重置<\/button>/u);
   assert.match(markup, /aria-live="polite"/u);
-  assert.match(
-    markup,
-    /可搜索范围：课程名称、课程号、学期、课程说明、课程分类、课程模板名称、课程状态/u,
-  );
   assert.match(markup, /共 3 门课程/u);
-  assert.match(markup, /<option value="ACTIVE">启用<\/option>/u);
-  assert.match(markup, /<option value="DRAFT">草稿<\/option>/u);
+  assert.match(markup, /role="tab"[^>]*>启用/u);
+  assert.match(markup, /role="tab"[^>]*>草稿/u);
   assert.doesNotMatch(markup, /<option value="ARCHIVED">/u);
   // 学期选项来自真实数据
   assert.match(markup, /<option value="2026-2027-1">2026-2027-1<\/option>/u);
-  assert.match(markup, /disabled=""/u);
+  assert.match(markup, /aria-label="排序方式"/u);
 });
 
 test("只有启用课程时隐藏状态筛选，并忽略旧草稿筛选链接", () => {
@@ -219,8 +216,9 @@ test("带筛选参数的链接直接渲染筛选后的结果，便于刷新与�
 
   assert.match(byTerm, /数据结构/u);
   assert.doesNotMatch(byTerm, /（进阶）/u);
-  assert.match(byTerm, /筛选出 1 \/ 3 门/u);
+  assert.match(byTerm, /找到 1 \/ 3 门课程/u);
   assert.match(byTerm, /当前条件：学期「2025-2026-2」/u);
+  assert.match(byTerm, />重置<\/button>/u);
 
   const byStatus = renderToStaticMarkup(
     React.createElement(TeacherCourseList, {

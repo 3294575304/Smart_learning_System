@@ -77,7 +77,7 @@ export default async function StudentWrongQuestionsPage({
   );
   if (!parsed.success)
     return (
-      <section className="mx-auto max-w-[1440px] min-w-0 space-y-4">
+      <section className="st-review-workspace mx-auto max-w-[1440px] min-w-0 space-y-4">
         <PageHeader
           actions={returnAction}
           title="我的题库"
@@ -96,7 +96,7 @@ export default async function StudentWrongQuestionsPage({
     );
   if (favorites)
     return (
-      <section className="mx-auto max-w-[1440px] min-w-0 space-y-4">
+      <section className="st-review-workspace mx-auto max-w-[1440px] min-w-0 space-y-4">
         <PageHeader
           actions={returnAction}
           title="我的题库"
@@ -124,7 +124,7 @@ export default async function StudentWrongQuestionsPage({
     : await summarizeWrongCourses(student.id, query.courseId);
 
   return (
-    <section className="mx-auto max-w-[1440px] min-w-0 space-y-4">
+    <section className="st-review-workspace mx-auto max-w-[1440px] min-w-0 space-y-4">
       <PageHeader
         actions={returnAction}
         description="整理错题和收藏，按课程与章节复习。收藏和掌握状态分别保存。"

@@ -108,6 +108,21 @@ const studentQuestionSelect = {
   typeSnapshot: true,
   sortOrder: true,
   points: true,
+  // 只取第一条 PUBLIC 用例用于答题页展示；隐藏用例不进前端。
+  programmingConfigSnapshot: {
+    select: {
+      configRevision: {
+        select: {
+          testCases: {
+            where: { visibility: "PUBLIC" as const },
+            orderBy: { sortOrder: "asc" as const },
+            take: 1,
+            select: { stdin: true, expectedOutput: true },
+          },
+        },
+      },
+    },
+  },
   examImages: {
     orderBy: { sortOrder: "asc" as const },
     select: { id: true },
@@ -1046,7 +1061,7 @@ async function requireStudentAssignment(
   assignmentId: string,
 ) {
   const assignment = await prisma.assignment.findUnique({
-    where: { id: assignmentId },
+    where: { id: assignmentId, deletedAt: null },
     include: {
       classroom: {
         select: {
@@ -1065,13 +1080,38 @@ async function requireStudentAssignment(
       submissions: {
         where: { studentId, status: { not: SubmissionStatus.WITHDRAWN } },
         orderBy: { attemptNumber: "desc" },
-        select: { id: true, status: true, attemptNumber: true },
+        // 详情页要展示「第几次 / 什么时候交 / 什么状态 / 多少分」，
+        // 只给三个字段时那张卡只能渲染成"第 N 次提交 → 查看结果"的空壳。
+        select: {
+          id: true,
+          status: true,
+          attemptNumber: true,
+          submittedAt: true,
+          score: true,
+          maxScore: true,
+        },
+      },
+      /*
+       * 考试同样是 Assignment，靠 examSessionId 关联 ExamSession。
+       * 详情页需要知道"这是不是一场考试"，才能把「提交历史与成绩」换成考试信息，
+       * 否则待开始的考试会显示一张永远为空的提交历史。
+       */
+      examSession: {
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          startsAt: true,
+          endsAt: true,
+          allowedSwitches: true,
+          cancelledAt: true,
+        },
       },
     },
   });
   if (!assignment) throw new ResourceNotFoundError("作业不存在");
   assertActiveMembership(assignment.classroom.memberships[0] ?? null);
-  assertAssignmentIsVisible(assignment, new Date());
+  assertAssignmentIsVisible(assignment, new Date(), true);
   return assignment;
 }
 
@@ -1101,6 +1141,17 @@ export async function getStudentAssignment(
     writeBlockedReason: work.reason,
     effectiveDueAt: work.dueAt,
     makeupKind: work.grant?.kind ?? null,
+    exam: assignment.examSession
+      ? {
+          id: assignment.examSession.id,
+          title: assignment.examSession.title,
+          type: assignment.examSession.type,
+          startsAt: assignment.examSession.startsAt,
+          endsAt: assignment.examSession.endsAt,
+          allowedSwitches: assignment.examSession.allowedSwitches,
+          cancelledAt: assignment.examSession.cancelledAt,
+        }
+      : null,
     questions: assignment.questions.map((question) => ({
       id: question.id,
       title: question.titleSnapshot,
@@ -1119,7 +1170,13 @@ export async function getStudentAssignment(
         sortOrder: option.sortOrder,
       })),
     })),
-    attempts: assignment.submissions,
+    attempts: assignment.submissions.map((submission) => ({
+      ...submission,
+      score:
+        submission.status === SubmissionStatus.PUBLISHED
+          ? submission.score
+          : null,
+    })),
   };
 }
 
@@ -1266,7 +1323,7 @@ export async function getStudentSubmissionDraft(
   submissionId: string,
 ) {
   const submission = await prisma.submission.findFirst({
-    where: { id: submissionId, studentId },
+    where: { id: submissionId, studentId, assignment: { deletedAt: null } },
     include: submissionDraftInclude,
   });
   if (!submission) throw new ResourceNotFoundError("作答记录不存在");
@@ -1276,11 +1333,7 @@ export async function getStudentSubmissionDraft(
   assertActiveMembership(membership ?? null);
   if (submission.assignment.status === "REVOKED")
     throw new AssignmentRevokedError();
-  if (submission.assignment.classroom.status !== "ACTIVE")
-    throw new AssignmentOperationError(
-      "班级已结课或已关闭，请返回作业页面查看历史提交与成绩",
-    );
-  assertAssignmentIsVisible(submission.assignment, new Date());
+  assertAssignmentIsVisible(submission.assignment, new Date(), true);
   const work = await readStudentWorkAccess(
     submission.assignmentId,
     studentId,
@@ -1297,6 +1350,7 @@ export async function getStudentSubmissionDraft(
     lastSavedAt: submission.lastSavedAt,
     examSessionId: submission.assignment.examSessionId,
     dueAt: work.dueAt,
+    serverNow: new Date(),
     canWrite: work.canWrite,
     writeBlockedReason: work.reason,
     makeupKind: work.grant?.kind ?? null,
@@ -1307,6 +1361,13 @@ export async function getStudentSubmissionDraft(
       type: question.typeSnapshot,
       sortOrder: question.sortOrder,
       points: question.points.toNumber(),
+      programming: question.programmingConfigSnapshot?.configRevision
+        .testCases[0]
+        ? {
+            sample:
+              question.programmingConfigSnapshot.configRevision.testCases[0],
+          }
+        : null,
       images: question.examImages.map((image) => ({
         id: image.id,
         url: `/api/assignment-question-images/${image.id}`,
@@ -1579,190 +1640,200 @@ export async function submitStudentAssignment(
   submissionId: string,
   mode: "STUDENT" | "EXAM_AUTO" = "STUDENT",
 ): Promise<SubmissionResultView> {
-  await runAssignmentSerializable(async (transaction) => {
-    const submission = await transaction.submission.findFirst({
-      where: { id: submissionId, studentId },
-      include: gradingSubmissionInclude,
-    });
-    if (!submission) throw new ResourceNotFoundError("作答记录不存在");
-    if (mode === "EXAM_AUTO" && !submission.assignment.examSessionId)
-      throw new ResourceNotFoundError("考试作答不存在");
-    if (submission.status !== SubmissionStatus.IN_PROGRESS) return;
-    const membership = submission.assignment.classroom.memberships.find(
-      (item) => item.studentId === studentId,
-    );
-    if (mode === "STUDENT") assertActiveMembership(membership ?? null);
-    const work =
-      mode === "STUDENT"
-        ? await assertStudentWorkAccess(
-            transaction,
-            submission.assignmentId,
-            studentId,
+  await runAssignmentSerializable(
+    async (transaction) => {
+      const submission = await transaction.submission.findFirst({
+        where: { id: submissionId, studentId, assignment: { deletedAt: null } },
+        include: gradingSubmissionInclude,
+      });
+      if (!submission) throw new ResourceNotFoundError("作答记录不存在");
+      if (mode === "EXAM_AUTO" && !submission.assignment.examSessionId)
+        throw new ResourceNotFoundError("考试作答不存在");
+      if (submission.status !== SubmissionStatus.IN_PROGRESS) return;
+      const membership = submission.assignment.classroom.memberships.find(
+        (item) => item.studentId === studentId,
+      );
+      if (mode === "STUDENT") assertActiveMembership(membership ?? null);
+      const work =
+        mode === "STUDENT"
+          ? await assertStudentWorkAccess(
+              transaction,
+              submission.assignmentId,
+              studentId,
+              submissionId,
+            )
+          : { grant: null };
+      const now = new Date();
+      let examSubmissionReason: ExamSubmissionReason | null = submission
+        .assignment.examSessionId
+        ? "MANUAL"
+        : null;
+      if (mode === "EXAM_AUTO") {
+        const exam = await transaction.examSession.findFirst({
+          where: {
+            assignments: { some: { id: submission.assignmentId } },
+            cancelledAt: null,
+          },
+        });
+        if (!exam) throw new ResourceNotFoundError("考试作答不存在");
+        const switches = await transaction.examSwitchEvent.count({
+          where: { submissionId },
+        });
+        if (now < exam.endsAt && switches <= exam.allowedSwitches)
+          throw new AssignmentOperationError("尚未达到考试自动交卷条件", 409);
+        examSubmissionReason = now >= exam.endsAt ? "TIME_UP" : "SWITCH_LIMIT";
+      } else {
+        await assertClassroomWorkAllowed(
+          transaction,
+          submission.assignment.classroomId,
+        );
+        if (
+          submission.assignment.examSessionId &&
+          submission.assignment.dueAt &&
+          new Date() >= submission.assignment.dueAt
+        )
+          throw new AssignmentOperationError("考试时间已到，等待自动收卷", 409);
+      }
+      const claimed = await transaction.submission.updateMany({
+        where: {
+          id: submissionId,
+          studentId,
+          status: SubmissionStatus.IN_PROGRESS,
+        },
+        data: {
+          status: SubmissionStatus.SUBMITTED,
+          submittedAt: now,
+          examSubmissionReason,
+        },
+      });
+      if (claimed.count !== 1) return;
+      if (work.grant) {
+        const consumed = await transaction.assignmentMakeupGrant.updateMany({
+          where: {
+            id: work.grant.id,
+            status: "ACTIVE",
+            expiresAt: { gt: now },
             submissionId,
-          )
-        : { grant: null };
-    const now = new Date();
-    let examSubmissionReason: ExamSubmissionReason | null = submission
-      .assignment.examSessionId
-      ? "MANUAL"
-      : null;
-    if (mode === "EXAM_AUTO") {
-      const exam = await transaction.examSession.findFirst({
-        where: {
-          assignments: { some: { id: submission.assignmentId } },
-          cancelledAt: null,
-        },
-      });
-      if (!exam) throw new ResourceNotFoundError("考试作答不存在");
-      const switches = await transaction.examSwitchEvent.count({
-        where: { submissionId },
-      });
-      if (now < exam.endsAt && switches <= exam.allowedSwitches)
-        throw new AssignmentOperationError("尚未达到考试自动交卷条件", 409);
-      examSubmissionReason = now >= exam.endsAt ? "TIME_UP" : "SWITCH_LIMIT";
-    } else {
-      await assertClassroomWorkAllowed(
-        transaction,
-        submission.assignment.classroomId,
-      );
-      if (
-        submission.assignment.examSessionId &&
-        submission.assignment.dueAt &&
-        new Date() >= submission.assignment.dueAt
-      )
-        throw new AssignmentOperationError("考试时间已到，等待自动收卷", 409);
-    }
-    const claimed = await transaction.submission.updateMany({
-      where: {
-        id: submissionId,
-        studentId,
-        status: SubmissionStatus.IN_PROGRESS,
-      },
-      data: {
-        status: SubmissionStatus.SUBMITTED,
-        submittedAt: now,
-        examSubmissionReason,
-      },
-    });
-    if (claimed.count !== 1) return;
-    if (work.grant) {
-      const consumed = await transaction.assignmentMakeupGrant.updateMany({
-        where: {
-          id: work.grant.id,
-          status: "ACTIVE",
-          expiresAt: { gt: now },
-          submissionId,
-        },
-        data: { status: "USED", usedAt: now },
-      });
-      if (consumed.count !== 1)
-        throw new AssignmentOperationError("补交授权已失效，请刷新后重试", 409);
-    }
+          },
+          data: { status: "USED", usedAt: now },
+        });
+        if (consumed.count !== 1)
+          throw new AssignmentOperationError(
+            "补交授权已失效，请刷新后重试",
+            409,
+          );
+      }
 
-    const answerMap = new Map(
-      submission.answers.map((answer) => [answer.assignmentQuestionId, answer]),
-    );
-    let earned = new Prisma.Decimal(0);
-    let requiresManualReview = false;
-    const answerIds: string[] = [];
-    for (const question of submission.assignment.questions) {
-      const currentAnswer = answerMap.get(question.id);
-      const savedInput = savedAnswerInput(
-        { id: question.id, type: question.typeSnapshot },
-        currentAnswer,
+      const answerMap = new Map(
+        submission.answers.map((answer) => [
+          answer.assignmentQuestionId,
+          answer,
+        ]),
       );
-      const result = gradeAnswer(
-        {
-          type: question.typeSnapshot,
-          points: question.points.toNumber(),
-          correctBoolean: question.correctBooleanSnapshot,
-          acceptableAnswers: question.acceptableAnswersSnapshot,
-          isCaseSensitive: question.isCaseSensitiveSnapshot,
-          options: question.optionSnapshots.map((option) => ({
-            id: option.id,
-            isCorrect: option.isCorrectSnapshot,
-          })),
-        },
-        savedInput,
-      );
-      if (result.score !== null) earned = earned.add(result.score);
-      if (result.gradingStatus === GradingStatus.MANUAL_REVIEW_REQUIRED) {
-        requiresManualReview = true;
-      }
-      if (question.typeSnapshot === QuestionType.PYTHON_PROGRAMMING) {
-        requiresManualReview = true;
-      }
-      const persisted = await transaction.studentAnswer.upsert({
-        where: {
-          submissionId_assignmentQuestionId: {
+      let earned = new Prisma.Decimal(0);
+      let requiresManualReview = false;
+      const answerIds: string[] = [];
+      for (const question of submission.assignment.questions) {
+        const currentAnswer = answerMap.get(question.id);
+        const savedInput = savedAnswerInput(
+          { id: question.id, type: question.typeSnapshot },
+          currentAnswer,
+        );
+        const result = gradeAnswer(
+          {
+            type: question.typeSnapshot,
+            points: question.points.toNumber(),
+            correctBoolean: question.correctBooleanSnapshot,
+            acceptableAnswers: question.acceptableAnswersSnapshot,
+            isCaseSensitive: question.isCaseSensitiveSnapshot,
+            options: question.optionSnapshots.map((option) => ({
+              id: option.id,
+              isCorrect: option.isCorrectSnapshot,
+            })),
+          },
+          savedInput,
+        );
+        if (result.score !== null) earned = earned.add(result.score);
+        if (result.gradingStatus === GradingStatus.MANUAL_REVIEW_REQUIRED) {
+          requiresManualReview = true;
+        }
+        if (question.typeSnapshot === QuestionType.PYTHON_PROGRAMMING) {
+          requiresManualReview = true;
+        }
+        const persisted = await transaction.studentAnswer.upsert({
+          where: {
+            submissionId_assignmentQuestionId: {
+              submissionId,
+              assignmentQuestionId: question.id,
+            },
+          },
+          update: {
+            gradingStatus: result.gradingStatus,
+            score: result.score,
+            maxScore: question.points,
+            isCorrect: result.isCorrect,
+            gradedAt:
+              result.gradingStatus === GradingStatus.AUTO_GRADED ? now : null,
+          },
+          create: {
             submissionId,
             assignmentQuestionId: question.id,
+            maxScore: question.points,
+            gradingStatus: result.gradingStatus,
+            score: result.score,
+            isCorrect: result.isCorrect,
+            gradedAt:
+              result.gradingStatus === GradingStatus.AUTO_GRADED ? now : null,
           },
-        },
-        update: {
-          gradingStatus: result.gradingStatus,
-          score: result.score,
-          maxScore: question.points,
-          isCorrect: result.isCorrect,
-          gradedAt:
-            result.gradingStatus === GradingStatus.AUTO_GRADED ? now : null,
-        },
-        create: {
-          submissionId,
-          assignmentQuestionId: question.id,
-          maxScore: question.points,
-          gradingStatus: result.gradingStatus,
-          score: result.score,
-          isCorrect: result.isCorrect,
-          gradedAt:
-            result.gradingStatus === GradingStatus.AUTO_GRADED ? now : null,
-        },
-        select: { id: true },
-      });
-      answerIds.push(persisted.id);
-      if (question.typeSnapshot === QuestionType.PYTHON_PROGRAMMING) {
-        await createFormalProgrammingAttempt(transaction, {
-          studentAnswerId: persisted.id,
-          assignmentQuestionId: question.id,
-          studentId,
-          sourceCode: currentAnswer?.textAnswer ?? "",
-          courseId: submission.assignment.classroom.courseId,
+          select: { id: true },
         });
-      }
-      if (result.isCorrect === false) {
-        await transaction.wrongQuestion.upsert({
-          where: { studentAnswerId: persisted.id },
-          update: { isResolved: false },
-          create: {
-            studentId,
+        answerIds.push(persisted.id);
+        if (question.typeSnapshot === QuestionType.PYTHON_PROGRAMMING) {
+          await createFormalProgrammingAttempt(transaction, {
             studentAnswerId: persisted.id,
             assignmentQuestionId: question.id,
-          },
-        });
+            studentId,
+            sourceCode: currentAnswer?.textAnswer ?? "",
+            courseId: submission.assignment.classroom.courseId,
+          });
+        }
+        if (result.isCorrect === false) {
+          await transaction.wrongQuestion.upsert({
+            where: { studentAnswerId: persisted.id },
+            update: { isResolved: false },
+            create: {
+              studentId,
+              studentAnswerId: persisted.id,
+              assignmentQuestionId: question.id,
+            },
+          });
+        }
       }
-    }
-    const maxScore = submission.assignment.totalPoints;
-    const percentage = maxScore.gt(0)
-      ? earned.div(maxScore).mul(100).toDecimalPlaces(2)
-      : new Prisma.Decimal(0);
-    await transaction.submission.update({
-      where: { id: submissionId },
-      data: {
-        status: requiresManualReview
-          ? SubmissionStatus.PENDING_REVIEW
-          : SubmissionStatus.GRADED,
-        gradedAt: requiresManualReview ? null : now,
-        publishedAt: null,
-        score: earned,
-        maxScore,
-        percentage,
-      },
-    });
-    await appendAssessmentLearningEventsAndProjectEvidence(
-      transaction,
-      answerIds,
-    );
-  }, "提交状态已发生变化，请刷新后重试");
+      const maxScore = submission.assignment.totalPoints;
+      const percentage = maxScore.gt(0)
+        ? earned.div(maxScore).mul(100).toDecimalPlaces(2)
+        : new Prisma.Decimal(0);
+      await transaction.submission.update({
+        where: { id: submissionId },
+        data: {
+          status: requiresManualReview
+            ? SubmissionStatus.PENDING_REVIEW
+            : SubmissionStatus.GRADED,
+          gradedAt: requiresManualReview ? null : now,
+          publishedAt: null,
+          score: earned,
+          maxScore,
+          percentage,
+        },
+      });
+      await appendAssessmentLearningEventsAndProjectEvidence(
+        transaction,
+        answerIds,
+      );
+    },
+    "提交状态已发生变化，请刷新后重试",
+    30_000,
+  );
   return getStudentSubmissionResult(studentId, submissionId);
 }
 
@@ -1774,6 +1845,7 @@ export async function getStudentSubmissionResult(
     where: {
       id: submissionId,
       studentId,
+      assignment: { deletedAt: null },
       status: {
         in: [
           SubmissionStatus.SUBMITTED,

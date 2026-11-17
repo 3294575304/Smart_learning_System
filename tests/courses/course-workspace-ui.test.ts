@@ -4,10 +4,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CourseWorkspaceNavigation } from "../../components/courses/course-workspace-navigation";
-import {
-  CourseQuestionTools,
-  CourseSetupChecklist,
-} from "../../components/courses/course-setup-checklist";
+import { CourseSetupChecklist } from "../../components/courses/course-setup-checklist";
 import { CourseDetailDisclosure } from "../../components/courses/course-detail-disclosure";
 import {
   buildCourseSetupProgress,
@@ -16,8 +13,8 @@ import {
 
 Object.assign(globalThis, { React });
 
-function renderSetup(overrides: Partial<CourseSetupInput> = {}) {
-  const progress = buildCourseSetupProgress({
+function setupProgress(overrides: Partial<CourseSetupInput> = {}) {
+  return buildCourseSetupProgress({
     courseId: "course-a",
     status: "ACTIVE",
     activeClassroomCount: 1,
@@ -40,15 +37,24 @@ function renderSetup(overrides: Partial<CourseSetupInput> = {}) {
     },
     ...overrides,
   });
+}
+
+function renderSetup(overrides: Partial<CourseSetupInput> = {}) {
+  const progress = setupProgress(overrides);
   return (
     renderToStaticMarkup(
       React.createElement(CourseSetupChecklist, {
         courseId: "course-a",
         progress,
+        section: "construction",
       }),
     ) +
     renderToStaticMarkup(
-      React.createElement(CourseQuestionTools, { courseId: "course-a" }),
+      React.createElement(CourseSetupChecklist, {
+        courseId: "course-a",
+        progress: setupProgress(),
+        section: "questions",
+      }),
     )
   );
 }
@@ -141,12 +147,17 @@ test("课程建设集中在原清单，三个日常分类不重复提供建设�
         archived: true,
         activeStudentCount: 0,
       },
+      section: "construction",
     }),
   );
   assert.match(construction, /课程建设/u);
   assert.match(construction, /课程已归档/u);
   const questionTools = renderToStaticMarkup(
-    React.createElement(CourseQuestionTools, { courseId: "course-a" }),
+    React.createElement(CourseSetupChecklist, {
+      courseId: "course-a",
+      progress: setupProgress(),
+      section: "questions",
+    }),
   );
   const entryPaths = [
     ...(html + construction + questionTools).matchAll(
@@ -212,6 +223,7 @@ test("大纲上传与审核共用卡片状态，下一步保留文字提示", ()
         archived: false,
         activeStudentCount: 0,
       },
+      section: "construction",
     }),
   );
   assert.match(html, /教学大纲/u);
@@ -283,7 +295,7 @@ test("课程准备进度随完成情况变化，四项始终保留直接入口",
   assert.doesNotMatch(empty, /id="course-completed-setup-details"/u);
   assert.match(
     partial,
-    /<details id="course-completed-setup-details" class="group\/completed\s/u,
+    /<details id="course-completed-setup-details" class="group\/completed"/u,
   );
   assert.match(partial, /已完成 1 项/u);
   const completedGroup = partial.indexOf('id="course-completed-setup-details"');
@@ -297,7 +309,7 @@ test("课程准备进度随完成情况变化，四项始终保留直接入口",
   );
   assert.match(
     complete,
-    /<details id="course-completed-setup-details" open="" class="group\/completed\s/u,
+    /<details id="course-completed-setup-details" open="" class="group\/completed"/u,
   );
   assert.match(complete, /已完成 4 项/u);
   assert.deepEqual(constructionEntries(empty), [
@@ -422,7 +434,7 @@ test("建设清单位于日常功能上方，课程信息、名单和教学进�
   );
   assert.ok(
     courseDetail.indexOf("<CourseWorkspaceNavigation") <
-      courseDetail.indexOf("<CourseQuestionTools"),
+      courseDetail.indexOf('section="questions"'),
   );
   assert.match(courseDetail, /id="course-classrooms"/u);
   assert.ok(

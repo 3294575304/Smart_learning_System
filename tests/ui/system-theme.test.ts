@@ -39,7 +39,9 @@ test("工作区采用深蓝交互与稳定浅底，保留登录品牌背景且�
   const forbiddenBackground =
     /\b(?:bg-black(?:\/\d+)?|bg-gray-(?:800|900)|bg-slate-(?:800|900|950))\b/u;
   for (const file of files) {
-    if (file.endsWith("knowledge-graph-canvas.tsx")) continue;
+    // The 3D graph is a deliberately dark visualization inside the light workspace.
+    if (file.replaceAll("\\", "/").endsWith("/knowledge-graph-canvas.tsx"))
+      continue;
     const source = await readFile(file, "utf8");
     assert.doesNotMatch(source, forbiddenBackground, file);
   }
