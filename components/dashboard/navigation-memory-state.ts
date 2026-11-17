@@ -36,9 +36,14 @@ export function rememberedReturnUrl(
   const memory = parsePageMemory(value, now);
   if (!memory) return null;
   const target = new URL(memory.url, "https://navigation.local");
+  if (
+    isTeacherClassroomHistory(target.pathname, target.searchParams.get("view"))
+  )
+    return null;
   return target.origin === "https://navigation.local" &&
     target.pathname === pathname &&
     target.search
     ? `${target.pathname}${target.search}`
     : null;
 }
+import { isTeacherClassroomHistory } from "@/lib/teacher-classroom-list-route";

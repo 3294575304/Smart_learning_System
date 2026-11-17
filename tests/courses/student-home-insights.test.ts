@@ -71,6 +71,7 @@ function item(
       absent: 0,
       pending: 0,
     },
+    attendanceWeek: [],
     recent: [],
   };
 }

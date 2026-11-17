@@ -6,6 +6,7 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { DeleteClassroomButton } from "./delete-classroom-button";
 import { ClassroomStatusBadge } from "./classroom-status-badge";
+import { TeacherClassroomListNavigation } from "./teacher-classroom-list-navigation";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
 import {
@@ -20,17 +21,16 @@ import {
   hasActiveFilterCondition,
   matchesFilterKeyword,
 } from "@/lib/list-filter";
+import {
+  teacherClassroomStatuses,
+  type TeacherClassroomFilters,
+} from "@/lib/teacher-classroom-list-route";
 
 /** 教师端班级列表不返回归档班级，所以这里只列出实际可能出现的状态。 */
-const CLASSROOM_STATUS_OPTIONS = (
-  ["ACTIVE", "COMPLETED", "CLOSED"] as const
-).map((value) => ({ value, label: CLASSROOM_STATUS_LABELS[value] }));
-
-export interface TeacherClassroomFilters {
-  keyword: string;
-  status: string;
-  courseId: string;
-}
+const CLASSROOM_STATUS_OPTIONS = teacherClassroomStatuses.map((value) => ({
+  value,
+  label: CLASSROOM_STATUS_LABELS[value],
+}));
 
 /**
  * 关键词与状态、关联课程之间是「与」关系：任一条件不满足即排除。
@@ -149,6 +149,15 @@ export function TeacherClassroomList({
 
   return (
     <section>
+      <div className="mb-4">
+        <TeacherClassroomListNavigation
+          filters={{
+            keyword,
+            status: effectiveStatus,
+            courseId: effectiveCourseId,
+          }}
+        />
+      </div>
       {classrooms.length === 0 ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">全部班级</h2>

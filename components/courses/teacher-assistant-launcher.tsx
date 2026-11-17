@@ -13,6 +13,7 @@ import { TeacherAssistantConversation } from "./teacher-assistant-conversation";
 import { TeacherAssistantIntro } from "./teacher-assistant-intro";
 import { TeacherAssistantMascot } from "./teacher-assistant-mascot";
 import { ASSISTANT_SIZE, useAssistantPosition } from "./use-assistant-position";
+import { useTeacherAssistantVisibility } from "./teacher-assistant-preferences";
 import {
   assistantCatalog,
   assistantTopics,
@@ -42,9 +43,16 @@ function currentArea(pathname: string): AssistantTopic {
   );
 }
 
-export function TeacherAssistantLauncher({ courses }: { courses: Course[] }) {
+export function TeacherAssistantLauncher({
+  courses,
+  teacherId,
+}: {
+  courses: Course[];
+  teacherId: string;
+}) {
   const pathname = usePathname();
   const query = useSearchParams();
+  const { visible } = useTeacherAssistantVisibility(teacherId);
   const currentId =
     /^\/teacher\/courses\/([^/]+)/u.exec(pathname)?.[1] ??
     query.get("courseId");
@@ -56,9 +64,11 @@ export function TeacherAssistantLauncher({ courses }: { courses: Course[] }) {
       ? rawClassroomId
       : undefined;
   const currentCourse = courses.find((course) => course.id === currentId);
+  if (!visible) return null;
   return (
     <AssistantPanel
-      key={`${pathname}:${currentCourse?.id ?? ""}:${classroomId ?? ""}`}
+      key={`${teacherId}:${pathname}:${currentCourse?.id ?? ""}:${classroomId ?? ""}`}
+      teacherId={teacherId}
       currentCourse={currentCourse}
       classroomId={classroomId}
       area={currentArea(pathname)}
@@ -67,10 +77,12 @@ export function TeacherAssistantLauncher({ courses }: { courses: Course[] }) {
 }
 
 function AssistantPanel({
+  teacherId,
   currentCourse,
   classroomId,
   area,
 }: {
+  teacherId: string;
   currentCourse?: Course;
   classroomId?: string;
   area: AssistantTopic;
@@ -82,7 +94,7 @@ function AssistantPanel({
   const [intro, setIntro] = useState(false);
   const [panelHeight, setPanelHeight] = useState(480);
   const seenIntro = useRef(false);
-  const position = useAssistantPosition();
+  const position = useAssistantPosition(teacherId);
 
   function finishIntro() {
     seenIntro.current = true;
@@ -180,6 +192,12 @@ function AssistantPanel({
     <>
       <div
         className="fixed top-0 left-0 z-40"
+        data-teacher-assistant-near-bottom={
+          triggerX > viewport.left + viewport.width - 136 &&
+          point.y > viewport.top + viewport.height - 220
+            ? true
+            : undefined
+        }
         style={{
           transform: `translate3d(${triggerX}px, ${point.y}px, 0)`,
           width: dock ? tabWidth : ASSISTANT_SIZE,
@@ -246,6 +264,7 @@ function AssistantPanel({
           id={panelId}
           ref={panel}
           aria-label="教师 AI 助手面板"
+          data-teacher-assistant-panel
           style={{
             left,
             top,

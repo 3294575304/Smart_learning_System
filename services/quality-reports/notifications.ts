@@ -65,6 +65,13 @@ export async function deliverQualityReportNotifications() {
           report.status === "SUCCEEDED" &&
           report.reviewStatus === "PENDING_REVIEW";
         if (!failed && !ready) return;
+        if (ready) {
+          const recipient = await transaction.user.findUniqueOrThrow({
+            where: { id: report.requestedById },
+            select: { teacherNotifyQualityReportReady: true },
+          });
+          if (!recipient.teacherNotifyQualityReportReady) return;
+        }
         const scope = [report.course.name, report.classroom?.name]
           .filter(Boolean)
           .join(" · ");

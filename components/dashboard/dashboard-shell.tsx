@@ -9,6 +9,7 @@ import {
   KeyRound,
   Menu,
   Search,
+  Settings,
   Users,
   UserPlus,
   X,
@@ -29,17 +30,20 @@ import { LogoutButton } from "@/components/auth/logout-button";
 import { JoinClassroomForm } from "@/components/classrooms/join-classroom-form";
 import { studentJoinClassroomEvent } from "@/components/classrooms/student-join-classroom-button";
 import { buildBreadcrumbs } from "@/components/dashboard/breadcrumbs";
+import { BackToTop } from "@/components/dashboard/back-to-top";
 import { FeedbackLink } from "@/components/dashboard/feedback-link";
 import {
   getDashboardPageTitle,
   isNavigationItemActive,
   NAVIGATION,
   STUDENT_FOOTER_NAVIGATION,
+  TEACHER_FOOTER_NAVIGATION,
   type NavigationGroup,
 } from "@/components/dashboard/navigation";
 import { NotificationIndicator } from "@/components/notifications/notification-indicator";
 import { WorkspaceSearch } from "@/components/dashboard/workspace-search";
 import { cn } from "@/lib/utils";
+import { readTeacherClassroomListFilters } from "@/lib/teacher-classroom-list-route";
 import type { AuthenticatedUser } from "@/services/auth/types";
 
 interface DashboardShellProps {
@@ -76,6 +80,11 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
     view: searchParams.get("view"),
     studentQueryHref,
     source: searchParams.get("source"),
+    classroomListFilters: readTeacherClassroomListFilters({
+      keyword: searchParams.get("keyword"),
+      status: searchParams.get("status"),
+      courseId: searchParams.get("courseId"),
+    }),
   }).map((crumb) =>
     classroomId &&
     crumb.href.startsWith("/student/courses/") &&
@@ -261,6 +270,12 @@ export function DashboardShell({
   const menuDialogRef = useRef<HTMLDivElement>(null);
   const menuOpenButtonRef = useRef<HTMLButtonElement>(null);
   const navigationGroups = NAVIGATION[user.role];
+  const footerGroups =
+    user.role === Role.STUDENT
+      ? STUDENT_FOOTER_NAVIGATION
+      : user.role === Role.TEACHER
+        ? TEACHER_FOOTER_NAVIGATION
+        : null;
   const userName = displayUserName(user);
   const schoolName = user.schoolName?.trim() || platformName;
   // 教师与管理工作区共用紧凑侧栏，学生端保留学习导航宽度。
@@ -459,12 +474,12 @@ export function DashboardShell({
             pathname={pathname}
             student={user.role === Role.STUDENT}
           />
-          {user.role === Role.STUDENT && (
+          {footerGroups && (
             <div className="mt-auto border-t">
               <SidebarNavigation
-                groups={STUDENT_FOOTER_NAVIGATION}
+                groups={footerGroups}
                 pathname={pathname}
-                student
+                student={user.role === Role.STUDENT}
               />
             </div>
           )}
@@ -537,12 +552,12 @@ export function DashboardShell({
                 pathname={pathname}
               />
             </div>
-            {user.role === Role.STUDENT && (
+            {footerGroups && (
               <div className="border-t">
                 <SidebarNavigation
-                  groups={STUDENT_FOOTER_NAVIGATION}
+                  groups={footerGroups}
                   pathname={pathname}
-                  student
+                  student={user.role === Role.STUDENT}
                   onNavigate={() => setMobileMenuOpen(false)}
                 />
               </div>
@@ -710,6 +725,18 @@ export function DashboardShell({
                         加入班级
                       </button>
                     ) : null}
+                    {user.role === Role.TEACHER && (
+                      <Link
+                        className="my-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-sky-50 hover:text-sky-800 focus-visible:outline-2 focus-visible:outline-sky-700"
+                        href="/teacher/settings"
+                        onClick={() => setAccountMenuOpen(false)}
+                      >
+                        <span className="flex size-8 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
+                          <Settings aria-hidden="true" className="size-4" />
+                        </span>
+                        设置
+                      </Link>
+                    )}
                     <div className="flex items-center justify-between gap-2 border-t border-sky-100 pt-3">
                       <button
                         className="flex items-center gap-2 rounded-md border border-sky-200 px-3 py-2 text-sm font-medium text-sky-800 transition hover:bg-sky-50"
@@ -768,6 +795,10 @@ export function DashboardShell({
           </NavigationMemoryProvider>
         </main>
       </div>
+
+      {!pathname.endsWith("/knowledge-graph") && !accountMenuOpen && (
+        <BackToTop />
+      )}
 
       {user.role === Role.STUDENT && joinClassroomDialogOpen ? (
         <div

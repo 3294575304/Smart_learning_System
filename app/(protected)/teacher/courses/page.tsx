@@ -1,6 +1,5 @@
 import { Role } from "@prisma/client";
 import { BookOpenCheck } from "lucide-react";
-import Link from "next/link";
 import { CourseForm } from "@/components/courses/course-form";
 import { TeacherCourseList } from "@/components/courses/teacher-course-list";
 import {
@@ -115,9 +114,6 @@ export default async function TeacherCoursesPage({
             <p className="tt-sub">{summaryLine}</p>
           </div>
           <div className="tt-phead-act">
-            <Link className="tt-btn-line" href="/teacher/classrooms">
-              班级管理
-            </Link>
             <CreateEntry tone="cta" />
           </div>
         </header>

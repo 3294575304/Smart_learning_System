@@ -25,7 +25,7 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".data/next-production/types/**/*.ts",
+    ".data/next-verify-exams-1117/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts"
   ],

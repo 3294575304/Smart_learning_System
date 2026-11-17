@@ -18,10 +18,33 @@ export function buildBreadcrumbs(
     view?: string | null;
     studentQueryHref?: string;
     source?: string | null;
+    classroomListFilters?: TeacherClassroomFilters;
   },
 ): BreadcrumbItem[] {
   const segments = pathname.split("/").filter(Boolean);
   const labels = getSegmentLabels(pathname, segmentLabels);
+
+  if (isTeacherClassroomHistory(pathname, context?.view)) {
+    const filters =
+      context?.classroomListFilters ?? readTeacherClassroomListFilters({});
+    return [
+      {
+        href: "/teacher",
+        label: labels.teacher ?? "教师工作台",
+        linkable: true,
+      },
+      {
+        href: teacherClassroomListHref(filters),
+        label: labels.classrooms ?? "班级管理",
+        linkable: true,
+      },
+      {
+        href: teacherClassroomListHref(filters, true),
+        label: "历史班级",
+        linkable: false,
+      },
+    ];
+  }
 
   return segments
     .map((segment, index) => {
@@ -179,3 +202,9 @@ export function buildBreadcrumbs(
         !items.slice(index + 1).some((next) => next.href === item.href),
     );
 }
+import {
+  isTeacherClassroomHistory,
+  readTeacherClassroomListFilters,
+  teacherClassroomListHref,
+  type TeacherClassroomFilters,
+} from "@/lib/teacher-classroom-list-route";

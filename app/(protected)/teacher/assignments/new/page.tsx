@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import { AssignmentForm } from "@/components/assignments/assignment-form";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { getTeacherAssignmentEditorOptions } from "@/services/assignments/service";
+import { getTeacherTeachingPreferences } from "@/services/dashboard/teacher-settings";
 import { getSystemConfigValue } from "@/services/system-config/service";
 
 export default async function NewAssignmentPage({
@@ -18,11 +19,13 @@ export default async function NewAssignmentPage({
   const teacher = await requirePageRole(Role.TEACHER);
   const { classroomId } = await searchParams;
   if (classroomId !== undefined && typeof classroomId !== "string") notFound();
-  const [options, defaultDueDays, recentDrafts] = await Promise.all([
-    getTeacherAssignmentEditorOptions(teacher.id),
-    getSystemConfigValue("assignmentDefaultDueDays"),
-    getRecentAssignmentDrafts(teacher.id, classroomId),
-  ]);
+  const [options, platformDueDays, preferences, recentDrafts] =
+    await Promise.all([
+      getTeacherAssignmentEditorOptions(teacher.id),
+      getSystemConfigValue("assignmentDefaultDueDays"),
+      getTeacherTeachingPreferences(teacher.id),
+      getRecentAssignmentDrafts(teacher.id, classroomId),
+    ]);
   const selectedClassroom = classroomId
     ? options.classrooms.find((item) => item.id === classroomId)
     : null;
@@ -106,7 +109,8 @@ export default async function NewAssignmentPage({
           )}
           <div id="assignment-editor" className="scroll-mt-24">
             <AssignmentForm
-              defaultDueDays={defaultDueDays}
+              defaultDueDays={preferences.assignmentDueDays ?? platformDueDays}
+              defaultAllowResubmission={preferences.allowAssignmentResubmission}
               initialClassroomId={selectedClassroom?.id}
               mode="create"
               {...options}

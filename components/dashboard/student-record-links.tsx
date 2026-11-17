@@ -68,7 +68,7 @@ export function StudentRecordLinks({
       <ul
         id={linksId}
         hidden={!open}
-        className="absolute end-0 top-full z-10 mt-1 min-w-32 rounded-xl border border-slate-200 bg-white p-1 shadow-md"
+        className="absolute end-0 top-full z-30 mt-1 min-w-32 rounded-xl border border-slate-200 bg-white p-1 shadow-md"
       >
         <li>
           <StudentAnalyticsLink

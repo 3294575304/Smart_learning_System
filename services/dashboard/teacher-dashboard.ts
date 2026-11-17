@@ -5,6 +5,7 @@ import { latestEffectiveSubmissions } from "@/services/assignments/latest-submis
 import { summarizeAssignmentParticipation } from "@/services/dashboard/teacher-assignment-metrics";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { getTeacherWorkbenchPreferences } from "./teacher-settings";
 import { groupKnowledgeChapters } from "@/services/knowledge-graph/chapter-groups";
 import {
   summarizeDashboardAssignmentTodo,
@@ -30,18 +31,27 @@ export async function getTeacherDashboard(
   input: TeacherDashboardQuery = {},
 ) {
   const query = teacherDashboardQuerySchema.parse(input);
-  const courses = await prisma.course.findMany({
-    where: { teacherId, status: { not: "ARCHIVED" } },
-    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-    select: { id: true, name: true, term: true },
-  });
-  const selectedCourse = query.courseId
-    ? courses.find((course) => course.id === query.courseId)
-    : courses[0];
-  if (
-    (!selectedCourse && query.courseId) ||
-    (!selectedCourse && query.classroomId)
-  )
+  const { courses, defaultCourseId } =
+    await getTeacherWorkbenchPreferences(teacherId);
+  const classroomCourse =
+    !query.courseId && query.classroomId
+      ? await prisma.classroom.findFirst({
+          where: {
+            id: query.classroomId,
+            teacherId,
+            status: { in: ["ACTIVE", "COMPLETED"] },
+          },
+          select: { courseId: true },
+        })
+      : null;
+  const selectedCourse =
+    query.courseId || query.classroomId
+      ? courses.find(
+          (course) =>
+            course.id === (query.courseId ?? classroomCourse?.courseId),
+        )
+      : (courses.find((course) => course.id === defaultCourseId) ?? courses[0]);
+  if (!selectedCourse && (query.courseId || query.classroomId))
     throw new ResourceNotFoundError("课程或班级不存在");
   if (!selectedCourse) return { courses, workspace: null };
   const courseId = selectedCourse.id;

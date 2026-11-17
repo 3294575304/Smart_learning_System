@@ -12,7 +12,7 @@ export async function TeacherAssistantSurface({
   const courses = await listTeacherAssistantCourses(teacherId);
   return (
     <Suspense>
-      <TeacherAssistantLauncher courses={courses} />
+      <TeacherAssistantLauncher courses={courses} teacherId={teacherId} />
     </Suspense>
   );
 }

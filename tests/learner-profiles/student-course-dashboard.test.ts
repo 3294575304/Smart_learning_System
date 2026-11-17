@@ -39,6 +39,7 @@ function sample(): StudentClassAnalysis {
       pending: 0,
       total: 0,
     },
+    attendanceWeek: [],
     recent: [],
   };
 }

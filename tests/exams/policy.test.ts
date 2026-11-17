@@ -6,7 +6,10 @@ import {
   plusThreeYears,
 } from "../../services/exams/fingerprint";
 import { examCreateSchema } from "../../services/exams/schemas";
-import { checkExamPublication } from "../../services/exams/publication-check";
+import {
+  checkExamPublication,
+  collectExamPublicationIssues,
+} from "../../services/exams/publication-check";
 import { examAttendanceState } from "../../services/exams/monitor-state";
 
 test("the same question unlocks on its three-year anniversary", () => {
@@ -173,5 +176,60 @@ test("publication preview blocks incomplete settings, stale classrooms and overs
     checkExamPublication({ ...input, questions }, classroomIds, now).error ??
       "",
     /400/,
+  );
+});
+
+test("发布前校验会一次性收集全部字段问题，而不是只报第一条", () => {
+  const id = (index: number) => `c${String(index).padStart(24, "0")}`;
+  const now = new Date("2026-11-17T00:00:00.000Z");
+  const classroomIds = [id(1), id(2)];
+  const base = {
+    requestId: "00000000-0000-4000-8000-000000000000",
+    courseId: id(9),
+    classroomIds,
+    type: "MIDTERM" as const,
+    title: "期中考试",
+    startsAt: "2026-12-01T01:00:00Z",
+    endsAt: "2026-12-01T02:00:00Z",
+    allowedSwitches: 2,
+    questions: [{ questionId: id(5), points: 10 }],
+  };
+
+  // 空标题 + 不选班级 + 不选题目 → 三条问题各自落到对应字段
+  const issues = collectExamPublicationIssues(
+    { ...base, title: "", classroomIds: [], questions: [] },
+    classroomIds,
+    now,
+  );
+  const fields = issues.map((item) => item.field);
+  assert.ok(fields.includes("title"));
+  assert.ok(fields.includes("classroomIds"));
+  assert.ok(fields.includes("questions"));
+  assert.equal(
+    issues.every((item) => item.message.length > 0),
+    true,
+  );
+
+  // 班级 × 题目超 400 → 落到 questions 字段，并带上算式
+  // 注意：题量本身必须在 schema 允许的 1–200 内，否则会先被"1 至 200 题"拦下
+  const threeClasses = [id(1), id(2), id(3)];
+  const twoHundredQuestions = Array.from({ length: 200 }, (_, index) => ({
+    questionId: id(100 + index),
+    points: 1,
+  }));
+  const overLimit = collectExamPublicationIssues(
+    {
+      ...base,
+      classroomIds: threeClasses,
+      questions: twoHundredQuestions,
+    },
+    threeClasses,
+    now,
+  );
+  assert.equal(
+    overLimit.some(
+      (item) => item.field === "questions" && /400/.test(item.message),
+    ),
+    true,
   );
 });

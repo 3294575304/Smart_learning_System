@@ -4,13 +4,13 @@ import { StudentEnrollmentPicker } from "./student-enrollment-picker";
 import {
   ArrowRight,
   ArrowUpRight,
-  BookOpen,
   ChartNoAxesCombined,
   CheckCheck,
   ClipboardList,
   Clock3,
   Info,
   Lightbulb,
+  ListChecks,
   Network,
   CalendarCheck2,
 } from "lucide-react";
@@ -39,6 +39,26 @@ const specialGradeLabels: Record<string, string> = {
   CHEATING: "作弊",
   OTHER: "特殊状态",
   NOT_ENTERED: "未录入",
+};
+
+/**
+ * 出勤周历条的状态色与文案。
+ *
+ * 只用于一格 24px 的小色块，不做大面积铺色；颜色与「我的出勤记录」
+ * 的原有语义保持一致（正常蓝、迟到琥珀、请假靛、缺勤玫红）。
+ */
+const attendanceStatusMeta: Record<string, { label: string; tone: string }> = {
+  PRESENT: { label: "正常", tone: "bg-sky-500" },
+  LATE: { label: "迟到", tone: "bg-amber-400" },
+  EARLY_LEAVE: { label: "早退", tone: "bg-orange-400" },
+  LEAVE: { label: "请假", tone: "bg-indigo-400" },
+  ABSENT: { label: "缺勤", tone: "bg-rose-400" },
+  PENDING: { label: "待确认", tone: "bg-slate-300" },
+};
+const suggestionTone: Record<string, string> = {
+  brand: "bg-sky-600",
+  practice: "bg-teal-600",
+  exam: "bg-amber-500",
 };
 function PanelTitle({
   icon,
@@ -329,6 +349,56 @@ export function StudentAnalysisWorkspace({
             label: "进入课程",
           },
         ];
+  /*
+    建议列表：第一条永远是待办动作，第二条起按「本课程练习」补充。
+    练习是课程级口径，文案里写明「本课程」，避免被读成教学班任务。
+  */
+  const practiceAnswered = s.practiceHistory.reduce(
+    (sum, day) => sum + day.answered,
+    0,
+  );
+  const practiceCorrect = s.practiceHistory.reduce(
+    (sum, day) => sum + day.correct,
+    0,
+  );
+  const practiceTip =
+    s.practiceHistory.length && practiceAnswered
+      ? {
+          tone: "practice" as const,
+          title: `练习正确率 ${Math.round((practiceCorrect / practiceAnswered) * 100)}%`,
+          text: `本课程最近 ${s.practiceHistory.length} 个练习日 · 共 ${practiceAnswered} 道题`,
+          href: `/student/practice?${scope}`,
+          label: "去练习",
+        }
+      : null;
+  const suggestions = [
+    { ...tips[0], tone: "brand" as const },
+    ...(practiceTip ? [practiceTip] : []),
+  ];
+  /*
+    常用入口：填满右栏剩余高度，同时承担「下一步去哪儿」的导航。
+    全部为已有路由，不引入新的数据口径。
+  */
+  const quickLinks = [
+    {
+      label: "错题复习",
+      hint: "按课程整理错题与收藏",
+      href: `/student/wrong-questions?${scope}`,
+      icon: ListChecks,
+    },
+    {
+      label: "课程任务",
+      hint: "查看待办、考试与签到安排",
+      href: `/student/tasks?${scope}`,
+      icon: ClipboardList,
+    },
+    {
+      label: "课程总评",
+      hint: "成绩明细与目标达成",
+      href: `/student/results?view=course&courseId=${s.course.id}&classroomId=${s.classroom.id}`,
+      icon: ChartNoAxesCombined,
+    },
+  ];
   const scoreTip =
     s.average === null
       ? "已公布成绩不足时，不对学习水平作判断。"
@@ -449,9 +519,9 @@ export function StudentAnalysisWorkspace({
           </article>
         ))}
       </div>
-      <div className="grid gap-4 lg:grid-cols-12 xl:contents">
+      <div className="grid gap-4 xl:contents">
         <section
-          className={`${panel} flex flex-col p-5 sm:p-6 lg:col-span-8 xl:col-span-1 xl:col-start-1 xl:row-start-4`}
+          className={`${panel} flex flex-col p-5 sm:p-6 xl:col-span-1 xl:col-start-1 xl:row-start-4`}
         >
           <PanelTitle
             icon={<ChartNoAxesCombined className="size-4" />}
@@ -483,7 +553,7 @@ export function StudentAnalysisWorkspace({
             }}
           />
         </section>
-        <div className="flex min-w-0 flex-col gap-4 lg:col-span-4 xl:col-span-1 xl:col-start-2 xl:row-span-2 xl:row-start-4">
+        <div className="flex min-w-0 flex-col gap-4 xl:col-span-1 xl:col-start-2 xl:row-start-4">
           <section className={`${panel} flex flex-col p-5 sm:p-6`}>
             <PanelTitle
               icon={<CalendarCheck2 className="size-4" />}
@@ -501,40 +571,59 @@ export function StudentAnalysisWorkspace({
             {s.attendance.total ? (
               <>
                 <div
-                  className="mt-5 flex h-2 overflow-hidden rounded-full bg-slate-100"
+                  className="mt-4 grid max-w-[20rem] grid-cols-7 gap-1"
                   role="img"
-                  aria-label={attendance
-                    .map((a) => `${a.label}${a.value}次`)
-                    .join("，")}
+                  aria-label={`最近 7 天出勤：${s.attendanceWeek
+                    .map(
+                      (day) =>
+                        `周${day.weekday} ${
+                          day.status
+                            ? (attendanceStatusMeta[day.status]?.label ??
+                              "未知")
+                            : "无课"
+                        }`,
+                    )
+                    .join("，")}`}
                 >
-                  {attendance
-                    .filter((a) => a.value)
-                    .map((a) => (
-                      <div
-                        key={a.label}
-                        className={a.color}
-                        style={{
-                          width: `${(a.value / s.attendance.total) * 100}%`,
-                        }}
+                  {s.attendanceWeek.map((day) => (
+                    <div key={day.key} className="text-center">
+                      <p className="text-[11px] leading-4 text-slate-400">
+                        {day.weekday}
+                      </p>
+                      <span
+                        className={`mt-1 block h-6 rounded-md ${
+                          day.status
+                            ? (attendanceStatusMeta[day.status]?.tone ??
+                              "bg-slate-200")
+                            : "bg-slate-100"
+                        }`}
                       />
-                    ))}
-                </div>
-                <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-4">
-                  {attendance.map((a) => (
-                    <div key={a.label}>
-                      <dt className="flex items-center gap-1.5 text-xs text-slate-500">
-                        <span className={`size-1.5 rounded-full ${a.color}`} />
-                        {a.label}
-                      </dt>
-                      <dd className="mt-1 text-base font-semibold text-slate-700">
-                        {a.value}
-                        <span className="ml-1 text-xs font-normal text-slate-500">
-                          次
-                        </span>
-                      </dd>
                     </div>
                   ))}
-                </dl>
+                </div>
+                <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                  <span className="text-slate-400">累计</span>
+                  {attendance
+                    .filter((item) => item.value > 0)
+                    .map((item) => (
+                      <span
+                        key={item.label}
+                        className="inline-flex items-center gap-1.5"
+                      >
+                        <span
+                          className={`size-1.5 rounded-full ${item.color}`}
+                        />
+                        {item.label}
+                        <b className="font-medium text-slate-900 tabular-nums">
+                          {item.value}
+                        </b>
+                      </span>
+                    ))}
+                </p>
+                <p className="mt-2 border-t border-slate-100 pt-2 text-[11px] leading-4 text-slate-400">
+                  本周 {s.attendanceWeek.filter((day) => day.status).length}{" "}
+                  次课；灰格为无课日，不按缺勤计。
+                </p>
               </>
             ) : (
               <p className="flex flex-1 items-center justify-center py-6 text-center text-sm text-slate-500">
@@ -542,65 +631,118 @@ export function StudentAnalysisWorkspace({
               </p>
             )}
           </section>
-          {/* 建议卡并入右栏并吸收剩余高度：上为行动建议、下为知识掌握入口，
-              两块内容分别贴顶与贴底，避免中间出现一条空带 */}
+          {/* 三段式：固定头（标题 + 条目数）、可滚动列表、固定底部入口。
+              卡高随内容，条目超过 3 条时列表在卡内滚动，避免把整页撑长或撑出空带 */}
           <section
-            className={`${panel} flex min-h-0 flex-1 flex-col bg-gradient-to-br from-white to-sky-50/70 p-5`}
+            className={`${panel} flex min-h-0 flex-1 flex-col overflow-hidden`}
           >
-            <PanelTitle
-              icon={<Lightbulb className="size-4" />}
-              title="接下来可以做"
-            />
-            <div className="mt-3 flex min-h-0 flex-1 flex-col justify-between gap-4 overflow-y-auto overscroll-contain pr-1">
-              <div className="space-y-3">
-                {tips.map((tip) => (
-                  <div key={tip.title}>
-                    <h3 className="text-sm font-semibold text-slate-700">
-                      {tip.title}
-                    </h3>
-                    <p className="mt-1 text-xs leading-6 text-slate-500">
-                      {tip.text}
-                    </p>
-                    <Link
-                      href={tip.href}
-                      className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-sky-700"
-                    >
-                      {tip.label}
-                      <ArrowRight className="size-3" aria-hidden="true" />
-                    </Link>
-                  </div>
-                ))}
-              </div>
-              <p className="border-t border-sky-100 pt-2.5 text-xs leading-6 text-slate-500">
-                {scoreTip}
-              </p>
-              <div className="flex items-start gap-3 border-t border-sky-100 pt-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-sky-600 shadow-sm shadow-slate-200/50">
-                  <Network aria-hidden="true" className="size-4" />
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <span className="text-sky-600">
+                  <Lightbulb className="size-4" aria-hidden="true" />
                 </span>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-800">
-                    我的知识掌握
-                  </h3>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    画像汇总我在这门课的评分记录，可进入课程学习中心查看图谱与学习路径。
-                  </p>
-                  <Link href={center} className={`${panelAction} mt-2 w-fit`}>
-                    <BookOpen className="size-4" aria-hidden="true" />
-                    课程学习中心
-                    <ArrowRight className="size-3.5" aria-hidden="true" />
+                接下来可以做
+              </h2>
+              <span className="text-xs text-slate-400 tabular-nums">
+                {suggestions.length} 项
+              </span>
+            </div>
+            <ul
+              aria-label="学习行动建议"
+              className="max-h-[13.5rem] [scrollbar-gutter:stable] divide-y divide-slate-100 overflow-y-auto overscroll-contain"
+            >
+              {suggestions.map((item) => (
+                <li key={item.title}>
+                  <Link
+                    href={item.href}
+                    className="flex min-h-14 items-start gap-2.5 px-5 py-2.5 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-700"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`mt-0.5 w-[3px] self-stretch rounded-full ${suggestionTone[item.tone]}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-medium [overflow-wrap:anywhere] text-slate-800">
+                        {item.title}
+                      </span>
+                      <span
+                        className="mt-0.5 block truncate text-xs text-slate-500"
+                        title={item.text}
+                      >
+                        {item.text}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1 pt-0.5 text-xs font-medium text-sky-700">
+                      {item.label}
+                      <ArrowRight className="size-3" aria-hidden="true" />
+                    </span>
                   </Link>
-                </div>
+                </li>
+              ))}
+            </ul>
+            <p className="border-t border-slate-100 px-5 py-2 text-[11px] leading-4 text-slate-400">
+              {scoreTip}
+            </p>
+            {/* 常用入口：三行等分剩余高度，内容不足时由入口块吸收，不留空带 */}
+            <div className="flex min-h-0 flex-1 flex-col border-t border-slate-100">
+              <p className="px-5 pt-2.5 pb-1 text-[11px] font-medium tracking-wide text-slate-400">
+                常用入口
+              </p>
+              <ul className="flex min-h-0 flex-1 flex-col divide-y divide-slate-100">
+                {quickLinks.map((link) => (
+                  <li key={link.label} className="flex min-h-11 flex-1">
+                    <Link
+                      href={link.href}
+                      className="flex w-full items-center gap-2.5 px-5 py-1.5 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-700"
+                    >
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sky-600">
+                        <link.icon aria-hidden="true" className="size-3.5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[13px] font-medium text-slate-800">
+                          {link.label}
+                        </span>
+                        <span className="block truncate text-[11px] text-slate-500">
+                          {link.hint}
+                        </span>
+                      </span>
+                      <ArrowUpRight
+                        aria-hidden="true"
+                        className="size-3 shrink-0 text-sky-700"
+                      />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex items-center gap-3 border-t border-slate-100 px-5 py-3">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sky-600">
+                <Network aria-hidden="true" className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium text-slate-800">
+                  我的知识掌握
+                </p>
+                <p className="truncate text-[11px] text-slate-500">
+                  画像汇总我在这门课的评分记录
+                </p>
               </div>
+              <Link
+                href={center}
+                className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+              >
+                学习中心
+                <ArrowUpRight className="size-3" aria-hidden="true" />
+              </Link>
             </div>
           </section>
         </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-12 xl:contents">
+      <div className="grid gap-4 xl:contents">
         <section
-          className={`${panel} flex min-h-0 flex-col overflow-hidden lg:col-span-8 xl:col-span-1 xl:col-start-1 xl:row-start-5`}
+          className={`${panel} flex min-h-0 flex-col xl:col-span-2 xl:col-start-1 xl:row-start-5`}
         >
-          <div className="p-5 pb-3 sm:px-6">
+          <div className="relative z-20 p-5 pb-3 sm:px-6">
             <PanelTitle
               icon={<ClipboardList className="size-4" />}
               title="我的作业与考试记录"
@@ -615,7 +757,7 @@ export function StudentAnalysisWorkspace({
             />
           </div>
           {s.recent.length ? (
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl">
               <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_5rem] gap-3 border-y border-slate-100 bg-slate-50/95 px-5 py-2 text-xs text-slate-500 backdrop-blur-sm sm:grid-cols-[minmax(0,1fr)_4.5rem_6rem_6rem] sm:px-6">
                 <span>任务名称</span>
                 <span className="hidden sm:block">类型</span>

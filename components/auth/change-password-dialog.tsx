@@ -32,7 +32,7 @@ export function ChangePasswordDialog({
 
       const focusable = Array.from(
         dialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ':is(button, input, [tabindex]):not([disabled]):not([tabindex="-1"])',
         ) ?? [],
       );
       const first = focusable[0];

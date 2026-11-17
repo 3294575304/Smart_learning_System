@@ -164,6 +164,10 @@ export const STUDENT_FOOTER_NAVIGATION: NavigationGroup[] = [
   },
 ];
 
+export const TEACHER_FOOTER_NAVIGATION: NavigationGroup[] = [
+  { items: [{ href: "/teacher/settings", label: "设置", icon: Settings }] },
+];
+
 export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   "super-admin": "超级管理员工作台",
   schools: "合作学校和管理员",
@@ -211,6 +215,7 @@ export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   analytics: "学情分析",
   recommendations: "推荐练习",
   notifications: "通知中心",
+  settings: "设置",
   practice: "练习",
   answer: "在线答题",
   new: "新建",
@@ -225,7 +230,6 @@ const STUDENT_SEGMENT_LABELS: Readonly<Record<string, string>> = {
   ),
   "course-grades": "课程总评",
   search: "搜索结果",
-  settings: "设置",
   "question-favorites": "我的收藏",
   submissions: "我的作答",
   practice: "练习",

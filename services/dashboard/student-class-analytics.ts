@@ -64,6 +64,58 @@ function summarizePracticeDays(
     }));
 }
 
+/**
+ * 出勤周历条：最近 7 天（含今天）每天一格。
+ *
+ * 一天可能有多次课，按「越严重越优先」合并为一种状态（缺勤 > 迟到 > 早退 >
+ * 请假 > 待确认 > 正常），避免同一天多格却只有一格宽。没有课的日子返回 null，
+ * 前端画灰格并说明「无课不按缺勤计」。
+ */
+const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
+const ATTENDANCE_SEVERITY: Record<string, number> = {
+  ABSENT: 6,
+  LATE: 5,
+  EARLY_LEAVE: 4,
+  LEAVE: 3,
+  PENDING: 2,
+  PRESENT: 1,
+};
+function buildAttendanceWeek(
+  records: Array<{ currentStatus: string; session: { startsAt: Date } }>,
+  now: Date,
+) {
+  const base = new Date(now.getTime() + 8 * 3_600_000);
+  return Array.from({ length: 7 }, (_, index) => {
+    const offset = 6 - index;
+    const dayStart = new Date(
+      Date.UTC(
+        base.getUTCFullYear(),
+        base.getUTCMonth(),
+        base.getUTCDate() - offset,
+      ) -
+        8 * 3_600_000,
+    );
+    const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+    const statuses = records
+      .filter(
+        (record) =>
+          record.session.startsAt >= dayStart &&
+          record.session.startsAt < dayEnd,
+      )
+      .map((record) => record.currentStatus)
+      .sort(
+        (left, right) =>
+          (ATTENDANCE_SEVERITY[right] ?? 0) - (ATTENDANCE_SEVERITY[left] ?? 0),
+      );
+    const shanghai = new Date(dayStart.getTime() + 8 * 3_600_000);
+    return {
+      key: shanghaiDayKey(dayStart),
+      weekday: WEEKDAY_LABELS[shanghai.getUTCDay()],
+      status: (statuses[0] ?? null) as string | null,
+    };
+  });
+}
+
 export async function getStudentClassAnalytics(
   studentId: string,
   rawQuery: unknown,
@@ -138,7 +190,7 @@ export async function getStudentClassAnalytics(
             },
             select: {
               currentStatus: true,
-              session: { select: { classroomId: true } },
+              session: { select: { classroomId: true, startsAt: true } },
             },
           }),
           listPublishedExamScores(ids, studentId, now),
@@ -378,6 +430,7 @@ export async function getStudentClassAnalytics(
         pending: records.filter((x) => x.currentStatus === "PENDING").length,
         total: records.length,
       },
+      attendanceWeek: buildAttendanceWeek(records, now),
       recent: rows
         .filter((x) => x.submission)
         .sort(

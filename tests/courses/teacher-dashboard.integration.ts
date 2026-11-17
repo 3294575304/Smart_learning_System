@@ -8,6 +8,10 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getTeacherDashboard } from "@/services/dashboard/teacher-dashboard";
+import {
+  getTeacherWorkbenchPreferences,
+  setTeacherDefaultCourse,
+} from "@/services/dashboard/teacher-settings";
 import { publishAssignmentResults } from "@/services/assignments/manual-grading";
 import { listTeacherAssignments } from "@/services/assignments/service";
 import { assignmentListQuerySchema } from "@/services/assignments/schemas";
@@ -71,6 +75,42 @@ async function main() {
   const class1 = await makeClass(course.id, student.id);
   const class2 = await makeClass(course.id, student2.id);
   const otherClass = await makeClass(another.id, student.id);
+  const settingsCourse = await createCourse(teacher.id, "教师默认课程");
+  await setTeacherDefaultCourse(teacher.id, settingsCourse.id);
+  await assert.rejects(
+    setTeacherDefaultCourse(teacher.id, foreign.id),
+    ResourceNotFoundError,
+  );
+  assert.equal(
+    (await getTeacherDashboard(teacher.id)).workspace?.course.id,
+    settingsCourse.id,
+  );
+  assert.equal(
+    (await getTeacherDashboard(teacher.id, { courseId: course.id })).workspace
+      ?.course.id,
+    course.id,
+  );
+  const classroomLink = await getTeacherDashboard(teacher.id, {
+    classroomId: class2.id,
+  });
+  assert.equal(classroomLink.workspace?.course.id, course.id);
+  assert.equal(classroomLink.workspace?.selectedClassroomId, class2.id);
+  await prisma.course.update({
+    where: { id: settingsCourse.id },
+    data: { status: "ARCHIVED" },
+  });
+  await assert.rejects(
+    setTeacherDefaultCourse(teacher.id, settingsCourse.id),
+    ResourceNotFoundError,
+  );
+  const fallback = await getTeacherDashboard(teacher.id);
+  assert.ok(fallback.workspace);
+  assert.equal(fallback.workspace.course.id, fallback.courses[0]?.id);
+  await setTeacherDefaultCourse(teacher.id, null);
+  assert.equal(
+    (await getTeacherWorkbenchPreferences(teacher.id)).defaultCourseId,
+    null,
+  );
   const fixture = await createPublishedGraphFixture(course.id, teacher.id);
   const concept = await prisma.knowledgeGraphConcept.create({
     data: { courseId: course.id, stableKey: "DASHBOARD_CONCEPT" },
