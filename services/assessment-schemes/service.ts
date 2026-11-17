@@ -26,7 +26,7 @@ import {
 import type { AuditRequestContext } from "@/services/audit/types";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { extractTextFromPdf } from "@/services/syllabus-parsing/pdf-extractor";
+import { extractSyllabusText } from "@/services/syllabus-parsing/source-extractor";
 import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 import { getStorageService } from "@/services/storage";
 import type { StorageService } from "@/services/storage/types";
@@ -218,12 +218,15 @@ async function buildSource(
       "PUBLISHED_SYLLABUS_INVALID",
     );
   }
-  let pages: Awaited<ReturnType<typeof extractTextFromPdf>>["pages"] = [];
+  let pages: Awaited<ReturnType<typeof extractSyllabusText>>["pages"] = [];
   let extractionWarning: string | null = null;
   try {
     const storage = dependencies.storage ?? getStorageService();
     pages = (
-      await extractTextFromPdf(await storage.read(source.syllabus.storageKey))
+      await extractSyllabusText(
+        await storage.read(source.syllabus.storageKey),
+        source.syllabus.originalName,
+      )
     ).pages;
   } catch {
     extractionWarning =
