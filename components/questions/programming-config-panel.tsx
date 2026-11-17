@@ -34,22 +34,22 @@ interface ConfigDto {
 }
 
 const defaultCases: TestCaseDraft[] = [
-  {
+  ...[1, 2].map((index) => ({
     visibility: ProgrammingTestVisibility.PUBLIC,
-    name: "公开样例 1",
+    name: `公开样例 ${index}`,
+    stdin: "",
+    expectedOutput: "",
+    points: 1,
+    sortOrder: index,
+  })),
+  ...[1, 2, 3, 4].map((index) => ({
+    visibility: ProgrammingTestVisibility.HIDDEN,
+    name: `隐藏用例 ${index}`,
     stdin: "",
     expectedOutput: "",
     points: 2,
-    sortOrder: 1,
-  },
-  {
-    visibility: ProgrammingTestVisibility.HIDDEN,
-    name: "隐藏用例 1",
-    stdin: "",
-    expectedOutput: "",
-    points: 8,
-    sortOrder: 2,
-  },
+    sortOrder: index + 2,
+  })),
 ];
 
 export function ProgrammingConfigPanel({ questionId }: { questionId: string }) {

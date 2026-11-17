@@ -16,6 +16,7 @@ import type {
 import { QuestionType } from "@prisma/client";
 import type { ExamPaperAIInput } from "@/services/exams/paper-ai";
 import type { QuestionObjectiveAIInput } from "@/services/question-objectives/schemas";
+import type { ProgrammingCodeScoreInput } from "@/services/programming-scoring/schemas";
 import { parseQuestionImportText } from "@/services/question-import/parser";
 
 export type MockAIResponder = (
@@ -333,6 +334,24 @@ export class MockAIProvider implements AIProvider {
         "",
       confidence: 0.5,
       reason: "模拟目标分类",
+    };
+  }
+
+  async scoreProgrammingCode(
+    input: ProgrammingCodeScoreInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    if (options.signal.aborted)
+      throw new DOMException("AI request aborted", "AbortError");
+    return {
+      functionalPoints: [
+        {
+          description: input.title.slice(0, 300),
+          importance: 1,
+          coverage: input.studentCode.trim() ? 0.5 : 0,
+        },
+      ],
+      commentPairs: [],
     };
   }
 

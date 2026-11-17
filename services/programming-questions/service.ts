@@ -80,6 +80,7 @@ export function publicProgrammingRevisionDto(record: RevisionRecord) {
       .filter(
         (testCase) => testCase.visibility === ProgrammingTestVisibility.PUBLIC,
       )
+      .slice(0, 2)
       .map((testCase, index) => ({
         index: index + 1,
         name: testCase.name,

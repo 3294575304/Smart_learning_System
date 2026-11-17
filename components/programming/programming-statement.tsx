@@ -15,12 +15,13 @@ import {
  */
 export function ProgrammingStatement({
   text,
-  sample,
+  samples,
 }: {
   text: string;
-  sample?: PublicProgrammingSample | null;
+  samples?: PublicProgrammingSample[];
 }) {
-  const statement = sample ? programmingStatementText(text) : text;
+  const hasSamples = Boolean(samples?.length);
+  const statement = hasSamples ? programmingStatementText(text) : text;
   const hasDescription = /题目描述|问题描述/u.test(statement);
 
   return (
@@ -29,7 +30,7 @@ export function ProgrammingStatement({
         <h3 className="text-ink mb-3 text-lg font-bold">题目描述</h3>
       )}
       <QuestionText text={statement} />
-      {sample ? <ProgrammingSample sample={sample} /> : null}
+      {hasSamples ? <ProgrammingSample samples={samples ?? []} /> : null}
     </div>
   );
 }

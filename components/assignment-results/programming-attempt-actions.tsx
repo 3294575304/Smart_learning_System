@@ -2,11 +2,14 @@
 import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-workspace-refresh";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 
 interface Props {
+  busy?: boolean;
+  embedded?: boolean;
+  children?: ReactNode;
   attempt: {
     id: string;
     status: string;
@@ -26,7 +29,12 @@ const statusLabels: Record<string, string> = {
   CANCELLED: "结果已撤销",
 };
 
-export function ProgrammingAttemptActions({ attempt }: Props) {
+export function ProgrammingAttemptActions({
+  attempt,
+  busy = false,
+  embedded = false,
+  children,
+}: Props) {
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<
     "rejudge" | "revoke" | null
@@ -95,20 +103,28 @@ export function ProgrammingAttemptActions({ attempt }: Props) {
   }
 
   return (
-    <div className="mt-4 space-y-3 rounded-md border bg-sky-50/60 p-3 text-sm">
+    <div
+      className={
+        embedded
+          ? "mt-3 space-y-3 text-sm"
+          : "mt-4 space-y-3 rounded-md border bg-sky-50/60 p-3 text-sm"
+      }
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p>
           第 {attempt.revisionNumber} 次判题 ·{" "}
           {statusLabels[attempt.status] ?? attempt.status}
-          {attempt.score === null
-            ? ""
-            : ` · ${attempt.score} / ${attempt.maxScore}`}
+          {!embedded &&
+            (attempt.score === null
+              ? ""
+              : ` · ${attempt.score} / ${attempt.maxScore}`)}
         </p>
         <div className="flex gap-2">
           <button
             className="rounded border bg-white px-3 py-1.5 disabled:opacity-50"
             disabled={
               pendingAction !== null ||
+              busy ||
               attempt.status === "PENDING" ||
               attempt.status === "RUNNING"
             }
@@ -119,7 +135,9 @@ export function ProgrammingAttemptActions({ attempt }: Props) {
           </button>
           <button
             className="rounded border border-red-200 bg-white px-3 py-1.5 text-red-700 disabled:opacity-50"
-            disabled={pendingAction !== null || attempt.status !== "SUCCEEDED"}
+            disabled={
+              busy || pendingAction !== null || attempt.status !== "SUCCEEDED"
+            }
             onClick={() => void revoke()}
             type="button"
           >
@@ -138,6 +156,7 @@ export function ProgrammingAttemptActions({ attempt }: Props) {
           {error}
         </p>
       ) : null}
+      {children}
     </div>
   );
 }

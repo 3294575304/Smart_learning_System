@@ -15,6 +15,29 @@ export function assignmentEditorClassroomWhere(teacherId: string) {
   } satisfies Prisma.ClassroomWhereInput;
 }
 
+export async function getRecentAssignmentDrafts(
+  teacherId: string,
+  classroomId?: string,
+) {
+  return prisma.assignment.findMany({
+    where: {
+      teacherId,
+      status: "DRAFT",
+      deletedAt: null,
+      ...(classroomId ? { classroomId } : {}),
+      classroom: assignmentEditorClassroomWhere(teacherId),
+    },
+    select: {
+      id: true,
+      title: true,
+      updatedAt: true,
+      classroom: { select: { name: true } },
+    },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    take: 3,
+  });
+}
+
 export async function getAssignmentCreationContext(
   teacherId: string,
   classroomId?: string,
@@ -22,23 +45,7 @@ export async function getAssignmentCreationContext(
 ) {
   const eligibleClassrooms = assignmentEditorClassroomWhere(teacherId);
   const [recentDrafts, history] = await Promise.all([
-    prisma.assignment.findMany({
-      where: {
-        teacherId,
-        status: "DRAFT",
-        deletedAt: null,
-        ...(classroomId ? { classroomId } : {}),
-        classroom: eligibleClassrooms,
-      },
-      select: {
-        id: true,
-        title: true,
-        updatedAt: true,
-        classroom: { select: { name: true } },
-      },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      take: 3,
-    }),
+    getRecentAssignmentDrafts(teacherId, classroomId),
     prisma.classroom.findMany({
       where: eligibleClassrooms,
       select: {

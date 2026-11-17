@@ -26,6 +26,7 @@ import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-worksp
 import { toast } from "@/components/ui/toast";
 import {
   distributeAssignmentPoints,
+  distributeAssignmentPointsByType,
   distributePointsEquallyByType,
   selectAssignmentQuestions,
 } from "@/services/assignments/editor-helpers";
@@ -44,7 +45,6 @@ import type { AssignmentPublicationPreview } from "@/services/assignments/editor
 import type { TeacherAssignmentView } from "@/services/assignments/types";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import {
-  ASSIGNMENT_QUESTION_ORDER_LABEL,
   isAssignmentQuestionOrderOrganized,
   organizeAssignmentQuestions,
 } from "@/services/assignments/question-order";
@@ -68,6 +68,7 @@ interface EditorQuestion {
   type: QuestionType;
   questionCategoryId: string | null;
   questionCategory?: { name: string } | null;
+  programmingTotalPoints?: number | null;
   graphBindings?: Array<{ courseId: string; conceptId: string }>;
 }
 
@@ -111,14 +112,6 @@ interface AssignmentFormProps {
   };
   defaultDueDays?: number;
   initialClassroomId?: string;
-  lastPublishedByClassroom?: Record<
-    string,
-    {
-      title: string;
-      category: keyof typeof ASSIGNMENT_CATEGORY_LABELS;
-      publishedAt: string;
-    }
-  >;
 }
 
 interface PreparedAction {
@@ -139,6 +132,15 @@ function datetimeLocal(date: Date | null | undefined): string {
   return local.toISOString().slice(0, 16);
 }
 
+function initialQuestionPoints(
+  question: Pick<EditorQuestion, "type" | "programmingTotalPoints">,
+) {
+  return question.type === "PYTHON_PROGRAMMING" &&
+    question.programmingTotalPoints != null
+    ? question.programmingTotalPoints
+    : 10;
+}
+
 export function AssignmentForm({
   mode,
   classrooms,
@@ -150,7 +152,6 @@ export function AssignmentForm({
   batch,
   defaultDueDays = 7,
   initialClassroomId,
-  lastPublishedByClassroom,
 }: AssignmentFormProps) {
   const [confirmation, setConfirmation] = useState<PreparedAction | null>(null);
   const questionPreviewSource = new URLSearchParams(
@@ -161,7 +162,6 @@ export function AssignmentForm({
           ...(initialClassroomId ? { classroomId: initialClassroomId } : {}),
         },
   ).toString();
-  const [retryAction, setRetryAction] = useState<PreparedAction | null>(null);
   const [switchTarget, setSwitchTarget] = useState<{
     courseId: string;
     classroomId: string;
@@ -316,21 +316,30 @@ export function AssignmentForm({
     },
   });
 
-  const titleIsEmpty = mode === "create" && !form.watch("title").trim();
-
   useEffect(() => {
     if (!defaultHundredPoints || selected.length === 0) return;
-    setSelected((items) => {
-      const points = distributeAssignmentPoints(items.length, 100);
-      return items.map((item, index) => ({ ...item, points: points[index] }));
-    });
-  }, [defaultHundredPoints, selected.length]);
+    try {
+      const points = distributeAssignmentPointsByType(selected, 100);
+      if (selected.every((item, index) => item.points === points[index]))
+        return;
+      setSelected((items) =>
+        items.map((item, index) => ({ ...item, points: points[index] })),
+      );
+    } catch (error) {
+      setOrderFeedback(
+        error instanceof Error ? error.message : "无法按题型分配总分",
+      );
+    }
+  }, [defaultHundredPoints, selected]);
 
   function addQuestion(question: EditorQuestion) {
     if (selected.some((item) => item.id === question.id)) return;
     setOrderFeedback(null);
     setSelected((items) => {
-      const next = [...items, { ...question, points: 10 }];
+      const next = [
+        ...items,
+        { ...question, points: initialQuestionPoints(question) },
+      ];
       return autoOrganize ? organizeAssignmentQuestions(next) : next;
     });
   }
@@ -409,7 +418,10 @@ export function AssignmentForm({
         available,
         selected.map((item) => item.id),
         pickCount,
-      ).map((item) => ({ ...item, points: 10 }));
+      ).map((item) => ({
+        ...item,
+        points: initialQuestionPoints(item),
+      }));
       setSelected((items) =>
         autoOrganize
           ? organizeAssignmentQuestions([...items, ...chosen])
@@ -429,7 +441,9 @@ export function AssignmentForm({
     const byId = new Map(questions.map((item) => [item.id, item]));
     const added = ids.flatMap((id) => {
       const item = byId.get(id);
-      return item && !current.has(id) ? [{ ...item, points: 10 }] : [];
+      return item && !current.has(id)
+        ? [{ ...item, points: initialQuestionPoints(item) }]
+        : [];
     });
     const next = [...selected, ...added].slice(0, 200);
     setSelected(autoOrganize ? organizeAssignmentQuestions(next) : next);
@@ -517,7 +531,6 @@ export function AssignmentForm({
       `已更新课程和班级范围${impact.removedCount ? `，移除${impact.removedCount}道不适用题目` : ""}${impact.removedAttachments ? `，解除${impact.removedAttachments}个课程附件引用（原文件保留）` : ""}。`,
     );
     setSwitchTarget(null);
-    setRetryAction(null);
   }
   function requestCourseChange(courseId: string, classroomId: string) {
     const oldCourse =
@@ -612,7 +625,6 @@ export function AssignmentForm({
                 ? "默认百分制"
                 : "自定义总分",
       };
-      setRetryAction(null);
       if (publish) {
         inFlight.current = true;
         setPreflighting(true);
@@ -655,7 +667,6 @@ export function AssignmentForm({
     setServerError(null);
     const fail = (message: string) => {
       setServerError(message);
-      setRetryAction(action);
       setConfirmation(null);
     };
     try {
@@ -713,7 +724,7 @@ export function AssignmentForm({
             { method: "POST" },
           );
           if (!response.success) {
-            fail(`草稿已保存，但发布失败：${response.error}。可重试本次发布。`);
+            fail(`草稿已保存，但发布失败：${response.error}`);
             return;
           }
           saved = response.data;
@@ -726,7 +737,6 @@ export function AssignmentForm({
           });
       }
       setConfirmation(null);
-      setRetryAction(null);
       toast("success", action.publish ? "作业已发布。" : "草稿已保存。");
       markTeacherWorkspaceDirty();
     } finally {
@@ -759,6 +769,15 @@ export function AssignmentForm({
       return defaultHundredPoints ? "默认百分制" : "自定义总分";
     const round2 = (value: number) => Math.round(value * 100) / 100;
     const values = selected.map((item) => round2(item.points));
+    if (defaultHundredPoints) {
+      try {
+        const expected = distributeAssignmentPointsByType(selected, 100);
+        if (values.every((value, index) => value === round2(expected[index])))
+          return "默认百分制 · 按题型配分";
+      } catch {
+        // Keep the current score summary visible if the programming total is incompatible.
+      }
+    }
     const allSame = values.every((value) => value === values[0]);
     if (allSame) {
       if (
@@ -834,29 +853,19 @@ export function AssignmentForm({
     );
   return (
     <form
-      className="space-y-5 [&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:h-10 [&_select]:h-10"
+      className="space-y-4 [&_input:not([type=checkbox]):not([type=radio]):not([type=file])]:h-10 [&_select]:h-10"
       onSubmit={form.handleSubmit((v) => persist(v, false))}
     >
-      <fieldset disabled={busy} className="min-w-0 space-y-6">
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="min-w-0 space-y-6 rounded-xl border bg-white p-5">
+      <fieldset disabled={busy} className="min-w-0 space-y-4">
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="workspace-panel min-w-0 space-y-5">
             <section
               aria-labelledby="assignment-basic-heading"
               className="min-w-0 space-y-3"
             >
-              <div className="flex items-start justify-between gap-3">
-                <h2 id="assignment-basic-heading" className="font-semibold">
-                  基本信息
-                </h2>
-                <details className="relative text-xs text-slate-500">
-                  <summary className="w-fit cursor-pointer rounded px-1 py-0.5 text-sky-700 focus-visible:outline-2 focus-visible:outline-sky-600">
-                    计分说明
-                  </summary>
-                  <p className="absolute right-0 z-30 mt-2 w-72 max-w-[70vw] rounded-lg border bg-white p-3 leading-5 shadow-lg">
-                    计入总评前需确认正式考核方案与内部权重，并在成绩台账中同步；作业发布不会自动替代其他平时成绩构成。
-                  </p>
-                </details>
-              </div>
+              <h2 id="assignment-basic-heading" className="font-semibold">
+                基本信息
+              </h2>
               <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                 <label className="block space-y-1 text-sm">
                   <span className="font-medium">作业名称</span>
@@ -892,88 +901,6 @@ export function AssignmentForm({
                   </span>
                 </label>
               </div>
-              <p className="text-xs text-slate-500">
-                练习对应平时表现，作业与实验对应各自成绩项目；发布后类别不可修改。
-              </p>
-              {mode === "create" &&
-                lastPublishedByClassroom &&
-                selectedClassroomIds.length > 0 && (
-                  <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
-                    <p className="font-medium text-slate-700">上次布置的作业</p>
-                    {selectedClassroomIds.length ? (
-                      <ul className="max-h-40 space-y-2 overflow-y-auto">
-                        {selectedClassroomIds.map((id) => {
-                          const classroom = classrooms.find(
-                            (item) => item.id === id,
-                          );
-                          const previous = lastPublishedByClassroom[id];
-                          return (
-                            <li
-                              key={id}
-                              className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1"
-                            >
-                              <div className="min-w-0 [overflow-wrap:anywhere]">
-                                <p className="text-xs text-slate-600">
-                                  {classroom?.name}
-                                </p>
-                                {previous ? (
-                                  <p className="mt-0.5">
-                                    <span className="font-medium">
-                                      {previous.title}
-                                    </span>{" "}
-                                    <span className="text-xs text-slate-600">
-                                      ·{" "}
-                                      {
-                                        ASSIGNMENT_CATEGORY_LABELS[
-                                          previous.category
-                                        ]
-                                      }{" "}
-                                      ·{" "}
-                                      <time dateTime={previous.publishedAt}>
-                                        {new Date(
-                                          previous.publishedAt,
-                                        ).toLocaleDateString("zh-CN", {
-                                          timeZone: "Asia/Shanghai",
-                                        })}
-                                      </time>
-                                    </span>
-                                  </p>
-                                ) : (
-                                  <p className="text-xs text-slate-600">
-                                    暂无已开放作业
-                                  </p>
-                                )}
-                              </div>
-                              {previous && titleIsEmpty && (
-                                <button
-                                  type="button"
-                                  aria-label={`用作命名参考：${previous.title} · ${classroom?.name}`}
-                                  onClick={() => {
-                                    if (form.getValues("title").trim()) return;
-                                    form.setValue("title", previous.title, {
-                                      shouldDirty: true,
-                                      shouldValidate: true,
-                                    });
-                                    form.setFocus("title", {
-                                      shouldSelect: true,
-                                    });
-                                  }}
-                                  className="min-h-8 rounded-md border bg-white px-2 text-xs text-sky-800 hover:bg-sky-50"
-                                >
-                                  用作命名参考
-                                </button>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-slate-600">
-                        选择教学班后查看。
-                      </p>
-                    )}
-                  </div>
-                )}
               <label className="block space-y-1 text-sm">
                 <span className="font-medium">作业说明</span>
                 <textarea
@@ -1020,9 +947,6 @@ export function AssignmentForm({
                     </label>
                   ))}
                 </div>
-                <p className="text-muted-foreground mt-2 text-xs">
-                  直接任务可提交文字、截图或 PDF，由教师单独评分。
-                </p>
               </fieldset>
               {assignmentType === "task" ? (
                 <section className="space-y-4">
@@ -1036,7 +960,6 @@ export function AssignmentForm({
                       onChange={(event) =>
                         setTask({ ...task, prompt: event.target.value })
                       }
-                      placeholder="例如：完成实验，说明分析过程，并提交结果截图。"
                     />
                   </label>
                   <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
@@ -1074,7 +997,7 @@ export function AssignmentForm({
                   </div>
                   <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
                     <label className="block text-sm font-medium">
-                      教师任务附件（发给学生的材料）
+                      教师任务附件
                       <input
                         type="file"
                         multiple
@@ -1087,9 +1010,6 @@ export function AssignmentForm({
                         disabled={busy || resourceFiles.length >= 5}
                       />
                     </label>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      支持PDF、Word(docx)、图片、UTF-8文本及Python文件，最多5个，每个5MB。发布后学生可下载，附件内容随作业冻结。
-                    </p>
                     {uploading ? (
                       <p role="status" className="mt-2 text-xs text-sky-700">
                         正在上传：{uploading}
@@ -1134,12 +1054,9 @@ export function AssignmentForm({
                     />
                     允许学生上传作答附件：截图与 PDF（每题最多 5 个，每个 5 MB）
                   </label>
-                  <p className="text-xs text-slate-500">
-                    学生可填写文字答案并附材料；提交后进入人工批改，成绩发布后学生可见。
-                  </p>
                 </section>
               ) : (
-                <div className="grid items-start gap-5 xl:grid-cols-2">
+                <div className="grid items-start gap-5">
                   <section className="min-w-0">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h2 className="font-semibold">从题库选择题目</h2>
@@ -1183,11 +1100,6 @@ export function AssignmentForm({
                         <Sparkles aria-hidden="true" className="size-4" />
                         智能组卷
                       </button>
-                      <p className="w-full text-xs leading-5 text-slate-500">
-                        {currentAssemblyChapters.length
-                          ? "智能组卷支持多选章节和知识点，并在确认前显示历史用题。"
-                          : "选择已发布正式知识图谱的课程后可使用智能组卷。"}
-                      </p>
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 [&>input]:min-w-0 [&>select]:min-w-0">
                       <select
@@ -1293,13 +1205,6 @@ export function AssignmentForm({
                         )}
                       </select>
                     </div>
-                    <p className="mt-3 text-xs text-slate-500">
-                      课程与章节依据教师已确认的知识点关联筛选。未关联题目可在“全部课程题目”中查看。
-                    </p>
-                    <p className="mt-2 text-xs text-slate-500">
-                      当前筛选 {available.length} 道 · 已选 {selected.length}{" "}
-                      道。课程列表仅显示有正式图谱且有可选关联题目的课程。
-                    </p>
                     <div className="mt-4 max-h-[40rem] space-y-2 overflow-y-auto pr-1">
                       {available.length === 0 ? (
                         <p className="text-sm text-gray-500">
@@ -1380,7 +1285,7 @@ export function AssignmentForm({
                     </div>
                   </section>
 
-                  <section className="min-w-0">
+                  <section className="border-border min-w-0 border-t pt-5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <h2 className="font-semibold">已选作业题目</h2>
                       <span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-medium text-sky-800">
@@ -1420,10 +1325,6 @@ export function AssignmentForm({
                           一键整理题序
                         </button>
                       </div>
-                      <p className="text-xs leading-5 text-slate-500">
-                        {ASSIGNMENT_QUESTION_ORDER_LABEL}
-                        。同类题保持原顺序，上移、下移可切换为手动排序。
-                      </p>
                       <div className="space-y-3 border-t pt-3">
                         <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
                           <input
@@ -1440,7 +1341,7 @@ export function AssignmentForm({
                               );
                             }}
                           />
-                          总分固定 100 分，增减题目自动均分
+                          总分固定 100 分，自动按题型配分
                         </label>
                         <div className="flex flex-wrap items-center gap-2">
                           <label className="flex items-center gap-1 text-xs text-slate-600">
@@ -1472,7 +1373,7 @@ export function AssignmentForm({
                             onClick={organizePointsByType}
                             className="shrink-0 rounded-lg border bg-white px-3 py-2 text-xs whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:opacity-50"
                           >
-                            按题型均分
+                            各题型等分
                           </button>
                           <button
                             type="button"
@@ -1483,9 +1384,6 @@ export function AssignmentForm({
                             自定义配分
                           </button>
                         </div>
-                        <p className="text-xs leading-5 text-slate-500">
-                          全卷均分＝所有题同分；按题型均分＝各题型小计相同、题型内再均分；自定义配分＝逐题型设置小计。
-                        </p>
                         {typedScore ? (
                           <p
                             role="status"
@@ -1521,9 +1419,6 @@ export function AssignmentForm({
                         ) : null}
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-                        <span className="text-xs text-slate-500">
-                          清空仅移除本次选题，保留题库原题
-                        </span>
                         <button
                           type="button"
                           disabled={selected.length === 0}
@@ -1546,8 +1441,8 @@ export function AssignmentForm({
                           <p className="text-sm font-medium text-red-800">
                             确认清空当前作业的 {selected.length} 道题目？
                           </p>
-                          <p className="text-xs leading-5 text-red-700">
-                            不会删除题库原题。保存草稿后才会更新作业。
+                          <p className="text-sm text-red-700">
+                            题库原题不会被删除。
                           </p>
                           <div className="flex flex-wrap gap-2">
                             <button
@@ -1578,7 +1473,7 @@ export function AssignmentForm({
                     </div>
                     {selected.length === 0 ? (
                       <p className="mt-4 rounded-md border border-dashed p-8 text-center text-sm text-gray-500">
-                        尚未选择题目。草稿可以保存，但发布前至少需要一道题。
+                        尚未选择题目
                       </p>
                     ) : (
                       <div className="mt-4 max-h-[52rem] space-y-3 overflow-y-auto pr-1">
@@ -1677,7 +1572,7 @@ export function AssignmentForm({
           </div>
           <section
             aria-labelledby="assignment-publish-heading"
-            className="min-w-0 space-y-3 rounded-xl border border-sky-200 bg-white p-5 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-176px)] xl:overflow-y-auto"
+            className="workspace-panel min-w-0 space-y-3"
           >
             <h2 id="assignment-publish-heading" className="font-semibold">
               发布设置
@@ -1760,9 +1655,6 @@ export function AssignmentForm({
                         </label>
                       ))}
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    每班生成独立作业，分别批改和公布成绩。
-                  </p>
                 </fieldset>
               </>
             ) : batch ? (
@@ -1777,9 +1669,6 @@ export function AssignmentForm({
                     </li>
                   ))}
                 </ul>
-                <p className="text-xs text-slate-500">
-                  同一份内容会写入以上每个班级，无需逐个班级编辑。
-                </p>
               </div>
             ) : (
               <label className="block space-y-1 text-sm">
@@ -1838,26 +1727,12 @@ export function AssignmentForm({
         {serverError ? (
           <div
             role="alert"
-            className="space-y-2 rounded-xl bg-red-50 p-3 text-sm text-red-700"
+            className="rounded-xl bg-red-50 p-3 text-sm text-red-700"
           >
             <p>{serverError}</p>
-            {retryAction ? (
-              <button
-                type="button"
-                disabled={busy}
-                className="h-10 rounded-lg border border-red-200 bg-white px-3"
-                onClick={() =>
-                  retryAction.publish
-                    ? setConfirmation(retryAction)
-                    : void execute(retryAction)
-                }
-              >
-                重试上次{retryAction.publish ? "发布" : "保存"}内容
-              </button>
-            ) : null}
           </div>
         ) : null}
-        <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white/95 px-5 py-3 shadow-[0_-4px_16px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+        <div className="workspace-panel sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 bg-white/95 px-4 py-3 backdrop-blur-sm">
           <p className="text-sm text-slate-600">
             {assignmentType === "task" ? "直接任务" : `${selected.length}道题`}{" "}
             · 总分{" "}
@@ -2011,11 +1886,6 @@ export function AssignmentForm({
                   : "仅允许提交一次"}
               </dd>
             </dl>
-            {confirmation.preview && (
-              <p className="mt-3 text-xs text-slate-600">
-                已核对班级权限、题目、总分和附件归属。历史用题及同名作业提示供发布前确认。
-              </p>
-            )}
             {confirmation.resourceNames.length ? (
               <ul className="mt-3 space-y-1 rounded-lg bg-slate-50 p-3 text-xs">
                 {confirmation.resourceNames.map((name, index) => (
@@ -2025,7 +1895,7 @@ export function AssignmentForm({
                 ))}
               </ul>
             ) : null}
-            <p className="mt-4 rounded-lg bg-sky-50 p-3 text-xs leading-6 text-sky-900">
+            <p className="mt-4 rounded-lg bg-sky-50 p-3 text-sm leading-6 text-sky-900">
               发布后题目、题序、分值和教师附件冻结，各班独立记录提交及成绩。
             </p>
             <div className="mt-5 flex flex-wrap justify-end gap-3">

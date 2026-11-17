@@ -37,3 +37,14 @@ export function scrubSensitiveText(
 
   return sanitized.replace(/\s+/gu, " ").trim().slice(0, maxLength);
 }
+
+/** Keep code formatting intact while removing common directly identifying values. */
+export function scrubSensitiveCode(value: string, maxLength = 50_000): string {
+  return value
+    .normalize("NFKC")
+    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .replace(EMAIL_PATTERN, "[已隐藏邮箱]")
+    .replace(PHONE_PATTERN, "[已隐藏手机号]")
+    .replace(LONG_NUMBER_PATTERN, "[已隐藏编号]")
+    .slice(0, maxLength);
+}

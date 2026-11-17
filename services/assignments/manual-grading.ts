@@ -177,7 +177,16 @@ function detailFromRecord(
           ? null
           : answer.assignmentQuestion.typeSnapshot ===
               QuestionType.PYTHON_PROGRAMMING
-            ? decimalNumber(answer.programmingAttempts[0]?.score ?? null)
+            ? (() => {
+                const attempt = answer.programmingAttempts[0];
+                return attempt?.score != null && attempt.maxScore.gt(0)
+                  ? attempt.score
+                      .mul(answer.assignmentQuestion.points)
+                      .div(attempt.maxScore)
+                      .toDecimalPlaces(2)
+                      .toNumber()
+                  : null;
+              })()
             : decimalNumber(answer.score),
       manualScore:
         answer.assignmentQuestion.typeSnapshot === QuestionType.SHORT_ANSWER ||

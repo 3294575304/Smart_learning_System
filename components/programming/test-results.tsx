@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
  *
  * 约束：
  * - 任何状态必须「判定缩写 + 颜色」同时出现，不能只靠颜色传达结果（沿用 StatusChip 的硬约束）。
- * - 输出只折叠展示，不默认铺开，避免多用例时把页面撑长。
+ * - 结果面板只展示测试状态与资源消耗，不展示运行输出。
  */
 export interface ProgrammingTestResult {
   index: number;
@@ -97,7 +97,6 @@ export function ProgrammingTestResults({
 }) {
   if (cases.length === 0) return null;
   const passed = cases.filter((item) => item.passed).length;
-  const withOutput = cases.filter((item) => item.stdout || item.stderr);
 
   return (
     <section
@@ -141,31 +140,6 @@ export function ProgrammingTestResults({
       </ul>
 
       <p className="text-ink-muted mt-3 text-xs">{LEGEND}</p>
-
-      {withOutput.length > 0 ? (
-        <div className="mt-3 space-y-2">
-          {withOutput.map((item) => (
-            <details
-              className="border-line-soft bg-page rounded-lg border px-3 py-2"
-              key={item.index}
-            >
-              <summary className="text-ink-soft cursor-pointer text-xs font-medium">
-                用例 #{item.index} 运行输出
-              </summary>
-              {item.stdout ? (
-                <pre className="text-ink mt-2 overflow-auto text-xs whitespace-pre-wrap">
-                  {item.stdout}
-                </pre>
-              ) : null}
-              {item.stderr ? (
-                <pre className="text-bad mt-2 overflow-auto text-xs whitespace-pre-wrap">
-                  {item.stderr}
-                </pre>
-              ) : null}
-            </details>
-          ))}
-        </div>
-      ) : null}
     </section>
   );
 }

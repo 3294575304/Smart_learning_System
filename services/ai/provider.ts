@@ -14,6 +14,7 @@ import type { QuestionObjectiveAIInput } from "@/services/question-objectives/sc
 
 import type { AssemblyProviderInput } from "@/services/assignments/editor-assistance-schemas";
 import type { CourseRecommendationFocusInput } from "@/services/course-recommendations/reason-focus";
+import type { ProgrammingCodeScoreInput } from "@/services/programming-scoring/schemas";
 
 export interface AIProviderOptions {
   signal: AbortSignal;
@@ -156,6 +157,11 @@ export interface AIProvider {
 
   classifyQuestionObjective?(
     input: QuestionObjectiveAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  scoreProgrammingCode?(
+    input: ProgrammingCodeScoreInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 }

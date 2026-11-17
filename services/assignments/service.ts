@@ -108,16 +108,16 @@ const studentQuestionSelect = {
   typeSnapshot: true,
   sortOrder: true,
   points: true,
-  // 只取第一条 PUBLIC 用例用于答题页展示；隐藏用例不进前端。
+  // 展示全部 PUBLIC 检查点；隐藏用例不进前端。
   programmingConfigSnapshot: {
     select: {
       configRevision: {
         select: {
           testCases: {
             where: { visibility: "PUBLIC" as const },
+            take: 2,
             orderBy: { sortOrder: "asc" as const },
-            take: 1,
-            select: { stdin: true, expectedOutput: true },
+            select: { name: true, stdin: true, expectedOutput: true },
           },
         },
       },
@@ -390,6 +390,11 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
           where: { course: { teacherId } },
           select: { courseId: true, conceptId: true },
         },
+        programmingConfigRevisions: {
+          orderBy: [{ revisionNumber: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { totalPoints: true },
+        },
       },
     }),
     prisma.course.findMany({
@@ -454,8 +459,10 @@ export async function getTeacherAssignmentEditorOptions(teacherId: string) {
         ),
       ),
     ),
-    questions: questions.map((question) => ({
+    questions: questions.map(({ programmingConfigRevisions, ...question }) => ({
       ...question,
+      programmingTotalPoints:
+        programmingConfigRevisions[0]?.totalPoints.toNumber() ?? null,
     })),
   };
 }
@@ -974,7 +981,7 @@ export async function publishInTransaction(
     assignment.classroom.courseId,
   );
   await freezeAssignmentProgrammingConfigs(transaction, assignmentId, {
-    allowPointScaling: assignment.examSessionId !== null,
+    allowPointScaling: true,
   });
   await transaction.assignment.update({
     where: { id: assignmentId },
@@ -1361,11 +1368,11 @@ export async function getStudentSubmissionDraft(
       type: question.typeSnapshot,
       sortOrder: question.sortOrder,
       points: question.points.toNumber(),
-      programming: question.programmingConfigSnapshot?.configRevision
-        .testCases[0]
+      programming: question.programmingConfigSnapshot?.configRevision.testCases
+        .length
         ? {
-            sample:
-              question.programmingConfigSnapshot.configRevision.testCases[0],
+            samples:
+              question.programmingConfigSnapshot.configRevision.testCases,
           }
         : null,
       images: question.examImages.map((image) => ({
