@@ -9,6 +9,9 @@ import {
   createEmptyQuestionAnswer,
   type QuestionAnswerState,
 } from "@/components/assignments/question-answer-input";
+import { ProgrammingAnswerLayout } from "@/components/assignments/student-answer-workspace";
+import { PythonCodeEditor } from "@/components/programming/code-editor";
+import { ProgrammingStatement } from "@/components/programming/programming-statement";
 import { ProgrammingAttemptStatus } from "@/components/assignments/programming-attempt-status";
 import { questionTypeLabel } from "@/components/recommendations/recommendation-presenters";
 import type { getStudentPracticeSession } from "@/services/course-recommendations/service";
@@ -267,9 +270,11 @@ export function CoursePracticeSession({ session }: Props) {
           <span>{questionTypeLabel(item.question.type)}</span>
         </div>
         <h2 className="mt-4 text-lg font-semibold">{item.question.title}</h2>
-        <p className="mt-4 text-sm leading-7 whitespace-pre-wrap">
-          {item.question.content}
-        </p>
+        {answer.kind !== "CODE" && (
+          <p className="mt-4 text-sm leading-7 whitespace-pre-wrap">
+            {item.question.content}
+          </p>
+        )}
         {session.mode === "PRACTICE" && item.reason ? (
           <details className="mt-3 rounded-lg border border-sky-100 bg-sky-50/50 px-3 py-2 text-sm">
             <summary className="cursor-pointer font-medium text-sky-900">
@@ -281,14 +286,36 @@ export function CoursePracticeSession({ session }: Props) {
             ) : null}
           </details>
         ) : null}
-        <QuestionAnswerInput
-          answer={answer}
-          disabled={busy}
-          onChange={(nextAnswer) =>
-            setAnswers((current) => ({ ...current, [item.id]: nextAnswer }))
-          }
-          question={item.question}
-        />
+        {answer.kind === "CODE" ? (
+          <ProgrammingAnswerLayout
+            prompt={<ProgrammingStatement text={item.question.content} />}
+          >
+            <div className="flex h-full min-h-0 min-w-0 flex-col">
+              <PythonCodeEditor
+                fillHeight
+                value={answer.value}
+                disabled={
+                  busy || Boolean(programmingAttemptId) || Boolean(feedback)
+                }
+                onChange={(value) =>
+                  setAnswers((current) => ({
+                    ...current,
+                    [item.id]: { kind: "CODE", value },
+                  }))
+                }
+              />
+            </div>
+          </ProgrammingAnswerLayout>
+        ) : (
+          <QuestionAnswerInput
+            answer={answer}
+            disabled={busy}
+            onChange={(nextAnswer) =>
+              setAnswers((current) => ({ ...current, [item.id]: nextAnswer }))
+            }
+            question={item.question}
+          />
+        )}
         {programmingAttemptId ? (
           <ProgrammingAttemptStatus
             assignmentQuestionId={item.question.id}
@@ -296,7 +323,6 @@ export function CoursePracticeSession({ session }: Props) {
             onComplete={(score, maxScore) => {
               setEarnedScore((current) => current + score);
               setCompletedCount((current) => current + 1);
-              setProgrammingAttemptId(null);
               setFeedback({
                 correctCount: score >= maxScore ? 1 : 0,
                 totalCount: 1,
@@ -337,7 +363,7 @@ export function CoursePracticeSession({ session }: Props) {
       ) : null}
       <button
         className="st-btn-cta rounded-md bg-sky-700 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-        disabled={busy || Boolean(programmingAttemptId)}
+        disabled={busy || (Boolean(programmingAttemptId) && !feedback)}
         onClick={() => {
           if (feedback) {
             if (index === session.items.length - 1) setFinished(true);
@@ -352,7 +378,7 @@ export function CoursePracticeSession({ session }: Props) {
       >
         {busy
           ? "正在提交并批改…"
-          : programmingAttemptId
+          : programmingAttemptId && !feedback
             ? "判题中…"
             : feedback
               ? index === session.items.length - 1

@@ -105,7 +105,15 @@ const recommendationViewSelect =
         programmingConfigRevisions: {
           orderBy: { revisionNumber: "desc" },
           take: 1,
-          select: { starterCode: true },
+          select: {
+            starterCode: true,
+            testCases: {
+              where: { visibility: "PUBLIC" },
+              orderBy: { sortOrder: "asc" },
+              take: 2,
+              select: { name: true, stdin: true, expectedOutput: true },
+            },
+          },
         },
         correctBoolean: true,
         referenceAnswer: true,

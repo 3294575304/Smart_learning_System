@@ -122,3 +122,30 @@ test("mixed groups only allow pending and started available questions", () => {
   for (const status of ["EXPIRED", "COMPLETED", "DISMISSED"] as const)
     assert.equal(canAnswerPractice({ status }), false);
 });
+
+test("submitted programming review retains both panels with judging details below", () => {
+  const item: RecommendationDetailView = {
+    ...detail(),
+    type: "PYTHON_PROGRAMMING",
+    status: "COMPLETED",
+    savedAnswer: "print(42)",
+    programmingAttempt: {
+      id: "attempt-12345678",
+      status: "SUCCEEDED",
+      progress: 100,
+    },
+    programmingSamples: [
+      { name: "公开样例", stdin: "1", expectedOutput: "42" },
+    ],
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(PracticeHistoryQuestion, { item }),
+  );
+  assert.match(html, /题目说明/);
+  assert.match(html, /main\.py/);
+  assert.match(html, /已提交 · 只读/);
+  assert.match(html, /公开检查点/);
+  assert.match(html, /Python 正式判题/);
+  assert.ok(html.indexOf("Python 正式判题") > html.indexOf("main.py"));
+  assert.doesNotMatch(html, /提交本题判题|未保存检测点记录/);
+});

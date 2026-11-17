@@ -1,6 +1,14 @@
+"use client";
+
 import type { RecommendationDetailView } from "@/services/recommendations/types";
 import { QuestionText } from "@/components/assignments/question-text";
-import { AnswerQuestionHeading } from "@/components/assignments/student-answer-workspace";
+import { PythonCodeEditor } from "@/components/programming/code-editor";
+import { ProgrammingStatement } from "@/components/programming/programming-statement";
+import { ProgrammingAttemptStatus } from "@/components/assignments/programming-attempt-status";
+import {
+  AnswerQuestionHeading,
+  ProgrammingAnswerLayout,
+} from "@/components/assignments/student-answer-workspace";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import { PracticeChoiceReview } from "./practice-choice-review";
 import {
@@ -84,9 +92,54 @@ export function PracticeHistoryQuestion({
           {status}
         </header>
       )}
-      <QuestionText
-        text={item.content || "未保存题目内容，暂时无法回看题干。"}
-      />
+      {item.type === "PYTHON_PROGRAMMING" ? (
+        <>
+          <ProgrammingAnswerLayout
+            prompt={
+              <ProgrammingStatement
+                text={item.content || "未保存题目内容，暂时无法回看题干。"}
+                samples={item.programmingSamples}
+              />
+            }
+          >
+            <div className="flex h-full min-h-0 min-w-0 flex-col gap-3">
+              <PythonCodeEditor
+                fillHeight
+                disabled
+                muteWhenDisabled={false}
+                value={draftText ?? ownAnswer ?? ""}
+                onChange={() => {}}
+                label="已提交的 Python 代码（只读）"
+                toolbar={
+                  <span className="text-xs font-medium text-slate-300">
+                    已提交 · 只读
+                  </span>
+                }
+              />
+              <noscript>
+                <pre>{draftText ?? ownAnswer ?? "未作答，未保存答案。"}</pre>
+              </noscript>
+            </div>
+          </ProgrammingAnswerLayout>
+          {item.programmingAttempt ? (
+            <div className="min-w-0">
+              <ProgrammingAttemptStatus
+                assignmentQuestionId={item.questionId}
+                attemptId={item.programmingAttempt.id}
+                displayMaxScore={item.assignedPoints}
+              />
+            </div>
+          ) : (
+            <p className="text-ink-soft text-sm" role="status">
+              未保存检测点记录，暂时无法展示判题详情。
+            </p>
+          )}
+        </>
+      ) : (
+        <QuestionText
+          text={item.content || "未保存题目内容，暂时无法回看题干。"}
+        />
+      )}
       {item.options.length ? (
         <PracticeChoiceReview
           options={item.options}
@@ -99,7 +152,7 @@ export function PracticeHistoryQuestion({
           <QuestionText text={answer.explanation || "未保存解析"} />
         </div>
       )}
-      {!answer?.choiceFeedback && (
+      {item.type !== "PYTHON_PROGRAMMING" && !answer?.choiceFeedback && (
         <section className="rounded-lg bg-sky-50 p-4 text-sm">
           <h3 className="font-medium">
             {showDraft ? "未提交草稿" : "你的答案"}

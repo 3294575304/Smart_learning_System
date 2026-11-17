@@ -1,5 +1,6 @@
 "use client";
 import { QuestionText } from "@/components/assignments/question-text";
+import { PracticeHistoryQuestion } from "./practice-history-question";
 import { PracticeChoiceReview } from "./practice-choice-review";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
 
@@ -350,10 +351,11 @@ export function RecommendationPractice({
     />
   );
   const codeEditor = (
-    <div className="space-y-3">
-      <h3 className="text-ink text-sm font-semibold">你的作答</h3>
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3">
       <PythonCodeEditor
+        fillHeight
         disabled={programmingPending || Boolean(programmingAttemptId)}
+        muteWhenDisabled={false}
         onChange={(next) => {
           setCode(next);
           onDraftChange?.(recommendation.id, {
@@ -362,6 +364,22 @@ export function RecommendationPractice({
           });
         }}
         value={code}
+        toolbar={
+          !programmingAttemptId ? (
+            <button
+              className="inline-flex h-9 items-center rounded-md bg-sky-500 px-3 text-xs font-semibold text-slate-900 hover:bg-sky-400 disabled:opacity-50"
+              disabled={programmingPending || batchBusy || !code.trim()}
+              onClick={() => void submitProgramming()}
+              type="button"
+            >
+              {programmingPending ? "正在提交判题…" : "提交本题判题"}
+            </button>
+          ) : (
+            <span className="text-xs font-medium text-slate-300">
+              已提交 · 只读
+            </span>
+          )
+        }
       />
     </div>
   );
@@ -381,9 +399,30 @@ export function RecommendationPractice({
         </header>
       )}
 
-      {!embedded && <div className="flex justify-end">{favorite}</div>}
+      {!embedded && recommendation.type !== QuestionType.PYTHON_PROGRAMMING && (
+        <div className="flex justify-end">{favorite}</div>
+      )}
       {result ? (
-        <PracticeResult result={result} recommendation={recommendation} />
+        recommendation.type === QuestionType.PYTHON_PROGRAMMING ? (
+          <PracticeHistoryQuestion
+            embedded={embedded}
+            item={{
+              ...recommendation,
+              status: RecommendationStatus.COMPLETED,
+              practiceResult: result,
+              savedAnswer: code,
+              programmingAttempt: programmingAttemptId
+                ? {
+                    id: programmingAttemptId,
+                    status: "SUCCEEDED",
+                    progress: 100,
+                  }
+                : recommendation.programmingAttempt,
+            }}
+          />
+        ) : (
+          <PracticeResult result={result} recommendation={recommendation} />
+        )
       ) : recommendation.status === RecommendationStatus.COMPLETED ? (
         <div
           className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"
@@ -394,32 +433,18 @@ export function RecommendationPractice({
       ) : recommendation.type === QuestionType.PYTHON_PROGRAMMING ? (
         <div className="space-y-5">
           <article className={questionClass}>
-            {embedded ? (
-              <>
-                {embeddedHeading}
-                <ProgrammingAnswerLayout
-                  prompt={
-                    <ProgrammingStatement text={recommendation.content} />
-                  }
-                >
-                  {codeEditor}
-                </ProgrammingAnswerLayout>
-              </>
-            ) : (
-              <div className="space-y-4">
-                <h2 className="font-semibold [overflow-wrap:anywhere]">
-                  {recommendation.title}
-                </h2>
-                <ProgrammingStatement text={recommendation.content} />
-                {codeEditor}
-              </div>
-            )}
+            {embeddedHeading}
+            <ProgrammingAnswerLayout
+              prompt={
+                <ProgrammingStatement
+                  text={recommendation.content}
+                  samples={recommendation.programmingSamples}
+                />
+              }
+            >
+              {codeEditor}
+            </ProgrammingAnswerLayout>
           </article>
-          {serverError ? (
-            <p className="text-sm text-red-700" role="alert">
-              {serverError}
-            </p>
-          ) : null}
           {programmingAttemptId ? (
             <ProgrammingAttemptStatus
               assignmentQuestionId={recommendation.questionId}
@@ -440,20 +465,12 @@ export function RecommendationPractice({
                 });
               }}
             />
-          ) : (
-            <button
-              className={submitClass}
-              disabled={programmingPending || !code.trim()}
-              onClick={() => void submitProgramming()}
-              type="button"
-            >
-              {programmingPending
-                ? "正在提交判题…"
-                : embedded
-                  ? "提交本题"
-                  : "提交 Python 判题"}
-            </button>
-          )}
+          ) : null}
+          {serverError ? (
+            <p className="text-sm text-red-700" role="alert">
+              {serverError}
+            </p>
+          ) : null}
           <p className="text-sm text-gray-500">
             隐藏用例异步执行；系统故障不会记为零分，完成后刷新可查看结果。
           </p>

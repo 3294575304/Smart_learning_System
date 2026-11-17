@@ -153,6 +153,11 @@ export interface RecommendationDetailView extends RecommendationListItemView {
   completedAt: string | null;
   practiceResult: RecommendationPracticeResultView | null;
   starterCode?: string;
+  programmingSamples?: Array<{
+    name: string;
+    stdin: string;
+    expectedOutput: string;
+  }>;
   programmingAttempt?: {
     id: string;
     status: string;

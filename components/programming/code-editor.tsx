@@ -86,8 +86,8 @@ const EDITOR_THEME = EditorView.theme(
       backgroundColor: "#0b1622",
       color: "#64748b",
       borderRight: "1px solid #1e3a52",
-      // CodeMirror 会按内容高度写内联最小值，短代码时仍需撑满编辑区。
-      minHeight: "288px !important",
+      // 保留 CodeMirror 按文档高度设置的 min-height，避免长代码滚动时截断行号栏。
+      alignSelf: "stretch",
       userSelect: "none",
     },
     ".cm-lineNumbers": {
@@ -132,7 +132,7 @@ const LIGHT_EDITOR_THEME = EditorView.theme(
       backgroundColor: "#f1f5f9",
       color: "#64748b",
       borderRight: "1px solid #e2e8f0",
-      minHeight: "288px !important",
+      alignSelf: "stretch",
       userSelect: "none",
     },
     ".cm-lineNumbers": {
@@ -166,7 +166,6 @@ const FILL_EDITOR_THEME = EditorView.theme({
   ".cm-gutters": {
     alignSelf: "stretch !important",
     height: "auto",
-    minHeight: "100% !important",
   },
 });
 
@@ -214,7 +213,6 @@ export function PythonCodeEditor({
     const hostElement = host.current;
     if (!hostElement) return;
     const config = compartments.current;
-    let scheduleFillerUpdate = () => {};
     const editor = new EditorView({
       parent: hostElement,
       state: EditorState.create({
@@ -260,7 +258,6 @@ export function PythonCodeEditor({
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               callback.current(update.state.doc.toString());
-              scheduleFillerUpdate();
             }
           }),
           initial.current.variant === "light"
@@ -271,101 +268,7 @@ export function PythonCodeEditor({
       }),
     });
     view.current = editor;
-    const filler = initial.current.fillHeight
-      ? document.createElement("div")
-      : null;
-    if (filler) {
-      filler.className = "cm-line-number-filler";
-      filler.setAttribute("aria-hidden", "true");
-      hostElement.appendChild(filler);
-    }
-    let animationFrame = 0;
-    const updateFiller = () => {
-      if (!filler) return;
-      filler.replaceChildren();
-      filler.style.display = "none";
-
-      const scroller = editor.scrollDOM;
-      if (
-        scroller.scrollTop + scroller.clientHeight <
-        scroller.scrollHeight - 2
-      )
-        return;
-
-      const gutter = editor.dom.querySelector<HTMLElement>(".cm-lineNumbers");
-      const line = editor.dom.querySelector<HTMLElement>(".cm-line");
-      if (!gutter || !line) return;
-
-      let lastNumber: HTMLElement | null = null;
-      const lineCount = editor.state.doc.lines;
-      for (const element of gutter.querySelectorAll<HTMLElement>(
-        ".cm-gutterElement",
-      )) {
-        if (element.textContent?.trim() === String(lineCount)) {
-          lastNumber = element;
-          break;
-        }
-      }
-      if (!lastNumber) return;
-
-      const lineHeight = Number.parseFloat(getComputedStyle(line).lineHeight);
-      if (!Number.isFinite(lineHeight) || lineHeight <= 0) return;
-      const hostRect = hostElement.getBoundingClientRect();
-      const gutterRect = gutter.getBoundingClientRect();
-      const lastNumberRect = lastNumber.getBoundingClientRect();
-      const rowCount = Math.floor(
-        (scroller.getBoundingClientRect().bottom - lastNumberRect.bottom + 1) /
-          lineHeight,
-      );
-      if (rowCount <= 0) return;
-
-      const numberStyle = getComputedStyle(lastNumber);
-      filler.style.position = "absolute";
-      filler.style.top = `${lastNumberRect.bottom - hostRect.top}px`;
-      filler.style.left = `${gutterRect.left - hostRect.left}px`;
-      filler.style.width = `${gutterRect.width}px`;
-      filler.style.display = "flex";
-      filler.style.flexDirection = "column";
-      filler.style.pointerEvents = "none";
-      filler.style.zIndex = "300";
-      for (let index = 1; index <= rowCount; index++) {
-        const row = document.createElement("div");
-        row.className = "cm-gutterElement";
-        row.textContent = String(lineCount + index);
-        row.style.boxSizing = "border-box";
-        row.style.display = "flex";
-        row.style.alignItems = "center";
-        row.style.justifyContent = "flex-end";
-        row.style.flex = `0 0 ${lineHeight}px`;
-        row.style.height = `${lineHeight}px`;
-        row.style.padding = numberStyle.padding;
-        row.style.color = numberStyle.color;
-        row.style.fontFamily = numberStyle.fontFamily;
-        row.style.fontSize = numberStyle.fontSize;
-        row.style.fontWeight = numberStyle.fontWeight;
-        row.style.lineHeight = numberStyle.lineHeight;
-        row.style.fontVariantNumeric = numberStyle.fontVariantNumeric;
-        row.style.textAlign = numberStyle.textAlign;
-        filler.appendChild(row);
-      }
-    };
-    scheduleFillerUpdate = () => {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(updateFiller);
-    };
-    const resizeObserver =
-      filler && typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(scheduleFillerUpdate)
-        : null;
-    resizeObserver?.observe(hostElement);
-    resizeObserver?.observe(editor.scrollDOM);
-    editor.scrollDOM.addEventListener("scroll", scheduleFillerUpdate);
-    scheduleFillerUpdate();
     return () => {
-      window.cancelAnimationFrame(animationFrame);
-      resizeObserver?.disconnect();
-      editor.scrollDOM.removeEventListener("scroll", scheduleFillerUpdate);
-      filler?.remove();
       editor.destroy();
       view.current = null;
     };

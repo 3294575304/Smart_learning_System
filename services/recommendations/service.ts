@@ -226,6 +226,10 @@ function detailFromRecord(
       record.question.type === "PYTHON_PROGRAMMING"
         ? (record.question.programmingConfigRevisions[0]?.starterCode ?? "")
         : "",
+    programmingSamples:
+      record.question.type === "PYTHON_PROGRAMMING"
+        ? (record.question.programmingConfigRevisions[0]?.testCases ?? [])
+        : [],
     programmingAttempt: record.programmingAttempts[0]
       ? {
           id: record.programmingAttempts[0].id,
