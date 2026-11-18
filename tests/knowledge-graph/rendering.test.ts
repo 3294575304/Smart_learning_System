@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 import SpriteText from "three-spritetext";
-import { KnowledgeGraphNodeVisual } from "@/components/courses/knowledge-graph-node-visual";
+import {
+  KnowledgeGraphNodeVisual,
+  knowledgeNodeRadius,
+} from "@/components/courses/knowledge-graph-node-visual";
 import {
   chapterGraphLayout,
   graphChapterColors,
@@ -39,10 +42,9 @@ test("反复选择、悬停和切换名称复用节点与文字纹理，只有�
   const geometry = visual.sphere.geometry;
   const material = visual.sphere.material;
   const initialColor = material.color.getHexString();
-  assert.equal(
-    material.emissive.getHexString(),
-    "000000",
-    "实体节点不使用自发光",
+  assert.ok(
+    material.emissiveIntensity <= 0.1,
+    "浅色画布上自发光只作微弱补光，亮度交给灯光",
   );
   const appearance = {
     selected: false,
@@ -56,7 +58,6 @@ test("反复选择、悬停和切换名称复用节点与文字纹理，只有�
     visual.updateAppearance({
       ...appearance,
       selected: index % 2 === 0,
-      emphasized: index % 3 === 0,
       showLabel: index % 4 === 0,
     });
     assert.equal(material.opacity, 1, "悬停与选择不压暗其他节点");
@@ -66,7 +67,11 @@ test("反复选择、悬停和切换名称复用节点与文字纹理，只有�
   assert.equal(label.text, "循环结构 · 3题");
   assert.equal(visual.sphere.geometry, geometry);
   assert.equal(visual.sphere.material, material);
-  assert.equal(visual.children.length, 2, "题量合并到名称，不创建额外精灵");
+  assert.equal(
+    visual.children.length,
+    3,
+    "只由球体、光晕与名称精灵组成，题量并入名称不再拆分",
+  );
 
   visual.updateAppearance({ ...appearance, showLabel: true, questionCount: 5 });
   visual.updateAppearance({ ...appearance, showLabel: true, questionCount: 5 });
@@ -80,13 +85,20 @@ test("反复选择、悬停和切换名称复用节点与文字纹理，只有�
   assert.equal(label.text, "循环结构");
   assert.equal(visual.sphere.material.opacity, 1);
   assert.equal(visual.sphere.material.color.getHexString(), initialColor);
-  assert.equal(visual.sphere.scale.x, 1);
+  assert.equal(
+    visual.sphere.scale.x,
+    knowledgeNodeRadius("KNOWLEDGE_POINT"),
+    "取消选中后回到知识点基准半径",
+  );
+  // 淡化只由“取消强调”触发；选中态本身不影响其他节点的透明度。
+  visual.updateAppearance({ ...appearance, emphasized: false });
+  assert.ok(material.opacity < 1, "取消强调的节点淡出但仍保留轮廓");
   geometry.dispose();
   material.dispose();
   label.material.dispose();
 });
 
-test("真实 SpriteText 的背景边距随字号缩放，深色画布上的长标题清晰且紧凑", () => {
+test("真实 SpriteText 的背景边距随字号缩放，浅色画布上的长标题清晰且紧凑", () => {
   const previousDocument = Object.getOwnPropertyDescriptor(
     globalThis,
     "document",
@@ -130,9 +142,13 @@ test("真实 SpriteText 的背景边距随字号缩放，深色画布上的长�
       assert.ok(label instanceof SpriteText);
       assert.ok(label.scale.y < 0.065, "两行标签不应膨胀为遮挡图谱的大块背景");
       assert.ok(label.scale.x < 0.3, "标题宽度保持紧凑");
-      assert.equal(label.color, "#e2e8f0", "深色画布使用浅色文字");
-      assert.equal(label.backgroundColor, false, "名称不使用遮挡节点的厚底框");
-      assert.equal(label.borderWidth, 0);
+      assert.equal(label.color, "#12324d", "浅色画布使用深色文字");
+      assert.equal(
+        label.backgroundColor,
+        "rgba(255, 255, 255, 0.94)",
+        "名称使用浅色底片压住网格与连杆",
+      );
+      assert.ok(label.borderWidth > 0, "底片保留细描边以区分画布底色");
       assert.equal(label.fontWeight, "normal");
       assert.equal(
         label.material.depthTest,
@@ -142,7 +158,7 @@ test("真实 SpriteText 的背景边距随字号缩放，深色画布上的长�
       assert.equal(label.material.depthWrite, false);
       assert.equal(label.renderOrder, 10);
       assert.deepEqual(label.center.toArray(), [0.5, 0.5]);
-      assert.deepEqual(label.position.toArray(), [0, 0, 0]);
+      assert.ok(label.position.y > 0, "标签浮在节点上方，不压住球体");
       assert.ok(visual.sphere.geometry.parameters.radius <= 20);
       visual.sphere.geometry.dispose();
       visual.sphere.material.dispose();

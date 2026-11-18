@@ -16,7 +16,7 @@ export default async function Page({
   return (
     <section className="space-y-6">
       <PageHeader
-        title="Python 课程知识图谱"
+        title="课程知识图谱"
         description="基于正式教学大纲生成、审核并显式发布不可变图谱版本。"
         actions={
           <TeacherBackLink href={`/teacher/courses/${parsed.data}`}>

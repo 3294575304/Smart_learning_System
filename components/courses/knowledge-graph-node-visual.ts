@@ -26,13 +26,13 @@ function createLabel(node: VisualNode): GraphLabel {
   const isChapter = node.type === "CHAPTER";
   const textHeight = isPoint ? 0.012 : isChapter ? 0.014 : 0.016;
   // 先配置空标签，最后写入正文，避免反复绘制高分辨率长文本。
-  const label = new SpriteText("", textHeight, "#e8eef7");
+  const label = new SpriteText("", textHeight, "#12324d");
   label.fontSize = 52;
   label.fontFace =
     '"Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif';
   label.fontWeight = "normal";
-  // 深色底片让标签压在星云与连杆上仍然可读。
-  label.backgroundColor = "rgba(8, 15, 30, 0.72)";
+  // 浅色底改用浅色底片 + 细描边：既能压在浅蓝网格上，也不切断球体的颜色。
+  label.backgroundColor = "rgba(255, 255, 255, 0.94)";
   // SpriteText 的边距、圆角、边框与 textHeight 使用相同的场景单位。
   // 必须随字号缩放，否则 0.1 的边距就会比 0.016 的文字大数倍。
   label.padding = [
@@ -40,8 +40,8 @@ function createLabel(node: VisualNode): GraphLabel {
     textHeight * (isChapter ? 0.12 : 0.08),
   ];
   label.borderRadius = textHeight * (isChapter ? 0.42 : 0.15);
-  label.borderWidth = 0;
-  label.borderColor = "#334155";
+  label.borderWidth = textHeight * 0.08;
+  label.borderColor = "#c3d7e9";
   label.material.sizeAttenuation = false;
   // 不开启透明时 opacity 完全不生效，避让与淡化都会失效，标签会一直叠在一起。
   label.material.transparent = true;
@@ -102,15 +102,15 @@ export class KnowledgeGraphNodeVisual extends THREE.Group {
     });
     this.baseColor = new THREE.Color(
       node.type === "COURSE" ? "#22d3ee" : node.color,
-    ).offsetHSL(0, 0.06, 0.06);
+    ).offsetHSL(0, 0.05, -0.03);
     this.sphere = new THREE.Mesh(
       new THREE.SphereGeometry(1, 32, 24),
       new THREE.MeshStandardMaterial({
         color: this.baseColor,
-        roughness: node.type === "CHAPTER" ? 0.32 : 0.42,
-        metalness: 0.12,
+        roughness: node.type === "CHAPTER" ? 0.3 : 0.4,
+        metalness: 0.08,
         emissive: this.baseColor,
-        emissiveIntensity: node.type === "KNOWLEDGE_POINT" ? 0.16 : 0.1,
+        emissiveIntensity: node.type === "KNOWLEDGE_POINT" ? 0.07 : 0.05,
       }),
     );
     this.sphere.scale.setScalar(this.baseRadius);
@@ -119,8 +119,8 @@ export class KnowledgeGraphNodeVisual extends THREE.Group {
       new THREE.MeshBasicMaterial({
         color: this.baseColor,
         transparent: true,
-        opacity: 0.16,
-        blending: THREE.AdditiveBlending,
+        // 叠加混合在浅色底上会被冲白，改为普通混合的半透明外壳。
+        opacity: 0.12,
         depthWrite: false,
         side: THREE.BackSide,
       }),
@@ -150,14 +150,14 @@ export class KnowledgeGraphNodeVisual extends THREE.Group {
     this.sphere.material.color.copy(this.baseColor);
     this.sphere.material.emissive.copy(this.baseColor);
     this.sphere.material.emissiveIntensity = selected
-      ? 0.5
+      ? 0.22
       : dimmed
-        ? 0.04
-        : 0.16;
-    this.sphere.material.opacity = dimmed ? 0.28 : 1;
+        ? 0.02
+        : 0.07;
+    this.sphere.material.opacity = dimmed ? 0.36 : 1;
     this.sphere.material.transparent = dimmed;
     this.sphere.material.depthWrite = !dimmed;
-    this.aura.material.opacity = dimmed ? 0.05 : 0.16;
+    this.aura.material.opacity = dimmed ? 0.04 : 0.12;
     this.sphere.scale.setScalar(radius * (selected ? 1.18 : 1));
 
     this.labelOpacity = dimmed ? 0.12 : 1;

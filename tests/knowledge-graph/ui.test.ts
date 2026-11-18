@@ -203,3 +203,45 @@ test("AI 增强后保存使用隐藏审核稿的最新修订号", async () => {
     /expectedRevisionNumber: state\.latestReviewRevisionNumber/u,
   );
 });
+
+test("三维图谱以浅色舞台呈现，并默认开启呼吸与自动旋转", async () => {
+  const [canvas, visual, page] = await Promise.all([
+    readFile(
+      new URL(
+        "../../components/courses/knowledge-graph-canvas.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../../components/courses/knowledge-graph-node-visual.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../../app/(protected)/teacher/courses/[courseId]/knowledge-graph/page.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ]);
+  // 模式命名与图标：三维视图不再叫“伸缩球”。
+  assert.match(canvas, /\["SPHERE", "3D 图谱"\]/u);
+  assert.match(canvas, /SphereGraphIcon/u);
+  assert.doesNotMatch(canvas, /伸缩球/u);
+  // 默认状态：进入即呼吸并自转，用户仍可单独关闭。
+  assert.match(canvas, /const \[breathing, setBreathing\] = useState\(true\)/u);
+  assert.match(
+    canvas,
+    /const \[autoRotate, setAutoRotate\] = useState\(true\)/u,
+  );
+  // 舞台与荧光配色必须回到浅色工作区，标签改为深字浅底。
+  assert.match(canvas, /border-sky-100 bg-white/u);
+  assert.match(visual, /rgba\(255, 255, 255, 0\.94\)/u);
+  assert.doesNotMatch(visual, /rgba\(8, 15, 30/u);
+  // 页面主标题固定为“课程知识图谱”，不再绑定具体课程名。
+  assert.match(page, /title="课程知识图谱"/u);
+});

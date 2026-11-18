@@ -19,8 +19,14 @@ interface Direction extends SpherePosition {
 
 /** Keep the same 42 anchor directions so existing node paths do not shift. */
 const ANCHOR_SUBDIVISION = 1;
-/** Knowledge clusters retain their existing radial offset. */
-const CLUSTER_LIFT = 16;
+/** 星团最大铺开半径：呼吸末端小知识点铺成一张圆盘，章节再多也放得下。 */
+const CLUSTER_MAX_SPREAD = 80;
+/** 展开时知识点相对章节壳层再外推的距离，以及星团前后的错层幅度。 */
+const CLUSTER_LIFT = 62;
+const CLUSTER_DEPTH = 16;
+/** 单个星团相对章节壳层最远能伸出的距离（含取景余量），回归检查按它核对。 */
+export const CLUSTER_REACH =
+  CLUSTER_LIFT + CLUSTER_DEPTH + CLUSTER_MAX_SPREAD * 1.1 + 4;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
 
@@ -166,9 +172,9 @@ function tangentBasis(direction: Direction) {
   };
 }
 
-/** 星团半径按知识点数量开方归一化，大小章节的视觉权重接近。 */
+/** 星团半径按知识点数量开方归一化，大小章节的视觉权重接近，展开后明显大于章节壳层。 */
 function clusterSpread(count: number) {
-  return Math.min(58, Math.max(24, 16 + Math.sqrt(count) * 8));
+  return Math.min(CLUSTER_MAX_SPREAD, Math.max(34, 18 + Math.sqrt(count) * 12));
 }
 
 /** Presentation coordinates only; graph identity and relations are untouched. */
@@ -226,6 +232,16 @@ export function expandableSphereLayout(graph: KnowledgeGraphStructure) {
     .filter((index) => !usedVertices.has(index));
   let spareIndex = 0;
 
+  /**
+   * 相邻章节之间的可用弧距。章节被压到靠近球心后，星团如果继续按固定半径铺开，
+   * 两章的星团会在屏幕上连成一片，所以铺开半径不得超过间距的一半略减。
+   */
+  const clusterRoom =
+    2 *
+    (HOBERMAN_MAX_RADIUS + CLUSTER_LIFT) *
+    Math.sin(Math.PI / Math.max(3, chapters.length)) *
+    0.44;
+
   for (const [chapterKey, chapterPoints] of pointsByChapter) {
     let direction = chapterDirections.get(chapterKey);
     let color = colors.get(chapterKey) ?? "#047857";
@@ -236,14 +252,16 @@ export function expandableSphereLayout(graph: KnowledgeGraphStructure) {
       color = "#64748b";
     }
     const { tangent, bitangent } = tangentBasis(direction);
-    const spread = clusterSpread(chapterPoints.length);
+    const spread = Math.min(clusterSpread(chapterPoints.length), clusterRoom);
     chapterPoints.forEach((point, index) => {
       // 黄金角螺旋铺满圆盘：点位不会沿半径排成一列。
-      const radius = Math.sqrt((index + 0.5) / chapterPoints.length);
+      const ring = Math.sqrt((index + 0.5) / chapterPoints.length);
+      // 每个点的铺开半径再错开 10%，星团外缘不会整齐收成一个圆。
+      const reach = spread * (0.9 + ((index % 4) / 3) * 0.2);
       const angle = index * GOLDEN_ANGLE;
-      const offsetX = Math.cos(angle) * radius * spread;
-      const offsetY = Math.sin(angle) * radius * spread;
-      const lift = CLUSTER_LIFT + ((index % 3) - 1) * 4;
+      const offsetX = Math.cos(angle) * ring * reach;
+      const offsetY = Math.sin(angle) * ring * reach;
+      const lift = CLUSTER_LIFT + ((index % 3) - 1) * CLUSTER_DEPTH;
       expanded.set(point.key, {
         x:
           direction.x * (HOBERMAN_MAX_RADIUS + lift) +
@@ -259,11 +277,20 @@ export function expandableSphereLayout(graph: KnowledgeGraphStructure) {
           bitangent.z * offsetY,
         color,
       });
-      // 收起时收拢到章节附近，展开过程表现为星团从章节向外绽放。
+      // 收起时缩到章节内侧的一小簇，展开过程才是从核心向外炸开的轨迹。
       collapsed.set(point.key, {
-        x: direction.x * HOBERMAN_MIN_RADIUS * 0.9 + tangent.x * offsetX * 0.26,
-        y: direction.y * HOBERMAN_MIN_RADIUS * 0.9 + tangent.y * offsetX * 0.26,
-        z: direction.z * HOBERMAN_MIN_RADIUS * 0.9 + tangent.z * offsetX * 0.26,
+        x:
+          direction.x * HOBERMAN_MIN_RADIUS * 0.78 +
+          tangent.x * offsetX * 0.18 +
+          bitangent.x * offsetY * 0.18,
+        y:
+          direction.y * HOBERMAN_MIN_RADIUS * 0.78 +
+          tangent.y * offsetX * 0.18 +
+          bitangent.y * offsetY * 0.18,
+        z:
+          direction.z * HOBERMAN_MIN_RADIUS * 0.78 +
+          tangent.z * offsetX * 0.18 +
+          bitangent.z * offsetY * 0.18,
         color,
       });
     });
