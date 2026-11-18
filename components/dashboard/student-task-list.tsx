@@ -1,4 +1,5 @@
 import React from "react";
+import { ExamAttemptBadge } from "@/components/exams/exam-attempt-badge";
 import {
   ArrowUpRight,
   CalendarCheck,
@@ -90,6 +91,11 @@ export function StudentTaskList({
                 <span className="font-medium [overflow-wrap:anywhere]">
                   <span className="sr-only">{item.action}：</span>
                   {item.title}
+                  {item.kind === "exam" && (
+                    <span className="ml-2">
+                      <ExamAttemptBadge remaining={item.remainingAttempts} />
+                    </span>
+                  )}
                   {item.id === priorityId && (
                     <span className="sr-only"> 优先处理</span>
                   )}
@@ -167,6 +173,9 @@ export function StudentTaskList({
                   与 exams/assignments 页的状态色规则保持一致（色块 + 文字同现）。
                 */}
                 <StatusChip tone="brand">{item.state}</StatusChip>
+                {item.kind === "exam" && (
+                  <ExamAttemptBadge remaining={item.remainingAttempts} />
+                )}
                 {workspace && priority && items.length > 1 && (
                   <span className="bg-brand/10 text-brand-strong rounded-full px-2 py-0.5 text-xs font-medium">
                     优先处理

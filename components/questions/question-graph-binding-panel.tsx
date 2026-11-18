@@ -63,17 +63,20 @@ export function QuestionGraphBindingPanel({
   questionId,
   courses,
   initialCourseId,
+  initialKeyword,
 }: {
   questionId: string;
   courses: Course[];
   initialCourseId?: string;
+  initialKeyword?: string;
 }) {
+  const initialCourse = courses.find((course) => course.id === initialCourseId);
   const [courseId, setCourseId] = useState(
-    courses.find((course) => course.id === initialCourseId)?.id ??
-      courses[0]?.id ??
-      "",
+    initialCourse?.id ?? courses[0]?.id ?? "",
   );
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(
+    initialCourse ? (initialKeyword?.slice(0, 120) ?? "") : "",
+  );
   const [nodes, setNodes] = useState<Node[]>([]);
   const [graphVersionId, setGraphVersionId] = useState<string | null>(null);
   const [versionNumber, setVersionNumber] = useState<number | null>(null);
@@ -210,7 +213,10 @@ export function QuestionGraphBindingPanel({
     setStatus("idle");
   }
   return (
-    <section className="space-y-4 rounded-lg border p-4">
+    <section
+      id="question-graph-binding"
+      className="scroll-mt-24 space-y-4 rounded-lg border p-4"
+    >
       <div>
         <h2 className="font-medium">课程知识图谱绑定</h2>
         <p className="text-muted-foreground text-sm">

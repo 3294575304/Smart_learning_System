@@ -1,5 +1,5 @@
 import {
-  BrainCircuit,
+  ArrowUpRight,
   CheckCircle2,
   Clock3,
   GitBranch,
@@ -10,9 +10,19 @@ import {
 import Link from "next/link";
 
 import { TrendChart } from "@/components/dashboard/trend-chart";
+import { Panel, SectionHeading } from "@/components/ui/panel";
 import { knowledgeStateDot } from "@/components/ui/knowledge-state";
-import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
+import { CONCLUSIVE_EVIDENCE_COUNT } from "@/services/learner-profiles/constants";
 import type { StudentCourseLearningCenter } from "@/services/learner-profiles/learning-center";
+
+/** 评分记录较少时给出还差多少，而不是只写「未评估」。 */
+function evidenceHint(count: number) {
+  if (count === 0) return "还没有评分记录";
+  if (count < CONCLUSIVE_EVIDENCE_COUNT) {
+    return `还差 ${CONCLUSIVE_EVIDENCE_COUNT - count} 条评分记录可评估`;
+  }
+  return `${count} 条评分记录`;
+}
 
 type ConceptStatus =
   StudentCourseLearningCenter["heatmap"][number]["concepts"][number]["status"];
@@ -52,43 +62,66 @@ export function StudentCourseLearningCenterView({
   data,
   tab = "path",
   scoreTrend = true,
+  readOnly = false,
 }: {
   data: StudentCourseLearningCenter;
-  tab?: "path" | "knowledge" | "activity";
+  tab?: "path" | "activity";
   /**
    * 是否渲染「近期评分得分率」。课程学习中心的趋势页已经有 ScoreChart 画作业成绩，
    * 两张图讲的是同一件事（按次得分率），并排只会让人对不上刻度。
    */
   scoreTrend?: boolean;
+  /** 结课/关闭班级：隐藏练习入口，只保留查看。 */
+  readOnly?: boolean;
 }) {
+  const chaptersByPoint = new Map(
+    data.heatmap.flatMap(({ key, name, concepts }) =>
+      concepts.map((concept) => [concept.key, { key, name }] as const),
+    ),
+  );
+  const focusItem =
+    data.learningPath.current.find((item) => item.conceptId) ?? null;
+  const focusHref =
+    !readOnly && focusItem?.conceptId
+      ? `/student/recommendations?${new URLSearchParams({
+          view: "generate",
+          courseId: data.course.id,
+          ...(data.classroom ? { classroomId: data.classroom.id } : {}),
+          conceptId: focusItem.conceptId,
+        }).toString()}`
+      : null;
+  const masteryPoints = data.masteryTrend;
+  const masteryDelta =
+    masteryPoints.length >= 2
+      ? Number(
+          (
+            masteryPoints[masteryPoints.length - 1].value -
+            masteryPoints[masteryPoints.length - 2].value
+          ).toFixed(1),
+        )
+      : null;
   return (
     <div className="space-y-6">
       {tab === "path" && (
-        <section
-          className="border-line bg-card scroll-mt-24 rounded-xl border p-5 sm:p-6"
-          id="learning-path"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Route aria-hidden="true" className="text-ink-soft size-5" />
-                <h2 className="text-ink text-[15px] font-semibold">
-                  我的学习路径
-                </h2>
-              </div>
-              <p className="text-ink-soft mt-1 text-sm">
-                先复习还不熟悉的内容，再按课程顺序学习新的知识点。
-              </p>
-            </div>
-          </div>
-          <div className="mt-5 grid gap-4 xl:grid-cols-3">
-            <PathColumn
-              empty="完成相关题目并拿到评分后，就能看到哪些内容已经掌握。"
-              icon={CheckCircle2}
-              items={data.learningPath.mastered}
-              step="01"
-              title="已经掌握"
-            />
+        <Panel className="scroll-mt-24" id="learning-path">
+          <SectionHeading
+            actions={
+              focusHref ? (
+                <Link
+                  className="bg-brand hover:bg-brand-strong inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+                  href={focusHref}
+                >
+                  练习{focusItem?.name}
+                  <ArrowUpRight aria-hidden="true" className="size-4" />
+                </Link>
+              ) : undefined
+            }
+            description="先看需要巩固的内容，也可以查看已掌握和尚无评分记录的知识点。"
+            icon={<Route aria-hidden="true" className="text-ink-soft size-5" />}
+            level="page"
+            title="我的学习路径"
+          />
+          <div className="mt-5 grid items-start gap-4 lg:grid-cols-3">
             <PathColumn
               empty={
                 data.overview.evidenceConcepts === 0
@@ -97,20 +130,48 @@ export function StudentCourseLearningCenterView({
               }
               icon={TriangleAlert}
               items={data.learningPath.current}
-              step="02"
+              chaptersByPoint={chaptersByPoint}
+              readOnly={readOnly}
+              scope={{
+                courseId: data.course.id,
+                classroomId: data.classroom?.id ?? null,
+              }}
+              previewCount={3}
               title="优先巩固"
             />
             <PathColumn
-              empty="课程中的知识点都有评分记录了，可以回头复习还不熟悉的内容。"
+              empty="完成相关题目并拿到评分后，就能看到哪些内容已经掌握。"
+              icon={CheckCircle2}
+              items={data.learningPath.mastered}
+              chaptersByPoint={chaptersByPoint}
+              readOnly={readOnly}
+              scope={{
+                courseId: data.course.id,
+                classroomId: data.classroom?.id ?? null,
+              }}
+              previewCount={0}
+              title="已掌握"
+            />
+            <PathColumn
+              empty={
+                data.overview.totalConcepts
+                  ? "所有知识点已有评分记录。"
+                  : "等待教师发布课程知识图谱。"
+              }
               icon={GitBranch}
               items={data.learningPath.next}
-              step="03"
-              title="接下来学"
+              chaptersByPoint={chaptersByPoint}
+              readOnly={readOnly}
+              scope={{
+                courseId: data.course.id,
+                classroomId: data.classroom?.id ?? null,
+              }}
+              previewCount={0}
+              title="尚无评分记录"
             />
           </div>
-        </section>
+        </Panel>
       )}
-      {tab === "knowledge" && <KnowledgeStatus data={data} />}
       {tab === "activity" && (
         <>
           <section className="scroll-mt-24 space-y-4" id="learning-trend">
@@ -120,15 +181,24 @@ export function StudentCourseLearningCenterView({
               </h2>
               <p className="text-ink-soft mt-1 text-sm">
                 {scoreTrend
-                  ? "掌握度只采用达到证据门槛的画像；得分率按已发布作业、已完成整组练习展示，二者取样不同。"
-                  : "掌握度只采用达到证据门槛的画像，未评估不等于零分；得分率见上方「我的作业成绩」。"}
+                  ? "掌握度只采用评分记录达到评估要求的画像；得分率按已发布作业、已完成整组练习展示，二者取样不同。"
+                  : "掌握度只采用评分记录达到评估要求的画像，未评估不等于零分；得分率见上方「我的作业成绩」。"}
               </p>
+              {scoreTrend &&
+              data.accuracyTrend.length > 0 &&
+              data.accuracyTrend.length < 3 ? (
+                <p className="mt-1 text-xs text-amber-700">
+                  目前只有 {data.accuracyTrend.length}{" "}
+                  次成绩，趋势仅供参考，累积到 3 次后更稳定。
+                </p>
+              ) : null}
             </div>
             <div className={`grid gap-6 ${scoreTrend ? "xl:grid-cols-2" : ""}`}>
               <TrendPanel
-                description="课程汇总：仅统计证据充足知识点，未评估不等于零分。"
-                caption="课程汇总 · 各版本只统计当时证据充足的知识点，覆盖范围可能变化；展开查看版本和更新时间。"
+                description="课程汇总：仅统计评分记录充足知识点，未评估不等于零分。"
+                caption="课程汇总 · 各版本只统计当时评分记录充足的知识点，覆盖范围可能变化；展开查看版本和更新时间。"
                 emptyMessage="当前还没有足够的历史画像生成趋势。"
+                delta={masteryDelta}
                 label="课程稳定掌握度变化"
                 points={data.masteryTrend}
                 title="稳定掌握度变化"
@@ -150,7 +220,7 @@ export function StudentCourseLearningCenterView({
             className="grid scroll-mt-24 gap-6 xl:grid-cols-[1fr_0.8fr]"
             id="learning-records"
           >
-            <div className="border-line bg-card min-w-0 rounded-xl border p-5 sm:p-6">
+            <Panel>
               <div className="flex items-center gap-2">
                 <Clock3 aria-hidden="true" className="text-ink-soft size-5" />
                 <h2 className="text-ink text-[15px] font-semibold">
@@ -179,11 +249,11 @@ export function StudentCourseLearningCenterView({
                 </ol>
               ) : (
                 <p className="text-ink-soft mt-4 rounded-xl border border-dashed p-8 text-center text-sm">
-                  暂无正式评分或推荐练习证据。
+                  暂无作业或练习评分记录。
                 </p>
               )}
-            </div>
-            <aside className="border-line bg-card rounded-xl border p-5 sm:p-6">
+            </Panel>
+            <Panel>
               <div className="flex size-10 items-center justify-center rounded-xl bg-sky-100/70">
                 <Sparkles aria-hidden="true" className="text-ink-body size-5" />
               </div>
@@ -195,9 +265,9 @@ export function StudentCourseLearningCenterView({
               </p>
               <p className="text-ink-soft mt-4 border-t pt-4 text-xs leading-5">
                 更新时间：{data.generatedAt.toLocaleString("zh-CN")}
-                。出勤、自述和客观掌握证据分别计算，不会相互覆盖。
+                。出勤、自我反思与知识掌握分别计算，不会相互覆盖。
               </p>
-            </aside>
+            </Panel>
           </section>
         </>
       )}
@@ -205,220 +275,157 @@ export function StudentCourseLearningCenterView({
   );
 }
 
-function KnowledgeStatus({ data }: { data: StudentCourseLearningCenter }) {
-  return (
-    <section
-      className="border-line bg-card scroll-mt-24 rounded-xl border p-5 sm:p-6"
-      id="knowledge-status"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <BrainCircuit aria-hidden="true" className="text-ink-soft size-5" />
-            <h2 className="text-ink text-[15px] font-semibold">
-              按章节查看知识状态
-            </h2>
-          </div>
-          <p className="text-ink-soft mt-1 text-sm">
-            看看哪些内容已经熟悉，哪些还需要多练。
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          {Object.values(statusPresentation).map((item) => (
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${item.className}`}
-              key={item.label}
-            >
-              <span className={`size-1.5 rounded-full ${item.dotClassName}`} />
-              {item.label}
-            </span>
-          ))}
-        </div>
-      </div>
-      {data.heatmap.length ? (
-        <div className="mt-5 space-y-3">
-          {data.heatmap.map((chapter, index) => (
-            <details
-              className="group overflow-hidden rounded-xl border bg-white open:shadow-sm"
-              key={chapter.key}
-            >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4 transition hover:bg-sky-50/60">
-                <span className="flex min-w-0 items-center gap-3">
-                  <span className="text-ink-soft flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-100/70 text-xs font-semibold">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">
-                      {chapter.name}
-                    </span>
-                    <span className="text-ink-soft mt-0.5 block text-xs">
-                      {chapter.code} · {chapter.concepts.length} 个知识点
-                    </span>
-                  </span>
-                </span>
-                <span className="text-ink-soft shrink-0 rounded-full bg-sky-100/70 px-3 py-1 text-xs">
-                  {
-                    chapter.concepts.filter(
-                      (concept) => concept.evidenceCount > 0,
-                    ).length
-                  }
-                  /{chapter.concepts.length} 有评分
-                </span>
-              </summary>
-              <div className="grid gap-2 border-t bg-sky-50/60 p-4 sm:grid-cols-2 xl:grid-cols-3">
-                {chapter.concepts.map((concept) => {
-                  const presentation = statusPresentation[concept.status];
-                  return (
-                    <article
-                      className="rounded-lg border bg-white p-3"
-                      key={concept.key}
-                      title={`${concept.name}，${presentation.label}，${concept.evidenceCount} 条评分记录`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-ink text-sm leading-5">
-                          {concept.name}
-                        </span>
-                        <span
-                          className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${presentation.className}`}
-                        >
-                          {presentation.label}
-                        </span>
-                      </div>
-                      <p className="text-ink-soft mt-2 text-xs">
-                        {concept.code} · {concept.evidenceCount} 条评分记录
-                      </p>
-                      <div className="mt-3 border-t pt-3">
-                        <p className="text-ink-soft text-xs font-medium">
-                          教师关联题目 · {concept.relatedQuestions.length} 道
-                        </p>
-                        {concept.relatedQuestions.length ? (
-                          <>
-                            <ul className="mt-2 max-h-36 space-y-2 overflow-y-auto">
-                              {concept.relatedQuestions.map((question) => (
-                                <li
-                                  className="rounded-md bg-slate-50 p-2"
-                                  key={question.id}
-                                >
-                                  <p className="text-ink text-xs leading-5">
-                                    {question.title}
-                                  </p>
-                                  <p className="text-ink-soft mt-1 text-[11px]">
-                                    {QUESTION_TYPE_LABELS[question.type]} ·{" "}
-                                    {question.bindingType === "PRIMARY"
-                                      ? "主要考查"
-                                      : "次要涉及"}
-                                    {" · 课程题库"}
-                                  </p>
-                                </li>
-                              ))}
-                            </ul>
-                            {concept.conceptId ? (
-                              <Link
-                                className="mt-3 inline-flex rounded-md bg-sky-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-sky-800 active:scale-[0.98]"
-                                href={`/student/recommendations?view=generate&courseId=${encodeURIComponent(data.course.id)}&conceptId=${encodeURIComponent(concept.conceptId)}${data.classroom ? `&classroomId=${encodeURIComponent(data.classroom.id)}` : ""}`}
-                              >
-                                按此知识点选择练习或测试
-                              </Link>
-                            ) : null}
-                          </>
-                        ) : (
-                          <p className="text-ink-soft mt-2 text-xs">
-                            教师尚未为此知识点绑定可练习题目。
-                          </p>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </details>
-          ))}
-        </div>
-      ) : (
-        <p className="text-ink-soft mt-5 rounded-xl border border-dashed p-8 text-center text-sm">
-          教师发布正式知识图谱后，这里会按章节展示学习状态。
-        </p>
-      )}
-    </section>
-  );
-}
-
 function PathColumn({
   title,
-  step,
+  previewCount,
+  chaptersByPoint,
   empty,
   items,
+  readOnly,
+  scope,
   icon: Icon,
 }: {
   title: string;
-  step: string;
+  previewCount: number;
+  chaptersByPoint: ReadonlyMap<string, { key: string; name: string }>;
   empty: string;
+  readOnly: boolean;
+  scope: { courseId: string; classroomId: string | null };
   items: Array<{
     key: string;
+    conceptId: string | null;
     code: string;
     name: string;
     masteryScore: number | null;
+    evidenceCount: number;
     status: ConceptStatus;
     prerequisiteGaps?: string[];
   }>;
   icon: typeof CheckCircle2;
 }) {
+  function renderItem(item: (typeof items)[number], index: number) {
+    const practiceHref =
+      !readOnly && item.conceptId
+        ? `/student/recommendations?${new URLSearchParams({
+            view: "generate",
+            courseId: scope.courseId,
+            ...(scope.classroomId ? { classroomId: scope.classroomId } : {}),
+            conceptId: item.conceptId,
+          })}`
+        : null;
+    return (
+      <li className="flex min-w-0 items-start gap-2 py-3" key={item.key}>
+        {previewCount > 0 && (
+          <span className="text-ink-soft shrink-0 text-xs tabular-nums">
+            {index + 1}.
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-ink flex items-center gap-2 text-sm font-medium [overflow-wrap:anywhere]">
+            <span
+              aria-hidden="true"
+              className={`size-2.5 shrink-0 ${knowledgeStateDot[item.status]}`}
+            />
+            {item.name}
+          </p>
+          <p className="text-ink-soft mt-1 text-xs">
+            {statusPresentation[item.status].label} ·{" "}
+            {evidenceHint(item.evidenceCount)}
+            {item.masteryScore !== null &&
+            item.status !== "INSUFFICIENT" &&
+            item.status !== "NO_EVIDENCE"
+              ? ` · ${item.masteryScore}%`
+              : ""}
+          </p>
+          {item.prerequisiteGaps?.length ? (
+            <p className="mt-1 text-xs text-amber-800">
+              先补：{item.prerequisiteGaps.join("、")}
+            </p>
+          ) : null}
+        </div>
+        {practiceHref && (
+          <Link
+            className="text-brand-strong border-line hover:bg-muted inline-flex min-h-9 shrink-0 items-center rounded-md border px-2 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+            aria-label={`练习${item.name}`}
+            href={practiceHref}
+          >
+            练习
+          </Link>
+        )}
+      </li>
+    );
+  }
+  const groups = new Map<
+    string | null,
+    {
+      name: string;
+      rows: Array<{ item: (typeof items)[number]; index: number }>;
+    }
+  >();
+  items.slice(previewCount).forEach((item, offset) => {
+    const chapter = chaptersByPoint.get(item.key);
+    const key = chapter?.key ?? null;
+    const group = groups.get(key) ?? {
+      name: chapter?.name ?? "未分章知识点",
+      rows: [],
+    };
+    group.rows.push({ item, index: previewCount + offset });
+    groups.set(key, group);
+  });
   return (
-    <article className="overflow-hidden rounded-xl border">
+    <article className="border-line min-w-0 overflow-hidden rounded-xl border">
       <header className="flex items-center justify-between border-b bg-sky-50/60 px-4 py-3">
         <div className="flex items-center gap-2">
           <Icon aria-hidden="true" className="text-ink-soft size-4" />
           <h3 className="text-sm font-medium">{title}</h3>
+          <span className="text-ink-soft rounded-full bg-white/70 px-2 py-0.5 text-[11px] tabular-nums">
+            {items.length}
+          </span>
         </div>
-        <span className="text-ink-soft text-xs font-semibold tracking-widest">
-          {step}
-        </span>
       </header>
       {items.length ? (
-        <ol className="divide-y px-4">
-          {items.map((item, index) => {
-            const presentation = statusPresentation[item.status];
-            return (
-              <li className="py-3" key={item.key}>
-                <div className="flex items-start gap-3">
-                  <span className="text-ink-soft mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-sky-100/70 text-[10px] font-semibold">
-                    {index + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span
-                          aria-hidden="true"
-                          className={`size-2.5 shrink-0 ${knowledgeStateDot[item.status]}`}
-                        />
-                        <span className="text-sm leading-5">{item.name}</span>
+        <>
+          {previewCount > 0 && items.length > previewCount && (
+            <p className="text-ink-soft px-4 pt-3 text-xs">
+              先看最需要巩固的 {previewCount} 个知识点
+            </p>
+          )}
+          {previewCount > 0 && (
+            <ol className="divide-y px-4">
+              {items.slice(0, previewCount).map(renderItem)}
+            </ol>
+          )}
+          {items.length > previewCount && (
+            <details className="border-line border-t px-4 open:pb-3">
+              <summary className="text-brand-strong cursor-pointer py-3 text-sm font-medium">
+                查看{previewCount ? "其余" : "全部"}{" "}
+                {items.length - previewCount} 个知识点
+              </summary>
+              <div
+                role="region"
+                aria-label={`${title}章节列表`}
+                tabIndex={0}
+                className="border-line focus-visible:outline-brand mt-1 max-h-[min(22rem,55dvh)] min-w-0 [scrollbar-gutter:stable] overflow-y-auto overscroll-y-contain rounded-md border px-3 pb-1 focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                {[...groups].map(([key, { name, rows }]) => (
+                  <section key={key ?? "__unassigned"}>
+                    <h4 className="bg-muted text-ink sticky top-0 z-[1] flex items-center justify-between gap-2 rounded-b-md px-2 py-2 text-xs font-semibold">
+                      <span className="min-w-0 [overflow-wrap:anywhere]">
+                        {name}
                       </span>
-                      <span className="text-ink-soft shrink-0 text-xs">
-                        {item.masteryScore === null
-                          ? item.code
-                          : `${item.masteryScore}%`}
+                      <span className="text-ink-soft shrink-0 font-normal tabular-nums">
+                        {rows.length} 个
                       </span>
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <span className="text-ink-soft text-xs">
-                        {presentation.label}
-                      </span>
-                    </div>
-                    {/*
-                      前置缺口原来跟在状态词后面，只是一句琥珀色小字，几乎没人会读到。
-                      提到独立一行，学生才能看出自己卡在哪个前置知识点上。
-                    */}
-                    {item.prerequisiteGaps?.length ? (
-                      <p className="mt-1 text-xs font-medium text-amber-700">
-                        先补：{item.prerequisiteGaps.join("、")}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+                    </h4>
+                    <ul className="divide-y">
+                      {rows.map(({ item, index }) => renderItem(item, index))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            </details>
+          )}
+        </>
       ) : (
         <p className="text-ink-soft p-4 text-sm leading-6">{empty}</p>
       )}
@@ -433,8 +440,10 @@ function TrendPanel({
   emptyMessage,
   points,
   caption,
+  delta,
 }: {
   caption?: string;
+  delta?: number | null;
   title: string;
   description: string;
   label: string;
@@ -442,16 +451,31 @@ function TrendPanel({
   points: StudentCourseLearningCenter["masteryTrend"];
 }) {
   return (
-    <section className="border-line bg-card min-w-0 rounded-xl border p-5 sm:p-6">
-      <h3 className="text-ink text-[15px] font-semibold">{title}</h3>
+    <Panel>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-ink text-[15px] font-semibold">{title}</h3>
+        {typeof delta === "number" && delta !== 0 ? (
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums ${
+              delta > 0
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-rose-50 text-rose-700"
+            }`}
+          >
+            较上一版 {delta > 0 ? "+" : ""}
+            {delta}pt
+          </span>
+        ) : null}
+      </div>
       <p className="text-ink-soft mt-1 text-sm">{description}</p>
       <TrendChart
+        compactSmallSample
         ariaLabel={label}
         caption={caption}
         showDetails
         emptyMessage={emptyMessage}
         points={points}
       />
-    </section>
+    </Panel>
   );
 }

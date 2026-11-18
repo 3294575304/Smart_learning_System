@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 
 import { CourseSetupChecklist } from "@/components/courses/course-setup-checklist";
+import { CourseContentCoverage } from "@/components/courses/course-content-coverage";
 import { CourseWorkspaceNavigation } from "@/components/courses/course-workspace-navigation";
 import { CourseForm } from "@/components/courses/course-form";
 import { CourseDetailDisclosure } from "@/components/courses/course-detail-disclosure";
@@ -16,6 +17,7 @@ import {
   listTeacherQuestionCourseCategories,
 } from "@/services/courses/service";
 import { getTeacherCourseSetupProgress } from "@/services/courses/setup-service";
+import { getTeacherCourseContentCoverage } from "@/services/courses/content-coverage";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
@@ -48,11 +50,22 @@ export default async function TeacherCourseDetailPage({
   let course;
   let setupProgress;
   let categories;
+  let coverage;
   try {
-    [course, setupProgress, categories] = await Promise.all([
+    [course, setupProgress, categories, coverage] = await Promise.all([
       getTeacherCourse(teacher.id, parsedId.data),
       getTeacherCourseSetupProgress(teacher.id, parsedId.data),
       listTeacherQuestionCourseCategories(teacher.id),
+      getTeacherCourseContentCoverage(teacher.id, parsedId.data).catch(
+        (error: unknown) => {
+          if (error instanceof ResourceNotFoundError) throw error;
+          console.error(
+            "Course content coverage query failed",
+            error instanceof Error ? error.name : "UnknownError",
+          );
+          return null;
+        },
+      ),
     ]);
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) {
@@ -119,6 +132,8 @@ export default async function TeacherCourseDetailPage({
               .filter((classroom) => classroom.status === "ACTIVE")
               .map(({ id, name }) => ({ id, name }))}
           />
+
+          <CourseContentCoverage courseId={course.id} coverage={coverage} />
 
           <CourseDetailDisclosure
             id="course-classrooms"

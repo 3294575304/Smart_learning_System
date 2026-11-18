@@ -9,6 +9,8 @@ export interface ExamPublicationIssue {
     | "startsAt"
     | "endsAt"
     | "allowedSwitches"
+    | "autoSubmitOnExit"
+    | "allowedAttempts"
     | "questions"
     | "form";
   message: string;
@@ -21,6 +23,8 @@ const FIELD_MESSAGES: Record<string, string> = {
   startsAt: "请填写有效的开考时间。",
   endsAt: "请填写有效的截止时间，且晚于开考时间。",
   allowedSwitches: "允许切屏次数须为 0 至 20 的整数。",
+  autoSubmitOnExit: "请选择退出考试时的交卷规则。",
+  allowedAttempts: "允许考试次数须为 1 至 20 的整数。",
   questions: "请选择 1 至 200 道不同的题目，每题分值须大于 0 且不超过 10000。",
 };
 

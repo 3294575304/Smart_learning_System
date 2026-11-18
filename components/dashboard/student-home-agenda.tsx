@@ -1,4 +1,5 @@
 import React from "react";
+import { ExamAttemptBadge } from "@/components/exams/exam-attempt-badge";
 
 import { ArrowRight } from "lucide-react";
 
@@ -120,6 +121,9 @@ export function StudentHomeAgenda({
                   >
                     {row.item.title}
                   </StudentPageLink>
+                  {row.item.kind === "exam" && (
+                    <ExamAttemptBadge remaining={row.item.remainingAttempts} />
+                  )}
                   <p className="st-agenda-meta">{row.meta}</p>
                 </div>
                 <p className="st-agenda-when">{row.when}</p>

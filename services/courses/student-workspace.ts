@@ -12,6 +12,32 @@ export const STUDENT_GROWTH_SECTIONS = [
 export type StudentCourseTab = (typeof STUDENT_COURSE_TABS)[number]["id"];
 export type StudentGrowthSection =
   (typeof STUDENT_GROWTH_SECTIONS)[number]["id"];
+
+/**
+ * 趋势页的时间区间。
+ * 刻意不用「本学期」：课程 term 存在 `2025-2026-2学期` / `2026-9-2027-1`
+ * 等多种写法，解析开学日期会把口径变成猜谜；固定天数可解释、可对比。
+ */
+export const STUDENT_GROWTH_RANGES = [
+  { id: "30d", label: "近 30 天", days: 30 },
+  { id: "90d", label: "近 90 天", days: 90 },
+  { id: "all", label: "全部", days: null },
+] as const;
+export type StudentGrowthRange = (typeof STUDENT_GROWTH_RANGES)[number]["id"];
+
+export function parseGrowthRange(value: unknown): StudentGrowthRange {
+  return value === "30d" || value === "90d" ? value : "all";
+}
+
+/** 区间起点；`all` 返回 null，表示不裁剪。 */
+export function growthRangeSince(
+  range: StudentGrowthRange,
+  now: Date = new Date(),
+): Date | null {
+  const days = STUDENT_GROWTH_RANGES.find((item) => item.id === range)?.days;
+  if (!days) return null;
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+}
 export type StudentCourseLocation =
   | { tab: "overview" | "tasks" }
   | { tab: "growth"; section: StudentGrowthSection };

@@ -5,10 +5,8 @@ import {
   studentCourseTabHref,
   type StudentCourseTab,
 } from "@/services/courses/student-workspace";
-import {
-  SECTION_TABS_LIST,
-  sectionTabClass,
-} from "@/components/ui/section-tabs";
+import { SECTION_TABS_LIST } from "@/components/ui/section-tabs";
+import { CourseWorkspaceTabLink } from "./course-workspace-tab-link";
 const icons = [BookOpen, ClipboardList, GitBranch];
 export function CourseWorkspaceTabs({
   courseId,
@@ -24,15 +22,14 @@ export function CourseWorkspaceTabs({
       {STUDENT_COURSE_TABS.map((item, index) => {
         const Icon = icons[index];
         return (
-          <a
+          <CourseWorkspaceTabLink
             key={item.id}
             href={studentCourseTabHref(courseId, classroomId, item.id)}
-            aria-current={tab === item.id ? "page" : undefined}
-            className={sectionTabClass(tab === item.id)}
+            active={tab === item.id}
           >
             <Icon aria-hidden="true" className="size-4 shrink-0" />
             {item.label}
-          </a>
+          </CourseWorkspaceTabLink>
         );
       })}
     </nav>

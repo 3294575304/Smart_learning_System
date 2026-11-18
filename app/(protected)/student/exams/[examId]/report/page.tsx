@@ -48,8 +48,8 @@ export default async function StudentExamReportPage({
   const header = (
     <StudentExamDetailHeader
       record={record}
+      back={back}
       title="我的考试报告"
-
       actions={
         <Link className={examActionClass} href={recordHref}>
           查看考试记录

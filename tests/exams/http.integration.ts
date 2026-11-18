@@ -636,6 +636,105 @@ async function main() {
     console.log(
       "Exam monitor, timed publication, score visibility and review passed",
     );
+    const exitQuestion = await prisma.question.create({
+      data: {
+        creatorId: teacher.id,
+        questionCategoryId: category.id,
+        title: "退出自动交卷测试",
+        content: `判断题 ${randomUUID()}`,
+        type: "TRUE_FALSE",
+        explanation: "测试解析",
+        correctBoolean: true,
+        status: "ACTIVE",
+      },
+    });
+    const exitExamResponse = await write(
+      `${base}/api/teacher/exams`,
+      teacherCookie,
+      {
+        requestId: randomUUID(),
+        courseId: course.id,
+        classroomIds: [classroom.id],
+        type: "MIDTERM",
+        title: "退出自动交卷测试",
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 3_600_000),
+        autoSubmitOnExit: true,
+        allowedAttempts: 2,
+        allowedSwitches: 2,
+        questions: [{ questionId: exitQuestion.id, points: 100 }],
+      },
+    );
+    const exitExamBody = await exitExamResponse.json();
+    assert.equal(exitExamResponse.status, 201, JSON.stringify(exitExamBody));
+    assert.equal(exitExamBody.data.allowedAttempts, 2);
+    const exitAssignmentId = exitExamBody.data.assignments[0].id;
+    const startExitAttempt = () =>
+      write(
+        `${base}/api/student/assignments/${exitAssignmentId}/attempts`,
+        studentCookie,
+        { idempotencyKey: randomUUID() },
+      );
+    const exitAutoUrl = `${base}/api/student/exams/auto-submit`;
+    const exitAttemptResponse = await startExitAttempt();
+    assert.equal(exitAttemptResponse.status, 201);
+    const firstExitAttempt = (await exitAttemptResponse.json()).data;
+    const exitSnapshot = {
+      trigger: "EXIT",
+      submissionId: firstExitAttempt.id,
+      answers: {
+        version: firstExitAttempt.version,
+        answers: [
+          {
+            assignmentQuestionId: firstExitAttempt.questions[0].id,
+            kind: "BOOLEAN",
+            value: true,
+          },
+        ],
+      },
+    };
+    assert.equal(
+      (await write(exitAutoUrl, teacherCookie, exitSnapshot)).status,
+      403,
+    );
+    const exitCollection = await write(
+      exitAutoUrl,
+      studentCookie,
+      exitSnapshot,
+    );
+    assert.equal(exitCollection.status, 200);
+    assert.equal(
+      (await exitCollection.json()).data.examReceipt.reason,
+      "PAGE_EXIT",
+    );
+    for (const path of [
+      "/student/tasks?kind=exam",
+      "/student/exams",
+      `/student/assignments/${exitAssignmentId}`,
+    ]) {
+      const page = await fetch(`${base}${path}`, {
+        headers: { cookie: studentCookie },
+      });
+      assert.equal(page.status, 200);
+      assert.match(
+        await page.text(),
+        /剩余\s*(?:<!-- -->)?1(?:<!-- -->)?\s*次/,
+      );
+    }
+    const nextExitAttempt = (await (await startExitAttempt()).json()).data;
+    assert.equal(
+      (
+        await write(exitAutoUrl, studentCookie, {
+          trigger: "EXIT",
+          submissionId: nextExitAttempt.id,
+        })
+      ).status,
+      200,
+    );
+    assert.equal((await startExitAttempt()).status, 409);
+    console.log(
+      "Exam exit endpoint, role checks, badges and exhausted limit passed",
+    );
     console.log("Exam HTTP integration passed");
   } finally {
     server.kill();

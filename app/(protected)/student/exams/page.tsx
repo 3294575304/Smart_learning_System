@@ -21,6 +21,7 @@ import {
 } from "@/services/student-experience/activity-page";
 import { loadActivityExams } from "@/services/student-experience/activity-service";
 import { studentTaskHref } from "@/services/student-experience/task-scope";
+import { ExamAttemptBadge } from "@/components/exams/exam-attempt-badge";
 
 const statusLabel = {
   TODO: "考试中",
@@ -88,18 +89,15 @@ export default async function StudentExamsPage({
                 className={`${activityCardClass} scroll-mt-24`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-start gap-2">
-                    <ClipboardCheck
-                      aria-hidden="true"
-                      className="mt-0.5 size-4 shrink-0 text-neutral-700"
-                    />
-                    <h2 className="min-w-0 text-base font-semibold break-words">
-                      {exam.title}
-                    </h2>
+                  <h2 className="min-w-0 text-base font-semibold break-words">
+                    {exam.title}
+                  </h2>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs text-sky-800">
+                      {statusLabel[exam.status]}
+                    </span>
+                    <ExamAttemptBadge remaining={exam.remainingAttempts} />
                   </div>
-                  <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs text-sky-800">
-                    {statusLabel[exam.status]}
-                  </span>
                 </div>
                 <p className="mt-2 text-sm text-slate-600">
                   {[
@@ -131,7 +129,11 @@ export default async function StudentExamsPage({
                         (exam.dueAt.getTime() - exam.startsAt.getTime()) /
                           60000,
                       )}{" "}
-                      分钟，允许切屏 {exam.allowedSwitches} 次。请在截止前提交。
+                      分钟，允许切屏 {exam.allowedSwitches} 次，可考{" "}
+                      {exam.allowedAttempts} 次。
+                      {exam.autoSubmitOnExit
+                        ? "离开作答页会自动交卷。"
+                        : "退出可保留已保存作答。"}
                     </p>
                     <p>
                       考试范围以教师公布内容为准。可先查看本课程任务和错题，再安排限时练习。
@@ -168,7 +170,11 @@ export default async function StudentExamsPage({
                           : exam.href + "&" + returnQuery
                       }
                     >
-                      {exam.status === "TODO" ? "进入考试" : "查看考试记录"}
+                      {exam.status === "TODO"
+                        ? exam.hasInProgress
+                          ? "继续考试"
+                          : "进入考试"
+                        : "查看考试记录"}
                     </Link>
                   )}
                   {exam.canViewReport && (

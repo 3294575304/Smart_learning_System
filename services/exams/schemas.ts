@@ -1,5 +1,11 @@
 import { ExamType, QuestionType } from "@prisma/client";
 import { z } from "zod";
+import { maxExamAttempts } from "./attempt-policy";
+
+export const examAttemptRulesSchema = z.object({
+  autoSubmitOnExit: z.boolean().default(false),
+  allowedAttempts: z.number().int().min(1).max(maxExamAttempts).default(1),
+});
 
 export const teacherExamStatusLabels = {
   UPCOMING: "未开始",
@@ -20,6 +26,7 @@ export type TeacherExamListScope = z.infer<typeof teacherExamListSchema>;
 
 export const examCreateSchema = z
   .object({
+    ...examAttemptRulesSchema.shape,
     requestId: z.string().uuid(),
     courseId: z.string().cuid(),
     classroomIds: z

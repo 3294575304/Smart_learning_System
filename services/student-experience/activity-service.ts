@@ -1,5 +1,6 @@
 import "server-only";
 
+import { examAttemptAvailability } from "@/services/exams/attempt-policy";
 import { getStudentAttendance } from "@/services/attendance/service";
 import { listStudentAssignmentPage } from "@/services/assignments/student-list";
 import { studentAssignmentListQuerySchema } from "@/services/assignments/schemas";
@@ -120,15 +121,23 @@ export async function loadActivityExams(
       const writable =
         assignment.status === "PUBLISHED" &&
         assignment.classroom.status === "ACTIVE";
-      const status: RowStatus = assignment.submissions.some(
+      const hasSubmitted = assignment.submissions.some(
         (s) => s.status !== "IN_PROGRESS",
-      )
-        ? "SUBMITTED"
-        : !writable || now >= dueAt
-          ? "EXPIRED"
+      );
+      const { remainingAttempts, hasInProgress } = examAttemptAvailability(
+        exam.allowedAttempts,
+        assignment.submissions,
+      );
+      const status: RowStatus =
+        !writable || now >= dueAt
+          ? hasSubmitted
+            ? "SUBMITTED"
+            : "EXPIRED"
           : now < startsAt
             ? "UPCOMING"
-            : "TODO";
+            : hasInProgress || remainingAttempts > 0
+              ? "TODO"
+              : "SUBMITTED";
       const scope = {
         courseId: exam.courseId,
         classroomId: assignment.classroomId,
@@ -156,6 +165,10 @@ export async function loadActivityExams(
           examId: exam.id,
           examType: exam.type,
           allowedSwitches: exam.allowedSwitches,
+          autoSubmitOnExit: exam.autoSubmitOnExit,
+          allowedAttempts: exam.allowedAttempts,
+          remainingAttempts,
+          hasInProgress,
           scope,
           canViewReport: now >= exam.endsAt,
         },

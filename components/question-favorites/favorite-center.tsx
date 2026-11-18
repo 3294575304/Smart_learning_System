@@ -217,6 +217,7 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     if (!enabled) return;
     const url = new URL(window.location.href);
+    if (url.searchParams.get("view") !== "favorites") return;
     const filters = {
       courseId: course,
       chapterId: chapter,
@@ -232,7 +233,7 @@ export function FavoriteCenter({ enabled }: { enabled: boolean }) {
     url.searchParams.set("page", String(page));
     if (url.href !== window.location.href) {
       const method = initialUrl.current ? "replaceState" : "pushState";
-      window.history[method](window.history.state, "", url);
+      window.history[method](null, "", url);
     }
     initialUrl.current = false;
   }, [enabled, course, chapter, point, type, querySearch, page]);

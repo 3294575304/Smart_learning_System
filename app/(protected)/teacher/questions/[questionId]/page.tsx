@@ -22,6 +22,7 @@ interface QuestionDetailPageProps {
   params: Promise<{ questionId: string }>;
   searchParams: Promise<{
     courseId?: string;
+    bindingKeyword?: string | string[];
     from?: string | string[];
     assignmentId?: string | string[];
     classroomId?: string | string[];
@@ -53,6 +54,7 @@ export default async function QuestionDetailPage({
   );
   const {
     courseId: initialCourseId,
+    bindingKeyword,
     from,
     assignmentId,
     classroomId,
@@ -63,20 +65,28 @@ export default async function QuestionDetailPage({
   const editPreview = from === "assignment-edit" && editId.success;
   // 从「新建考试」的选题区进来：返回时回到同一个表单（内容由答题草稿恢复）
   const examPreview = from === "exam-create";
+  const coverageCourse =
+    typeof bindingKeyword === "string"
+      ? courses.find((course) => course.id === initialCourseId)
+      : undefined;
   const backHref = examPreview
     ? "/teacher/exams/new"
     : createPreview
       ? `/teacher/assignments/new${classroom.success ? `?classroomId=${classroom.data}` : ""}#assignment-editor`
       : editPreview
         ? `/teacher/assignments/${editId.data}/edit`
-        : "/teacher/questions";
+        : coverageCourse
+          ? `/teacher/courses/${coverageCourse.id}#course-content-coverage`
+          : "/teacher/questions";
   const backLabel = examPreview
     ? "返回新建考试"
     : createPreview
       ? "返回创建作业"
       : editPreview
         ? "返回编辑作业"
-        : "返回题库";
+        : coverageCourse
+          ? "返回内容覆盖自检"
+          : "返回题库";
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -189,6 +199,9 @@ export default async function QuestionDetailPage({
       <QuestionGraphBindingPanel
         courses={courses}
         initialCourseId={initialCourseId}
+        initialKeyword={
+          typeof bindingKeyword === "string" ? bindingKeyword : undefined
+        }
         questionId={question.id}
       />
       <QuestionCourseObjectivePanel

@@ -5,8 +5,12 @@ import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import {
   AttendanceSessionStatus,
   LearnerProfileEvidenceState,
+  LearningEventType,
   MembershipStatus,
   Prisma,
+  ProgrammingAttemptKind,
+  ProgrammingAttemptStatus,
+  StudentSelfReflectionStatus,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -17,12 +21,21 @@ import {
   getTeacherStudentCourseConceptMastery,
   recalculateStudentCourseConceptMastery,
 } from "@/services/concept-mastery/service";
-import { LEARNER_PROFILE_RULE_VERSION } from "@/services/learner-profiles/constants";
+import {
+  ACTIVITY_WINDOW_DAYS,
+  LEARNER_PROFILE_RULE_VERSION,
+} from "@/services/learner-profiles/constants";
 import {
   evidenceConfidence,
   learnerProfileEvidenceState,
 } from "@/services/learner-profiles/calculation";
+import {
+  buildActivityDimension,
+  buildProgrammingDimension,
+  buildReflectionDimension,
+} from "@/services/learner-profiles/dimensions";
 import { learnerProfileFingerprint } from "@/services/learner-profiles/fingerprint";
+import { scheduleSnapshotPrune } from "@/services/learner-profiles/snapshot-retention";
 
 async function assertStudentAccess(studentId: string, courseId: string) {
   const course = await prisma.course.findFirst({
@@ -76,79 +89,175 @@ export async function ensureLearnerProfileSnapshot(
     studentId,
     courseId,
   );
-  const [course, masteryState, watermark, attendanceRecords] =
-    await Promise.all([
-      transaction.course.findUniqueOrThrow({
-        where: { id: courseId },
-        select: {
-          id: true,
-          name: true,
-          currentPublishedKnowledgeGraphVersion: {
-            select: {
-              id: true,
-              versionNumber: true,
-              nodes: {
-                orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-                select: {
-                  conceptId: true,
-                  code: true,
-                  name: true,
-                },
+  const activitySince = new Date(
+    Date.now() - ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const [
+    course,
+    masteryState,
+    watermark,
+    attendanceRecords,
+    activityEvents,
+    reflectionRecords,
+    reflectionCount,
+    programmingAttempts,
+    programmingTotal,
+  ] = await Promise.all([
+    transaction.course.findUniqueOrThrow({
+      where: { id: courseId },
+      select: {
+        id: true,
+        name: true,
+        currentPublishedKnowledgeGraphVersion: {
+          select: {
+            id: true,
+            versionNumber: true,
+            nodes: {
+              orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+              select: {
+                conceptId: true,
+                code: true,
+                name: true,
               },
             },
           },
         },
-      }),
-      transaction.studentCourseConceptMasteryState.findUnique({
-        where: { studentId_courseId: { studentId, courseId } },
-        select: {
-          revisions: {
-            orderBy: { revisionNumber: "desc" },
-            take: 1,
-            select: {
-              id: true,
-              inputFingerprint: true,
-              calculationRuleVersion: true,
-              entries: {
-                orderBy: { conceptId: "asc" },
-                select: {
-                  conceptId: true,
-                  evidenceCount: true,
-                  masteryScore: true,
-                  lastEvidenceAt: true,
-                  concept: { select: { stableKey: true } },
-                },
+      },
+    }),
+    transaction.studentCourseConceptMasteryState.findUnique({
+      where: { studentId_courseId: { studentId, courseId } },
+      select: {
+        revisions: {
+          orderBy: { revisionNumber: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            inputFingerprint: true,
+            calculationRuleVersion: true,
+            entries: {
+              orderBy: { conceptId: "asc" },
+              select: {
+                conceptId: true,
+                evidenceCount: true,
+                masteryScore: true,
+                lastEvidenceAt: true,
+                concept: { select: { stableKey: true } },
               },
             },
           },
         },
-      }),
-      transaction.learningEvent.findFirst({
-        where: {
-          studentId,
+      },
+    }),
+    transaction.learningEvent.findFirst({
+      where: {
+        studentId,
+        courseId,
+        projectedEvidence: { none: { assignment: { status: "REVOKED" } } },
+      },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      select: { id: true, occurredAt: true },
+    }),
+    transaction.attendanceRecord.findMany({
+      where: {
+        studentId,
+        session: {
           courseId,
-          projectedEvidence: { none: { assignment: { status: "REVOKED" } } },
+          status: AttendanceSessionStatus.CLOSED,
         },
-        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-        select: { id: true, occurredAt: true },
-      }),
-      transaction.attendanceRecord.findMany({
-        where: {
-          studentId,
-          session: {
-            courseId,
-            status: AttendanceSessionStatus.CLOSED,
+      },
+      orderBy: [{ session: { startsAt: "asc" } }, { id: "asc" }],
+      select: {
+        id: true,
+        currentStatus: true,
+        currentRevisionNumber: true,
+        updatedAt: true,
+      },
+    }),
+    transaction.learningEvent.findMany({
+      where: {
+        studentId,
+        courseId,
+        supersededBy: null,
+        occurredAt: { gte: activitySince },
+        projectedEvidence: { none: { assignment: { status: "REVOKED" } } },
+        eventType: {
+          in: [
+            LearningEventType.ASSESSMENT_GRADED,
+            LearningEventType.RECOMMENDATION_PRACTICE_GRADED,
+          ],
+        },
+      },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      take: 400,
+      select: { id: true, eventType: true, occurredAt: true },
+    }),
+    transaction.studentSelfReflection.findMany({
+      where: {
+        studentId,
+        courseId,
+        status: StudentSelfReflectionStatus.CONFIRMED,
+        deletedAt: null,
+      },
+      orderBy: [{ confirmedAt: "desc" }, { createdAt: "desc" }],
+      take: 3,
+      select: {
+        id: true,
+        confirmedAt: true,
+        updatedAt: true,
+        inputText: true,
+        summary: true,
+        goals: true,
+        difficulties: true,
+      },
+    }),
+    transaction.studentSelfReflection.count({
+      where: {
+        studentId,
+        courseId,
+        status: StudentSelfReflectionStatus.CONFIRMED,
+        deletedAt: null,
+      },
+    }),
+    transaction.programmingAttempt.findMany({
+      where: {
+        studentId,
+        kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+        status: ProgrammingAttemptStatus.SUCCEEDED,
+        OR: [
+          {
+            assignmentQuestion: {
+              is: { assignment: { is: { classroom: { is: { courseId } } } } },
+            },
           },
-        },
-        orderBy: [{ session: { startsAt: "asc" } }, { id: "asc" }],
-        select: {
-          id: true,
-          currentStatus: true,
-          currentRevisionNumber: true,
-          updatedAt: true,
-        },
-      }),
-    ]);
+          { recommendation: { is: { courseCycle: { is: { courseId } } } } },
+        ],
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 20,
+      select: {
+        id: true,
+        score: true,
+        maxScore: true,
+        completedAt: true,
+        createdAt: true,
+      },
+    }),
+    transaction.programmingAttempt.count({
+      where: {
+        studentId,
+        kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+        status: ProgrammingAttemptStatus.SUCCEEDED,
+        OR: [
+          {
+            assignmentQuestion: {
+              is: { assignment: { is: { classroom: { is: { courseId } } } } },
+            },
+          },
+          { recommendation: { is: { courseCycle: { is: { courseId } } } } },
+        ],
+      },
+    }),
+  ]);
 
   const graph = course.currentPublishedKnowledgeGraphVersion;
   const mastery = masteryState?.revisions[0] ?? null;
@@ -201,12 +310,21 @@ export async function ensureLearnerProfileSnapshot(
     earnedCredits: Number(attendance.earned),
     updatedAt: attendanceRecords.at(-1)?.updatedAt.toISOString() ?? null,
   };
-  const unavailableDimension = {
-    evidenceState: LearnerProfileEvidenceState.NO_EVIDENCE,
-    evidenceCount: 0,
-    conclusion: null,
-    sourceStatus: "NOT_COLLECTED",
-  };
+  const activityDimension = buildActivityDimension({ events: activityEvents });
+  const reflectionDimension = buildReflectionDimension({
+    confirmedCount: reflectionCount,
+    latest: reflectionRecords[0] ?? null,
+  });
+  const programmingDimension = buildProgrammingDimension({
+    total: programmingTotal,
+    attempts: programmingAttempts.map((attempt) => ({
+      id: attempt.id,
+      score: attempt.score?.toNumber() ?? null,
+      maxScore: attempt.maxScore?.toNumber() ?? null,
+      completedAt: attempt.completedAt,
+      createdAt: attempt.createdAt,
+    })),
+  });
   const objectiveMasteryDimension = {
     evidenceState: objectiveState,
     conceptCount: concepts.length,
@@ -221,12 +339,26 @@ export async function ensureLearnerProfileSnapshot(
     ).length,
     conclusiveAverageMastery: conclusiveAverage,
   };
-  const summary =
+  const objectiveSummary =
     objectiveState === LearnerProfileEvidenceState.NO_EVIDENCE
       ? "当前没有可用于形成客观掌握度结论的正式评分证据。"
       : objectiveState === LearnerProfileEvidenceState.INSUFFICIENT_EVIDENCE
         ? "当前已有少量正式评分证据，但尚不足以形成稳定的课程掌握度结论。"
         : `当前有 ${conclusive.length} 个知识概念达到可形成结论的证据门槛；结论仅反映客观评分证据。`;
+  const auxiliarySummary = [
+    activityDimension.evidenceCount > 0
+      ? `近 ${activityDimension.windowDays} 天有 ${activityDimension.activeDays} 天产生评分记录。`
+      : `近 ${activityDimension.windowDays} 天没有新的评分记录。`,
+    reflectionDimension.evidenceCount > 0
+      ? `学生已确认 ${reflectionDimension.evidenceCount} 条学习自述（自述不计入客观掌握度）。`
+      : "学生尚未确认学习自述。",
+    programmingDimension.evidenceCount > 0
+      ? `正式判题 ${programmingDimension.evidenceCount} 次。`
+      : null,
+  ]
+    .filter((item): item is string => Boolean(item))
+    .join(" ");
+  const summary = `${objectiveSummary} ${auxiliarySummary}`.trim();
   const inputFingerprint = learnerProfileFingerprint({
     ruleVersion: LEARNER_PROFILE_RULE_VERSION,
     graphVersionId: graph?.id ?? null,
@@ -245,8 +377,49 @@ export async function ensureLearnerProfileSnapshot(
       revision: record.currentRevisionNumber,
       status: record.currentStatus,
     })),
-    activity: unavailableDimension,
-    reflection: unavailableDimension,
+    activity: {
+      evidenceCount: activityDimension.evidenceCount,
+      activeDays: activityDimension.activeDays,
+      lastActiveAt: activityDimension.lastActiveAt,
+    },
+    reflection: {
+      evidenceCount: reflectionDimension.evidenceCount,
+      latestConfirmedAt: reflectionDimension.latestConfirmedAt,
+      latestWordCount: reflectionDimension.latestWordCount,
+    },
+    programming: {
+      evidenceCount: programmingDimension.evidenceCount,
+      passedCount: programmingDimension.passedCount,
+      lastAttemptAt: programmingDimension.lastAttemptAt,
+    },
+  });
+  /*
+   * 廉价失效签名：只由「事件水位 / 出勤最新修订 / 自述条数 / 判题条数 / 图谱 /
+   * 掌握度修订 / 规则版本」组成。读页面时用几条轻查询判断快照是否仍然有效，
+   * 不必每次重算掌握度。
+   */
+  const attendanceLatestUpdate = attendanceRecords.reduce<Date | null>(
+    (latest, record) =>
+      !latest || record.updatedAt > latest ? record.updatedAt : latest,
+    null,
+  );
+  const sourceSignature = learnerProfileFingerprint({
+    ruleVersion: LEARNER_PROFILE_RULE_VERSION,
+    graphVersionId: graph?.id ?? null,
+    eventId: watermark?.id ?? null,
+    masteryRevisionId: mastery?.id ?? null,
+    attendance: {
+      count: attendanceRecords.length,
+      updatedAt: attendanceLatestUpdate?.toISOString() ?? null,
+    },
+    reflection: {
+      count: reflectionCount,
+      updatedAt: reflectionRecords[0]?.confirmedAt?.toISOString() ?? null,
+    },
+    programming: {
+      count: programmingTotal,
+      updatedAt: programmingAttempts[0]?.createdAt.toISOString() ?? null,
+    },
   });
   const existing = await transaction.learnerProfileSnapshot.findUnique({
     where: {
@@ -256,9 +429,21 @@ export async function ensureLearnerProfileSnapshot(
         inputFingerprint,
       },
     },
-    select: { id: true },
+    select: { id: true, sourceSignature: true },
   });
-  if (existing) return existing.id;
+  if (existing) {
+    /*
+     * 历史快照可能还没有签名（签名列是后加的）。补齐一次，
+     * 否则读路径每次都会判定"快照失效"从而反复重算。
+     */
+    if (existing.sourceSignature !== sourceSignature) {
+      await transaction.learnerProfileSnapshot.update({
+        where: { id: existing.id },
+        data: { sourceSignature },
+      });
+    }
+    return existing.id;
+  }
   const latest = await transaction.learnerProfileSnapshot.findFirst({
     where: { studentId, courseId },
     orderBy: { revisionNumber: "desc" },
@@ -270,14 +455,18 @@ export async function ensureLearnerProfileSnapshot(
       courseId,
       revisionNumber: (latest?.revisionNumber ?? 0) + 1,
       inputFingerprint,
+      sourceSignature,
       calculationRuleVersion: LEARNER_PROFILE_RULE_VERSION,
       eventWatermarkId: watermark?.id ?? null,
       eventWatermarkOccurredAt: watermark?.occurredAt ?? null,
       graphVersionId: graph?.id ?? null,
       masteryRevisionId: mastery?.id ?? null,
       attendanceDimension,
-      activityDimension: unavailableDimension,
-      reflectionDimension: unavailableDimension,
+      activityDimension: activityDimension as unknown as Prisma.InputJsonValue,
+      reflectionDimension:
+        reflectionDimension as unknown as Prisma.InputJsonValue,
+      programmingDimension:
+        programmingDimension as unknown as Prisma.InputJsonValue,
       objectiveMasteryDimension,
       summary,
       concepts: { create: concepts },
@@ -288,17 +477,140 @@ export async function ensureLearnerProfileSnapshot(
 }
 
 async function ensureSnapshot(studentId: string, courseId: string) {
-  return runAssignmentSerializable(
+  const snapshotId = await runAssignmentSerializable(
     (transaction) =>
       ensureLearnerProfileSnapshot(transaction, studentId, courseId),
     "画像正在更新，请稍后重试",
     30_000,
   );
+  /*
+   * 快照已提交后再回收过期版本：回收是纯清理，不进事务、不阻塞读，
+   * 同一学生/课程 10 分钟内最多跑一次（见 snapshot-retention.ts）。
+   * 写路径（评分/判题）直接调 ensureLearnerProfileSnapshot，产生的历史
+   * 版本会在下一次有人打开画像时一并回收。
+   */
+  scheduleSnapshotPrune(studentId, courseId);
+  return snapshotId;
+}
+
+/** 快照最长复用时间：兜底那些没有进入签名的变化（如成绩撤销后的重算）。 */
+const PROFILE_SNAPSHOT_MAX_AGE_MS = 15 * 60 * 1000;
+
+/**
+ * 页面读取画像的统一入口：先比对廉价签名，命中就直接复用最新快照。
+ * 只有数据变化、规则升级或快照过旧时才进入重算事务。
+ */
+async function resolveSnapshot(studentId: string, courseId: string) {
+  const [
+    snapshot,
+    course,
+    event,
+    attendance,
+    reflections,
+    programming,
+    mastery,
+  ] = await Promise.all([
+    prisma.learnerProfileSnapshot.findFirst({
+      where: { studentId, courseId },
+      orderBy: { revisionNumber: "desc" },
+      select: {
+        id: true,
+        sourceSignature: true,
+        calculationRuleVersion: true,
+        createdAt: true,
+      },
+    }),
+    prisma.course.findUnique({
+      where: { id: courseId },
+      select: { currentPublishedKnowledgeGraphVersionId: true },
+    }),
+    prisma.learningEvent.findFirst({
+      where: {
+        studentId,
+        courseId,
+        supersededBy: null,
+        projectedEvidence: { none: { assignment: { status: "REVOKED" } } },
+      },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      select: { id: true },
+    }),
+    prisma.attendanceRecord.aggregate({
+      where: {
+        studentId,
+        session: { courseId, status: AttendanceSessionStatus.CLOSED },
+      },
+      _count: { _all: true },
+      _max: { updatedAt: true },
+    }),
+    prisma.studentSelfReflection.aggregate({
+      where: {
+        studentId,
+        courseId,
+        status: StudentSelfReflectionStatus.CONFIRMED,
+        deletedAt: null,
+      },
+      _count: { _all: true },
+      _max: { confirmedAt: true },
+    }),
+    prisma.programmingAttempt.aggregate({
+      where: {
+        studentId,
+        kind: ProgrammingAttemptKind.FORMAL_JUDGE,
+        status: ProgrammingAttemptStatus.SUCCEEDED,
+        OR: [
+          {
+            assignmentQuestion: {
+              is: { assignment: { is: { classroom: { is: { courseId } } } } },
+            },
+          },
+          { recommendation: { is: { courseCycle: { is: { courseId } } } } },
+        ],
+      },
+      _count: { _all: true },
+      _max: { createdAt: true },
+    }),
+    prisma.studentCourseConceptMasteryState.findUnique({
+      where: { studentId_courseId: { studentId, courseId } },
+      select: {
+        revisions: {
+          orderBy: { revisionNumber: "desc" },
+          take: 1,
+          select: { id: true },
+        },
+      },
+    }),
+  ]);
+  if (!snapshot) return ensureSnapshot(studentId, courseId);
+  if (snapshot.calculationRuleVersion !== LEARNER_PROFILE_RULE_VERSION)
+    return ensureSnapshot(studentId, courseId);
+  if (Date.now() - snapshot.createdAt.getTime() > PROFILE_SNAPSHOT_MAX_AGE_MS)
+    return ensureSnapshot(studentId, courseId);
+  const signature = learnerProfileFingerprint({
+    ruleVersion: LEARNER_PROFILE_RULE_VERSION,
+    graphVersionId: course?.currentPublishedKnowledgeGraphVersionId ?? null,
+    eventId: event?.id ?? null,
+    masteryRevisionId: mastery?.revisions[0]?.id ?? null,
+    attendance: {
+      count: attendance._count._all,
+      updatedAt: attendance._max.updatedAt?.toISOString() ?? null,
+    },
+    reflection: {
+      count: reflections._count._all,
+      updatedAt: reflections._max.confirmedAt?.toISOString() ?? null,
+    },
+    programming: {
+      count: programming._count._all,
+      updatedAt: programming._max.createdAt?.toISOString() ?? null,
+    },
+  });
+  if (snapshot.sourceSignature === signature) return snapshot.id;
+  return ensureSnapshot(studentId, courseId);
 }
 
 async function snapshotView(
   snapshotId: string,
   mastery: Awaited<ReturnType<typeof getStudentCourseConceptMastery>>,
+  options: { includeEvidence?: boolean } = {},
 ) {
   const snapshot = await prisma.learnerProfileSnapshot.findUniqueOrThrow({
     where: { id: snapshotId },
@@ -342,48 +654,53 @@ async function snapshotView(
   const traceByConcept = new Map(
     mastery.concepts.map((concept) => [concept.conceptId, concept]),
   );
-  const references = mastery.concepts.flatMap(
-    (concept) => concept.historicalEvidence.latestReferences,
-  );
+  const references =
+    options.includeEvidence === false
+      ? []
+      : mastery.concepts.flatMap(
+          (concept) => concept.historicalEvidence.latestReferences,
+        );
   const [assignments, assignmentQuestions, practiceQuestions] =
-    await Promise.all([
-      prisma.assignment.findMany({
-        where: {
-          id: {
-            in: references
-              .filter((r) => r.sourceType === "ASSIGNMENT")
-              .flatMap((r) => (r.assignmentId ? [r.assignmentId] : [])),
-          },
-          classroom: { courseId: snapshot.course.id },
-        },
-        select: { id: true, title: true },
-      }),
-      prisma.assignmentQuestion.findMany({
-        where: {
-          id: {
-            in: references
-              .filter((r) => r.sourceType === "ASSIGNMENT")
-              .flatMap((r) =>
-                r.assignmentQuestionId ? [r.assignmentQuestionId] : [],
-              ),
-          },
-          assignment: { classroom: { courseId: snapshot.course.id } },
-        },
-        select: { id: true, titleSnapshot: true },
-      }),
-      prisma.question.findMany({
-        where: {
-          id: {
-            in: references
-              .filter((r) => r.sourceType === "RECOMMENDATION_PRACTICE")
-              .flatMap((r) =>
-                r.assignmentQuestionId ? [r.assignmentQuestionId] : [],
-              ),
-          },
-        },
-        select: { id: true, title: true },
-      }),
-    ]);
+    references.length
+      ? await Promise.all([
+          prisma.assignment.findMany({
+            where: {
+              id: {
+                in: references
+                  .filter((r) => r.sourceType === "ASSIGNMENT")
+                  .flatMap((r) => (r.assignmentId ? [r.assignmentId] : [])),
+              },
+              classroom: { courseId: snapshot.course.id },
+            },
+            select: { id: true, title: true },
+          }),
+          prisma.assignmentQuestion.findMany({
+            where: {
+              id: {
+                in: references
+                  .filter((r) => r.sourceType === "ASSIGNMENT")
+                  .flatMap((r) =>
+                    r.assignmentQuestionId ? [r.assignmentQuestionId] : [],
+                  ),
+              },
+              assignment: { classroom: { courseId: snapshot.course.id } },
+            },
+            select: { id: true, titleSnapshot: true },
+          }),
+          prisma.question.findMany({
+            where: {
+              id: {
+                in: references
+                  .filter((r) => r.sourceType === "RECOMMENDATION_PRACTICE")
+                  .flatMap((r) =>
+                    r.assignmentQuestionId ? [r.assignmentQuestionId] : [],
+                  ),
+              },
+            },
+            select: { id: true, title: true },
+          }),
+        ])
+      : [[], [], []];
   const assignmentNames = new Map(
     assignments.map((row) => [row.id, row.title]),
   );
@@ -428,6 +745,7 @@ async function snapshotView(
       attendance: snapshot.attendanceDimension,
       activity: snapshot.activityDimension,
       reflection: snapshot.reflectionDimension,
+      programming: snapshot.programmingDimension,
       objectiveMastery: snapshot.objectiveMasteryDimension,
     },
     summary: snapshot.summary,
@@ -500,14 +818,40 @@ async function snapshotView(
   };
 }
 
+/**
+ * 画像视图。`includeEvidence: false` 时不加载历史评分明细，
+ * 供学习中心这类只需要维度与概念的页面使用（可省 150–200ms）。
+ */
+export async function getStudentLearnerProfileView(
+  studentId: string,
+  courseId: string,
+  options: { includeEvidence?: boolean } = {},
+) {
+  await assertStudentAccess(studentId, courseId);
+  const snapshotId = await resolveSnapshot(studentId, courseId);
+  if (options.includeEvidence === false) {
+    return snapshotView(
+      snapshotId,
+      {
+        concepts: [],
+        currentRevision: null,
+      } as unknown as Awaited<
+        ReturnType<typeof getStudentCourseConceptMastery>
+      >,
+      { includeEvidence: false },
+    );
+  }
+  const mastery = await getStudentCourseConceptMastery(studentId, courseId);
+  return snapshotView(snapshotId, mastery, { includeEvidence: true });
+}
+
 export async function getStudentLearnerProfile(
   studentId: string,
   courseId: string,
 ) {
-  await assertStudentAccess(studentId, courseId);
-  const snapshotId = await ensureSnapshot(studentId, courseId);
-  const mastery = await getStudentCourseConceptMastery(studentId, courseId);
-  return snapshotView(snapshotId, mastery);
+  return getStudentLearnerProfileView(studentId, courseId, {
+    includeEvidence: true,
+  });
 }
 
 /** Homepage reads the same immutable snapshot without loading evidence drill-downs. */
@@ -516,7 +860,7 @@ export async function getStudentKnowledgeSnapshot(
   courseId: string,
 ) {
   await assertStudentAccess(studentId, courseId);
-  const snapshotId = await ensureSnapshot(studentId, courseId);
+  const snapshotId = await resolveSnapshot(studentId, courseId);
   const snapshot = await prisma.learnerProfileSnapshot.findUniqueOrThrow({
     where: { id: snapshotId },
     select: {
@@ -548,7 +892,7 @@ export async function getTeacherStudentLearnerProfile(
   studentId: string,
 ) {
   await assertTeacherAccess(teacherId, courseId, studentId);
-  const snapshotId = await ensureSnapshot(studentId, courseId);
+  const snapshotId = await resolveSnapshot(studentId, courseId);
   const mastery = await getTeacherStudentCourseConceptMastery(
     teacherId,
     courseId,
@@ -602,22 +946,55 @@ export async function listTeacherCourseLearnerProfiles(
   const pageSize = 12;
   const totalPages = Math.max(1, Math.ceil(unique.length / pageSize));
   const page = Math.min(totalPages, Math.max(1, options.page ?? 1));
-  const items = [];
-  for (const membership of unique.slice(
-    (page - 1) * pageSize,
-    page * pageSize,
-  )) {
-    const snapshotId = await ensureSnapshot(membership.studentId, courseId);
-    const profile = await prisma.learnerProfileSnapshot.findUniqueOrThrow({
+  const pageMemberships = unique.slice((page - 1) * pageSize, page * pageSize);
+  const pageStudentIds = pageMemberships.map((item) => item.studentId);
+  /*
+   * 列表页只需要摘要：一次批量取每人的最新快照，不再逐个学生重算。
+   * 缺失或规则版本过旧的学生才会进入 resolveSnapshot（通常只发生在
+   * 刚上线新规则、或学生从未打开过画像时）。
+   */
+  const snapshots = pageStudentIds.length
+    ? await prisma.learnerProfileSnapshot.findMany({
+        where: {
+          courseId,
+          studentId: { in: pageStudentIds },
+          calculationRuleVersion: LEARNER_PROFILE_RULE_VERSION,
+        },
+        orderBy: [{ studentId: "asc" }, { revisionNumber: "desc" }],
+        distinct: ["studentId"],
+        select: {
+          id: true,
+          studentId: true,
+          revisionNumber: true,
+          createdAt: true,
+          summary: true,
+          objectiveMasteryDimension: true,
+        },
+      })
+    : [];
+  const snapshotByStudent = new Map(
+    snapshots.map((snapshot) => [snapshot.studentId, snapshot]),
+  );
+  for (const membership of pageMemberships) {
+    if (snapshotByStudent.has(membership.studentId)) continue;
+    const snapshotId = await resolveSnapshot(membership.studentId, courseId);
+    const snapshot = await prisma.learnerProfileSnapshot.findUniqueOrThrow({
       where: { id: snapshotId },
       select: {
         id: true,
+        studentId: true,
         revisionNumber: true,
         createdAt: true,
         summary: true,
         objectiveMasteryDimension: true,
       },
     });
+    snapshotByStudent.set(membership.studentId, snapshot);
+  }
+  const items = [];
+  for (const membership of pageMemberships) {
+    const profile = snapshotByStudent.get(membership.studentId);
+    if (!profile) continue;
     const objective = profile.objectiveMasteryDimension as {
       evidenceState: string;
       conclusiveAverageMastery: number | null;

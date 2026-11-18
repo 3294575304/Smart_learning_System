@@ -25,10 +25,17 @@ import {
 } from "./fingerprint";
 import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 import {
+  examAttemptRulesSchema,
   teacherExamListSchema,
   type ExamCreateInput,
   type TeacherExamListScope,
 } from "./schemas";
+
+type ExamSessionInput = Omit<
+  ExamCreateInput,
+  "allowedAttempts" | "autoSubmitOnExit"
+> &
+  Partial<Pick<ExamCreateInput, "allowedAttempts" | "autoSubmitOnExit">>;
 
 async function ownedCourse(teacherId: string, courseId: string) {
   const course = await prisma.course.findFirst({
@@ -181,15 +188,21 @@ export async function listEligibleExamQuestions(
 export async function createExamSessionInTransaction(
   tx: Prisma.TransactionClient,
   teacherId: string,
-  input: ExamCreateInput,
+  input: ExamSessionInput,
   context: AuditRequestContext = { ipAddress: null, userAgent: null },
 ) {
+  const { autoSubmitOnExit, allowedAttempts, ...examInput } = input;
+  const rules = examAttemptRulesSchema.parse({
+    autoSubmitOnExit,
+    allowedAttempts,
+  });
   const course = await ownedCourse(teacherId, input.courseId);
   const requestFingerprint = createHash("sha256")
     .update(
       JSON.stringify({
         teacherId,
-        ...input,
+        ...examInput,
+        ...(rules.autoSubmitOnExit || rules.allowedAttempts !== 1 ? rules : {}),
         classroomIds: [...input.classroomIds].sort(),
       }),
     )
@@ -290,6 +303,7 @@ export async function createExamSessionInTransaction(
       startsAt: input.startsAt,
       endsAt: input.endsAt,
       allowedSwitches: input.allowedSwitches,
+      ...rules,
       questionUses: {
         create: questions.map((question) => ({
           questionId: question.id,
@@ -311,7 +325,7 @@ export async function createExamSessionInTransaction(
       classroomId,
       publishedAt: input.startsAt,
       dueAt: input.endsAt,
-      allowResubmission: false,
+      allowResubmission: rules.allowedAttempts > 1,
       allowAttachments: false,
       questions: input.questions.map((item, index) => ({
         ...item,
@@ -360,6 +374,7 @@ export async function createExamSessionInTransaction(
       startsAt: input.startsAt.toISOString(),
       endsAt: input.endsAt.toISOString(),
       questionCount: input.questions.length,
+      ...rules,
     },
     context,
   });
@@ -371,7 +386,7 @@ export async function createExamSessionInTransaction(
 
 export async function createExamSession(
   teacherId: string,
-  input: ExamCreateInput,
+  input: ExamSessionInput,
   context: AuditRequestContext = { ipAddress: null, userAgent: null },
 ) {
   return runAssignmentSerializable(
@@ -526,7 +541,6 @@ export async function listStudentExams(
             where: { studentId, status: { not: "WITHDRAWN" } },
             select: { status: true },
             orderBy: { attemptNumber: "desc" },
-            take: 1,
           },
         },
       },
@@ -557,7 +571,12 @@ export async function getStudentExamAttemptStatus(
             },
           },
           examSession: {
-            select: { endsAt: true, cancelledAt: true, allowedSwitches: true },
+            select: {
+              endsAt: true,
+              cancelledAt: true,
+              allowedSwitches: true,
+              autoSubmitOnExit: true,
+            },
           },
         },
       },
@@ -583,6 +602,7 @@ export async function getStudentExamAttemptStatus(
     serverNow: new Date().toISOString(),
     endsAt: exam.endsAt.toISOString(),
     allowedSwitches: exam.allowedSwitches,
+    autoSubmitOnExit: exam.autoSubmitOnExit,
     switches: submission._count.examSwitchEvents,
   };
 }

@@ -74,6 +74,18 @@ export function ExamPublicationDialog({
               <dt className="text-slate-600">允许切屏</dt>
               <dd>{exam.allowedSwitches} 次</dd>
             </div>
+            <div>
+              <dt>允许考试次数</dt>
+              <dd>{exam.allowedAttempts} 次</dd>
+            </div>
+            <div>
+              <dt>考试期间退出</dt>
+              <dd>
+                {exam.autoSubmitOnExit
+                  ? "自动交卷并计 1 次"
+                  : "保留作答，可继续考试"}
+              </dd>
+            </div>
           </dl>
           <p className="mt-3 text-sm text-slate-700">
             发布后会冻结试卷和考试规则，各班独立保存答卷和成绩。

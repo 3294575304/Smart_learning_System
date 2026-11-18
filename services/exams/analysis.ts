@@ -92,6 +92,8 @@ const examHeaderFields = {
   startsAt: true,
   endsAt: true,
   allowedSwitches: true,
+  allowedAttempts: true,
+  autoSubmitOnExit: true,
   cancelledAt: true,
 } as const satisfies Prisma.ExamSessionSelect;
 

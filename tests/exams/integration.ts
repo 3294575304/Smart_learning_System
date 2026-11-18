@@ -503,6 +503,10 @@ async function main() {
   await assert.rejects(
     submitStudentAssignment(student.id, attempt.id, "EXAM_AUTO"),
   );
+  await assert.rejects(
+    submitStudentAssignment(student.id, attempt.id, "EXAM_EXIT"),
+    /未启用退出自动交卷/,
+  );
   const switched = await recordExamSwitch(student.id, attempt.id, randomUUID());
   assert.equal(switched.shouldSubmit, true);
   const saved = await prisma.submission.findUniqueOrThrow({
@@ -590,6 +594,83 @@ async function main() {
   assert.equal(await publishDueExamResults(), 0);
   console.log(
     "Exam receipt reasons, accepted answer count and status ownership passed",
+  );
+  const retryQuestion = await prisma.question.create({
+    data: {
+      creatorId: teacher.id,
+      questionCategoryId: course.questionCategoryId,
+      title: "退出交卷次数专项",
+      content: `判断题 ${randomUUID()}`,
+      explanation: "测试自动交卷",
+      correctBoolean: true,
+      type: "TRUE_FALSE",
+      status: "ACTIVE",
+    },
+  });
+  const retryExam = await createExamSession(teacher.id, {
+    ...input,
+    requestId: randomUUID(),
+    classroomIds: [first.id],
+    startsAt: new Date(Date.now() - 60_000),
+    endsAt: new Date(Date.now() + 3_600_000),
+    allowedAttempts: 2,
+    autoSubmitOnExit: true,
+    questions: [{ questionId: retryQuestion.id, points: 100 }],
+  });
+  const retryAssignment = retryExam.assignments[0];
+  assert.ok(retryAssignment);
+  assert.equal(retryExam.allowedAttempts, 2);
+  assert.equal(retryExam.autoSubmitOnExit, true);
+  const task = async () =>
+    (await getStudentExamTasks(student.id, new Date())).find(
+      (item) => item.id === `exam:${retryAssignment.id}`,
+    );
+  assert.equal((await task())?.remainingAttempts, 2);
+  const [firstTry, resumed] = await Promise.all([
+    startOrResumeAttempt(student.id, retryAssignment.id, randomUUID()),
+    startOrResumeAttempt(student.id, retryAssignment.id, randomUUID()),
+  ]);
+  assert.equal(resumed.id, firstTry.id);
+  assert.equal((await task())?.remainingAttempts, 2);
+  await assert.rejects(
+    submitStudentAssignment(other.id, firstTry.id, "EXAM_EXIT"),
+  );
+  const retrySnapshot = await prisma.assignmentQuestion.findFirstOrThrow({
+    where: { assignmentId: retryAssignment.id },
+  });
+  const exitAnswers = {
+    version: firstTry.version,
+    answers: [
+      {
+        assignmentQuestionId: retrySnapshot.id,
+        kind: "BOOLEAN" as const,
+        value: true,
+      },
+    ],
+  };
+  const [exitResult, repeatedExit] = await Promise.all([
+    submitStudentAssignment(student.id, firstTry.id, "EXAM_EXIT", exitAnswers),
+    submitStudentAssignment(student.id, firstTry.id, "EXAM_EXIT", exitAnswers),
+  ]);
+  assert.equal(exitResult.examReceipt?.reason, "PAGE_EXIT");
+  assert.equal(exitResult.examReceipt?.answeredCount, 1);
+  assert.equal(repeatedExit.examReceipt?.reason, "PAGE_EXIT");
+  assert.equal((await task())?.remainingAttempts, 1);
+  const secondTry = await startOrResumeAttempt(
+    student.id,
+    retryAssignment.id,
+    randomUUID(),
+  );
+  assert.notEqual(firstTry.id, secondTry.id);
+  await saveStudentAnswers(student.id, secondTry.id, exitAnswers);
+  await submitStudentAssignment(student.id, secondTry.id);
+  assert.equal(await task(), undefined);
+  await assert.rejects(
+    startOrResumeAttempt(student.id, retryAssignment.id, randomUUID()),
+    /无剩余考试机会/,
+  );
+  console.log(
+    "Exam exit collection, saved answers and two-attempt limit passed",
   );
   const paperText = `题号：1\n填空题 独立试卷题干 ${randomUUID()} ____\n答案：exam-answer\n解析：用于考试草稿集成测试。`;
   const context = { ipAddress: null, userAgent: "exam-integration" };

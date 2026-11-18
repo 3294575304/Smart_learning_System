@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState, type ComponentProps } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 import { AnswerSheet } from "@/components/assignments/answer-sheet";
 import type { getStudentExamAttemptStatus } from "@/services/exams/service";
+import type { AutosaveAnswersData } from "@/services/assignments/schemas";
+import { requestAssignmentApi } from "@/components/assignments/request-api";
+import { examAutoSubmitEndpoint, examExitBody } from "./exam-exit";
 
 type AttemptStatus = Awaited<ReturnType<typeof getStudentExamAttemptStatus>>;
 const pollIntervalMs = 30_000;
@@ -20,6 +23,10 @@ export function ExamMonitor({
 }) {
   const router = useRouter();
   const submissionId = answerSheet.submission.id;
+  const exitSnapshot = useRef<(() => AutosaveAnswersData | undefined) | null>(
+    null,
+  );
+  const exitSent = useRef(false);
   const [remaining, setRemaining] = useState(() =>
     Math.max(
       0,
@@ -34,6 +41,75 @@ export function ExamMonitor({
   const [online, setOnline] = useState(true);
   const [connectionError, setConnectionError] = useState(false);
 
+  async function submitOnExit(): Promise<string | null> {
+    const result = await requestAssignmentApi<{ id: string }>(
+      examAutoSubmitEndpoint,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: examExitBody(submissionId),
+      },
+    );
+    if (!result.success) return result.error;
+    exitSent.current = true;
+    return null;
+  }
+
+  useEffect(() => {
+    if (
+      !initial.autoSubmitOnExit ||
+      initial.state !== "WORKING" ||
+      closed ||
+      collecting
+    )
+      return;
+    const answerPath = window.location.pathname;
+
+    function collectOnLeave() {
+      if (exitSent.current) return;
+      exitSent.current = true;
+      const body = examExitBody(submissionId, exitSnapshot.current?.());
+      if (
+        navigator.sendBeacon?.(
+          examAutoSubmitEndpoint,
+          new Blob([body], { type: "application/json" }),
+        )
+      )
+        return;
+      void fetch(examAutoSubmitEndpoint, {
+        method: "POST",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body,
+      }).then(
+        (response) => {
+          if (!response.ok) exitSent.current = false;
+        },
+        () => {
+          exitSent.current = false;
+        },
+      );
+    }
+
+    function routeChanged() {
+      if (window.location.pathname !== answerPath) collectOnLeave();
+    }
+
+    window.addEventListener("pagehide", collectOnLeave);
+    window.addEventListener("popstate", routeChanged);
+    return () => {
+      window.removeEventListener("pagehide", collectOnLeave);
+      window.removeEventListener("popstate", routeChanged);
+      routeChanged();
+    };
+  }, [
+    initial.autoSubmitOnExit,
+    initial.state,
+    closed,
+    collecting,
+    submissionId,
+  ]);
+
   useEffect(() => {
     const controller = new AbortController();
     const pendingSwitches: string[] = [];
@@ -43,6 +119,7 @@ export function ExamMonitor({
     let nextRequest = 0;
     let busy = false;
     let finished = false;
+    let leavingDocument = false;
     const secondsLeft = () =>
       Math.max(
         0,
@@ -55,6 +132,7 @@ export function ExamMonitor({
       );
     const collect = () => {
       finished = true;
+      exitSent.current = true;
       setCollecting(true);
       router.replace(resultHref);
     };
@@ -73,7 +151,7 @@ export function ExamMonitor({
       });
 
     async function tick() {
-      if (finished || controller.signal.aborted) return;
+      if (finished || leavingDocument || controller.signal.aborted) return;
       const seconds = secondsLeft();
       setRemaining(seconds);
       setOnline(navigator.onLine);
@@ -157,12 +235,20 @@ export function ExamMonitor({
 
     function visibilityChanged() {
       if (document.visibilityState === "hidden") {
-        if (!finished && secondsLeft() > 0)
+        if (!finished && !leavingDocument && secondsLeft() > 0)
           pendingSwitches.push(crypto.randomUUID());
-        void tick();
       } else {
         reconnect();
       }
+    }
+
+    function pageHidden() {
+      leavingDocument = true;
+    }
+
+    function pageRestored() {
+      leavingDocument = false;
+      reconnect();
     }
 
     if (initial.state === "COLLECTED") collect();
@@ -171,12 +257,16 @@ export function ExamMonitor({
     void tick();
     window.addEventListener("online", reconnect);
     window.addEventListener("offline", tick);
+    window.addEventListener("pagehide", pageHidden);
+    window.addEventListener("pageshow", pageRestored);
     document.addEventListener("visibilitychange", visibilityChanged);
     return () => {
       controller.abort();
       window.clearInterval(interval);
       window.removeEventListener("online", reconnect);
       window.removeEventListener("offline", tick);
+      window.removeEventListener("pagehide", pageHidden);
+      window.removeEventListener("pageshow", pageRestored);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
   }, [initial, resultHref, router, submissionId]);
@@ -207,10 +297,18 @@ export function ExamMonitor({
       <span>
         切屏 {switches}/{initial.allowedSwitches}
       </span>
+      {initial.autoSubmitOnExit && <span>离开作答页将自动交卷</span>}
       {message && <p role="status">{message}</p>}
     </div>
   );
   return (
-    <AnswerSheet {...answerSheet} exam examLocked={locked} banner={banner} />
+    <AnswerSheet
+      {...answerSheet}
+      exam
+      examLocked={locked}
+      banner={banner}
+      examExit={initial.autoSubmitOnExit ? submitOnExit : undefined}
+      examExitSnapshot={initial.autoSubmitOnExit ? exitSnapshot : undefined}
+    />
   );
 }

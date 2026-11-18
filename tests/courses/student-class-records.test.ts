@@ -9,7 +9,7 @@ import test from "node:test";
  * tile 样式、同样的 `?courseId&classroomId` 作用域，且目标页能回到课程任务。
  */
 test("课程记录右栏新增我的考试，并与我的作业保持同一跳转与样式", async () => {
-  const [learningCenter, examsPage, joinButton, coursesPage] =
+  const [learningCenter, examsPage, joinButton, courseFilters] =
     await Promise.all([
       readFile(
         new URL(
@@ -34,7 +34,7 @@ test("课程记录右栏新增我的考试，并与我的作业保持同一跳�
       ),
       readFile(
         new URL(
-          "../../app/(protected)/student/courses/page.tsx",
+          "../../components/courses/student-course-filters.tsx",
           import.meta.url,
         ),
         "utf8",
@@ -75,7 +75,7 @@ test("课程记录右栏新增我的考试，并与我的作业保持同一跳�
   // 「加入新班级」卡片只在「全部 / 学习中」出现；已结束标签页只回顾历史教学班
   assert.match(joinButton, /加入新班级/u);
   assert.match(
-    coursesPage,
+    courseFilters,
     /status !== "ended"\s*&&\s*<StudentJoinClassroomButton card/u,
   );
 });
@@ -177,6 +177,11 @@ test("待开始的考试进详情页显示考试信息，而不是空的提交�
   assert.match(page, /!exam \|\| hasAttempts/u);
   assert.match(
     page,
-    /returnTo \? "返回学习任务" : exam \? "返回考试列表" : "返回作业列表"/u,
+    /<StudentBackLink href=\{returnTo\}>返回学习任务<\/StudentBackLink>/u,
+  );
+  assert.match(page, /href=\{examListReturn\([\s\S]*?返回考试列表/u);
+  assert.match(
+    page,
+    /<StudentAssignmentListBackLink scope=\{scope\.data\} \/>/u,
   );
 });

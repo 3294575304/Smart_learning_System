@@ -20,6 +20,7 @@ export function examAttendanceState(input: {
   if (input.cancelled) return "CANCELLED";
   if (input.submission && input.submission.status !== "IN_PROGRESS") {
     return input.submission.reason === "TIME_UP" ||
+      input.submission.reason === "PAGE_EXIT" ||
       input.submission.reason === "SWITCH_LIMIT"
       ? "AUTO_SUBMITTED"
       : "SUBMITTED";

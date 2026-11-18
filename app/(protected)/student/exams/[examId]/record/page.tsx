@@ -18,6 +18,7 @@ const receipt = {
   MANUAL: "主动交卷",
   TIME_UP: "到时自动收卷",
   SWITCH_LIMIT: "切屏超限自动交卷",
+  PAGE_EXIT: "离开考试页自动交卷",
 };
 
 export default async function StudentExamRecordPage({
@@ -40,7 +41,7 @@ export default async function StudentExamRecordPage({
   const closed = record.dueAt <= new Date();
   return (
     <section className="space-y-5">
-      <StudentExamDetailHeader record={record} title="考试记录" />
+      <StudentExamDetailHeader record={record} back={back} title="考试记录" />
       <div className="grid gap-4 lg:grid-cols-2">
         <section className={examPanelClass}>
           <h2 className="text-lg font-semibold">交卷记录</h2>

@@ -2,8 +2,54 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { StudentAnalysisWorkspace } from "../../components/dashboard/student-analysis-workspace";
+import {
+  ScoreChart,
+  StudentAnalysisWorkspace,
+} from "../../components/dashboard/student-analysis-workspace";
+import { TrendChart } from "../../components/dashboard/trend-chart";
 import type { StudentClassAnalysis } from "../../services/dashboard/student-class-analytics";
+
+test("growth shows two results as compact rows, retaining zero grades and detail links", () => {
+  Object.assign(globalThis, { React });
+  const score = renderToStaticMarkup(
+    React.createElement(ScoreChart, {
+      compactSmallSample: true,
+      points: [
+        {
+          id: "first",
+          title: "文件数据统计",
+          percentage: 0,
+          href: "/student/submissions/first/result",
+          kind: "ASSIGNMENT",
+          submittedAt: new Date("2026-11-17T00:00:00Z"),
+        },
+        {
+          id: "second",
+          title: "循环与函数",
+          percentage: 100,
+          href: "/student/submissions/second/result",
+          kind: "ASSIGNMENT",
+          submittedAt: new Date("2026-11-18T00:00:00Z"),
+        },
+      ],
+    }),
+  );
+  assert.match(score, /文件数据统计/);
+  assert.match(score, /0 分/);
+  assert.match(score, /\/student\/submissions\/second\/result/);
+  assert.doesNotMatch(score, /<svg/);
+  const trend = renderToStaticMarkup(
+    React.createElement(TrendChart, {
+      compactSmallSample: true,
+      showDetails: true,
+      emptyMessage: "暂无记录",
+      points: [{ label: "11/17", value: 88, detail: "11 月 17 日课程掌握度" }],
+    }),
+  );
+  assert.match(trend, /11 月 17 日课程掌握度/);
+  assert.match(trend, /88%/);
+  assert.doesNotMatch(trend, /min-h-52/);
+});
 function sample(): StudentClassAnalysis {
   return {
     course: {

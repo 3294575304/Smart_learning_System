@@ -17,10 +17,12 @@ import { listTeacherBindingCourses } from "@/services/question-graph-bindings/se
 
 interface EditQuestionPageProps {
   params: Promise<{ questionId: string }>;
+  searchParams: Promise<{ courseId?: string; bindingKeyword?: string }>;
 }
 
 export default async function EditQuestionPage({
   params,
+  searchParams,
 }: EditQuestionPageProps) {
   const teacher = await requirePageRole(Role.TEACHER);
   const parsedId = questionIdSchema.safeParse((await params).questionId);
@@ -33,10 +35,21 @@ export default async function EditQuestionPage({
       listTeacherBindingCourses(teacher.id),
     ]);
     if (!question.canEdit) notFound();
+    const { courseId, bindingKeyword } = await searchParams;
+    const coverageCourse =
+      typeof bindingKeyword === "string"
+        ? courses.find((course) => course.id === courseId)
+        : undefined;
+    const detailSuffix =
+      coverageCourse && typeof bindingKeyword === "string"
+        ? `?${new URLSearchParams({ courseId: coverageCourse.id, bindingKeyword })}#question-graph-binding`
+        : "";
     return (
       <section className="space-y-6">
         <div>
-          <TeacherBackLink href={`/teacher/questions/${question.id}`}>
+          <TeacherBackLink
+            href={`/teacher/questions/${question.id}${detailSuffix}`}
+          >
             返回题目详情
           </TeacherBackLink>
           <h1 className="mt-2 text-2xl font-semibold">编辑题目</h1>
@@ -62,7 +75,14 @@ export default async function EditQuestionPage({
             <ProgrammingConfigPanel questionId={question.id} />
           </section>
         ) : null}
-        <QuestionGraphBindingPanel courses={courses} questionId={question.id} />
+        <QuestionGraphBindingPanel
+          courses={courses}
+          initialCourseId={coverageCourse?.id}
+          initialKeyword={
+            typeof bindingKeyword === "string" ? bindingKeyword : undefined
+          }
+          questionId={question.id}
+        />
       </section>
     );
   } catch (error: unknown) {

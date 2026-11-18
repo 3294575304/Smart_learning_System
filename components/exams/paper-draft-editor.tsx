@@ -1,5 +1,7 @@
 "use client";
 
+import { ExamAttemptFields } from "./exam-attempt-fields";
+
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -672,6 +674,12 @@ export function PaperDraftEditor({
   const [allowedSwitches, setAllowedSwitches] = useState(
     initial.allowedSwitches,
   );
+  const [allowedAttempts, setAllowedAttempts] = useState(
+    initial.allowedAttempts,
+  );
+  const [autoSubmitOnExit, setAutoSubmitOnExit] = useState(
+    initial.autoSubmitOnExit,
+  );
   const [classroomIds, setClassroomIds] = useState(initial.classroomIds);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -713,6 +721,8 @@ export function PaperDraftEditor({
         startsAt: startsAt ? new Date(startsAt).toISOString() : null,
         endsAt: endsAt ? new Date(endsAt).toISOString() : null,
         allowedSwitches,
+        allowedAttempts,
+        autoSubmitOnExit,
         classroomIds,
       });
       await refresh();
@@ -786,6 +796,8 @@ export function PaperDraftEditor({
       startsAt !== localDatetime(draft.startsAt) ||
       endsAt !== localDatetime(draft.endsAt) ||
       allowedSwitches !== draft.allowedSwitches ||
+      allowedAttempts !== draft.allowedAttempts ||
+      autoSubmitOnExit !== draft.autoSubmitOnExit ||
       classroomIds.length !== draft.classroomIds.length ||
       classroomIds.some((id) => !draft.classroomIds.includes(id));
     if (settingsChanged || dirtyQuestions.length) {
@@ -805,6 +817,8 @@ export function PaperDraftEditor({
         startsAt: draft.startsAt ?? undefined,
         endsAt: draft.endsAt ?? undefined,
         allowedSwitches: draft.allowedSwitches,
+        allowedAttempts: draft.allowedAttempts,
+        autoSubmitOnExit: draft.autoSubmitOnExit,
         classroomIds: draft.classroomIds,
         questions: draft.questions.map((row) => ({
           questionId: row.id,
@@ -944,6 +958,13 @@ export function PaperDraftEditor({
                 onChange={setAllowedSwitches}
               />
             </div>
+            <ExamAttemptFields
+              allowedAttempts={allowedAttempts}
+              autoSubmitOnExit={autoSubmitOnExit}
+              setAllowedAttempts={setAllowedAttempts}
+              setAutoSubmitOnExit={setAutoSubmitOnExit}
+              fieldClass="mt-1 w-full rounded border p-2"
+            />
             <fieldset className="sm:col-span-2">
               <legend className="text-sm">参加班级</legend>
               <div className="mt-2 flex flex-wrap gap-4">

@@ -93,10 +93,6 @@ export function buildBreadcrumbs(
             ["gradebook", "surveys"].includes(segments[3])));
       const isStudentCourse =
         index === 2 && segments[0] === "student" && segments[1] === "courses";
-      const isStudentAttendance =
-        index === 2 &&
-        segments[0] === "student" &&
-        segments[1] === "attendance";
       const isTeacherAssignment =
         index === 2 &&
         segments[0] === "teacher" &&
@@ -142,7 +138,6 @@ export function buildBreadcrumbs(
           segments[3] === "submissions"
             ? "个人作答详情"
             : undefined) ??
-          (isStudentAttendance ? "签到与出勤" : undefined) ??
           getStudentPageLabel(
             isStudentVirtualRoot ? targetHref.split("?")[0] : href,
           ) ??

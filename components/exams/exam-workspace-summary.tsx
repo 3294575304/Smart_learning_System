@@ -38,7 +38,8 @@ export function ExamWorkspaceSummary({
         <p className="mt-1 text-sm text-slate-600">
           {exam.startsAt.toLocaleString("zh-CN")} 至{" "}
           {exam.endsAt.toLocaleString("zh-CN")} · 允许切屏{" "}
-          {exam.allowedSwitches} 次
+          {exam.allowedSwitches} 次 · 允许考试 {exam.allowedAttempts} 次 ·
+          {exam.autoSubmitOnExit ? "退出自动交卷" : "退出可继续作答"}
         </p>
         {(!assignmentId || exam.assignments.length > 1) &&
           exam.assignments.length > 0 && (

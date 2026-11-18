@@ -3,8 +3,10 @@ import { z } from "zod";
 
 import { questionAnswerSchema } from "@/services/questions/schemas";
 import { programmingConfigRevisionInputSchema } from "@/services/programming-questions/schemas";
+import { examAttemptRulesSchema } from "./schemas";
 
 export const paperDraftConfigSchema = z.object({
+  ...examAttemptRulesSchema.partial().shape,
   expectedRevision: z.number().int().positive(),
   type: z.nativeEnum(ExamType),
   title: z.string().trim().max(120),

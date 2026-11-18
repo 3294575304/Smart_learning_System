@@ -1,5 +1,6 @@
 import { Role } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
+import { Suspense } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -13,10 +14,6 @@ import {
   Target,
 } from "lucide-react";
 import { StudentPageLink } from "@/components/dashboard/student-page-link";
-import {
-  SECTION_TABS_LIST,
-  sectionTabClass,
-} from "@/components/ui/section-tabs";
 import { StatFunnel } from "@/components/ui/stat-funnel";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StudentHomeTasks } from "@/components/dashboard/student-home-tasks";
@@ -24,23 +21,36 @@ import { HomeKnowledgeMatrix } from "@/components/dashboard/home-knowledge-matri
 import { ScoreChart } from "@/components/dashboard/student-analysis-workspace";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import { CourseWorkspaceTabs } from "@/components/learner-profiles/course-workspace-tabs";
+import {
+  GrowthKnowledgeSections,
+  GrowthSectionNavigation,
+} from "@/components/learner-profiles/growth-section-navigation";
 import { LearnerProfileDetail } from "@/components/learner-profiles/profile-detail";
+import { GrowthKnowledgeTabs } from "@/components/learner-profiles/growth-knowledge-tabs";
+import { GrowthSummaryStrip } from "@/components/learner-profiles/growth-summary-strip";
+import { GrowthRangeTabs } from "@/components/learner-profiles/growth-range-tabs";
+import { ProfileEvidenceFocus } from "@/components/learner-profiles/profile-evidence-focus";
+import { WeeklyPlan } from "@/components/learner-profiles/weekly-plan";
+import { ObjectiveMasteryGrid } from "@/components/learner-profiles/objective-mastery";
 import { StudentCourseLearningCenterView } from "@/components/learner-profiles/student-course-learning-center";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { courseIdSchema } from "@/services/courses/schemas";
 import { studentEnrollmentStatus } from "@/services/courses/student-enrollment";
 import {
+  growthRangeSince,
+  parseGrowthRange,
   parseStudentCourseLocation,
   studentCourseTabHref,
-  STUDENT_GROWTH_SECTIONS,
   type StudentCourseLocation,
+  type StudentGrowthRange,
 } from "@/services/courses/student-workspace";
 import { getStudentTaskOverview } from "@/services/dashboard/student-task-service";
 import { getStudentClassAnalytics } from "@/services/dashboard/student-class-analytics";
 import { listStudentCourseEvaluationContexts } from "@/services/gradebook/service";
 import { getStudentCourseLearningCenter } from "@/services/learner-profiles/learning-center";
-import { getStudentLearnerProfile } from "@/services/learner-profiles/service";
+import { getStudentGrowthSummary } from "@/services/learner-profiles/growth-summary";
+import { getStudentLearnerProfileView } from "@/services/learner-profiles/service";
 
 const action =
   "inline-flex min-h-10 items-center gap-2 rounded-lg border border-line bg-card px-3 py-2 text-sm font-medium text-ink-body hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
@@ -81,13 +91,24 @@ export default async function StudentCourseLearningCenterPage({
   const { course, classroom } = context;
   const scope = { courseId: course.id, classroomId: classroom.id };
   const section = location.tab === "growth" ? location.section : undefined;
+  const range: StudentGrowthRange = parseGrowthRange(query.range);
   if (
     (query.tab !== undefined && query.tab !== location.tab) ||
-    (location.tab === "growth" && query.section !== section)
-  )
-    redirect(
-      studentCourseTabHref(course.id, classroom.id, location.tab, section),
+    (location.tab === "growth" && query.section !== section) ||
+    (query.range !== undefined && query.range !== range)
+  ) {
+    const href = studentCourseTabHref(
+      course.id,
+      classroom.id,
+      location.tab,
+      section,
     );
+    redirect(
+      location.tab === "growth" && section === "trends"
+        ? `${href}&range=${range}`
+        : href,
+    );
+  }
   const { label, readOnly } = studentEnrollmentStatus(
     course.status,
     classroom.status,
@@ -133,25 +154,73 @@ export default async function StudentCourseLearningCenterPage({
           }[location.tab]
         }
       </p>
+      {location.tab === "growth" && (
+        <>
+          <GrowthSectionNavigation
+            courseId={course.id}
+            classroomId={classroom.id}
+            initialSection={location.section}
+          />
+          <Suspense fallback={null}>
+            <GrowthSummary studentId={student.id} courseId={course.id} />
+          </Suspense>
+        </>
+      )}
+      {location.tab === "growth" && readOnly && (
+        <p className="border-line bg-muted/50 text-ink-body rounded-lg border px-3 py-2 text-xs">
+          当前教学班{label}，知识与成长仅可查看记录；「去练」类入口已隐藏。
+        </p>
+      )}
       <div className="mt-2 min-w-0 space-y-4">
-        {await courseContent(student.id, scope, location, readOnly)}
+        <Suspense
+          key={`${classroom.id}:${location.tab}:${section ?? ""}`}
+          fallback={
+            <p role="status" className={`${panel} text-ink-soft text-sm`}>
+              正在加载课程内容…
+            </p>
+          }
+        >
+          <CourseContent
+            studentId={student.id}
+            scope={scope}
+            location={location}
+            focusConceptId={
+              typeof query.conceptId === "string" ? query.conceptId : undefined
+            }
+            readOnly={readOnly}
+          />
+        </Suspense>
       </div>
     </section>
   );
 }
 
-async function courseContent(
-  studentId: string,
-  scope: { courseId: string; classroomId: string },
-  location: StudentCourseLocation,
-  readOnly: boolean,
-) {
+async function GrowthSummary({
+  studentId,
+  courseId,
+}: {
+  studentId: string;
+  courseId: string;
+}) {
+  const summary = await getStudentGrowthSummary(studentId, courseId);
+  return summary ? <GrowthSummaryStrip summary={summary} /> : null;
+}
+
+async function CourseContent({
+  studentId,
+  scope,
+  location,
+  focusConceptId,
+  readOnly,
+}: {
+  studentId: string;
+  scope: { courseId: string; classroomId: string };
+  location: StudentCourseLocation;
+  focusConceptId?: string;
+  readOnly: boolean;
+}) {
   const { courseId, classroomId } = scope;
   const scoped = new URLSearchParams(scope);
-  const courseUrl = (
-    tab: "overview" | "tasks" | "growth",
-    section?: (typeof STUDENT_GROWTH_SECTIONS)[number]["id"],
-  ) => studentCourseTabHref(courseId, classroomId, tab, section);
   const now = new Date();
   try {
     if (location.tab === "tasks") {
@@ -431,104 +500,209 @@ async function courseContent(
     }
     if (location.tab !== "growth") return null;
     const section = location.section;
-    const growthNav = (
-      <nav aria-label="知识与成长内容" className={SECTION_TABS_LIST}>
-        {STUDENT_GROWTH_SECTIONS.map((item) => (
-          <StudentPageLink
-            key={item.id}
-            href={courseUrl("growth", item.id)}
-            aria-current={section === item.id ? "page" : undefined}
-            className={sectionTabClass(section === item.id)}
-          >
-            {item.label}
-          </StudentPageLink>
-        ))}
-      </nav>
-    );
     if (section === "profile") {
-      const profile = await getStudentLearnerProfile(studentId, courseId);
+      const profile = await getStudentLearnerProfileView(studentId, courseId, {
+        includeEvidence: false,
+      });
+      /*
+       * 旧 /profile 页已收敛为跳转层，带 conceptId 的深链由这里承接：
+       * 展开对应知识点的证据明细，并在挂载后滚动聚焦。
+       * conceptId 只参与 DOM 定位与比较，不进数据库查询。
+       */
+      const focus = focusConceptId || undefined;
+      const evidenceHref = studentCourseTabHref(
+        courseId,
+        classroomId,
+        "growth",
+        "profile",
+      );
       return (
         <>
-          {growthNav}
           <p className="text-ink-body max-w-[52ch] text-sm leading-6">
-            汇总我在这门课的评分记录。出勤、自我反思和知识掌握分别展示。
+            五个维度分别取自出勤、评分记录、近期学习事件、学生自述与判题结果。
+            自述与活跃度只作辅助理解，不进入客观掌握度。
           </p>
-          <LearnerProfileDetail profile={profile} studentView />
+          <LearnerProfileDetail
+            evidenceHref={evidenceHref}
+            focusConceptId={focus}
+            profile={profile}
+            reflectionHref={`/student/recommendations?${new URLSearchParams({
+              view: "assistant",
+              courseId,
+              classroomId,
+            }).toString()}`}
+            studentView
+          />
+          <ProfileEvidenceFocus conceptId={focus} />
         </>
       );
     }
     const [data, analysis] = await Promise.all([
-      getStudentCourseLearningCenter(studentId, courseId, classroomId),
+      getStudentCourseLearningCenter(
+        studentId,
+        courseId,
+        classroomId,
+        section === "trends" ? "activity" : "knowledge",
+      ),
       section === "trends"
         ? getStudentClassAnalytics(studentId, scope, now)
         : null,
     ]);
-    return (
-      <>
-        {growthNav}
-        {section === "knowledge" && (
-          <section className={panel} aria-labelledby="course-chapter-matrix">
-            <header className="flex flex-wrap items-center justify-between gap-2">
-              <h2
-                id="course-chapter-matrix"
-                className="text-ink text-[15px] font-semibold"
-              >
-                我的知识掌握
-              </h2>
-              <StudentPageLink
-                className={action}
-                href={`/student/courses/${courseId}/knowledge-graph?${new URLSearchParams({ classroomId })}`}
-              >
-                <GitBranch aria-hidden="true" className="size-4" />
-                打开知识图谱
-              </StudentPageLink>
-            </header>
-            <HomeKnowledgeMatrix
-              chapters={data.heatmap.map((chapter) => ({
-                key: chapter.key,
-                name: chapter.name,
-                concepts: chapter.concepts.map((c) => ({
-                  key: c.key,
-                  conceptId: c.conceptId,
-                  name: c.name,
-                  status: c.status,
-                  evidenceCount: c.evidenceCount,
-                  masteryScore: c.masteryScore,
-                })),
-              }))}
-              profileHref={`/student/courses/${courseId}/profile?${new URLSearchParams({ classroomId })}`}
-              generatedAt={data.generatedAt.toISOString()}
-              profileRevision={data.profileRevision}
-              scroll={false}
-            />
-          </section>
-        )}
-        {section === "path" && (
-          <StudentCourseLearningCenterView data={data} tab="path" />
-        )}
-        {section === "trends" && (
-          <>
-            {analysis?.classes[0] && (
-              <section className={panel}>
+    function renderTrend(range: StudentGrowthRange) {
+      const since = growthRangeSince(range, now);
+      const scorePoints =
+        section === "trends"
+          ? (analysis?.classes[0]?.scoreHistory ?? []).filter(
+              (point) =>
+                !since || !point.submittedAt || point.submittedAt >= since,
+            )
+          : [];
+      const scoreDelta =
+        scorePoints.length >= 2 &&
+        typeof scorePoints.at(-1)?.percentage === "number" &&
+        typeof scorePoints.at(-2)?.percentage === "number"
+          ? Number(
+              (
+                (scorePoints.at(-1)!.percentage as number) -
+                (scorePoints.at(-2)!.percentage as number)
+              ).toFixed(1),
+            )
+          : null;
+      return (
+        <>
+          {analysis?.classes[0] && (
+            <section className={panel}>
+              <header className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-ink text-[15px] font-semibold">
                   我的作业成绩
                 </h2>
-                <div className="mt-3">
-                  <ScoreChart points={analysis.classes[0].scoreHistory} />
-                </div>
-              </section>
-            )}
-            {/*
-              原来"其他学习趋势与记录"把掌握度趋势、活动时间线、画像说明
-              整屏塞进一个默认收起的 details —— 学生看不到自己有没有在进步。
-              这里直接展开，只保留趋势与记录本身的内容。
-            */}
-            <StudentCourseLearningCenterView
-              data={data}
-              scoreTrend={false}
-              tab="activity"
-            />
-          </>
+                {scoreDelta !== null ? (
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-xs tabular-nums ${
+                      scoreDelta >= 0
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        : "border-amber-200 bg-amber-50 text-amber-800"
+                    }`}
+                  >
+                    较上一组 {scoreDelta >= 0 ? "+" : ""}
+                    {scoreDelta} 分
+                  </span>
+                ) : null}
+              </header>
+              <div className="mt-3">
+                <ScoreChart compactSmallSample points={scorePoints} />
+              </div>
+            </section>
+          )}
+          <StudentCourseLearningCenterView
+            data={{
+              ...data,
+              masteryTrend: data.masteryTrend.filter(
+                (point) => !since || Date.parse(point.at) >= since.getTime(),
+              ),
+            }}
+            scoreTrend={false}
+            tab="activity"
+          />
+        </>
+      );
+    }
+    return (
+      <>
+        {(section === "knowledge" || section === "path") && (
+          <GrowthKnowledgeSections
+            knowledge={
+              <GrowthKnowledgeTabs
+                chapterView={
+                  <section
+                    className={panel}
+                    aria-labelledby="course-chapter-matrix"
+                  >
+                    <header className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h2
+                          id="course-chapter-matrix"
+                          className="text-ink text-[15px] font-semibold"
+                        >
+                          我的知识掌握
+                        </h2>
+                        <p className="text-ink-soft mt-1 text-xs">
+                          未评估不等于零分；评分记录较少时只给状态，不给结论。
+                        </p>
+                      </div>
+                      <StudentPageLink
+                        className={action}
+                        href={`/student/courses/${courseId}/knowledge-graph?${new URLSearchParams({ classroomId })}`}
+                      >
+                        <GitBranch aria-hidden="true" className="size-4" />
+                        打开知识图谱
+                      </StudentPageLink>
+                    </header>
+                    <div className="mt-4">
+                      <HomeKnowledgeMatrix
+                        chapters={data.heatmap.map((chapter) => ({
+                          key: chapter.key,
+                          name: chapter.name,
+                          concepts: chapter.concepts.map((c) => ({
+                            key: c.key,
+                            conceptId: c.conceptId,
+                            name: c.name,
+                            status: c.status,
+                            evidenceCount: c.evidenceCount,
+                            masteryScore: c.masteryScore,
+                          })),
+                        }))}
+                        profileHref={studentCourseTabHref(
+                          courseId,
+                          classroomId,
+                          "growth",
+                          "profile",
+                        )}
+                        generatedAt={data.generatedAt.toISOString()}
+                        profileRevision={data.profileRevision}
+                        scroll={false}
+                      />
+                    </div>
+                  </section>
+                }
+                objectiveCount={data.objectives.length}
+                objectiveView={
+                  <ObjectiveMasteryGrid
+                    classroomId={classroomId}
+                    courseId={courseId}
+                    objectives={data.objectives}
+                    readOnly={readOnly}
+                  />
+                }
+              />
+            }
+            path={
+              <div className="space-y-4">
+                <StudentCourseLearningCenterView
+                  data={data}
+                  readOnly={readOnly}
+                  tab="path"
+                />
+                <WeeklyPlan
+                  classroomId={classroomId}
+                  courseId={courseId}
+                  items={data.learningPath.current.slice(0, 6)}
+                  readOnly={readOnly}
+                />
+              </div>
+            }
+          />
+        )}
+        {section === "trends" && (
+          <GrowthRangeTabs
+            classroomId={classroomId}
+            courseId={courseId}
+            panels={{
+              "30d": renderTrend("30d"),
+              "90d": renderTrend("90d"),
+              all: renderTrend("all"),
+            }}
+          />
         )}
       </>
     );

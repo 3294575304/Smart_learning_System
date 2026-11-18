@@ -19,6 +19,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StartAttemptButton } from "@/components/assignments/start-attempt-button";
+import { ExamAttemptBadge } from "@/components/exams/exam-attempt-badge";
 import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
 import { hundredPointScore } from "@/services/assignments/presentation";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -100,7 +101,9 @@ export default async function StudentAssignmentPage({
     return (
       <section className="space-y-6">
         <div>
-          {exam ? (
+          {returnTo ? (
+            <StudentBackLink href={returnTo}>返回学习任务</StudentBackLink>
+          ) : exam ? (
             <StudentBackLink
               href={examListReturn(query.returnTo, {
                 ...scope.data,
@@ -110,19 +113,19 @@ export default async function StudentAssignmentPage({
               返回考试列表
             </StudentBackLink>
           ) : (
-            <StudentAssignmentListBackLink
-              scope={scope.data}
-              returnTo={returnTo}
-            />
+            <StudentAssignmentListBackLink scope={scope.data} />
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <h1 className="text-ink text-2xl font-semibold break-words">
               {assignment.title}
             </h1>
             {exam ? (
-              <StatusChip tone="brand">
-                {EXAM_TYPE_LABELS[exam.type] ?? "考试"}
-              </StatusChip>
+              <>
+                <StatusChip tone="brand">
+                  {EXAM_TYPE_LABELS[exam.type] ?? "考试"}
+                </StatusChip>
+                <ExamAttemptBadge remaining={exam.remainingAttempts} />
+              </>
             ) : null}
           </div>
           <p className="text-ink-body mt-2">
@@ -161,6 +164,8 @@ export default async function StudentAssignmentPage({
               assignmentId={assignment.id}
               scope={scope.data}
               returnTo={returnTo}
+              exam={exam ?? undefined}
+              label={exam ? "开始考试" : undefined}
             />
           ) : null}
           {!assignment.canWrite && assignment.writeBlockedReason ? (
@@ -184,6 +189,20 @@ export default async function StudentAssignmentPage({
                 <dt className="text-ink-soft text-xs">允许切屏</dt>
                 <dd className="text-ink-body mt-0.5">
                   {exam.allowedSwitches} 次，超出后自动交卷
+                </dd>
+              </div>
+              <div>
+                <dt className="text-ink-soft text-xs">考试机会</dt>
+                <dd className="text-ink-body mt-0.5">
+                  共 {exam.allowedAttempts} 次
+                </dd>
+              </div>
+              <div>
+                <dt className="text-ink-soft text-xs">考试期间退出</dt>
+                <dd className="text-ink-body mt-0.5">
+                  {exam.autoSubmitOnExit
+                    ? "自动交卷并计 1 次"
+                    : "保留作答，可继续考试"}
                 </dd>
               </div>
             </dl>

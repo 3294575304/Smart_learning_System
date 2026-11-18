@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { EFFECTIVE_SUBMISSION_STATUSES } from "@/services/assignments/reporting";
+import { examAttemptAvailability } from "./attempt-policy";
 
 export async function getStudentExamRecord(
   studentId: string,
@@ -35,6 +36,7 @@ export async function getStudentExamRecord(
           startsAt: true,
           endsAt: true,
           type: true,
+          allowedAttempts: true,
           course: { select: { name: true } },
         },
       },
@@ -51,7 +53,6 @@ export async function getStudentExamRecord(
           lastSavedAt: true,
           examSubmissionReason: true,
         },
-        take: 1,
       },
     },
   });
@@ -61,6 +62,10 @@ export async function getStudentExamRecord(
   return {
     ...row,
     exam: row.examSession,
+    ...examAttemptAvailability(
+      row.examSession.allowedAttempts,
+      row.submissions,
+    ),
     startsAt: new Date(
       Math.max(
         row.examSession.startsAt.getTime(),

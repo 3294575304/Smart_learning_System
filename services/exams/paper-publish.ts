@@ -278,6 +278,8 @@ export async function publishPaperDraft(
         startsAt: draft.startsAt,
         endsAt: draft.endsAt,
         allowedSwitches: draft.allowedSwitches,
+        allowedAttempts: draft.allowedAttempts,
+        autoSubmitOnExit: draft.autoSubmitOnExit,
         questions: selected.map(({ questionId, points }) => ({
           questionId,
           points,

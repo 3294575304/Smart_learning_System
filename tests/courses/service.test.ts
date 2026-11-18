@@ -25,7 +25,120 @@ import {
   unlinkTeacherClassroomFromCourse,
 } from "@/services/courses/service";
 import { ensureTestQuestionCategory } from "@/tests/helpers/question-course-category";
+import { createPublishedGraphFixture } from "@/tests/helpers/teaching-graph-fixture";
+import { getTeacherCourseContentCoverage } from "@/services/courses/content-coverage";
 const prisma = new PrismaClient();
+
+test("覆盖自检区分未绑题、已绑题无证据与仍有有效证据", async () => {
+  const [teacher, student, template] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { email: "teacher@example.com" } }),
+    prisma.user.findUniqueOrThrow({ where: { email: "student@example.com" } }),
+    prisma.courseTemplate.findFirstOrThrow(),
+  ]);
+  const category = await ensureTestQuestionCategory(prisma, teacher.id);
+  const course = await prisma.course.create({
+    data: {
+      name: "覆盖自检测试",
+      courseNo: `COVERAGE-${randomBytes(4).toString("hex")}`,
+      term: "2026-2027-1",
+      teacherId: teacher.id,
+      templateId: template.id,
+      questionCategoryId: category.id,
+    },
+  });
+  const concepts = await Promise.all(
+    ["unbound", "withdrawn", "evidenced"].map((stableKey) =>
+      prisma.knowledgeGraphConcept.create({
+        data: { courseId: course.id, stableKey },
+      }),
+    ),
+  );
+  const fixture = await createPublishedGraphFixture(course.id, teacher.id);
+  const version = await fixture.publishVersion(
+    1,
+    concepts.map(({ id }) => id),
+  );
+  const question = await prisma.question.create({
+    data: {
+      creatorId: teacher.id,
+      questionCategoryId: category.id,
+      title: "覆盖自检用题",
+      content: "选择真或假。",
+      explanation: "测试解析",
+      status: "ACTIVE",
+      type: "TRUE_FALSE",
+      correctBoolean: true,
+    },
+  });
+  const boundNodes = version.nodes.slice(1);
+  await prisma.questionKnowledgeGraphBindingSet.create({
+    data: {
+      questionId: question.id,
+      courseId: course.id,
+      bindings: {
+        create: boundNodes.map((node, index) => ({
+          questionId: question.id,
+          courseId: course.id,
+          conceptId: node.conceptId,
+          sourceGraphVersionId: version.id,
+          sourceNodeId: node.id,
+          bindingType: index === 0 ? "PRIMARY" : "SECONDARY",
+          createdById: teacher.id,
+        })),
+      },
+    },
+  });
+  const evidence = (conceptId: string) => ({
+    conceptId,
+    evidenceCount: 1,
+    distinctAnswerCount: 1,
+    earnedPoints: 1,
+    availablePoints: 1,
+    masteryScore: 100,
+    level: "MASTERED" as const,
+    firstEvidenceAt: new Date(),
+    lastEvidenceAt: new Date(),
+  });
+  await prisma.studentCourseConceptMasteryState.create({
+    data: {
+      courseId: course.id,
+      studentId: student.id,
+      revisions: {
+        create: [
+          {
+            revisionNumber: 1,
+            inputFingerprint: "a".repeat(64),
+            calculationRuleVersion: "concept-mastery-v1",
+            entries: {
+              create: boundNodes.map((node) => evidence(node.conceptId)),
+            },
+          },
+          {
+            revisionNumber: 2,
+            inputFingerprint: "b".repeat(64),
+            calculationRuleVersion: "concept-mastery-v1",
+            entries: {
+              create: boundNodes
+                .slice(1)
+                .map((node) => evidence(node.conceptId)),
+            },
+          },
+        ],
+      },
+    },
+  });
+  const coverage = await getTeacherCourseContentCoverage(teacher.id, course.id);
+  assert.deepEqual(
+    coverage.gaps.map((row) => row.conceptId),
+    [concepts[0]?.id],
+  );
+  assert.deepEqual(
+    coverage.pointsWithoutEvidence.map((row) => row.conceptId),
+    [concepts[1]?.id],
+  );
+  assert.equal(coverage.totals.boundConceptCount, 2);
+  assert.equal(coverage.totals.evidencedConceptCount, 1);
+});
 
 const auditContext = {
   ipAddress: "127.0.0.1",

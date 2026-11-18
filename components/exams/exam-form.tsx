@@ -1,4 +1,6 @@
 "use client";
+
+import { ExamAttemptFields } from "./exam-attempt-fields";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -98,6 +100,8 @@ const FIELD_ANCHORS: Record<string, string> = {
   startsAt: "exam-field-starts",
   endsAt: "exam-field-ends",
   allowedSwitches: "exam-field-switches",
+  allowedAttempts: "exam-field-attempts",
+  autoSubmitOnExit: "exam-field-exit-policy",
   questions: "exam-field-questions",
 };
 export function ExamForm({
@@ -141,6 +145,8 @@ export function ExamForm({
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [allowedSwitches, setAllowedSwitches] = useState(2);
+  const [allowedAttempts, setAllowedAttempts] = useState(1);
+  const [autoSubmitOnExit, setAutoSubmitOnExit] = useState(true);
   const [questionType, setQuestionType] = useState("");
   const [conceptId, setConceptId] = useState("");
   const [objectiveCode, setObjectiveCode] = useState("");
@@ -249,6 +255,8 @@ export function ExamForm({
         startsAt: string;
         endsAt: string;
         allowedSwitches: number;
+        allowedAttempts?: number;
+        autoSubmitOnExit?: boolean;
         pickMode?: "auto" | "bank";
         targetPoints?: number;
         scoreMode?: ExamScoreMode;
@@ -290,6 +298,8 @@ export function ExamForm({
       setStartsAt(draft.startsAt);
       setEndsAt(draft.endsAt);
       setAllowedSwitches(draft.allowedSwitches);
+      setAllowedAttempts(draft.allowedAttempts ?? 1);
+      setAutoSubmitOnExit(draft.autoSubmitOnExit ?? true);
       if (draft.pickMode === "auto" || draft.pickMode === "bank")
         setPickMode(draft.pickMode);
       if (typeof draft.targetPoints === "number" && draft.targetPoints > 0)
@@ -369,6 +379,8 @@ export function ExamForm({
         startsAt,
         endsAt,
         allowedSwitches,
+        allowedAttempts,
+        autoSubmitOnExit,
       }),
     );
   }, [
@@ -393,6 +405,8 @@ export function ExamForm({
     startsAt,
     endsAt,
     allowedSwitches,
+    allowedAttempts,
+    autoSubmitOnExit,
   ]);
 
   function rescore(items: Selected[]) {
@@ -723,6 +737,8 @@ export function ExamForm({
       startsAt,
       endsAt,
       allowedSwitches,
+      allowedAttempts,
+      autoSubmitOnExit,
       questions: selected.map(({ questionId, points }) => ({
         questionId,
         points,
@@ -1021,6 +1037,17 @@ export function ExamForm({
                 onChange={setAllowedSwitches}
               />
             </div>
+            <ExamAttemptFields
+              allowedAttempts={allowedAttempts}
+              autoSubmitOnExit={autoSubmitOnExit}
+              setAllowedAttempts={(value) => {
+                setAllowedAttempts(value);
+                clearFieldError("allowedAttempts");
+              }}
+              setAutoSubmitOnExit={setAutoSubmitOnExit}
+              fieldClass={`${examField} ${fieldErrors.allowedAttempts ? examFieldInvalid : ""}`}
+              attemptsError={fieldErrors.allowedAttempts}
+            />
             <div className="border-border border-t sm:col-span-2 xl:col-span-3" />
             <fieldset
               id="exam-field-classrooms"

@@ -75,7 +75,9 @@ test("学生课程学习中心按全课程知识点和评分记录统计", async
     "utf8",
   );
   assert.match(tabs, /课程学习中心页面导航/u);
-  assert.match(view, /按章节查看知识状态/u);
+  // 章节掌握视图已上移到学习中心页面，view 组件只负责路径与趋势
+  assert.match(page, /我的知识掌握/u);
+  assert.match(page, /GrowthKnowledgeTabs/u);
   assert.match(view, /我的学习路径/u);
   assert.match(view, /优先巩固/u);
   assert.match(view, /先补：/u);
@@ -93,9 +95,8 @@ test("学生课程学习中心按全课程知识点和评分记录统计", async
   );
   assert.match(analysisView, /learning-center/u);
   assert.match(courses, /requirePageRole\(Role\.STUDENT\)/u);
-  // 我的课程列表已改用统一的班级分析服务聚合教学班，断言同步到当前实现
-  assert.match(courses, /getStudentClassAnalytics/u);
-  assert.match(courses, /key=\{classroom.id\}/u);
+  assert.match(courses, /listStudentCourseProgress\(student\.id\)/u);
+  assert.match(courses, /id: classroom\.id/u);
   assert.match(courses, /查看教学班/u);
   // 进入态文案在 aria-label 里按报名状态拼接（进入/查看 + 教学班：课程名）
   assert.match(courses, /教学班：\$\{course\.name\}/u);

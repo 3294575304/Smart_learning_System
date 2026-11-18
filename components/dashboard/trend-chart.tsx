@@ -10,6 +10,7 @@ interface TrendChartProps {
   ariaLabel?: string;
   caption?: string;
   showDetails?: boolean;
+  compactSmallSample?: boolean;
 }
 
 export function TrendChart({
@@ -18,7 +19,32 @@ export function TrendChart({
   ariaLabel = "近期成绩趋势",
   caption,
   showDetails = false,
+  compactSmallSample = false,
 }: TrendChartProps) {
+  if (compactSmallSample && points.length <= 2) {
+    return points.length ? (
+      <div>
+        <ul className="divide-line divide-y text-sm" aria-label={ariaLabel}>
+          {points.map((point, index) => (
+            <li
+              className="flex items-baseline justify-between gap-3 py-2"
+              key={index}
+            >
+              <span className="text-ink-soft">
+                {showDetails ? (point.detail ?? point.label) : point.label}
+              </span>
+              <strong className="text-ink shrink-0 tabular-nums">
+                {point.value}%
+              </strong>
+            </li>
+          ))}
+        </ul>
+        {caption && <p className="text-ink-soft mt-2 text-xs">{caption}</p>}
+      </div>
+    ) : (
+      <p className="text-ink-soft py-2 text-sm">{emptyMessage}</p>
+    );
+  }
   if (points.length === 0) {
     return (
       <div className="text-muted-foreground flex min-h-48 items-center justify-center rounded-lg border border-dashed text-sm">

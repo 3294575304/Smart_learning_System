@@ -165,6 +165,11 @@ export function ExamMonitorPanel({
                     {row.reason === "SWITCH_LIMIT" && (
                       <p className="text-xs text-rose-800">切屏超限收卷</p>
                     )}
+                    {row.reason === "PAGE_EXIT" && (
+                      <p className="text-xs text-slate-600">
+                        离开考试页自动交卷
+                      </p>
+                    )}
                   </td>
                   <td className="p-3">
                     <span

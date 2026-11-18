@@ -15,6 +15,7 @@ import { dueLabel } from "./student-time";
 import type { StudentClassAnalysis } from "@/services/dashboard/student-class-analytics";
 import type { StudentHomePulse } from "@/services/dashboard/student-home-pulse";
 import type { StudentTaskOverview } from "@/services/dashboard/student-task-overview";
+import { studentCourseTabHref } from "@/services/courses/student-workspace";
 
 const MASTERED = 80;
 
@@ -105,7 +106,12 @@ export function StudentHomeInsights({
           ? `已掌握 ${masteredChapters} 章 · 共 ${chapters.length} 章`
           : "还没有可评估的知识点",
       href: selected
-        ? `/student/courses/${selected.course.id}/profile?${new URLSearchParams({ classroomId: selected.classroom.id })}`
+        ? studentCourseTabHref(
+            selected.course.id,
+            selected.classroom.id,
+            "growth",
+            "profile",
+          )
         : "/student/analytics",
       alert: false,
     },
@@ -124,7 +130,12 @@ export function StudentHomeInsights({
   ];
 
   const profileHref = selected
-    ? `/student/courses/${selected.course.id}/profile?${new URLSearchParams({ classroomId: selected.classroom.id })}`
+    ? studentCourseTabHref(
+        selected.course.id,
+        selected.classroom.id,
+        "growth",
+        "profile",
+      )
     : "/student/courses";
 
   return (

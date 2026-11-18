@@ -33,6 +33,7 @@ interface QuestionFormProps {
   categories: Array<{ id: string; name: string }>;
   knowledgePoints: KnowledgePointOption[];
   question?: QuestionDetail;
+  coverage?: { courseId: string; categoryId: string; nodeCode: string };
 }
 
 function emptyQuestion(categoryId: string): QuestionUpsertData {
@@ -85,6 +86,7 @@ export function QuestionForm({
   categories,
   knowledgePoints,
   question,
+  coverage,
 }: QuestionFormProps) {
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -93,7 +95,10 @@ export function QuestionForm({
   const [tagError, setTagError] = useState<string | null>(null);
   const form = useForm<QuestionUpsertData>({
     resolver: zodResolver(questionUpsertSchema),
-    defaultValues: initialQuestion(question, categories),
+    defaultValues:
+      coverage && categories.some((item) => item.id === coverage.categoryId)
+        ? emptyQuestion(coverage.categoryId)
+        : initialQuestion(question, categories),
   });
   const { fields, append, replace } = useFieldArray({
     control: form.control,
@@ -200,10 +205,13 @@ export function QuestionForm({
       setServerError(result.error);
       return;
     }
+    const programming =
+      input.type === QuestionType.PYTHON_PROGRAMMING && mode === "create";
+    const query = coverage
+      ? `?${new URLSearchParams({ courseId: coverage.courseId, bindingKeyword: coverage.nodeCode })}`
+      : "";
     router.push(
-      input.type === QuestionType.PYTHON_PROGRAMMING && mode === "create"
-        ? `/teacher/questions/${result.data.id}/edit#programming-config`
-        : `/teacher/questions/${result.data.id}`,
+      `/teacher/questions/${result.data.id}${programming ? "/edit" : ""}${query}${programming ? "#programming-config" : coverage ? "#question-graph-binding" : ""}`,
     );
     router.refresh();
   }

@@ -90,9 +90,35 @@ function PanelTitle({
 }
 export function ScoreChart({
   points,
+  compactSmallSample = false,
 }: {
   points: StudentClassAnalysis["scoreHistory"];
+  compactSmallSample?: boolean;
 }) {
+  if (compactSmallSample && points.length <= 2) {
+    return points.length ? (
+      <ul className="divide-line divide-y text-sm">
+        {points.map((point, index) => (
+          <li
+            key={`${point.href}-${index}`}
+            className="flex items-baseline justify-between gap-3 py-2"
+          >
+            <Link
+              className="text-brand-strong min-w-0 font-medium [overflow-wrap:anywhere] underline-offset-4 hover:underline"
+              href={point.href}
+            >
+              {point.title}
+            </Link>
+            <span className="text-ink shrink-0 font-semibold tabular-nums">
+              {point.percentage} 分
+            </span>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p className="text-ink-soft py-2 text-sm">这段时间暂无已公布成绩。</p>
+    );
+  }
   if (!points.length)
     return (
       <div className="mt-4 flex min-h-44 flex-1 flex-col items-center justify-center rounded-xl bg-slate-50/80 px-5 text-center">

@@ -20,6 +20,7 @@ export type StudentTaskItem = {
   opensAt?: Date;
   windowMinutes?: number;
   attemptLimit?: number;
+  remainingAttempts?: number;
   canEnter?: boolean;
   href: string;
   action: string;

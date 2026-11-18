@@ -82,6 +82,7 @@ export default async function AnswerPage({ params, searchParams }: Props) {
     const initial = await getStudentExamAttemptStatus(student.id, submissionId);
     return (
       <ExamMonitor
+        key={submission.id}
         initial={initial}
         resultHref={studentTaskHref(
           `/student/submissions/${submissionId}/result`,

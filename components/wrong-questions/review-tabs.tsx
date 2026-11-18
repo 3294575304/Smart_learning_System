@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { Bookmark, NotebookPen } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { reviewTabHref } from "@/services/review/tab-navigation";
@@ -19,8 +18,7 @@ export function ReviewTabs({ favorites }: { favorites: boolean }) {
         { id: "favorites", label: "我的收藏", icon: Bookmark },
       ].map((tab) => {
         return (
-          <Link
-            prefetch={false}
+          <a
             key={tab.id}
             href={reviewTabHref(
               search.toString(),
@@ -37,7 +35,7 @@ export function ReviewTabs({ favorites }: { favorites: boolean }) {
           >
             <tab.icon className="size-4 shrink-0" aria-hidden="true" />
             <span>{tab.label}</span>
-          </Link>
+          </a>
         );
       })}
     </nav>

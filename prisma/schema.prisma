@@ -611,6 +611,7 @@ enum ExamType {
 }
 
 enum ExamSubmissionReason {
+  PAGE_EXIT
   MANUAL
   TIME_UP
   SWITCH_LIMIT
@@ -694,27 +695,27 @@ enum RecommendationStatus {
 }
 
 model User {
-  teacherAssignmentDueDays Int?
-  teacherAssignmentAllowResubmission Boolean @default(false)
-  teacherNotifyQualityReportReady Boolean @default(true)
-  teacherDefaultCourseId String?
-  teacherDefaultCourse Course? @relation("TeacherDefaultCourse", fields: [teacherDefaultCourseId], references: [id], onDelete: SetNull)
-  examSessions         ExamSession[]           @relation("ExamTeacher")
-  examPaperDrafts      ExamPaperDraft[]        @relation("ExamDraftTeacher")
-  makeupGrantsReceived AssignmentMakeupGrant[] @relation("MakeupStudent")
-  makeupGrantsIssued   AssignmentMakeupGrant[] @relation("MakeupTeacher")
-  id                   String                  @id @default(cuid())
-  email                String?                 @unique
-  passwordHash         String
-  role                 Role
-  status               UserStatus              @default(ACTIVE)
-  schoolId             String?
-  mustChangePassword   Boolean                 @default(false)
-  passwordChangedAt    DateTime?
-  lastLoginAt          DateTime?
-  deletedAt            DateTime?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
+  teacherAssignmentDueDays           Int?
+  teacherAssignmentAllowResubmission Boolean                 @default(false)
+  teacherNotifyQualityReportReady    Boolean                 @default(true)
+  teacherDefaultCourseId             String?
+  teacherDefaultCourse               Course?                 @relation("TeacherDefaultCourse", fields: [teacherDefaultCourseId], references: [id], onDelete: SetNull)
+  examSessions                       ExamSession[]           @relation("ExamTeacher")
+  examPaperDrafts                    ExamPaperDraft[]        @relation("ExamDraftTeacher")
+  makeupGrantsReceived               AssignmentMakeupGrant[] @relation("MakeupStudent")
+  makeupGrantsIssued                 AssignmentMakeupGrant[] @relation("MakeupTeacher")
+  id                                 String                  @id @default(cuid())
+  email                              String?                 @unique
+  passwordHash                       String
+  role                               Role
+  status                             UserStatus              @default(ACTIVE)
+  schoolId                           String?
+  mustChangePassword                 Boolean                 @default(false)
+  passwordChangedAt                  DateTime?
+  lastLoginAt                        DateTime?
+  deletedAt                          DateTime?
+  createdAt                          DateTime                @default(now())
+  updatedAt                          DateTime                @updatedAt
 
   profile                            UserProfile?
   school                             School?                              @relation(fields: [schoolId], references: [id], onDelete: Restrict)
@@ -749,6 +750,7 @@ model User {
   knowledgeGraphReviewRevisions      KnowledgeGraphReviewRevision[]       @relation("KnowledgeGraphReviewEditedBy")
   publishedKnowledgeGraphs           PublishedKnowledgeGraphVersion[]     @relation("KnowledgeGraphPublishedBy")
   createdQuestionGraphBindings       QuestionKnowledgeGraphBinding[]      @relation("QuestionGraphBindingCreator")
+  createdConceptObjectiveLinks       ConceptObjectiveLink[]               @relation("ConceptObjectiveLinkCreator")
   conceptAnswerEvidences             StudentAnswerConceptEvidence[]       @relation("ConceptEvidenceStudent")
   courseConceptMasteryStates         StudentCourseConceptMasteryState[]   @relation("CourseConceptMasteryStudent")
   createdStudentImportBatches        StudentImportBatch[]                 @relation("StudentImportBatchCreatedBy")
@@ -1148,29 +1150,29 @@ model QuestionCourseCategory {
 }
 
 model Course {
-  defaultForTeachers User[] @relation("TeacherDefaultCourse")
+  defaultForTeachers                      User[]                    @relation("TeacherDefaultCourse")
   examSessions                            ExamSession[]
   examPaperDrafts                         ExamPaperDraft[]
   questionObjectiveMappings               QuestionCourseObjective[]
-  categorizedQuestions                    Question[]       @relation("QuestionCategoryCourse")
+  categorizedQuestions                    Question[]                @relation("QuestionCategoryCourse")
   questionCategoryId                      String
-  id                                      String           @id @default(cuid())
+  id                                      String                    @id @default(cuid())
   templateId                              String
   teacherId                               String
-  courseNo                                String           @db.VarChar(50)
-  term                                    String           @db.VarChar(50)
-  name                                    String           @db.VarChar(100)
-  description                             String?          @db.Text
-  status                                  CourseStatus     @default(DRAFT)
+  courseNo                                String                    @db.VarChar(50)
+  term                                    String                    @db.VarChar(50)
+  name                                    String                    @db.VarChar(100)
+  description                             String?                   @db.Text
+  status                                  CourseStatus              @default(DRAFT)
   publishedAt                             DateTime?
   archivedAt                              DateTime?
-  currentPublishedSyllabusStructureId     String?          @unique
-  currentPublishedKnowledgeGraphVersionId String?          @unique
-  currentPublishedAssessmentSchemeId      String?          @unique
-  currentTeachingProgressRevisionId       String?          @unique
-  currentRecommendationPolicyRevisionId   String?          @unique
-  createdAt                               DateTime         @default(now())
-  updatedAt                               DateTime         @updatedAt
+  currentPublishedSyllabusStructureId     String?                   @unique
+  currentPublishedKnowledgeGraphVersionId String?                   @unique
+  currentPublishedAssessmentSchemeId      String?                   @unique
+  currentTeachingProgressRevisionId       String?                   @unique
+  currentRecommendationPolicyRevisionId   String?                   @unique
+  createdAt                               DateTime                  @default(now())
+  updatedAt                               DateTime                  @updatedAt
 
   template                              CourseTemplate                        @relation(fields: [templateId], references: [id], onDelete: Restrict)
   questionCategory                      QuestionCourseCategory                @relation(fields: [questionCategoryId], references: [id], onDelete: Restrict)
@@ -1191,6 +1193,7 @@ model Course {
   publishedAssessmentSchemes            PublishedAssessmentScheme[]           @relation("PublishedAssessmentSchemeCourse")
   currentPublishedAssessmentScheme      PublishedAssessmentScheme?            @relation("CurrentPublishedAssessmentScheme", fields: [currentPublishedAssessmentSchemeId], references: [id], onDelete: SetNull)
   knowledgeGraphConcepts                KnowledgeGraphConcept[]
+  conceptObjectiveLinks                 ConceptObjectiveLink[]
   questionGraphBindingSets              QuestionKnowledgeGraphBindingSet[]
   questionGraphBindings                 QuestionKnowledgeGraphBinding[]
   assignmentQuestionConceptSnapshots    AssignmentQuestionConceptSnapshot[]
@@ -1379,6 +1382,7 @@ model PublishedSyllabusStructure {
   publishedAssessmentSchemes    PublishedAssessmentScheme[]
   sourceCourseSurveys           CourseSurvey[]
   questionObjectiveMappings     QuestionCourseObjective[]
+  conceptObjectiveLinks         ConceptObjectiveLink[]
 
   @@unique([courseId, versionNumber])
   @@index([courseId, publishedAt])
@@ -2241,9 +2245,39 @@ model KnowledgeGraphConcept {
   targetedRecommendations      PersonalizedRecommendation[]          @relation("RecommendationTargetConcept")
   recommendationSnapshots      CourseRecommendationConceptSnapshot[]
   recommendationEvidences      RecommendationConceptEvidence[]
+  objectiveLinks               ConceptObjectiveLink[]
 
   @@unique([courseId, stableKey])
   @@index([courseId, createdAt])
+}
+
+/**
+ * 知识点 ↔ 课程目标（大纲 objectives）。
+ * 只用于展示与排序，不参与达成度或掌握度计算；
+ * source=DERIVED 的候选必须经教师确认才用于学生端「按目标」视图。
+ */
+model ConceptObjectiveLink {
+  id                  String   @id @default(cuid())
+  courseId            String
+  conceptId           String
+  objectiveCode       String   @db.VarChar(50)
+  syllabusStructureId String?
+  weight              Decimal  @default(1) @db.Decimal(7, 4)
+  source              String   @default("DERIVED") @db.VarChar(20)
+  confidence          Decimal  @default(0) @db.Decimal(5, 4)
+  createdById         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  course            Course                      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  concept           KnowledgeGraphConcept       @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  syllabusStructure PublishedSyllabusStructure? @relation(fields: [syllabusStructureId], references: [id], onDelete: SetNull)
+  createdBy         User?                       @relation("ConceptObjectiveLinkCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([courseId, conceptId, objectiveCode])
+  @@index([courseId, objectiveCode])
+  @@index([courseId, syllabusStructureId])
+  @@index([conceptId])
 }
 
 model PublishedKnowledgeGraphNode {
@@ -2562,39 +2596,39 @@ model KnowledgePoint {
 }
 
 model AIQuestionGenerationBatch {
-  id                   String    @id @default(cuid())
-  courseId             String
-  teacherId            String
-  jobId                String?   @unique
-  idempotencyKey       String    @unique @db.VarChar(191)
-  questionCategoryId   String
-  graphVersionId       String?
-  syllabusStructureId  String?
-  mode                 String    @db.VarChar(20)
-  status               String    @default("PENDING") @db.VarChar(20)
-  request              Json
-  generationRevision   Int       @default(1)
-  requestedCount       Int
-  generatedCount       Int       @default(0)
-  failedCount          Int       @default(0)
-  errorCode            String?   @db.VarChar(100)
-  failureDetails       Json      @default("[]")
-  firstValidationChecks Int     @default(0)
-  firstValidationPasses Int     @default(0)
-  provider             String?   @db.VarChar(100)
-  model                String?   @db.VarChar(191)
-  promptVersion        String    @db.VarChar(50)
-  ruleVersion          String    @db.VarChar(50)
-  sourceFileName       String?   @db.VarChar(255)
-  sourceFileFormat     String?   @db.VarChar(20)
-  sourceFileStorageKey String?   @unique @db.VarChar(191)
-  sourceFileChecksum   String?   @db.Char(64)
-  sourceFileSizeBytes  Int?
-  sourceFileExpiresAt  DateTime?
-  sourceFileDeletedAt  DateTime?
-  deletedAt            DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  courseId              String
+  teacherId             String
+  jobId                 String?   @unique
+  idempotencyKey        String    @unique @db.VarChar(191)
+  questionCategoryId    String
+  graphVersionId        String?
+  syllabusStructureId   String?
+  mode                  String    @db.VarChar(20)
+  status                String    @default("PENDING") @db.VarChar(20)
+  request               Json
+  generationRevision    Int       @default(1)
+  requestedCount        Int
+  generatedCount        Int       @default(0)
+  failedCount           Int       @default(0)
+  errorCode             String?   @db.VarChar(100)
+  failureDetails        Json      @default("[]")
+  firstValidationChecks Int       @default(0)
+  firstValidationPasses Int       @default(0)
+  provider              String?   @db.VarChar(100)
+  model                 String?   @db.VarChar(191)
+  promptVersion         String    @db.VarChar(50)
+  ruleVersion           String    @db.VarChar(50)
+  sourceFileName        String?   @db.VarChar(255)
+  sourceFileFormat      String?   @db.VarChar(20)
+  sourceFileStorageKey  String?   @unique @db.VarChar(191)
+  sourceFileChecksum    String?   @db.Char(64)
+  sourceFileSizeBytes   Int?
+  sourceFileExpiresAt   DateTime?
+  sourceFileDeletedAt   DateTime?
+  deletedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   course     Course                          @relation(fields: [courseId], references: [id], onDelete: Restrict)
   teacher    User                            @relation("AIQuestionGenerationBatchCreator", fields: [teacherId], references: [id], onDelete: Restrict)
@@ -2632,35 +2666,35 @@ model AIQuestionGenerationCandidate {
 }
 
 model Question {
-  examQuestionUses   ExamQuestionUse[]
-  examImages         QuestionImage[]
+  examQuestionUses        ExamQuestionUse[]
+  examImages              QuestionImage[]
   courseObjectiveMappings QuestionCourseObjective[]
-  categoryCourseId   String?
-  categoryCourse     Course?                 @relation("QuestionCategoryCourse", fields: [categoryCourseId], references: [id], onDelete: Restrict)
-  questionCategoryId String?
-  questionCategory   QuestionCourseCategory? @relation(fields: [questionCategoryId], references: [id], onDelete: Restrict)
-  isAssignmentOnly   Boolean                 @default(false)
-  id                 String                  @id @default(cuid())
-  creatorId          String
-  title              String
-  content            String                  @db.Text
-  type               QuestionType
-  origin             QuestionOrigin          @default(MANUAL)
-  defaultObjectiveKind String? @db.VarChar(20)
-  visibility         QuestionVisibility      @default(PRIVATE)
-  status             QuestionStatus          @default(DRAFT)
-  explanation        String                  @db.Text
-  tags               String[]                @default([])
-  correctBoolean     Boolean?
-  referenceAnswer    String?                 @db.Text
-  acceptableAnswers  String[]                @default([])
-  isCaseSensitive    Boolean                 @default(false)
-  gradingConfig      Json?
-  deletedAt          DateTime?
-  revision           Int                     @default(1)
-  archivedFromStatus QuestionStatus?
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
+  categoryCourseId        String?
+  categoryCourse          Course?                   @relation("QuestionCategoryCourse", fields: [categoryCourseId], references: [id], onDelete: Restrict)
+  questionCategoryId      String?
+  questionCategory        QuestionCourseCategory?   @relation(fields: [questionCategoryId], references: [id], onDelete: Restrict)
+  isAssignmentOnly        Boolean                   @default(false)
+  id                      String                    @id @default(cuid())
+  creatorId               String
+  title                   String
+  content                 String                    @db.Text
+  type                    QuestionType
+  origin                  QuestionOrigin            @default(MANUAL)
+  defaultObjectiveKind    String?                   @db.VarChar(20)
+  visibility              QuestionVisibility        @default(PRIVATE)
+  status                  QuestionStatus            @default(DRAFT)
+  explanation             String                    @db.Text
+  tags                    String[]                  @default([])
+  correctBoolean          Boolean?
+  referenceAnswer         String?                   @db.Text
+  acceptableAnswers       String[]                  @default([])
+  isCaseSensitive         Boolean                   @default(false)
+  gradingConfig           Json?
+  deletedAt               DateTime?
+  revision                Int                       @default(1)
+  archivedFromStatus      QuestionStatus?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
 
   studentFavorites                  StudentQuestionFavorite[]
   creator                           User                                  @relation("QuestionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
@@ -2875,7 +2909,7 @@ enum AssignmentCategory {
 }
 
 model Assignment {
-  examPublication ExamResultPublication?
+  examPublication     ExamResultPublication?
   examSessionId       String?
   examSession         ExamSession?            @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
   category            AssignmentCategory      @default(PRACTICE)
@@ -2928,6 +2962,8 @@ model ExamSession {
   startsAt           DateTime
   endsAt             DateTime
   allowedSwitches    Int                    @default(2)
+  autoSubmitOnExit   Boolean                @default(false)
+  allowedAttempts    Int                    @default(1)
   cancelledAt        DateTime?
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
@@ -2988,6 +3024,8 @@ model ExamPaperDraft {
   startsAt           DateTime?
   endsAt             DateTime?
   allowedSwitches    Int       @default(2)
+  autoSubmitOnExit   Boolean   @default(false)
+  allowedAttempts    Int       @default(1)
   classroomIds       String[]  @default([])
   provider           String?   @db.VarChar(100)
   model              String?   @db.VarChar(191)
@@ -3087,18 +3125,18 @@ model AssignmentQuestionImage {
 }
 
 model ExamQuestionUse {
-  id                 String      @id @default(cuid())
-  examSessionId      String
-  questionId         String
-  questionCategoryId String
-  contentHash        String      @db.Char(64)
-  objectiveCode      String?     @db.VarChar(50)
+  id                  String      @id @default(cuid())
+  examSessionId       String
+  questionId          String
+  questionCategoryId  String
+  contentHash         String      @db.Char(64)
+  objectiveCode       String?     @db.VarChar(50)
   syllabusStructureId String?
-  startsAt           DateTime
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  examSession        ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
-  question           Question    @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  startsAt            DateTime
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  examSession         ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Restrict)
+  question            Question    @relation(fields: [questionId], references: [id], onDelete: Restrict)
 
   @@unique([examSessionId, questionId])
   @@index([questionCategoryId, questionId, startsAt])
@@ -3115,9 +3153,9 @@ model QuestionCourseObjective {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  question  Question                   @relation(fields: [questionId], references: [id], onDelete: Restrict)
-  course    Course                     @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  syllabus  PublishedSyllabusStructure @relation(fields: [syllabusStructureId], references: [id], onDelete: Restrict)
+  question Question                   @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  course   Course                     @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  syllabus PublishedSyllabusStructure @relation(fields: [syllabusStructureId], references: [id], onDelete: Restrict)
 
   @@unique([questionId, courseId, syllabusStructureId])
   @@index([courseId, syllabusStructureId, objectiveCode])
@@ -3349,30 +3387,30 @@ model AssignmentQuestionConceptSnapshot {
 }
 
 model Submission {
-  examScoreReview  ExamScoreReview?
-  examSwitchEvents ExamSwitchEvent[]
-  makeupGrants     AssignmentMakeupGrant[]
-  attachments      SubmissionAttachment[]
-  id               String                  @id @default(cuid())
-  assignmentId     String
-  studentId        String
-  attemptNumber    Int                     @default(1)
-  idempotencyKey   String                  @unique
-  status           SubmissionStatus        @default(IN_PROGRESS)
-  startedAt        DateTime                @default(now())
-  submittedAt      DateTime?
+  examScoreReview      ExamScoreReview?
+  examSwitchEvents     ExamSwitchEvent[]
+  makeupGrants         AssignmentMakeupGrant[]
+  attachments          SubmissionAttachment[]
+  id                   String                  @id @default(cuid())
+  assignmentId         String
+  studentId            String
+  attemptNumber        Int                     @default(1)
+  idempotencyKey       String                  @unique
+  status               SubmissionStatus        @default(IN_PROGRESS)
+  startedAt            DateTime                @default(now())
+  submittedAt          DateTime?
   examSubmissionReason ExamSubmissionReason?
-  gradedAt         DateTime?
-  publishedAt      DateTime?
-  withdrawnAt      DateTime?
-  score            Decimal?                @db.Decimal(10, 2)
-  maxScore         Decimal?                @db.Decimal(10, 2)
-  percentage       Decimal?                @db.Decimal(5, 2)
-  feedback         String?                 @db.Text
-  saveVersion      Int                     @default(0)
-  lastSavedAt      DateTime?
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
+  gradedAt             DateTime?
+  publishedAt          DateTime?
+  withdrawnAt          DateTime?
+  score                Decimal?                @db.Decimal(10, 2)
+  maxScore             Decimal?                @db.Decimal(10, 2)
+  percentage           Decimal?                @db.Decimal(5, 2)
+  feedback             String?                 @db.Text
+  saveVersion          Int                     @default(0)
+  lastSavedAt          DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   assignment             Assignment                     @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   student                User                           @relation("SubmissionStudent", fields: [studentId], references: [id], onDelete: Restrict)
@@ -3631,6 +3669,7 @@ model LearnerProfileSnapshot {
   courseId                  String
   revisionNumber            Int
   inputFingerprint          String    @db.Char(64)
+  sourceSignature           String?   @db.Char(64)
   calculationRuleVersion    String    @db.VarChar(50)
   eventWatermarkId          String?   @db.VarChar(191)
   eventWatermarkOccurredAt  DateTime?
@@ -3639,6 +3678,7 @@ model LearnerProfileSnapshot {
   attendanceDimension       Json
   activityDimension         Json
   reflectionDimension       Json
+  programmingDimension      Json      @default("{}")
   objectiveMasteryDimension Json
   summary                   String    @db.Text
   createdAt                 DateTime  @default(now())
@@ -3945,33 +3985,33 @@ model AIAnalysisInsight {
 }
 
 model PersonalizedRecommendation {
-  id                 String               @id @default(cuid())
-  studentId          String
-  questionId         String
-  knowledgePointId   String?
-  analysisId         String?
-  courseCycleId      String?
-  targetConceptId    String?
-  rankingScore       Decimal?             @db.Decimal(8, 2)
-  reasonCodes        String[]             @default([])
-  reasonPromptVersion String?             @db.VarChar(50)
-  cycleKey           String
-  source             RecommendationSource
-  status             RecommendationStatus @default(PENDING)
-  reason             String               @db.Text
-  targetDifficulty   Int?
-  priority           Int                  @default(0)
-  expiresAt          DateTime?
-  startedAt          DateTime?
-  completedAt        DateTime?
-  dismissedAt        DateTime?
-  wasCorrect         Boolean?
-  assignedPoints     Decimal?             @db.Decimal(8, 2)
-  scoringRuleVersion String?
-  score              Decimal?             @db.Decimal(8, 2)
-  maxScore           Decimal?             @db.Decimal(8, 2)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  id                  String               @id @default(cuid())
+  studentId           String
+  questionId          String
+  knowledgePointId    String?
+  analysisId          String?
+  courseCycleId       String?
+  targetConceptId     String?
+  rankingScore        Decimal?             @db.Decimal(8, 2)
+  reasonCodes         String[]             @default([])
+  reasonPromptVersion String?              @db.VarChar(50)
+  cycleKey            String
+  source              RecommendationSource
+  status              RecommendationStatus @default(PENDING)
+  reason              String               @db.Text
+  targetDifficulty    Int?
+  priority            Int                  @default(0)
+  expiresAt           DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  dismissedAt         DateTime?
+  wasCorrect          Boolean?
+  assignedPoints      Decimal?             @db.Decimal(8, 2)
+  scoringRuleVersion  String?
+  score               Decimal?             @db.Decimal(8, 2)
+  maxScore            Decimal?             @db.Decimal(8, 2)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   student             User                                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
   question            Question                              @relation(fields: [questionId], references: [id], onDelete: Restrict)

@@ -9,7 +9,7 @@ export interface ScoredSession {
 }
 
 /** Each entry is a whole published submission or fully graded practice group. */
-export function buildScoreTrend(sessions: ScoredSession[]) {
+export function buildScoreTrend(sessions: ScoredSession[], limit = 8) {
   return [...new Map(sessions.map((session) => [session.id, session])).values()]
     .filter(
       (session) =>
@@ -30,7 +30,7 @@ export function buildScoreTrend(sessions: ScoredSession[]) {
         a.occurredAt.getTime() - b.occurredAt.getTime() ||
         a.id.localeCompare(b.id),
     )
-    .slice(-8)
+    .slice(-limit)
     .flatMap((session) =>
       session.score === null || session.maxScore === null
         ? []

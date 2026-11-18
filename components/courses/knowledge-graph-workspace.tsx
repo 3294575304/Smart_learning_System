@@ -113,7 +113,13 @@ function apiFailureMessage(
   return `${code}：${result.error}${recovery}`;
 }
 
-export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
+export function KnowledgeGraphWorkspace({
+  courseId,
+  conceptId,
+}: {
+  courseId: string;
+  conceptId?: string;
+}) {
   const [state, setState] = useState<State | null>(null);
   const [graph, setGraph] = useState<KnowledgeGraphStructure | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,8 +205,8 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     [courseId],
   );
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!conceptId) void load();
+  }, [conceptId, load]);
   useEffect(() => {
     if (
       state?.draft?.status !== "PENDING" &&
@@ -503,6 +509,52 @@ export function KnowledgeGraphWorkspace({ courseId }: { courseId: string }) {
     },
     [nodes],
   );
+  if (conceptId) {
+    const point = coverage?.points.find((item) => item.conceptId === conceptId);
+    return (
+      <section
+        className="rounded-xl border bg-white p-5"
+        aria-busy={coverageLoading}
+      >
+        {coverageLoading ? (
+          <p role="status" className="text-sm text-gray-500">
+            正在读取知识点…
+          </p>
+        ) : coverageError ? (
+          <p role="alert" className="text-sm text-red-700">
+            {coverageError}{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={refreshCoverage}
+            >
+              重新读取
+            </button>
+          </p>
+        ) : point && coverage?.graphVersionId ? (
+          <>
+            <h2 className="font-semibold [overflow-wrap:anywhere]">
+              {point.name}
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              {point.code} · 正式图谱 v{coverage.versionNumber}
+            </p>
+            <KnowledgePointQuestionPanel
+              key={`${coverage.graphVersionId}:${point.conceptId}`}
+              courseId={courseId}
+              graphVersionId={coverage.graphVersionId}
+              point={point}
+              onChanged={refreshCoverage}
+            />
+          </>
+        ) : (
+          <p className="text-sm text-gray-500">
+            当前正式图谱中没有此知识点，请返回内容覆盖自检。
+          </p>
+        )}
+      </section>
+    );
+  }
   return (
     <section className="space-y-5" aria-live="polite">
       <div className="rounded-xl border bg-white p-5">

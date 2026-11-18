@@ -23,26 +23,35 @@ test("个人中心位于右上角并与通知入口并列", async () => {
 });
 
 test("学生从个人中心菜单打开加入班级窗口", async () => {
-  const [shell, studentHome, studentCourses] = await Promise.all([
-    readFile(
-      new URL(
-        "../../components/dashboard/dashboard-shell.tsx",
-        import.meta.url,
+  const [shell, studentHome, studentCourses, courseFilters] = await Promise.all(
+    [
+      readFile(
+        new URL(
+          "../../components/dashboard/dashboard-shell.tsx",
+          import.meta.url,
+        ),
+        "utf8",
       ),
-      "utf8",
-    ),
-    readFile(
-      new URL("../../app/(protected)/student/page.tsx", import.meta.url),
-      "utf8",
-    ),
-    readFile(
-      new URL(
-        "../../app/(protected)/student/courses/page.tsx",
-        import.meta.url,
+      readFile(
+        new URL("../../app/(protected)/student/page.tsx", import.meta.url),
+        "utf8",
       ),
-      "utf8",
-    ),
-  ]);
+      readFile(
+        new URL(
+          "../../app/(protected)/student/courses/page.tsx",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+      readFile(
+        new URL(
+          "../../components/courses/student-course-filters.tsx",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ],
+  );
 
   assert.match(shell, /user\.role === Role\.STUDENT/u);
   assert.match(shell, /joinClassroomDialogOpen/u);
@@ -54,7 +63,7 @@ test("学生从个人中心菜单打开加入班级窗口", async () => {
   assert.doesNotMatch(studentCourses, /JoinClassroomForm/u);
   assert.match(studentCourses, /<StudentJoinClassroomButton\s*\/>/u);
   // 卡片入口只在「全部 / 学习中」出现，已结束标签页不展示
-  assert.match(studentCourses, /<StudentJoinClassroomButton card\s*\/>/u);
-  assert.match(studentCourses, /status !== "ended"/u);
+  assert.match(courseFilters, /<StudentJoinClassroomButton card\s*\/>/u);
+  assert.match(courseFilters, /status !== "ended"/u);
   assert.match(shell, /addEventListener\(studentJoinClassroomEvent, open\)/u);
 });

@@ -21,6 +21,8 @@ import { getStudentSubmissionResult } from "@/services/assignments/service";
 import { ExamScoreReview } from "@/components/exams/exam-score-review";
 import { getStudentExamReview } from "@/services/exams/score-reviews";
 import { StudentAssignmentListBackLink } from "@/components/assignments/student-assignment-list-back-link";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
+import { examListReturn } from "@/services/student-experience/activity-query";
 
 interface Props {
   params: Promise<{ submissionId: string }>;
@@ -30,6 +32,7 @@ const examReceiptLabels = {
   MANUAL: "主动交卷",
   TIME_UP: "到时自动收卷",
   SWITCH_LIMIT: "切屏超限自动交卷",
+  PAGE_EXIT: "离开考试页自动交卷",
 } as const;
 
 export default async function ResultPage({ params, searchParams }: Props) {
@@ -49,6 +52,12 @@ export default async function ResultPage({ params, searchParams }: Props) {
       : null;
     const percentage = hundredPointScore(result.score, result.maxScore);
     const feedback = result.answers.filter((answer) => answer.teacherFeedback);
+    const examBack = result.examReceipt
+      ? examListReturn(query.returnTo, {
+          ...scope.data,
+          focus: result.assignmentId,
+        })
+      : null;
     const answers = result.isPublished
       ? result.answers
       : result.submittedAnswers;
@@ -58,7 +67,11 @@ export default async function ResultPage({ params, searchParams }: Props) {
     return (
       <section className="space-y-6">
         <div>
-          <StudentAssignmentListBackLink scope={scope.data} />
+          {examBack ? (
+            <StudentBackLink href={examBack}>返回我的考试</StudentBackLink>
+          ) : (
+            <StudentAssignmentListBackLink scope={scope.data} />
+          )}
           <h1 className="mt-2 text-2xl font-semibold break-words">
             {result.assignmentTitle} ·{" "}
             {result.examReceipt ? "交卷回执" : "提交结果"}

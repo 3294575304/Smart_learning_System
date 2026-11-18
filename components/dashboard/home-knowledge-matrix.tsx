@@ -187,7 +187,7 @@ export function HomeKnowledgeMatrix({
                             className={`mr-1 size-2.5 shrink-0 ${knowledgeStateDot[c.status]}`}
                           />
                           {STUDENT_KNOWLEDGE_STATES[c.status].label} ·{" "}
-                          {c.evidenceCount} 条有效证据
+                          {c.evidenceCount} 条评分记录
                           {c.masteryScore !== null &&
                           c.status !== "INSUFFICIENT" &&
                           c.status !== "NO_EVIDENCE"

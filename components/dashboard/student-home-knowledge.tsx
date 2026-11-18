@@ -6,6 +6,7 @@ import { StudentKnowledgeSummary } from "./student-knowledge-summary";
 import { StudentSectionRetry } from "./student-section-retry";
 import { StudentPageLink } from "./student-page-link";
 import { FOCUS_RING } from "./ui-focus";
+import { studentCourseTabHref } from "@/services/courses/student-workspace";
 
 export function StudentHomeKnowledgeLoading() {
   return (
@@ -58,7 +59,12 @@ export async function StudentHomeKnowledge({
       <StudentKnowledgeSummary chapters={knowledge.heatmap} />
       <HomeKnowledgeMatrix
         chapters={knowledge.heatmap}
-        profileHref={`/student/courses/${courseId}/profile?${new URLSearchParams({ classroomId })}`}
+        profileHref={studentCourseTabHref(
+          courseId,
+          classroomId,
+          "growth",
+          "profile",
+        )}
         generatedAt={knowledge.generatedAt.toISOString()}
         profileRevision={knowledge.profileRevision}
         dashboard

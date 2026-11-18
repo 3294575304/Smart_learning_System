@@ -2,21 +2,35 @@ import { Role } from "@prisma/client";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { assignmentApiError } from "@/lib/assignment-api";
 import { requireAuthenticatedUser } from "@/services/auth/authorization";
-import { submissionIdSchema } from "@/services/assignments/schemas";
+import {
+  autosaveAnswersSchema,
+  submissionIdSchema,
+} from "@/services/assignments/schemas";
 import { submitStudentAssignment } from "@/services/assignments/service";
+import { z } from "zod";
+
+const autoSubmitSchema = z.union([
+  z.object({
+    trigger: z.literal("EXIT"),
+    submissionId: submissionIdSchema,
+    answers: autosaveAnswersSchema.optional(),
+  }),
+  z.object({ trigger: z.undefined(), submissionId: submissionIdSchema }),
+]);
 
 export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
-  const parsed = submissionIdSchema.safeParse(
-    body && typeof body === "object"
-      ? (body as { submissionId?: unknown }).submissionId
-      : null,
-  );
-  if (!parsed.success) return apiError("提交 ID 格式无效", 400);
+  const parsed = autoSubmitSchema.safeParse(body);
+  if (!parsed.success) return apiError("自动交卷参数无效", 400);
   try {
     const user = await requireAuthenticatedUser([Role.STUDENT]);
     return apiSuccess(
-      await submitStudentAssignment(user.id, parsed.data, "EXAM_AUTO"),
+      await submitStudentAssignment(
+        user.id,
+        parsed.data.submissionId,
+        parsed.data.trigger === "EXIT" ? "EXAM_EXIT" : "EXAM_AUTO",
+        parsed.data.trigger === "EXIT" ? parsed.data.answers : undefined,
+      ),
     );
   } catch (error) {
     return assignmentApiError(error);

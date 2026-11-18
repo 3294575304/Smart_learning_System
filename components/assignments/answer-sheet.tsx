@@ -8,14 +8,7 @@ import {
 import { FavoriteButton } from "@/components/question-favorites/favorite-button";
 import { QuestionType, SubmissionStatus } from "@prisma/client";
 import Image from "next/image";
-import {
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  LayoutGrid,
-  Save,
-  Send,
-} from "lucide-react";
+import { ArrowLeft, Save, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -24,6 +17,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 
 import {
@@ -35,7 +29,6 @@ import {
   answerQuestionCard,
   answerSecondaryButton,
 } from "./student-answer-workspace";
-import { AnswerSheetPanel } from "@/components/assignments/answer-sheet-panel";
 import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
 
 import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
@@ -55,7 +48,10 @@ import {
   bindQuestionTimingLifecycle,
   QuestionTimingTracker,
 } from "@/components/assignments/question-timing";
-import type { SavedAnswerInput } from "@/services/assignments/schemas";
+import type {
+  AutosaveAnswersData,
+  SavedAnswerInput,
+} from "@/services/assignments/schemas";
 import { ProgrammingStatement } from "@/components/programming/programming-statement";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 
@@ -93,6 +89,8 @@ interface Props {
   exitHref?: string;
   exam?: boolean;
   examLocked?: boolean;
+  examExit?: () => Promise<string | null>;
+  examExitSnapshot?: RefObject<(() => AutosaveAnswersData | undefined) | null>;
   banner?: ReactNode;
   teacherResources?: ReactNode;
   submission: {
@@ -209,6 +207,8 @@ export function AnswerSheet({
   exitHref,
   exam = false,
   examLocked = false,
+  examExit,
+  examExitSnapshot,
   banner,
   teacherResources,
 }: Props) {
@@ -245,10 +245,10 @@ export function AnswerSheet({
   const [attachmentOperations, setAttachmentOperations] = useState(0);
   const attachmentPending = attachmentOperations > 0;
   const [examConfirmation, setExamConfirmation] = useState(false);
+  const [examSubmitError, setExamSubmitError] = useState<string | null>(null);
   const questionPanel = useRef<HTMLElement>(null);
   const [finalAction, setFinalAction] = useState<FinalAction | null>(null);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<AssignmentLocalDraft | null>(
     null,
   );
@@ -259,6 +259,7 @@ export function AnswerSheet({
   const draftDecisionRef = useRef(false);
   const versionRef = useRef(submission.version);
   const latestAnswersRef = useRef(answers);
+  const savedAnswersRef = useRef(answers);
   const activeSaveRef = useRef<Promise<boolean> | null>(null);
   const firstUnsavedEditRef = useRef<number | null>(null);
   const queuedAutosaveRef = useRef(false);
@@ -368,6 +369,7 @@ export function AnswerSheet({
           return false;
         }
         versionRef.current = response.data.version;
+        savedAnswersRef.current = snapshot;
         setLastSavedAt(new Date(response.data.lastSavedAt));
         setSaveConflict(false);
         setSaveState(latestAnswersRef.current === snapshot ? "saved" : "idle");
@@ -386,6 +388,31 @@ export function AnswerSheet({
     },
     [clearLocalDraft, persistLocalDraft, router, submission.id, timingTracker],
   );
+
+  useEffect(() => {
+    if (!examExitSnapshot) return;
+    examExitSnapshot.current = () => {
+      if (
+        !hydratedRef.current ||
+        workLockedRef.current ||
+        draftDecisionRef.current ||
+        saveConflictRef.current ||
+        leavingRef.current ||
+        latestAnswersRef.current === savedAnswersRef.current
+      )
+        return undefined;
+      return {
+        version: versionRef.current,
+        answers: apiAnswers(
+          latestAnswersRef.current,
+          timingTracker.checkpoint(),
+        ),
+      };
+    };
+    return () => {
+      examExitSnapshot.current = null;
+    };
+  }, [examExitSnapshot, timingTracker]);
 
   useEffect(() => {
     try {
@@ -523,11 +550,20 @@ export function AnswerSheet({
       const confirmation = `${blank ? `还有 ${blank} 题未作答。` : ""}确认提交作业？提交后本次答案将不能修改。`;
       if (!window.confirm(confirmation)) return;
     }
+    if (exam && action === "submit") setExamSubmitError(null);
     finalActionRef.current = action;
     setFinalAction(action);
     try {
       if (!(await persist(true))) return;
       if (action === "exit") {
+        if (examExit) {
+          const error = await examExit();
+          if (error) {
+            setSaveState("failed");
+            setSaveError(error);
+            return;
+          }
+        }
         leavingRef.current = true;
         window.location.replace(
           exitHref ??
@@ -543,6 +579,10 @@ export function AnswerSheet({
         { method: "POST" },
       );
       if (!response.success) {
+        if (exam) {
+          setExamSubmitError(response.error);
+          return;
+        }
         setSaveState("failed");
         setSaveError(`提交失败：${response.error}`);
         return;
@@ -648,50 +688,17 @@ export function AnswerSheet({
                 ? { tone: "warn", label: "待选择草稿" }
                 : { tone: "neutral", label: "自动保存" };
 
-  const sheetActions = (
-    <>
-      <button
-        className="bg-brand hover:bg-brand-strong focus-visible:outline-brand min-h-11 w-full rounded-lg px-4 text-sm font-semibold text-white shadow-[0_4px_10px_-2px_rgb(1_105_161_/_0.22)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-        disabled={primaryDisabled}
-        onClick={() => {
-          if (exam) setExamConfirmation(true);
-          else void finish("submit");
-        }}
-        type="button"
-      >
-        {finalAction === "submit"
-          ? exam
-            ? "正在交卷…"
-            : "提交中…"
-          : exam
-            ? "交卷"
-            : "提交作业"}
-      </button>
-      <button
-        className="text-brand-strong focus-visible:outline-brand min-h-10 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-        disabled={Boolean(finalAction) || attachmentPending}
-        onClick={() => void finish("exit")}
-        type="button"
-      >
-        {workLocked
-          ? "返回列表"
-          : finalAction === "exit"
-            ? "正在保存…"
-            : "保存并退出"}
-      </button>
-    </>
-  );
-
   const answerCard = {
     activeIndex: activeQuestionIndex,
     answeredCount,
     disabled: !ready || Boolean(finalAction) || attachmentPending,
     isAnswered: (questionId: string) => !isBlankAnswer(answers[questionId]),
     questions: submission.questions,
+    groupByType: true,
     totalPoints,
   };
   const submitNote = exam
-    ? "交卷后答卷将锁定，不能再修改。"
+    ? "保存并退出后考试继续计时。交卷后答案不能修改。"
     : "提交后本次答案不能修改。";
 
   function resolveDraft(useLocal: boolean) {
@@ -718,7 +725,9 @@ export function AnswerSheet({
             : attachmentPending
               ? "正在处理附件，请稍等。"
               : finalAction === "exit"
-                ? "正在保存草稿，保存成功后返回作业列表。"
+                ? exam
+                  ? "正在保存考试作答，保存成功后返回考试列表。"
+                  : "正在保存草稿，保存成功后返回作业列表。"
                 : saveState === "saving"
                   ? "正在保存草稿…"
                   : saveState === "saved"
@@ -918,33 +927,6 @@ export function AnswerSheet({
             : "连接恢复后会重试保存。"}
         </p>
       )}
-      {exam && (
-        <div className="border-line bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 sm:px-5">
-          <div className="min-w-0 flex-1 basis-56">
-            <h1 className="text-ink font-semibold break-words">
-              {submission.assignmentTitle}
-            </h1>
-            <p className="text-ink-soft mt-1 text-xs">
-              第 {submission.attemptNumber} 次作答 · {answeredText} · 截止{" "}
-              {submission.dueAt
-                ? new Date(submission.dueAt).toLocaleString("zh-CN")
-                : "未设置"}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusChip tone={headerChip.tone}>{headerChip.label}</StatusChip>
-            {exam && lastSavedAt && (
-              <StatusChip tone="neutral">
-                账号最近保存{" "}
-                {lastSavedAt.toLocaleTimeString("zh-CN", { hour12: false })}
-              </StatusChip>
-            )}
-            {workLocked ? <StatusChip tone="warn">已锁定</StatusChip> : null}
-          </div>
-          {saveNotice}
-        </div>
-      )}
-
       {banner && (
         <div className="sticky top-(--dashboard-header-height) z-10">
           {banner}
@@ -987,6 +969,11 @@ export function AnswerSheet({
             <p className="mt-3 text-sm text-slate-700">所有题目均已作答。</p>
           )}
           <p className="mt-3 text-sm text-slate-700">交卷后答卷将锁定。</p>
+          {examSubmitError && (
+            <p role="alert" className="mt-2 text-sm text-rose-800">
+              未能确认交卷。{examSubmitError} 请重试确认交卷。
+            </p>
+          )}
           {saveState === "failed" && saveError && (
             <p role="alert" className="mt-2 text-sm text-rose-800">
               {saveError}
@@ -1013,202 +1000,94 @@ export function AnswerSheet({
         </EditorDialog>
       )}
 
-      {exam ? (
-        <>
-          <div
-            className={
-              programming
-                ? "min-w-0"
-                : "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_304px]"
-            }
-            inert={Boolean(finalAction)}
-          >
-            <div className="min-w-0 space-y-4">
-              <div
-                className={
-                  programming
-                    ? "flex flex-wrap items-center justify-between gap-3"
-                    : "flex flex-wrap items-center justify-between gap-3 lg:hidden"
-                }
-              >
-                <p className="text-ink-soft text-sm font-medium">
-                  {answeredText}
-                </p>
+      <StudentAnswerWorkspace
+        busy={Boolean(finalAction)}
+        header={{
+          title: submission.assignmentTitle,
+          details: (
+            <>
+              第 {activeQuestionIndex + 1} / {totalQuestions} 题 ·{" "}
+              {answeredText} · 第 {submission.attemptNumber} 次作答
+              {submission.dueAt && (
+                <>
+                  {" "}
+                  · 截止 {new Date(submission.dueAt).toLocaleString("zh-CN")}
+                </>
+              )}
+            </>
+          ),
+          leading: (
+            <button
+              className={answerSecondaryButton}
+              disabled={Boolean(finalAction) || attachmentPending}
+              onClick={() => void finish("exit")}
+              type="button"
+            >
+              <ArrowLeft aria-hidden="true" className="size-4" />
+              {workLocked
+                ? "返回列表"
+                : examExit
+                  ? "退出并交卷"
+                  : exam
+                    ? "退出考试"
+                    : "退出作答"}
+            </button>
+          ),
+          actions: (
+            <StatusChip tone={headerChip.tone}>{headerChip.label}</StatusChip>
+          ),
+          status: saveNotice,
+        }}
+        navigator={{
+          ...answerCard,
+          onSelect: selectQuestion,
+          progressLabel: "已作答",
+        }}
+      >
+        {questionContent}
+        <StudentAnswerFooter
+          current={activeQuestionIndex}
+          total={totalQuestions}
+          disabled={answerCard.disabled}
+          onSelect={selectQuestion}
+          note={workLocked ? undefined : submitNote}
+          actions={
+            !workLocked && (
+              <>
                 <button
-                  aria-expanded={sheetOpen}
-                  aria-haspopup="dialog"
-                  className="border-line text-brand-strong bg-card focus-visible:outline-brand inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2"
-                  onClick={() => setSheetOpen(true)}
+                  className={answerSecondaryButton}
+                  disabled={Boolean(finalAction) || attachmentPending}
+                  onClick={() => void finish("exit")}
                   type="button"
                 >
-                  <LayoutGrid aria-hidden="true" className="size-4" />
-                  答题卡
+                  <Save aria-hidden="true" className="size-4" />
+                  {finalAction === "exit" ? "正在保存…" : "保存并退出"}
                 </button>
-              </div>
-
-              {questionContent}
-
-              {hasQuestionNavigation && (
-                <div className="border-line bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2.5 shadow-[var(--shadow-card)]">
-                  <button
-                    className="border-line text-ink-body focus-visible:outline-brand inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-[13px] font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-                    disabled={
-                      attachmentPending ||
-                      Boolean(finalAction) ||
-                      !ready ||
-                      activeQuestionIndex === 0
-                    }
-                    onClick={() => selectQuestion(activeQuestionIndex - 1)}
-                    type="button"
-                  >
-                    <ChevronLeft aria-hidden="true" className="size-4" />
-                    上一题
-                  </button>
-                  <span className="text-ink-muted text-xs tabular-nums">
-                    第 {totalQuestions === 0 ? 0 : activeQuestionIndex + 1} /{" "}
-                    {totalQuestions} 题
-                  </span>
-                  <button
-                    className="border-line text-ink-body focus-visible:outline-brand inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-[13px] font-medium transition-colors hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-                    disabled={
-                      attachmentPending ||
-                      Boolean(finalAction) ||
-                      !ready ||
-                      activeQuestionIndex >= totalQuestions - 1
-                    }
-                    onClick={() => selectQuestion(activeQuestionIndex + 1)}
-                    type="button"
-                  >
-                    下一题
-                    <ChevronRight aria-hidden="true" className="size-4" />
-                  </button>
-                </div>
-              )}
-
-              <div
-                className={
-                  programming
-                    ? "border-line bg-card rounded-xl border p-4"
-                    : "border-line bg-card rounded-xl border p-4 lg:hidden"
-                }
-              >
-                <div className="flex flex-wrap justify-end gap-2 sm:[&>button]:w-auto">
-                  {sheetActions}
-                </div>
-                <p className="text-ink-soft mt-2 text-xs sm:text-right">
-                  {submitNote}
-                </p>
-              </div>
-            </div>
-
-            {!programming && (
-              <aside className="hidden lg:sticky lg:top-[calc(var(--dashboard-header-height)+4rem)] lg:block lg:max-h-[calc(100dvh-var(--dashboard-header-height)-5rem)] lg:overflow-y-auto">
-                <AnswerSheetPanel
-                  {...answerCard}
-                  footer={
-                    <>
-                      {sheetActions}
-                      <p className="text-ink-soft text-xs">{submitNote}</p>
-                    </>
-                  }
-                  onSelect={selectQuestion}
-                />
-              </aside>
-            )}
-          </div>
-
-          <EditorDialog
-            open={sheetOpen}
-            title="答题卡"
-            onClose={() => setSheetOpen(false)}
-            showCloseButton
-          >
-            {sheetOpen && (
-              <AnswerSheetPanel
-                {...answerCard}
-                showTitle={false}
-                className="mt-3"
-                onSelect={(index) => {
-                  selectQuestion(index);
-                  setSheetOpen(false);
-                }}
-              />
-            )}
-          </EditorDialog>
-        </>
-      ) : (
-        <StudentAnswerWorkspace
-          busy={Boolean(finalAction)}
-          header={{
-            title: submission.assignmentTitle,
-            details: (
-              <>
-                第 {activeQuestionIndex + 1} / {totalQuestions} 题 ·{" "}
-                {answeredText} · 第 {submission.attemptNumber} 次作答
-                {submission.dueAt && (
-                  <>
-                    {" "}
-                    · 截止 {new Date(submission.dueAt).toLocaleString("zh-CN")}
-                  </>
-                )}
+                <button
+                  className={answerPrimaryButton}
+                  disabled={primaryDisabled}
+                  onClick={() => {
+                    if (exam) {
+                      setExamSubmitError(null);
+                      setExamConfirmation(true);
+                    } else void finish("submit");
+                  }}
+                  type="button"
+                >
+                  <Send aria-hidden="true" className="size-4" />
+                  {exam
+                    ? finalAction === "submit"
+                      ? "正在交卷…"
+                      : "交卷"
+                    : finalAction === "submit"
+                      ? "提交中…"
+                      : "提交作业"}
+                </button>
               </>
-            ),
-            leading: (
-              <button
-                className={answerSecondaryButton}
-                disabled={Boolean(finalAction) || attachmentPending}
-                onClick={() => void finish("exit")}
-                type="button"
-              >
-                <ArrowLeft aria-hidden="true" className="size-4" />
-                {workLocked ? "返回列表" : "退出作答"}
-              </button>
-            ),
-            actions: (
-              <StatusChip tone={headerChip.tone}>{headerChip.label}</StatusChip>
-            ),
-            status: saveNotice,
-          }}
-          navigator={{
-            ...answerCard,
-            onSelect: selectQuestion,
-            progressLabel: "已作答",
-          }}
-        >
-          {questionContent}
-          <StudentAnswerFooter
-            current={activeQuestionIndex}
-            total={totalQuestions}
-            disabled={answerCard.disabled}
-            onSelect={selectQuestion}
-            note={workLocked ? undefined : submitNote}
-            actions={
-              !workLocked && (
-                <>
-                  <button
-                    className={answerSecondaryButton}
-                    disabled={Boolean(finalAction) || attachmentPending}
-                    onClick={() => void finish("exit")}
-                    type="button"
-                  >
-                    <Save aria-hidden="true" className="size-4" />
-                    {finalAction === "exit" ? "正在保存…" : "保存并退出"}
-                  </button>
-                  <button
-                    className={answerPrimaryButton}
-                    disabled={primaryDisabled}
-                    onClick={() => void finish("submit")}
-                    type="button"
-                  >
-                    <Send aria-hidden="true" className="size-4" />
-                    {finalAction === "submit" ? "提交中…" : "提交作业"}
-                  </button>
-                </>
-              )
-            }
-          />
-        </StudentAnswerWorkspace>
-      )}
+            )
+          }
+        />
+      </StudentAnswerWorkspace>
     </section>
   );
 }

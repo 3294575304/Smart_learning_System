@@ -1,4 +1,5 @@
 import React from "react";
+import { ExamAttemptBadge } from "@/components/exams/exam-attempt-badge";
 import { CalendarClock, History } from "lucide-react";
 import { StudentPageLink } from "./student-page-link";
 import { StudentExamCountdown } from "./student-exam-countdown";
@@ -106,6 +107,9 @@ export function StudentHomeExams({
               )}
               {next.windowMinutes !== undefined &&
                 ` · 限时 ${next.windowMinutes} 分钟`}
+              <span className="ml-2">
+                <ExamAttemptBadge remaining={next.remainingAttempts} />
+              </span>
             </p>
             <p className="mt-1 text-xs [overflow-wrap:anywhere] text-sky-100">
               {studentTaskContext(next)}

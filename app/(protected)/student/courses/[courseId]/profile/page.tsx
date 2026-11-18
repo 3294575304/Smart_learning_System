@@ -1,89 +1,45 @@
-import { studentCourseTabHref } from "@/services/courses/student-workspace";
-import { ProfileEvidenceFocus } from "@/components/learner-profiles/profile-evidence-focus";
-import { getStudentClassroomContext } from "@/services/courses/student-access";
-import { Role } from "@prisma/client";
-import { StudentBackLink } from "@/components/dashboard/student-back-link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
-import { LearnerProfileDetail } from "@/components/learner-profiles/profile-detail";
-import { ResourceNotFoundError } from "@/services/auth/policy";
+import { studentCourseTabHref } from "@/services/courses/student-workspace";
+import { studentProfilePathSchema } from "@/services/learner-profiles/schemas";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import {
-  studentProfilePathSchema,
-  studentProfileFocusSchema,
-} from "@/services/learner-profiles/schemas";
-import { getStudentLearnerProfile } from "@/services/learner-profiles/service";
+import { Role } from "@prisma/client";
 
 type Props = {
   params: Promise<{ courseId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+/**
+ * 兼容旧链接的跳转层。
+ *
+ * 完整画像现在只有一个入口：学习中心 → 知识与成长 → 我的画像。
+ * 这个独立地址曾经同时渲染一份完整画像 + 证据钻取，造成两份入口、
+ * 两份「快照修订」说明，且返回链接会来回打架。现在统一收敛为 deep-link：
+ *   - 带 `conceptId` → 跳到成长页并定位到该知识点的证据明细；
+ *   - 不带参数 → 直接跳到成长页画像。
+ * 目标页自己完成鉴权、班级上下文校验与证据聚焦，这里不再重复查询。
+ */
 export default async function StudentLearnerProfilePage({
   params,
   searchParams,
 }: Props) {
-  const student = await requirePageRole(Role.STUDENT);
+  await requirePageRole(Role.STUDENT);
   const path = studentProfilePathSchema.safeParse(await params);
   if (!path.success) notFound();
   const query = await searchParams;
-  if (query.classroomId !== undefined && typeof query.classroomId !== "string")
-    notFound();
-  const classroomId = query.classroomId;
-  const focus = studentProfileFocusSchema.safeParse({
-    conceptId: query.conceptId,
-  });
-  if (!focus.success) notFound();
-  try {
-    if (classroomId)
-      await getStudentClassroomContext(
-        student.id,
-        classroomId,
-        path.data.courseId,
-      );
-    const profile = await getStudentLearnerProfile(
-      student.id,
-      path.data.courseId,
-    );
-    if (
-      focus.data.conceptId &&
-      !profile.concepts.some((c) => c.conceptId === focus.data.conceptId)
-    )
-      notFound();
-    return (
-      <section className="space-y-6">
-        <header>
-          <StudentBackLink
-            href={
-              classroomId
-                ? studentCourseTabHref(
-                    profile.course.id,
-                    classroomId,
-                    "growth",
-                    focus.data.conceptId ? "knowledge" : "profile",
-                  )
-                : `/student/courses/${profile.course.id}/learning-center?tab=profile`
-            }
-          >
-            返回课程学习中心
-          </StudentBackLink>
-          <h1 className="mt-3 text-2xl font-semibold">
-            {profile.course.name} · 我的课程画像
-          </h1>
-          <p className="text-muted-foreground mt-2 text-sm">
-            基于已完成作答查看学习状态。尚未评估或待进一步评估的知识点，需要更多练习后才能形成可靠判断。
-          </p>
-        </header>
-        <LearnerProfileDetail
-          profile={profile}
-          focusConceptId={focus.data.conceptId}
-          studentView
-        />
-        <ProfileEvidenceFocus conceptId={focus.data.conceptId} />
-      </section>
-    );
-  } catch (error) {
-    if (error instanceof ResourceNotFoundError) notFound();
-    throw error;
-  }
+  const classroomId =
+    typeof query.classroomId === "string" ? query.classroomId : undefined;
+  const conceptId =
+    typeof query.conceptId === "string" && query.conceptId
+      ? query.conceptId
+      : undefined;
+  const href = classroomId
+    ? studentCourseTabHref(path.data.courseId, classroomId, "growth", "profile")
+    : `/student/courses/${encodeURIComponent(path.data.courseId)}/learning-center?${new URLSearchParams({ tab: "growth", section: "profile" })}`;
+  redirect(
+    conceptId
+      ? `${href}&conceptId=${encodeURIComponent(conceptId)}#profile-concept-${encodeURIComponent(conceptId)}`
+      : href,
+  );
 }

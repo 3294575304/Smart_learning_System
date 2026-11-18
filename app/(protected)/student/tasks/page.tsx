@@ -1,6 +1,7 @@
+import { ExamAttemptBadge } from "@/components/exams/exam-attempt-badge";
 import Link from "next/link";
 import { Role } from "@prisma/client";
-import { ArrowRight, ClipboardCheck, ClipboardList } from "lucide-react";
+import { ArrowRight, ClipboardList } from "lucide-react";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { StudentPageHeader } from "@/components/dashboard/student-page-header";
 import {
@@ -125,16 +126,15 @@ export default async function StudentTasksPage({
                     className="flex flex-wrap items-center justify-between gap-3 py-3"
                   >
                     <div className="min-w-0">
-                      <div className="flex items-start gap-2">
-                        {item.kind === "exam" && (
-                          <ClipboardCheck
-                            aria-hidden="true"
-                            className="mt-0.5 size-4 shrink-0 text-neutral-700"
-                          />
-                        )}
+                      <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-medium break-words">
                           {item.title}
                         </h3>
+                        {item.kind === "exam" && (
+                          <ExamAttemptBadge
+                            remaining={item.remainingAttempts}
+                          />
+                        )}
                       </div>
                       <p className="text-sm text-slate-600">
                         {studentTaskContext(item)} ·{" "}

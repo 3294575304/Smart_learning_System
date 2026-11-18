@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { activityHref } from "@/services/student-experience/activity-query";
 import { studentTaskHref } from "@/services/student-experience/task-scope";
 import { publishedResultsWhere } from "@/services/assignments/work-access";
-import { EFFECTIVE_SUBMISSION_STATUSES } from "@/services/assignments/reporting";
+import { examAttemptAvailability } from "@/services/exams/attempt-policy";
 import type { StudentTaskItem } from "./student-task-overview";
 
 export async function getStudentExamTasks(
@@ -23,26 +23,24 @@ export async function getStudentExamTasks(
         ...(scope ? { courseId: scope.courseId } : {}),
         memberships: { some: { studentId, status: "ACTIVE" } },
       },
-      AND: [
-        {
-          submissions: {
-            none: { studentId, status: { in: EFFECTIVE_SUBMISSION_STATUSES } },
-          },
-        },
-        { submissions: { none: publishedResultsWhere } },
-      ],
+      submissions: { none: publishedResultsWhere },
     },
     select: {
       id: true,
       publishedAt: true,
       dueAt: true,
       classroomId: true,
+      submissions: {
+        where: { studentId, status: { not: "WITHDRAWN" } },
+        select: { status: true },
+      },
       examSession: {
         select: {
           title: true,
           startsAt: true,
           endsAt: true,
           courseId: true,
+          allowedAttempts: true,
           course: { select: { name: true } },
         },
       },
@@ -66,6 +64,11 @@ export async function getStudentExamTasks(
       Math.min(exam.endsAt.getTime(), assignment.dueAt.getTime()),
     );
     if (dueAt <= opensAt) continue;
+    const { remainingAttempts, hasInProgress } = examAttemptAvailability(
+      exam.allowedAttempts,
+      assignment.submissions,
+    );
+    if (!hasInProgress && remainingAttempts === 0) continue;
     const canEnter = opensAt <= now;
     const scope = {
       courseId: exam.courseId,
@@ -81,12 +84,13 @@ export async function getStudentExamTasks(
       opensAt,
       dueAt,
       canEnter,
-      attemptLimit: 1,
+      attemptLimit: exam.allowedAttempts,
+      remainingAttempts,
       windowMinutes: Math.ceil((dueAt.getTime() - opensAt.getTime()) / 60000),
       href: canEnter
         ? studentTaskHref(`/student/assignments/${assignment.id}`, scope)
         : `${activityHref("exams", { ...scope, focus: assignment.id })}#exam-${assignment.id}`,
-      action: canEnter ? "进入考试" : "查看安排",
+      action: canEnter ? (hasInProgress ? "继续考试" : "进入考试") : "查看安排",
       state: canEnter ? "考试中" : "待开考",
     });
   }
