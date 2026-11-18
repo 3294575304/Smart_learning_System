@@ -44,6 +44,7 @@ export interface TeacherAssignmentView {
 }
 
 export interface StudentAssignmentListItem {
+  category?: TeacherAssignmentView["category"];
   originalDueAt?: Date;
   makeupKind?: "MAKEUP" | "REDO" | null;
   canWrite?: boolean;

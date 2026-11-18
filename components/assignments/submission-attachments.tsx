@@ -1,6 +1,11 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
+import { AttachmentDropZone } from "./attachment-drop-zone";
+import {
+  SUBMISSION_ATTACHMENT_ACCEPT,
+  SUBMISSION_ATTACHMENT_FORMATS,
+} from "@/services/assignments/attachment-formats";
 
 type Attachment = {
   id: string;
@@ -21,6 +26,7 @@ export function SubmissionAttachments({
 }) {
   const [files, setFiles] = useState<Attachment[]>([]);
   const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const url = `/api/submissions/${submissionId}/attachments`;
@@ -40,53 +46,76 @@ export function SubmissionAttachments({
   useEffect(() => {
     void refresh();
   }, [refresh]);
-  async function upload(file: File) {
-    setPending(true);
-    onPendingChange?.(true);
+  const uploadDisabled = !editable || loading || pending || files.length >= 5;
+  function changePending(value: boolean) {
+    pendingRef.current = value;
+    setPending(value);
+    onPendingChange?.(value);
+  }
+  async function upload(selected: File[]) {
+    if (uploadDisabled || pendingRef.current || !selected.length) return;
+    if (files.length + selected.length > 5) {
+      setError("每道题最多上传 5 个附件，请减少本次选择的文件");
+      return;
+    }
+    changePending(true);
     setError(null);
-    const form = new FormData();
-    form.set("file", file);
-    form.set("assignmentQuestionId", questionId);
-    const result = await requestAssignmentApi<{ id: string }>(url, {
-      method: "POST",
-      body: form,
-    });
-    if (result.success) await refresh();
-    else setError(result.error);
-    setPending(false);
-    onPendingChange?.(false);
+    try {
+      let failure: string | undefined;
+      for (const file of selected) {
+        const form = new FormData();
+        form.set("file", file);
+        form.set("assignmentQuestionId", questionId);
+        const result = await requestAssignmentApi<{ id: string }>(url, {
+          method: "POST",
+          body: form,
+        });
+        if (!result.success) {
+          failure = `${file.name}：${result.error}`;
+          break;
+        }
+      }
+      await refresh();
+      if (failure) setError(failure);
+    } finally {
+      changePending(false);
+    }
   }
   async function remove(id: string) {
-    setPending(true);
-    onPendingChange?.(true);
-    const result = await requestAssignmentApi<{ deleted: boolean }>(
-      `${url}/${id}`,
-      { method: "DELETE" },
-    );
-    if (result.success) await refresh();
-    else setError(result.error);
-    setPending(false);
-    onPendingChange?.(false);
+    if (!editable || pendingRef.current) return;
+    changePending(true);
+    try {
+      const result = await requestAssignmentApi<{ deleted: boolean }>(
+        `${url}/${id}`,
+        { method: "DELETE" },
+      );
+      if (result.success) await refresh();
+      else setError(result.error);
+    } finally {
+      changePending(false);
+    }
   }
   return (
-    <section
+    <AttachmentDropZone
       className="mt-4 rounded-xl border bg-slate-50 p-4"
-      aria-label="提交附件"
+      label="提交附件"
+      disabled={uploadDisabled}
+      onFiles={(selected) => void upload(selected)}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-medium">作业附件</h3>
         {editable && (
           <label className="cursor-pointer rounded-lg border bg-white px-3 py-2 text-sm">
-            {pending ? "处理中…" : "添加截图或 PDF"}
+            {pending ? "处理中…" : "添加附件"}
             <input
               className="sr-only"
               aria-label="上传作业附件"
               type="file"
-              accept="image/png,image/jpeg,application/pdf"
-              disabled={pending || files.length >= 5}
+              multiple
+              accept={SUBMISSION_ATTACHMENT_ACCEPT}
+              disabled={uploadDisabled}
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void upload(file);
+                void upload(Array.from(e.target.files ?? []));
                 e.target.value = "";
               }}
             />
@@ -95,7 +124,7 @@ export function SubmissionAttachments({
       </div>
       <p className="mt-2 text-xs text-slate-500">
         {editable
-          ? "每题最多 5 个文件，每个不超过 5 MB。请等待上传完成后提交作业。"
+          ? `可将文件拖到此处或点击添加附件。支持 ${SUBMISSION_ATTACHMENT_FORMATS}，每题最多 5 个，每个不超过 5 MB。请等待上传完成后提交作业。`
           : "点击文件下载查看学生提交材料。"}
       </p>
       {loading ? (
@@ -144,6 +173,6 @@ export function SubmissionAttachments({
           </button>
         </div>
       )}
-    </section>
+    </AttachmentDropZone>
   );
 }

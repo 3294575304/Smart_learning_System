@@ -23,6 +23,7 @@ import {
 } from "@/services/student-experience/task-scope";
 import { listStudentTaskClassrooms } from "@/services/courses/student-access";
 import { StudentAssignmentTabs } from "@/components/assignments/student-assignment-tabs";
+import { assignmentCategoryIcon } from "@/components/assignments/category-badge";
 import { StudentSubmissionHistory } from "@/components/assignment-results/student-submission-history";
 import { listStudentResults } from "@/services/dashboard/student-dashboard";
 import { studentResultsQuerySchema } from "@/services/assignments/schemas";
@@ -213,9 +214,12 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
         <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
           {pageItems.map((assignment) => {
             const state = assignmentState(assignment, now);
+            const Icon = assignmentCategoryIcon(
+              assignment.category ?? "PRACTICE",
+            );
             return (
               <Link
-                className={`${activityCardClass} transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600`}
+                className={`${activityCardClass} group flex flex-col transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600`}
                 href={withAssignmentTaskReturn(
                   studentTaskHref(
                     state === "SUBMITTED" && assignment.latestSubmissionId
@@ -228,9 +232,15 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
                 key={assignment.id}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <h2 className="min-w-0 font-semibold break-words">
-                    {assignment.title}
-                  </h2>
+                  <div className="flex min-w-0 items-start gap-2">
+                    <Icon
+                      aria-hidden="true"
+                      className="mt-0.5 size-4 shrink-0 text-neutral-700"
+                    />
+                    <h2 className="min-w-0 font-semibold break-words">
+                      {assignment.title}
+                    </h2>
+                  </div>
                   <span
                     className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${
                       state === "PENDING" || state === "IN_PROGRESS"
@@ -267,16 +277,16 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
                           : "已提交 · 等待批改"}
                   </p>
                 ) : null}
-                <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-700">
-                  {state === "IN_PROGRESS"
-                    ? "继续作答"
-                    : state === "SUBMITTED"
+                <div className="mt-auto pt-4">
+                  <span className="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white transition-colors group-hover:bg-sky-800 group-focus-visible:bg-sky-800">
+                    {state === "SUBMITTED"
                       ? "查看提交与成绩"
-                      : state === "EXPIRED"
-                        ? "查看详情"
-                        : "开始作业"}
-                  <ArrowRight aria-hidden="true" className="size-4" />
-                </span>
+                      : state === "PENDING"
+                        ? "开始作业"
+                        : "查看详情"}
+                    <ArrowRight aria-hidden="true" className="size-4" />
+                  </span>
+                </div>
               </Link>
             );
           })}

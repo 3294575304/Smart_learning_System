@@ -18,6 +18,7 @@ import {
 } from "@/services/assignments/makeup-service";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -305,14 +306,31 @@ async function main() {
     (await listSubmissionAttachments(actor(student), attempt.id)).length,
     0,
   );
+  const docx = await readFile(
+    new URL(
+      "../questions/fixtures/chinese-stream-boundary.docx",
+      import.meta.url,
+    ),
+  );
+  const wordMime =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const retained = await uploadSubmissionAttachment(
     actor(student),
     attempt.id,
     questionId,
-    screenshot(),
+    new File([new Uint8Array(docx)], "作答.docx", { type: wordMime }),
     context,
   );
   await submitStudentAssignment(student.id, attempt.id);
+  const downloaded = await readSubmissionAttachment(
+    actor(teacher),
+    attempt.id,
+    retained.id,
+    context,
+  );
+  assert.equal(downloaded.file.mimeType, wordMime);
+  assert.equal(downloaded.file.originalName, "作答.docx");
+  assert.deepEqual(downloaded.data, docx);
   await assert.rejects(() =>
     deleteSubmissionAttachment(
       actor(student),
@@ -341,7 +359,7 @@ async function main() {
     draft.id,
     attempt.id,
     grading.answers[0].id,
-    { score: 87, feedback: "截图清晰" },
+    { score: 87, feedback: "文档清晰" },
   );
   await completeSubmissionGrading(teacher.id, draft.id, attempt.id, context);
   await assert.rejects(

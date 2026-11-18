@@ -49,7 +49,7 @@ export default async function StudentExamReportPage({
     <StudentExamDetailHeader
       record={record}
       title="我的考试报告"
-      back={back}
+
       actions={
         <Link className={examActionClass} href={recordHref}>
           查看考试记录

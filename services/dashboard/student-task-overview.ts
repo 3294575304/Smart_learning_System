@@ -11,6 +11,7 @@ export type StudentTaskKind = "assignment" | "attendance" | "survey" | "exam";
 export type StudentTaskItem = {
   id: string;
   kind: StudentTaskKind;
+  assignmentCategory?: StudentAssignmentListItem["category"];
   title: string;
   courseName: string | null;
   classroomName: string;
@@ -86,6 +87,7 @@ export function summarizeStudentTasks(
       {
         id: `assignment:${assignment.id}`,
         kind: "assignment" as const,
+        assignmentCategory: assignment.category,
         status: "TODO" as const,
         title: assignment.title,
         courseName: context.classroom.course?.name ?? null,

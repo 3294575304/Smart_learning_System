@@ -1,3 +1,4 @@
+import React from "react";
 import { ClipboardList, FlaskConical, PencilLine } from "lucide-react";
 import {
   ASSIGNMENT_CATEGORY_LABELS,
@@ -21,6 +22,10 @@ const presentation = {
     target: "课程实验",
   },
 };
+
+export function assignmentCategoryIcon(category: AssignmentCategoryValue) {
+  return presentation[category].icon;
+}
 
 export function AssignmentCategoryBadge({
   category = "PRACTICE",

@@ -1,3 +1,6 @@
+import { AssignmentResourceList } from "@/components/assignments/assignment-resource-list";
+import { StudentAssignmentListBackLink } from "@/components/assignments/student-assignment-list-back-link";
+import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { StudentRevokedAssignment } from "@/components/assignments/student-revoked-assignment";
 import { AssignmentRevokedError } from "@/services/assignments/errors";
 import {
@@ -6,6 +9,7 @@ import {
 } from "@/services/student-experience/task-scope";
 import {
   assignmentTaskReturn,
+  examListReturn,
   withAssignmentTaskReturn,
 } from "@/services/student-experience/activity-query";
 import { assertAssignmentTaskScope } from "@/services/student-experience/task-scope-access";
@@ -96,19 +100,21 @@ export default async function StudentAssignmentPage({
     return (
       <section className="space-y-6">
         <div>
-          <Link
-            className="text-ink-soft hover:text-ink text-sm hover:underline"
-            href={
-              returnTo ??
-              studentTaskHref(
-                exam ? "/student/exams" : "/student/assignments",
-                scope.data,
-              )
-            }
-          >
-            ←{" "}
-            {returnTo ? "返回学习任务" : exam ? "返回考试列表" : "返回作业列表"}
-          </Link>
+          {exam ? (
+            <StudentBackLink
+              href={examListReturn(query.returnTo, {
+                ...scope.data,
+                focus: assignment.id,
+              })}
+            >
+              返回考试列表
+            </StudentBackLink>
+          ) : (
+            <StudentAssignmentListBackLink
+              scope={scope.data}
+              returnTo={returnTo}
+            />
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <h1 className="text-ink text-2xl font-semibold break-words">
               {assignment.title}
@@ -138,26 +144,10 @@ export default async function StudentAssignmentPage({
             </p>
           )}
         </div>
-        {resourceFiles.length ? (
-          <section className="border-line bg-card rounded-xl border p-4">
-            <h2 className="text-ink text-[15px] font-semibold">教师任务附件</h2>
-            <ul className="mt-2 space-y-2">
-              {resourceFiles.map((file) => (
-                <li key={file.id}>
-                  <a
-                    className="text-brand-strong text-sm underline"
-                    href={`/api/assignments/${assignment.id}/resources/${file.id}`}
-                  >
-                    {file.name}
-                  </a>
-                  <span className="text-ink-soft ml-2 text-xs">
-                    {Math.ceil(file.sizeBytes / 1024)} KB
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+        <AssignmentResourceList
+          assignmentId={assignment.id}
+          files={resourceFiles}
+        />
         <div className="flex flex-wrap items-center gap-3">
           {answerHref ? (
             <Link

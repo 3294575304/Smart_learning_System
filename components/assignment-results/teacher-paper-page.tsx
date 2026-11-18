@@ -1,3 +1,4 @@
+import { TeacherPaperQuestionList } from "./teacher-paper-question-list";
 import { QuestionText } from "@/components/assignments/question-text";
 import { CategoryCorrection } from "@/components/assignments/category-correction";
 import { AssignmentCategoryBadge } from "@/components/assignments/category-badge";
@@ -52,6 +53,53 @@ export default async function TeacherAssignmentPage({
           )
         : [],
     ]);
+    const questionCards = questions.map(({ id, order, type, ...question }) => ({
+      id,
+      order,
+      type,
+      content: (
+        <article key={id} className="rounded-xl border bg-white p-5">
+          <div className="flex items-start justify-between gap-3">
+            <h2
+              className="min-w-0 font-semibold [overflow-wrap:anywhere] whitespace-pre-wrap"
+              title={question.title}
+            >
+              {order}. {question.title}
+            </h2>
+            <span className="shrink-0 text-sm text-sky-800">
+              {question.points}分
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {QUESTION_TYPE_LABELS[type]}
+          </p>
+          <div className="mt-3 min-w-0">
+            <QuestionText text={question.content} />
+          </div>
+          {question.options.length ? (
+            <ul className="mt-3 space-y-2">
+              {question.options.map((option) => (
+                <li
+                  className="min-w-0 rounded-lg bg-slate-50 px-3 py-2 text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
+                  key={option.id}
+                >
+                  {option.label}. {option.content}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <details className="mt-4 border-t pt-3">
+            <summary className="cursor-pointer text-sm text-sky-800">
+              参考答案与解析（仅教师可见）
+            </summary>
+            <div className="mt-3 space-y-2 rounded-lg bg-slate-50 p-3 text-sm leading-6 break-words whitespace-pre-wrap">
+              <p>参考答案：{question.correctAnswer}</p>
+              <p>解析：{question.explanation || "暂无解析"}</p>
+            </div>
+          </details>
+        </article>
+      ),
+    }));
     return (
       <section className="space-y-5">
         <TeacherBackLink
@@ -210,53 +258,13 @@ export default async function TeacherAssignmentPage({
             </details>
           </section>
         ) : questions.length ? (
-          <div className="space-y-3">
-            {questions.map((question) => (
-              <article
-                key={question.id}
-                className="rounded-xl border bg-white p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h2
-                    className="min-w-0 font-semibold [overflow-wrap:anywhere] whitespace-pre-wrap"
-                    title={question.title}
-                  >
-                    {question.order}. {question.title}
-                  </h2>
-                  <span className="shrink-0 text-sm text-sky-800">
-                    {question.points}分
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  {QUESTION_TYPE_LABELS[question.type]}
-                </p>
-                <div className="mt-3 min-w-0">
-                  <QuestionText text={question.content} />
-                </div>
-                {question.options.length ? (
-                  <ul className="mt-3 space-y-2">
-                    {question.options.map((option) => (
-                      <li
-                        className="min-w-0 rounded-lg bg-slate-50 px-3 py-2 text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
-                        key={option.id}
-                      >
-                        {option.label}. {option.content}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <details className="mt-4 border-t pt-3">
-                  <summary className="cursor-pointer text-sm text-sky-800">
-                    参考答案与解析（仅教师可见）
-                  </summary>
-                  <div className="mt-3 space-y-2 rounded-lg bg-slate-50 p-3 text-sm leading-6 break-words whitespace-pre-wrap">
-                    <p>参考答案：{question.correctAnswer}</p>
-                    <p>解析：{question.explanation || "暂无解析"}</p>
-                  </div>
-                </details>
-              </article>
-            ))}
-          </div>
+          examSessionId || assignment.category === "COURSE_EXPERIMENT" ? (
+            <div className="space-y-3">
+              {questionCards.map(({ content }) => content)}
+            </div>
+          ) : (
+            <TeacherPaperQuestionList questions={questionCards} />
+          )
         ) : (
           <div className="rounded-xl border border-dashed bg-white p-6 text-sm text-slate-500">
             当前草稿尚未添加题目，请编辑草稿后发布。

@@ -9,7 +9,6 @@ import { assertAssignmentTaskScope } from "@/services/student-experience/task-sc
 import { QuestionText } from "@/components/assignments/question-text";
 import { Paperclip } from "lucide-react";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
@@ -21,8 +20,7 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentSubmissionResult } from "@/services/assignments/service";
 import { ExamScoreReview } from "@/components/exams/exam-score-review";
 import { getStudentExamReview } from "@/services/exams/score-reviews";
-import { examListReturn } from "@/services/student-experience/activity-query";
-import { StudentBackLink } from "@/components/dashboard/student-back-link";
+import { StudentAssignmentListBackLink } from "@/components/assignments/student-assignment-list-back-link";
 
 interface Props {
   params: Promise<{ submissionId: string }>;
@@ -39,12 +37,6 @@ export default async function ResultPage({ params, searchParams }: Props) {
   const query = await searchParams;
   const scope = studentTaskScopeSchema.safeParse(query);
   if (!scope.success) notFound();
-  const returnParams = new URLSearchParams({ view: "records", ...scope.data });
-  for (const key of ["page", "pageSize"]) {
-    const value = query[key];
-    if (typeof value === "string" && value.length < 100)
-      returnParams.set(key, value);
-  }
   try {
     const result = await getStudentSubmissionResult(
       student.id,
@@ -57,12 +49,6 @@ export default async function ResultPage({ params, searchParams }: Props) {
       : null;
     const percentage = hundredPointScore(result.score, result.maxScore);
     const feedback = result.answers.filter((answer) => answer.teacherFeedback);
-    const examBack = result.examReceipt
-      ? examListReturn(query.returnTo, {
-          ...scope.data,
-          focus: result.assignmentId,
-        })
-      : null;
     const answers = result.isPublished
       ? result.answers
       : result.submittedAnswers;
@@ -72,16 +58,7 @@ export default async function ResultPage({ params, searchParams }: Props) {
     return (
       <section className="space-y-6">
         <div>
-          {examBack ? (
-            <StudentBackLink href={examBack}>返回我的考试</StudentBackLink>
-          ) : (
-            <Link
-              className="inline-flex rounded-lg border bg-white px-3 py-2 text-sm text-sky-700 hover:bg-sky-50"
-              href={`/student/assignments?${returnParams}`}
-            >
-              ← 返回作业与成绩
-            </Link>
-          )}
+          <StudentAssignmentListBackLink scope={scope.data} />
           <h1 className="mt-2 text-2xl font-semibold break-words">
             {result.assignmentTitle} ·{" "}
             {result.examReceipt ? "交卷回执" : "提交结果"}

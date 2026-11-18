@@ -13,6 +13,8 @@ import { Role, SubmissionStatus } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 
 import { AnswerSheet } from "@/components/assignments/answer-sheet";
+import { AssignmentResourceList } from "@/components/assignments/assignment-resource-list";
+import { listAssignmentResourceFiles } from "@/services/assignments/resources";
 import { ExamMonitor } from "@/components/exams/exam-monitor";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -43,7 +45,21 @@ export default async function AnswerPage({ params, searchParams }: Props) {
           scope.data,
         ),
       );
-    const answerSheet = { scope: scope.data, autosaveDelayMs, submission };
+    const resourceFiles = await listAssignmentResourceFiles(
+      student,
+      submission.assignmentId,
+    );
+    const answerSheet = {
+      scope: scope.data,
+      autosaveDelayMs,
+      submission,
+      teacherResources: resourceFiles.length ? (
+        <AssignmentResourceList
+          assignmentId={submission.assignmentId}
+          files={resourceFiles}
+        />
+      ) : undefined,
+    };
     if (!submission.examSessionId) {
       const returnTo = assignmentTaskReturn(query.returnTo, scope.data);
       return (

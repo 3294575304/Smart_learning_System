@@ -345,7 +345,11 @@ function parseZipEntries(data: Buffer): ZipEntry[] {
   return entries;
 }
 
-function extractZipEntry(data: Buffer, entry: ZipEntry): Buffer {
+function extractZipEntry(
+  data: Buffer,
+  entry: ZipEntry,
+  maxOutputLength?: number,
+): Buffer {
   if (
     entry.localHeaderOffset + 30 > data.length ||
     data.readUInt32LE(entry.localHeaderOffset) !== ZIP_LOCAL_HEADER_SIGNATURE
@@ -367,7 +371,23 @@ function extractZipEntry(data: Buffer, entry: ZipEntry): Buffer {
 
   const compressed = data.subarray(dataStart, dataEnd);
   if (entry.compressionMethod === 0) return compressed;
-  return inflateRawSync(compressed);
+  return inflateRawSync(compressed, { maxOutputLength });
+}
+
+export function hasWordOpenXmlContent(data: Buffer): boolean {
+  const entries = parseZipEntries(data);
+  const parts = new Map(entries.map((entry) => [entry.name, entry]));
+  const manifest = parts.get("[Content_Types].xml");
+  const document = parts.get("word/document.xml");
+  if (!manifest || !document || parts.size !== entries.length) return false;
+
+  const readXml = (entry: ZipEntry) =>
+    extractZipEntry(data, entry, XLSX_MAX_XML_ENTRY_BYTES).toString("utf8");
+  return (
+    readXml(manifest).includes(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+    ) && /<(?:[\w.-]+:)?document\b/u.test(readXml(document))
+  );
 }
 
 function parseXlsx(data: Buffer): ParsedSpreadsheetSummary {
@@ -483,6 +503,55 @@ function parseOleDirectoryEntries(directory: Buffer): OleDirectoryEntry[] {
     entries.push({ name, type, startingSector, streamSize });
   }
   return entries;
+}
+
+export function hasBinaryWordContent(data: Buffer): boolean {
+  if (data.length < 512 || !startsWith(data, XLS_OLE_HEADER)) return false;
+  const sectorShift = data.readUInt16LE(30);
+  if (sectorShift !== 9 && sectorShift !== 12) return false;
+  const sectorSize = 2 ** sectorShift;
+  const fat = parseOleFat(data, sectorSize);
+  const directory = readOleChain(
+    data,
+    fat,
+    data.readInt32LE(48),
+    sectorSize,
+    Math.floor(data.length / sectorSize),
+  );
+  const entries = parseOleDirectoryEntries(directory);
+  const word = entries.find(
+    (entry) => entry.type === 2 && entry.name.toLowerCase() === "worddocument",
+  );
+  if (!word || word.streamSize < 32 || word.streamSize > data.length)
+    return false;
+
+  if (word.streamSize >= 4096) {
+    const stream = readOleChain(
+      data,
+      fat,
+      word.startingSector,
+      sectorSize,
+      Math.ceil(word.streamSize / sectorSize),
+    );
+    return (
+      stream.length >= word.streamSize && stream.readUInt16LE(0) === 0xa5ec
+    );
+  }
+
+  const root = entries.find((entry) => entry.type === 5);
+  if (!root || word.startingSector < 0) return false;
+  const miniStream = readOleChain(
+    data,
+    fat,
+    root.startingSector,
+    sectorSize,
+    Math.floor(data.length / sectorSize),
+  );
+  const offset = word.startingSector * 64;
+  return (
+    offset + 2 <= Math.min(root.streamSize, miniStream.length) &&
+    miniStream.readUInt16LE(offset) === 0xa5ec
+  );
 }
 
 function parseBiffRowCount(workbookStream: Buffer): number | null {

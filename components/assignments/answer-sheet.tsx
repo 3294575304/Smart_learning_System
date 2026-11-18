@@ -94,6 +94,7 @@ interface Props {
   exam?: boolean;
   examLocked?: boolean;
   banner?: ReactNode;
+  teacherResources?: ReactNode;
   submission: {
     id: string;
     assignmentTitle: string;
@@ -209,6 +210,7 @@ export function AnswerSheet({
   exam = false,
   examLocked = false,
   banner,
+  teacherResources,
 }: Props) {
   const [deadlineReached, setDeadlineReached] = useState(false);
   useEffect(() => {
@@ -240,7 +242,8 @@ export function AnswerSheet({
   const [lastSavedAt, setLastSavedAt] = useState(
     submission.lastSavedAt ?? null,
   );
-  const [attachmentPending, setAttachmentPending] = useState(false);
+  const [attachmentOperations, setAttachmentOperations] = useState(0);
+  const attachmentPending = attachmentOperations > 0;
   const [examConfirmation, setExamConfirmation] = useState(false);
   const questionPanel = useRef<HTMLElement>(null);
   const [finalAction, setFinalAction] = useState<FinalAction | null>(null);
@@ -755,6 +758,9 @@ export function AnswerSheet({
       )}
     </div>
   );
+  const teacherResourceSection = teacherResources && (
+    <div className="mt-4">{teacherResources}</div>
+  );
   const questionContent = question && (
     <article
       ref={questionPanel}
@@ -780,6 +786,7 @@ export function AnswerSheet({
                 samples={question.programming?.samples ?? []}
                 text={question.content}
               />
+              {teacherResourceSection}
               {question.images?.map((image) => (
                 <Image
                   alt={`第 ${question.sortOrder} 题附图`}
@@ -810,6 +817,7 @@ export function AnswerSheet({
           <div className="border-line-soft mt-4 min-w-0 border-t pt-5">
             <QuestionText text={question.content} />
           </div>
+          {teacherResourceSection}
           {question.images?.map((image) => (
             <Image
               alt={`第 ${question.sortOrder} 题附图`}
@@ -839,7 +847,9 @@ export function AnswerSheet({
               <SubmissionAttachments
                 submissionId={submission.id}
                 questionId={question.id}
-                onPendingChange={setAttachmentPending}
+                onPendingChange={(pending) =>
+                  setAttachmentOperations((count) => count + (pending ? 1 : -1))
+                }
                 editable={
                   submission.status === SubmissionStatus.IN_PROGRESS &&
                   !editingDisabled

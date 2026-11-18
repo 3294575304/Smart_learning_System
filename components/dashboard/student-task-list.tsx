@@ -1,3 +1,4 @@
+import React from "react";
 import {
   ArrowUpRight,
   CalendarCheck,
@@ -8,6 +9,7 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { StatusChip } from "@/components/ui/status-chip";
+import { assignmentCategoryIcon } from "@/components/assignments/category-badge";
 import { FOCUS_RING } from "./ui-focus";
 import {
   studentTaskContext,
@@ -53,6 +55,12 @@ export const STUDENT_TASK_PRESENTATION = {
   },
 } as const;
 
+export function studentTaskIcon(item: StudentTaskItem) {
+  return item.kind === "assignment"
+    ? assignmentCategoryIcon(item.assignmentCategory ?? "PRACTICE")
+    : STUDENT_TASK_PRESENTATION[item.kind].icon;
+}
+
 export function StudentTaskList({
   items,
   priorityId,
@@ -68,6 +76,7 @@ export function StudentTaskList({
     return (
       <ul className="workspace-task-list divide-border border-border divide-y border-t">
         {items.map((item) => {
+          const Icon = studentTaskIcon(item);
           const start = item.kind === "exam" ? item.opensAt : undefined;
           const time = start ?? item.dueAt;
           return (
@@ -77,10 +86,7 @@ export function StudentTaskList({
                 title={`${studentTaskContext(item)} · ${item.state}`}
                 className={`hover:bg-muted grid min-h-12 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded-md py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto] ${FOCUS_RING}`}
               >
-                <span
-                  aria-hidden="true"
-                  className="bg-brand size-2 rounded-full"
-                />
+                <Icon aria-hidden="true" className="size-4 text-neutral-700" />
                 <span className="font-medium [overflow-wrap:anywhere]">
                   <span className="sr-only">{item.action}：</span>
                   {item.title}
@@ -120,7 +126,7 @@ export function StudentTaskList({
     >
       {items.map((item) => {
         const presentation = STUDENT_TASK_PRESENTATION[item.kind];
-        const Icon = presentation.icon;
+        const Icon = studentTaskIcon(item);
         const priority = item.id === priorityId;
         return (
           <li

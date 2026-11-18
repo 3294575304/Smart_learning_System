@@ -22,6 +22,14 @@ import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import { getStorageService } from "@/services/storage";
 import { writeTeachingAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
+import {
+  hasBinaryWordContent,
+  hasWordOpenXmlContent,
+} from "@/services/course-files/validation";
+import {
+  SUBMISSION_ATTACHMENT_FORMATS,
+  SUBMISSION_ATTACHMENT_MIME_TYPES,
+} from "./attachment-formats";
 
 async function access(
   tx: Prisma.TransactionClient,
@@ -148,6 +156,54 @@ export async function validateAssignmentAttachmentData(
   throw new AssignmentOperationError("仅支持 PNG、JPG 图片和 PDF 文件", 400);
 }
 
+export async function validateSubmissionAttachment(
+  data: Buffer,
+  file: Pick<File, "name" | "type">,
+): Promise<string> {
+  if (data.length > 5 * 1024 * 1024 || !data.length)
+    throw new AssignmentOperationError("附件大小须在 1 字节至 5 MB 之间", 400);
+  const extension = /\.([a-z0-9]+)$/iu.exec(file.name)?.[1]?.toLowerCase();
+  if (!extension || !Object.hasOwn(SUBMISSION_ATTACHMENT_MIME_TYPES, extension))
+    throw new AssignmentOperationError(
+      `附件仅支持 ${SUBMISSION_ATTACHMENT_FORMATS} 格式`,
+      400,
+    );
+
+  const mimeType = SUBMISSION_ATTACHMENT_MIME_TYPES[extension];
+  if (
+    file.type &&
+    file.type !== "application/octet-stream" &&
+    file.type !== mimeType
+  )
+    throw new AssignmentOperationError("附件类型与扩展名不匹配", 400);
+
+  if (extension === "doc" || extension === "docx" || extension === "txt") {
+    try {
+      const valid =
+        extension === "doc"
+          ? hasBinaryWordContent(data)
+          : extension === "docx"
+            ? hasWordOpenXmlContent(data)
+            : !new TextDecoder("utf-8", { fatal: true })
+                .decode(data)
+                .includes("\0");
+      if (valid) return mimeType;
+    } catch {
+      // Malformed containers and undecodable text get the same upload error.
+    }
+    throw new AssignmentOperationError(
+      extension === "txt"
+        ? "TXT 文件须使用 UTF-8 纯文本格式"
+        : "Word 文件无法读取，请选择有效的 DOC 或 DOCX 文件",
+      400,
+    );
+  }
+
+  if ((await validateAssignmentAttachmentData(data)) !== mimeType)
+    throw new AssignmentOperationError("附件内容与扩展名不匹配", 400);
+  return mimeType;
+}
+
 export async function uploadSubmissionAttachment(
   actor: AuthenticatedUser,
   submissionId: string,
@@ -158,7 +214,7 @@ export async function uploadSubmissionAttachment(
   if (file.size > 5 * 1024 * 1024)
     throw new AssignmentOperationError("单个附件不能超过 5 MB", 400);
   const data = Buffer.from(await file.arrayBuffer());
-  const mimeType = await validateAssignmentAttachmentData(data);
+  const mimeType = await validateSubmissionAttachment(data, file);
   const sha256 = createHash("sha256").update(data).digest("hex");
   const storageKey = `assignment-attachments/${randomUUID()}`;
   const storage = getStorageService();

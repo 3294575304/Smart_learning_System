@@ -88,9 +88,15 @@ export default async function StudentExamsPage({
                 className={`${activityCardClass} scroll-mt-24`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h2 className="min-w-0 text-base font-semibold break-words">
-                    {exam.title}
-                  </h2>
+                  <div className="flex min-w-0 items-start gap-2">
+                    <ClipboardCheck
+                      aria-hidden="true"
+                      className="mt-0.5 size-4 shrink-0 text-neutral-700"
+                    />
+                    <h2 className="min-w-0 text-base font-semibold break-words">
+                      {exam.title}
+                    </h2>
+                  </div>
                   <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs text-sky-800">
                     {statusLabel[exam.status]}
                   </span>

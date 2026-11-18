@@ -1,3 +1,4 @@
+import { ExamTypeBadge } from "@/components/exams/exam-type-badge";
 import Link from "next/link";
 import { Role } from "@prisma/client";
 import {
@@ -222,9 +223,7 @@ export default async function TeacherExamsPage({
                       <h3 className="font-semibold [overflow-wrap:anywhere] text-slate-950">
                         {exam.title}
                       </h3>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
-                        {exam.type === "MIDTERM" ? "期中考试" : "期末考试"}
-                      </span>
+                      <ExamTypeBadge type={exam.type} />
                       <span
                         className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusTone[state]}`}
                       >

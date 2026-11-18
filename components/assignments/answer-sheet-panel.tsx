@@ -81,7 +81,8 @@ export function AnswerSheetPanel({
           </h2>
         )}
         <span className="bg-muted text-ink-soft rounded-md px-2 py-0.5 text-[11px] leading-5 font-medium">
-          {total} 题{totalPoints ? ` · ${totalPoints} 分` : ""}
+          {total} 题
+          {totalPoints ? ` · ${Number(totalPoints.toFixed(2))} 分` : ""}
         </span>
       </div>
 

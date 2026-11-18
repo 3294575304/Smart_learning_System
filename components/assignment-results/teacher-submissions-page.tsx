@@ -33,7 +33,6 @@ const filters: Array<{
   { label: "全部", status: undefined },
   { label: "待批改", status: SubmissionStatus.PENDING_REVIEW },
   { label: "已批改", status: SubmissionStatus.GRADED },
-  { label: "未提交草稿", status: SubmissionStatus.IN_PROGRESS },
 ];
 
 function pageHref(
@@ -138,32 +137,26 @@ export default async function TeacherSubmissionsPage({
             className="flex flex-wrap items-center gap-2"
           >
             <span className="mr-1 text-xs text-slate-500">提交状态</span>
-            {filters
-              .filter(
-                (filter) =>
-                  !examSessionId ||
-                  filter.status !== SubmissionStatus.IN_PROGRESS,
-              )
-              .map((filter) => {
-                const active = filter.status === query.data.status;
-                const href = filter.status
-                  ? `${base}/submissions?status=${filter.status}`
-                  : `${base}/submissions`;
-                return (
-                  <Link
-                    aria-current={active ? "page" : undefined}
-                    className={
-                      active
-                        ? "rounded-full bg-sky-700 px-4 py-2 text-sm text-white"
-                        : "rounded-full border bg-white px-4 py-2 text-sm"
-                    }
-                    href={href}
-                    key={filter.label}
-                  >
-                    {filter.label}
-                  </Link>
-                );
-              })}
+            {filters.map((filter) => {
+              const active = filter.status === query.data.status;
+              const href = filter.status
+                ? `${base}/submissions?status=${filter.status}`
+                : `${base}/submissions`;
+              return (
+                <Link
+                  aria-current={active ? "page" : undefined}
+                  className={
+                    active
+                      ? "rounded-full bg-sky-700 px-4 py-2 text-sm text-white"
+                      : "rounded-full border bg-white px-4 py-2 text-sm"
+                  }
+                  href={href}
+                  key={filter.label}
+                >
+                  {filter.label}
+                </Link>
+              );
+            })}
           </nav>
         ) : null}
 

@@ -101,6 +101,31 @@ test("在做的作业报出进度，并接到草稿而不是作业说明页", ()
   assert.ok(html.includes('href="/student/submissions/s2/answer"'));
 });
 
+test("今日任务使用不同图标区分类别，标题前不显示分类标签", () => {
+  const pendingItems: StudentTaskItem[] = [
+    { ...overdue, assignmentCategory: "COURSE_ASSIGNMENT" },
+    { ...doing, assignmentCategory: "COURSE_EXPERIMENT" },
+    { ...overdue, id: "assignment:practice", assignmentCategory: "PRACTICE" },
+    { ...overdue, id: "exam:e1", kind: "exam" },
+  ];
+  const classified = renderToStaticMarkup(
+    React.createElement(StudentHomeAgenda, {
+      now,
+      overview: { ...overview, pendingItems },
+      pulse,
+    }),
+  );
+  for (const [label, icon] of [
+    ["课程作业", "clipboard-list"],
+    ["课程实验", "flask-conical"],
+    ["练习", "pencil-line"],
+    ["期中考试", "clipboard-check"],
+  ]) {
+    assert.ok(!classified.includes(`>${label}</span>`), label);
+    assert.equal(classified.split(`lucide-${icon}`).length - 1, 1, icon);
+  }
+});
+
 test("已提交记录独立展示，不混入今日待办", () => {
   const recent = renderToStaticMarkup(
     React.createElement(StudentRecentLearning, { finished: pulse.finished }),

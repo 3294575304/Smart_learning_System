@@ -24,6 +24,7 @@ import { z } from "zod";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 import { markTeacherWorkspaceDirty } from "@/components/dashboard/teacher-workspace-refresh";
 import { toast } from "@/components/ui/toast";
+import { SUBMISSION_ATTACHMENT_FORMATS } from "@/services/assignments/attachment-formats";
 import {
   distributeAssignmentPoints,
   distributeAssignmentPointsByType,
@@ -36,6 +37,7 @@ import {
   courseSwitchImpact,
 } from "@/services/assignments/editor-review";
 import { EditorDialog } from "./editor-dialog";
+import { AttachmentDropZone } from "./attachment-drop-zone";
 import { TypedScoreDialog } from "./typed-score-dialog";
 import {
   AssignmentAssemblyDialog,
@@ -187,6 +189,7 @@ export function AssignmentForm({
     assignment?.resourceFiles ?? [],
   );
   const [uploading, setUploading] = useState<string | null>(null);
+  const resourceUploadPending = useRef(false);
   const [pickCount, setPickCount] = useState(10);
   const [targetPoints, setTargetPoints] = useState(100);
   const [scoreDialogOpen, setScoreDialogOpen] = useState(false);
@@ -374,8 +377,8 @@ export function AssignmentForm({
     });
   }
 
-  async function uploadResourceFiles(files: FileList | null) {
-    if (!files) return;
+  async function uploadResourceFiles(files: File[]) {
+    if (!files.length || busy || resourceUploadPending.current) return;
     const courseId = classrooms.find(
       (item) => item.id === form.getValues("classroomId"),
     )?.courseId;
@@ -388,8 +391,9 @@ export function AssignmentForm({
       return;
     }
     setServerError(null);
+    resourceUploadPending.current = true;
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         if (file.size > 5 * 1024 * 1024) {
           setServerError(`${file.name} 超过5MB，请压缩后重试`);
           return;
@@ -410,6 +414,7 @@ export function AssignmentForm({
         setResourceFiles((items) => [...items, response.data]);
       }
     } finally {
+      resourceUploadPending.current = false;
       setUploading(null);
     }
   }
@@ -998,21 +1003,34 @@ export function AssignmentForm({
                       />
                     </label>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                    <label className="block text-sm font-medium">
-                      教师任务附件
+                  <AttachmentDropZone
+                    label="教师任务附件"
+                    className="rounded-lg border border-slate-200 bg-slate-50/60 p-3"
+                    disabled={busy || resourceFiles.length >= 5}
+                    onFiles={(files) => void uploadResourceFiles(files)}
+                  >
+                    <p className="text-sm font-medium">教师任务附件</p>
+                    <label className="mt-2 inline-flex cursor-pointer items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-sky-600 has-[:disabled]:cursor-default has-[:disabled]:opacity-50">
+                      选择文件
                       <input
+                        aria-label="选择教师任务附件"
                         type="file"
                         multiple
                         accept=".pdf,.docx,.png,.jpg,.jpeg,.txt,.py"
-                        className="mt-2 block w-full text-xs"
+                        className="pointer-events-none sr-only"
                         onChange={(event) => {
-                          void uploadResourceFiles(event.target.files);
+                          void uploadResourceFiles(
+                            Array.from(event.target.files ?? []),
+                          );
                           event.target.value = "";
                         }}
                         disabled={busy || resourceFiles.length >= 5}
                       />
                     </label>
+                    <p className="mt-2 text-xs text-slate-500">
+                      可将文件拖到此处或点击选择文件。最多 5 个，每个不超过 5
+                      MB。
+                    </p>
                     {uploading ? (
                       <p role="status" className="mt-2 text-xs text-sky-700">
                         正在上传：{uploading}
@@ -1048,14 +1066,15 @@ export function AssignmentForm({
                         </li>
                       ))}
                     </ul>
-                  </div>
+                  </AttachmentDropZone>
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
                       checked={allowAttachments}
                       onChange={(e) => setAllowAttachments(e.target.checked)}
                     />
-                    允许学生上传作答附件：截图与 PDF（每题最多 5 个，每个 5 MB）
+                    允许学生上传作答附件（{SUBMISSION_ATTACHMENT_FORMATS}
+                    ，每题最多 5 个，每个 5 MB）
                   </label>
                 </section>
               ) : (

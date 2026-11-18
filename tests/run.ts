@@ -50,6 +50,7 @@ const testDirectories = [
 // React UI tests must keep the default export condition.
 const serverOnlyTests = new Set([
   "ai-analysis/governance.test.ts",
+  "assignments/attachment-formats.test.ts",
   "attendance/notifications.test.ts",
   "assessment-schemes/service.test.ts",
   "classrooms/dissolution-service.test.ts",

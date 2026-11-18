@@ -89,6 +89,7 @@ function listItem(
   );
   return {
     id: assignment.id,
+    category: assignment.category,
     title: assignment.title,
     description: assignment.description ?? "",
     classroomName: assignment.classroom.name,

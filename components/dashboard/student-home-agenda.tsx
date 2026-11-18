@@ -1,20 +1,21 @@
 import React from "react";
 
-import { ArrowRight, ClipboardList } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { StudentPageLink } from "./student-page-link";
 import { FOCUS_RING } from "./ui-focus";
 import { dueLabel, overdueDays } from "./student-time";
+import { studentTaskIcon } from "./student-task-list";
 import {
   studentTaskContext,
+  type StudentTaskItem,
   type StudentTaskOverview,
 } from "@/services/dashboard/student-task-overview";
 import type { StudentHomePulse } from "@/services/dashboard/student-home-pulse";
 
 type Tone = "overdue" | "active" | "upcoming";
 type Row = {
-  id: string;
-  title: string;
+  item: StudentTaskItem;
   meta: string;
   when: string;
   action: string;
@@ -53,8 +54,7 @@ function buildRows(
       .filter(Boolean)
       .join(" · ");
     return {
-      id: item.id,
-      title: item.title,
+      item,
       meta: detail,
       when,
       action:
@@ -106,29 +106,32 @@ export function StudentHomeAgenda({
       </header>
       {rows.length ? (
         <ul className="st-agenda">
-          {rows.map((row) => (
-            <li className={`st-agenda-row is-${row.tone}`} key={row.id}>
-              <span className="st-agenda-symbol" aria-hidden="true">
-                <ClipboardList />
-              </span>
-              <div className="st-agenda-main">
+          {rows.map((row) => {
+            const Icon = studentTaskIcon(row.item);
+            return (
+              <li className={`st-agenda-row is-${row.tone}`} key={row.item.id}>
+                <span className="st-agenda-symbol" aria-hidden="true">
+                  <Icon />
+                </span>
+                <div className="st-agenda-main">
+                  <StudentPageLink
+                    className={`st-agenda-title ${FOCUS_RING}`}
+                    href={row.href}
+                  >
+                    {row.item.title}
+                  </StudentPageLink>
+                  <p className="st-agenda-meta">{row.meta}</p>
+                </div>
+                <p className="st-agenda-when">{row.when}</p>
                 <StudentPageLink
-                  className={`st-agenda-title ${FOCUS_RING}`}
+                  className={`st-agenda-action is-${row.tone} ${FOCUS_RING}`}
                   href={row.href}
                 >
-                  {row.title}
+                  {row.action}
                 </StudentPageLink>
-                <p className="st-agenda-meta">{row.meta}</p>
-              </div>
-              <p className="st-agenda-when">{row.when}</p>
-              <StudentPageLink
-                className={`st-agenda-action is-${row.tone} ${FOCUS_RING}`}
-                href={row.href}
-              >
-                {row.action}
-              </StudentPageLink>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <div className="st-panel-empty">

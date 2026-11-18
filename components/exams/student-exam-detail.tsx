@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
-import { StudentBackLink } from "@/components/dashboard/student-back-link";
+import { StudentAssignmentListBackLink } from "@/components/assignments/student-assignment-list-back-link";
 import { StudentPageHeader } from "@/components/dashboard/student-page-header";
 import type { getStudentExamRecord } from "@/services/exams/student-record";
 import { studentTaskScopeSchema } from "@/services/student-experience/task-scope";
@@ -31,26 +31,27 @@ export const examTime = new Intl.DateTimeFormat("zh-CN", {
 
 export function StudentExamDetailHeader({
   record,
-  back,
   title,
   actions,
 }: {
   record: Awaited<ReturnType<typeof getStudentExamRecord>>;
-  back: string;
   title: string;
   actions?: ReactNode;
 }) {
   return (
-    <StudentPageHeader
-      eyebrow={title}
-      title={record.exam.title}
-      description={`${record.exam.course.name} · ${record.classroom.name} · ${record.exam.type === "MIDTERM" ? "期中考试" : "期末考试"} · ${examTime.format(record.startsAt)} 开考 · ${examTime.format(record.dueAt)} 截止`}
-      actions={
-        <>
-          <StudentBackLink href={back}>返回我的考试</StudentBackLink>
-          {actions}
-        </>
-      }
-    />
+    <>
+      <StudentAssignmentListBackLink
+        scope={{
+          courseId: record.exam.courseId,
+          classroomId: record.classroomId,
+        }}
+      />
+      <StudentPageHeader
+        eyebrow={title}
+        title={record.exam.title}
+        description={`${record.exam.course.name} · ${record.classroom.name} · ${record.exam.type === "MIDTERM" ? "期中考试" : "期末考试"} · ${examTime.format(record.startsAt)} 开考 · ${examTime.format(record.dueAt)} 截止`}
+        actions={actions}
+      />
+    </>
   );
 }

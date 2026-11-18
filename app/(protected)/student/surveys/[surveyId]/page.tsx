@@ -1,10 +1,7 @@
-import {
-  studentTaskScopeSchema,
-  studentTaskHref,
-} from "@/services/student-experience/task-scope";
+import { StudentAssignmentListBackLink } from "@/components/assignments/student-assignment-list-back-link";
+import { studentTaskScopeSchema } from "@/services/student-experience/task-scope";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StudentSurveyForm } from "@/components/course-surveys/student-survey-form";
@@ -35,15 +32,8 @@ export default async function StudentSurveyPage({
       notFound();
     return (
       <section className="space-y-6">
+        <StudentAssignmentListBackLink scope={scope.data} />
         <PageHeader
-          actions={
-            <Link
-              className="rounded-md border bg-white px-4 py-2 text-sm"
-              href={studentTaskHref("/student/surveys", scope.data)}
-            >
-              返回问卷列表
-            </Link>
-          }
           description={`${survey.course.name} · ${survey.classroom.name} · 截止 ${survey.dueAt.toLocaleString("zh-CN")}`}
           title={survey.title}
         />
