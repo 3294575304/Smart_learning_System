@@ -62,12 +62,8 @@ function header(row: string[], column: number): string {
   return "";
 }
 
-/** Reads the numeric grid, including empty cells, from a Word assessment table. */
-export function extractForwardAssessmentTable(
-  data: Buffer,
-): ForwardAssessmentTable | null {
+function docxXml(data: Buffer): string | null {
   if (!data.subarray(0, 2).equals(Buffer.from("PK"))) return null;
-  let xml: string;
   try {
     const document = unzipSync(new Uint8Array(data), {
       filter: (entry) =>
@@ -75,10 +71,30 @@ export function extractForwardAssessmentTable(
         entry.originalSize <= 32 * 1024 * 1024,
     })["word/document.xml"];
     if (!document || document.length > 32 * 1024 * 1024) return null;
-    xml = new TextDecoder().decode(document);
+    return new TextDecoder().decode(document);
   } catch {
     return null;
   }
+}
+
+/**
+ * Reads every Word table as a cell matrix. Merged cells are expanded by their
+ * grid span so downstream readers can work on a uniform row shape.
+ */
+export function readDocxTableRows(data: Buffer): string[][][] {
+  const xml = docxXml(data);
+  if (!xml) return [];
+  return [...xml.matchAll(/<w:tbl(?:\s[^>]*)?>[\s\S]*?<\/w:tbl>/gu)].map(
+    ([table]) => rowsOf(table),
+  );
+}
+
+/** Reads the numeric grid, including empty cells, from a Word assessment table. */
+export function extractForwardAssessmentTable(
+  data: Buffer,
+): ForwardAssessmentTable | null {
+  const xml = docxXml(data);
+  if (!xml) return null;
   const tables = [
     ...xml.matchAll(/<w:tbl(?:\s[^>]*)?>[\s\S]*?<\/w:tbl>/gu),
   ].map(([value]) => value);
