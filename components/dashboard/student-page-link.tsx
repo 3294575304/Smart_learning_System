@@ -6,5 +6,5 @@ export function StudentPageLink({
   href,
   ...props
 }: ComponentPropsWithoutRef<"a"> & { href: string }) {
-  return <Link href={href} prefetch={false} {...props} />;
+  return <Link href={href} {...props} />;
 }

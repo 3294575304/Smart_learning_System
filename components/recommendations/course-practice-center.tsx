@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useEffect, useState, useRef } from "react";
 
 interface ChapterOption {
@@ -44,6 +46,7 @@ export function CoursePracticeCenter({
   initialTemplate?: PracticeTemplate;
   initialMode?: "PRACTICE" | "TEST";
 }) {
+  const router = useRouter();
   const requestedCourse = courses.find(
     (item) =>
       (!initialCourseId || item.courseId === initialCourseId) &&
@@ -248,7 +251,7 @@ export function CoursePracticeCenter({
         setFeedback(message);
         return;
       }
-      window.location.assign(`/student/practice/${body.data.cycle.id}`);
+      router.push(`/student/practice/${body.data.cycle.id}`);
     } catch {
       setFeedback("网络连接异常，请稍后重试");
     } finally {

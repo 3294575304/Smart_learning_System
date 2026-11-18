@@ -43,7 +43,6 @@ export function GrowthRangeTabs({
                 }`}
                 href={`${base}&range=${item.id}`}
                 key={item.id}
-                prefetch={false}
                 scroll={false}
                 onNavigate={(event) => {
                   event.preventDefault();

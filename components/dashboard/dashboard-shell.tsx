@@ -193,7 +193,6 @@ function SidebarNavigation({
   badges?: Record<string, number>;
   onNavigate?: () => void;
 }) {
-  const NavigationLink = student ? "a" : Link;
   return (
     <nav aria-label="主导航" className="space-y-5 px-3 py-4">
       {groups.map((group) => (
@@ -213,7 +212,7 @@ function SidebarNavigation({
               const active = isNavigationItemActive(pathname, item);
               const badge = badges?.[item.href];
               return (
-                <NavigationLink
+                <Link
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:outline-none",
@@ -241,7 +240,7 @@ function SidebarNavigation({
                       {badge > 99 ? "99+" : badge}
                     </span>
                   ) : null}
-                </NavigationLink>
+                </Link>
               );
             })}
           </div>

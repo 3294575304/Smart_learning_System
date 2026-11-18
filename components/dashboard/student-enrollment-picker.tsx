@@ -1,5 +1,6 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { FOCUS_RING } from "./ui-focus";
 import {
   studentEnrollmentLabel,
@@ -16,10 +17,10 @@ export function StudentEnrollmentPicker({
   action: "/student" | "/student/analytics";
 }) {
   const [value, setValue] = useState(selectedId);
-  const [pending, setPending] = useState(false);
+  const router = useRouter();
+  const [pending, startNavigation] = useTransition();
   useEffect(() => {
     const restore = () => {
-      setPending(false);
       const id = new URLSearchParams(window.location.search).get("classroomId");
       setValue(
         id && contexts.some((x) => x.classroom.id === id) ? id : selectedId,
@@ -51,10 +52,12 @@ export function StudentEnrollmentPicker({
           onChange={(e) => {
             const next = e.target.value;
             setValue(next);
-            setPending(true);
-            window.location.assign(
-              `${action}?${new URLSearchParams({ classroomId: next })}`,
-            );
+            startNavigation(() => {
+              router.push(
+                `${action}?${new URLSearchParams({ classroomId: next })}`,
+                { scroll: false },
+              );
+            });
           }}
           className={`min-h-11 w-full min-w-0 rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-800 ${FOCUS_RING}`}
         >

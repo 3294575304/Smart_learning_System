@@ -195,9 +195,7 @@ export function NavigationMemory({ userId }: { userId: string }) {
       const remembered = rememberedReturnUrl(previous, target.pathname);
       if (!remembered) return;
       event.preventDefault();
-      if (pathname === "/student" || pathname.startsWith("/student/"))
-        window.location.assign(remembered);
-      else router.push(remembered);
+      router.push(remembered);
     };
     window.addEventListener("scroll", scheduleSave, { passive: true });
     window.addEventListener("pagehide", save);

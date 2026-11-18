@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { studentEnrollmentLabel } from "@/services/courses/student-enrollment";
 import type { GradeCardContext } from "@/services/gradebook/student-card-filters";
 import { studentGradeFilterHref } from "@/services/gradebook/student-card-filters";
@@ -20,7 +21,8 @@ export function StudentGradeFilters({
   const [classroom, setClassroom] = useState(classroomId);
   const [publicationState, setPublication] = useState(publication);
   const [search, setSearch] = useState(q);
-  const [pending, setPending] = useState(false);
+  const router = useRouter();
+  const [pending, startNavigation] = useTransition();
   useEffect(() => {
     // Browsers can restore pre-submit form drafts when returning from history.
     const restore = () => {
@@ -33,7 +35,6 @@ export function StudentGradeFilters({
       setClassroom(selected);
       setPublication(params.get("publication") || "ALL");
       setSearch(params.get("q") ?? "");
-      setPending(false);
     };
     restore();
     window.addEventListener("pageshow", restore);
@@ -42,21 +43,26 @@ export function StudentGradeFilters({
       window.removeEventListener("pageshow", restore);
       window.removeEventListener("popstate", restore);
     };
-  }, [contexts]);
+  }, [contexts, classroomId, publication, q]);
   const course =
     contexts.find((x) => x.classroom.id === classroom)?.course.id ?? "";
-  function navigate(nextClassroom: string, nextPublication: string) {
-    setPending(true);
-    // Dropdowns retain the applied keyword; typing alone never starts a search.
-    window.location.assign(
-      studentGradeFilterHref(contexts, nextClassroom, nextPublication, q),
-    );
+  function navigate(nextClassroom: string, nextPublication: string, query = q) {
+    startNavigation(() => {
+      router.push(
+        studentGradeFilterHref(contexts, nextClassroom, nextPublication, query),
+        { scroll: false },
+      );
+    });
   }
   const control =
     "min-h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus-visible:outline-2 focus-visible:outline-sky-600";
   return (
     <form
       action="/student/results"
+      onSubmit={(event) => {
+        event.preventDefault();
+        navigate(classroom, publicationState, search);
+      }}
       autoComplete="off"
       aria-busy={pending}
       className="grid gap-3 rounded-xl border border-sky-100 bg-white p-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_9rem_minmax(0,1fr)_auto]"

@@ -31,7 +31,6 @@ export function CourseWorkspaceTabLink({
   return (
     <Link
       href={href}
-      prefetch={false}
       scroll={false}
       onNavigate={
         onNavigate

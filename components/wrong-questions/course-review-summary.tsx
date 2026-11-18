@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useRef, useState } from "react";
 import Link from "next/link";
 import type { QuestionType } from "@prisma/client";
@@ -24,6 +26,7 @@ const questionTypeOptions: Array<{ value: PracticeType; label: string }> = [
 ];
 
 export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
+  const router = useRouter();
   const inFlight = useRef(false);
   const requests = useRef(new Map<string, string>());
   const [selected, setSelected] = useState<Record<string, string[]>>({});
@@ -142,7 +145,7 @@ export function CourseReviewSummary({ summaries }: { summaries: Summary }) {
         }));
         return;
       }
-      window.location.assign(`/student/practice/${cycleId}`);
+      router.push(`/student/practice/${cycleId}`);
     } catch {
       setFeedback((current) => ({
         ...current,
