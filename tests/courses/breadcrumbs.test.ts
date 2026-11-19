@@ -122,6 +122,7 @@ test("课程各功能页的所有上级面包屑指向真实管理入口", () =>
   for (const section of [
     "teaching-progress",
     "question-mapping",
+    "content-coverage",
     "gradebook",
     "attendance",
     "knowledge-graph",

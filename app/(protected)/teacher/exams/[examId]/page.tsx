@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getTeacherExamDetails } from "@/services/exams/analysis";
-import { teacherExamListSchema } from "@/services/exams/schemas";
+import { examListContext } from "@/services/exams/classroom-navigation";
 import { ExamWorkspaceSummary } from "@/components/exams/exam-workspace-summary";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
+import { AssignmentStateRefresh } from "@/components/assignments/state-refresh";
 
 export default async function ExamDetailsPage({
   params,
@@ -15,6 +16,7 @@ export default async function ExamDetailsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
+  const renderedAt = Date.now();
   const { examId } = await params;
   let details;
   try {
@@ -23,32 +25,17 @@ export default async function ExamDetailsPage({
     if (error instanceof ResourceNotFoundError) notFound();
     throw error;
   }
-  const scope = teacherExamListSchema.safeParse(await searchParams);
-  const back = new URLSearchParams();
-  if (scope.success && scope.data.courseId === details.exam.courseId)
-    back.set("courseId", scope.data.courseId);
-  if (
-    scope.success &&
-    scope.data.classroomId &&
-    details.exam.assignments.some(
-      (item) => item.classroomId === scope.data.classroomId,
-    )
-  )
-    back.set("classroomId", scope.data.classroomId);
-  if (scope.success) {
-    for (const key of ["keyword", "status", "type"] as const) {
-      const value = scope.data[key];
-      if (value) back.set(key, value);
-    }
-  }
+  const query = await searchParams;
+  const back = examListContext(query.examList ?? query);
   return (
     <section className="space-y-4">
+      <AssignmentStateRefresh renderedAt={renderedAt} />
       <TeacherBackLink
-        href={back.size ? `/teacher/exams?${back}` : "/teacher/exams"}
+        href={back ? `/teacher/exams?${back}` : "/teacher/exams"}
       >
         返回考试管理
       </TeacherBackLink>
-      <ExamWorkspaceSummary details={details} />
+      <ExamWorkspaceSummary details={details} listContext={back} />
     </section>
   );
 }

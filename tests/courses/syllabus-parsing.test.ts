@@ -239,7 +239,12 @@ test("strict AI JSON validation retries once and accepts a repaired output", asy
   });
   assert.equal(calls, 2);
   assert.equal(result.retryCount, 1);
-  assert.deepEqual(result.output, validOutput);
+  // A complete matrix is tagged with its calculation method; every other field
+  // must still match the repaired AI output byte for byte.
+  assert.equal(result.output.assessmentMethod, "REVERSE_MATRIX");
+  const normalized: Partial<SyllabusParseOutput> = { ...result.output };
+  delete normalized.assessmentMethod;
+  assert.deepEqual(normalized, validOutput);
 });
 
 test("2024 Python 固定样本验收结构覆盖目标原文、细粒度知识点、实验、学时和考核权重", async () => {
@@ -371,6 +376,124 @@ test("2024 Python 固定样本验收结构覆盖目标原文、细粒度知识�
     })[0]!.content,
     /practiceItems/u,
   );
+});
+
+test("只有权重表的大纲仍从课程目标评定表换算占比", async () => {
+  const gridPages = [
+    "5.3 课程目标评定方法",
+    "课程目标\t毕业要求指标点\t考核与评价方式及成绩评价比例(%)\t设定总分值Σ\t",
+    "\t\t课内讨论(10.0%)\t课后作业(10.0%)\t实验(20.0%)\t期末考试(60.0%)\t\t",
+    "课程目标1\t5-1\t5.0\t5.0\t10.0\t30.0\t50.0\t",
+    "课程目标2\t5-3\t5.0\t5.0\t10.0\t30.0\t50.0\t",
+    "合计\t\t10.0\t10.0\t20.0\t60.0\t100.0\t",
+  ].join("\n");
+  const aiOutput = structuredClone(validOutput);
+  aiOutput.objectives = ["课程目标1", "课程目标2"].map((title, index) => ({
+    code: `OBJ-${index + 1}`,
+    title,
+    description: title,
+    sourceRefs: [{ page: 1, verified: false }],
+  }));
+  aiOutput.assessments = [
+    ["ASSESS-1", "期末笔试", 40],
+    ["ASSESS-2", "期末机试", 20],
+    ["ASSESS-3", "课内讨论", 10],
+    ["ASSESS-4", "平时测试与作业", 10],
+    ["ASSESS-5", "实验", 20],
+  ].map(([code, name, weight]) => ({
+    code: String(code),
+    name: String(name),
+    type: String(name),
+    weight: Number(weight),
+    description: null,
+    sourceRefs: [{ page: 1, verified: false }],
+  }));
+  aiOutput.objectiveAssessmentMappings = [];
+  aiOutput.chapters = [];
+  aiOutput.practiceItems = [];
+  aiOutput.warnings = [];
+
+  const execution = await parseSyllabusStructure(
+    providerWith(() => aiOutput),
+    {
+      courseHint: {
+        name: "面向对象编程（C++）",
+        courseNo: "C++",
+        term: "2026-1",
+      },
+      pages: [{ pageNumber: 1, text: gridPages }],
+    },
+  );
+
+  const mappings = execution.output.objectiveAssessmentMappings;
+  assert.equal(execution.output.assessmentMethod, "REVERSE_MATRIX");
+  assert.equal(mappings.length, 10);
+  assert.deepEqual(
+    execution.output.assessments.map((assessment) => [
+      assessment.name,
+      mappings
+        .filter((mapping) => mapping.assessmentCode === assessment.code)
+        .reduce((sum, mapping) => sum + (mapping.allocationRate ?? 0), 0),
+    ]),
+    [
+      ["期末笔试", 100],
+      ["期末机试", 100],
+      ["课内讨论", 100],
+      ["平时测试与作业", 100],
+      ["实验", 100],
+    ],
+  );
+  assert.match(execution.output.warnings.join("\n"), /按列合计换算/u);
+});
+
+test("完全缺少目标分解时输出等分草稿而不是空白矩阵", async () => {
+  const aiOutput = structuredClone(validOutput);
+  aiOutput.objectives = ["课程目标1", "课程目标2", "课程目标3"].map(
+    (title, index) => ({
+      code: `OBJ-${index + 1}`,
+      title,
+      description: title,
+      sourceRefs: [{ page: 1, verified: false }],
+    }),
+  );
+  aiOutput.objectiveAssessmentMappings = [];
+  aiOutput.chapters = [];
+  aiOutput.practiceItems = [];
+  aiOutput.warnings = [];
+  aiOutput.assessments = [
+    ["ASSESS-1", "期末考试", 60],
+    ["ASSESS-2", "作业", 40],
+  ].map(([code, name, weight]) => ({
+    code: String(code),
+    name: String(name),
+    type: String(name),
+    weight: Number(weight),
+    description: null,
+    sourceRefs: [{ page: 1, verified: false }],
+  }));
+
+  const execution = await parseSyllabusStructure(
+    providerWith(() => aiOutput),
+    {
+      courseHint: { name: "课程", courseNo: "C1", term: "2026-1" },
+      pages: [
+        {
+          pageNumber: 1,
+          text: "本课程无课程目标分解表。课程目标1 课程目标2 课程目标3",
+        },
+      ],
+    },
+  );
+
+  const mappings = execution.output.objectiveAssessmentMappings;
+  assert.equal(mappings.length, 6);
+  for (const assessment of execution.output.assessments) {
+    const total = mappings
+      .filter((mapping) => mapping.assessmentCode === assessment.code)
+      .reduce((sum, mapping) => sum + (mapping.allocationRate ?? 0), 0);
+    assert.equal(total, 100);
+  }
+  assert.match(execution.output.warnings.join("\n"), /等分生成草稿/u);
 });
 
 test("v6 AI 输出必须显式包含实践项目且旧存量结构只读兼容", () => {

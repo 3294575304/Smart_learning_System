@@ -7,6 +7,7 @@ import { runAssignmentSerializable } from "@/services/assignments/transactions";
 import { writeTeachingAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { appendQuestionObjectiveInTransaction } from "@/services/question-objectives/editing";
 import { createProgrammingConfigInTransaction } from "@/services/programming-questions/service";
 import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 import {
@@ -169,6 +170,7 @@ export async function publishPaperDraft(
         questionId: string;
         points: number;
         objectiveCode: string;
+        createdInImport: boolean;
       }> = [];
       for (const row of draft.questions) {
         if (row.reviewedRevision !== row.revision)
@@ -215,6 +217,7 @@ export async function publishPaperDraft(
           throw new AssignmentOperationError("同一试卷不能包含相同题目", 400);
         selectedHashes.add(hash);
         let bankQuestion = existingByHash.get(hash);
+        const createdInImport = !bankQuestion;
         if (
           !bankQuestion &&
           existing.some(
@@ -267,6 +270,7 @@ export async function publishPaperDraft(
           questionId: bankQuestion.id,
           points: Number(row.points),
           objectiveCode,
+          createdInImport,
         });
       }
       const examInput = examCreateSchema.parse({
@@ -280,9 +284,10 @@ export async function publishPaperDraft(
         allowedSwitches: draft.allowedSwitches,
         allowedAttempts: draft.allowedAttempts,
         autoSubmitOnExit: draft.autoSubmitOnExit,
-        questions: selected.map(({ questionId, points }) => ({
+        questions: selected.map(({ questionId, points, objectiveCode }) => ({
           questionId,
           points,
+          objectiveCode,
         })),
       });
       const exam = await createExamSessionInTransaction(
@@ -291,36 +296,34 @@ export async function publishPaperDraft(
         examInput,
         context,
       );
-      for (const item of selected) {
-        await tx.questionCourseObjective.upsert({
-          where: {
-            questionId_courseId_syllabusStructureId: {
-              questionId: item.questionId,
-              courseId: draft.courseId,
-              syllabusStructureId: course.currentPublishedSyllabusStructureId,
-            },
-          },
-          create: {
-            questionId: item.questionId,
-            courseId: draft.courseId,
-            syllabusStructureId: course.currentPublishedSyllabusStructureId,
-            objectiveCode: item.objectiveCode,
+      const objectiveScope = {
+        courseId: draft.courseId,
+        syllabusStructureId: course.currentPublishedSyllabusStructureId,
+      };
+      const newMappings = selected.filter((item) => item.createdInImport);
+      if (newMappings.length)
+        await tx.questionCourseObjective.createMany({
+          data: newMappings.map(({ questionId, objectiveCode }) => ({
+            ...objectiveScope,
+            questionId,
+            objectiveCode,
             source: "TEACHER",
-          },
-          update: { objectiveCode: item.objectiveCode, source: "TEACHER" },
+          })),
         });
-        await tx.examQuestionUse.update({
-          where: {
-            examSessionId_questionId: {
-              examSessionId: exam.id,
-              questionId: item.questionId,
-            },
-          },
-          data: {
-            objectiveCode: item.objectiveCode,
-            syllabusStructureId: course.currentPublishedSyllabusStructureId,
-          },
-        });
+      const supplemented: Array<{ questionId: string; objectiveCode: string }> =
+        [];
+      if (input.labelUnmappedBankQuestions) {
+        for (const { questionId, objectiveCode, createdInImport } of selected) {
+          if (createdInImport) continue;
+          const result = await appendQuestionObjectiveInTransaction(
+            tx,
+            { ...objectiveScope, questionId },
+            objectiveCode,
+            true,
+          );
+          if (result.status === "added")
+            supplemented.push({ questionId, objectiveCode });
+        }
       }
       await tx.examPaperDraft.update({
         where: { id: draft.id },
@@ -336,7 +339,13 @@ export async function publishPaperDraft(
         targetId: draft.id,
         summary: "审核试卷并发布考试",
         beforeData: { revision: draft.revision },
-        afterData: { examId: exam.id, questionCount: selected.length },
+        afterData: {
+          examId: exam.id,
+          questionCount: selected.length,
+          ...objectiveScope,
+          labelUnmappedBankQuestions: input.labelUnmappedBankQuestions,
+          supplemented,
+        },
         context,
       });
       return exam;

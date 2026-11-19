@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CLUSTER_REACH,
   expandableSphereLayout,
   sphereNodeVisible,
   wheelExpansion,
@@ -103,9 +104,44 @@ test("章节与知识点保留原有球形坐标", () => {
       length(position) > HOBERMAN_MAX_RADIUS,
       "展开时知识点浮到球壳外侧，不被连杆遮挡",
     );
-    assert.ok(length(position) < HOBERMAN_MAX_RADIUS + 90);
+    assert.ok(length(position) < HOBERMAN_MAX_RADIUS + CLUSTER_REACH);
     assert.ok([position.x, position.y, position.z].every(Number.isFinite));
   }
+});
+
+test("章节贴向中心课程，知识点的呼吸轨迹与星团铺开大于章节壳层", () => {
+  const graph = fixture();
+  const layout = expandableSphereLayout(graph);
+  const chapterShellTravel =
+    HOBERMAN_MAX_RADIUS + 4 - (HOBERMAN_MIN_RADIUS + 2);
+  const points = graph.nodes.filter(
+    (node) => node.type === "KNOWLEDGE_POINT" && layout.expanded.has(node.key),
+  );
+  // 知识点从章节内侧一路推到外圈，位移要明显大于章节壳层自身的伸缩。
+  const travel = points.reduce((widest, point) => {
+    const start = layout.collapsed.get(point.key);
+    const end = layout.expanded.get(point.key);
+    assert.ok(start && end);
+    return Math.max(widest, distance(start, end));
+  }, 0);
+  assert.ok(travel > chapterShellTravel * 1.3, "呼吸轨迹以知识点为主角");
+
+  // 展开后单章星团的直径要撑过章节壳层的伸缩幅度，才显得铺得开。
+  const groups = new Map<string, Point[]>();
+  for (const edge of graph.edges) {
+    const position = layout.expanded.get(edge.to);
+    if (!position) continue;
+    const group = groups.get(edge.from) ?? [];
+    group.push(position);
+    groups.set(edge.from, group);
+  }
+  const widest = [...groups.values()].reduce((diameter, group) => {
+    for (let first = 0; first < group.length; first++)
+      for (let second = first + 1; second < group.length; second++)
+        diameter = Math.max(diameter, distance(group[first], group[second]));
+    return diameter;
+  }, 0);
+  assert.ok(widest > chapterShellTravel, "章节星团展开得比章节位移更开");
 });
 
 test("名称与输入顺序不改变伸缩坐标，孤立节点和空图可布局", () => {

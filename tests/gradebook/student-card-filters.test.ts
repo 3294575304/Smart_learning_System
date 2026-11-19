@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { filterStudentGradeCards } from "../../services/gradebook/student-card-filters";
 import { studentGradeFilterHref } from "../../services/gradebook/student-card-filters";
 import { StudentCourseEvaluationCard } from "../../components/grades/student-course-evaluation-card";
@@ -37,17 +38,40 @@ test("下拉跳转同时更新课程与状态，只保留已提交的搜索条�
   );
   assert.equal(all.searchParams.has("courseId"), false);
   assert.equal(all.searchParams.has("classroomId"), false);
+  assert.equal(all.searchParams.has("backClassroomId"), false);
+  const scoped = new URL(
+    studentGradeFilterHref(contexts, "b", "ALL", "", {
+      courseId: "c1",
+      classroomId: "a",
+    }),
+    "http://localhost",
+  );
+  assert.equal(scoped.searchParams.get("classroomId"), "b");
+  assert.equal(scoped.searchParams.get("backClassroomId"), "a");
   assert.throws(() => studentGradeFilterHref(contexts, "foreign", "ALL", ""));
 });
 test("学生总评只显示一个课程选择框，每个已加入班级独立成项", () => {
   const html = renderToStaticMarkup(
-    React.createElement(StudentGradeFilters, {
-      contexts,
-      courseId: "c1",
-      classroomId: "b",
-      publication: "ALL",
-      q: "",
-    }),
+    React.createElement(
+      AppRouterContext.Provider,
+      {
+        value: {
+          back() {},
+          forward() {},
+          refresh() {},
+          push() {},
+          replace() {},
+          prefetch() {},
+        },
+      },
+      React.createElement(StudentGradeFilters, {
+        contexts,
+        courseId: "c1",
+        classroomId: "b",
+        publication: "ALL",
+        q: "",
+      }),
+    ),
   );
   assert.equal((html.match(/<select/g) ?? []).length, 2);
   assert.match(html, /name="classroomId"/);

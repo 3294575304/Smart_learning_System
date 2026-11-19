@@ -1,0 +1,4 @@
+CREATE TYPE "ExamObservationKind" AS ENUM ('VISIBILITY', 'FULLSCREEN_EXIT', 'WINDOW_BLUR');
+
+ALTER TABLE "ExamSwitchEvent"
+ADD COLUMN "kind" "ExamObservationKind" NOT NULL DEFAULT 'VISIBILITY';

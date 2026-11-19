@@ -41,11 +41,13 @@ export function StudentAnswerWorkspace({
   navigator,
   busy,
   children,
+  firstUnanswered,
 }: {
   header: WorkspaceHeader;
   navigator: Navigator;
   busy?: boolean;
   children: ReactNode;
+  firstUnanswered?: number;
 }) {
   const [open, setOpen] = useState(false);
   const selection = useRef<number | null>(null);
@@ -113,6 +115,21 @@ export function StudentAnswerWorkspace({
               selection.current = index;
               setOpen(false);
             }}
+            footer={
+              firstUnanswered !== undefined && firstUnanswered >= 0 ? (
+                <button
+                  type="button"
+                  className={answerSecondaryButton}
+                  disabled={navigator.disabled}
+                  onClick={() => {
+                    selection.current = firstUnanswered;
+                    setOpen(false);
+                  }}
+                >
+                  跳到第一道未答题
+                </button>
+              ) : undefined
+            }
           />
         )}
       </EditorDialog>

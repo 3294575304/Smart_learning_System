@@ -50,6 +50,8 @@ export function AnswerSheetPanel({
   legendItems = legend,
   summary,
   groupByType = false,
+  totalQuestionCount,
+  filters,
 }: {
   questions: AnswerSheetQuestion[];
   activeIndex: number;
@@ -57,7 +59,7 @@ export function AnswerSheetPanel({
   questionState?: (index: number) => AnswerSheetState;
   onSelect: (index: number) => void;
   disabled?: boolean;
-  answeredCount: number;
+  answeredCount?: number;
   totalPoints?: number;
   footer?: ReactNode;
   className?: string;
@@ -65,17 +67,23 @@ export function AnswerSheetPanel({
   progressLabel?: string;
   legendItems?: readonly AnswerSheetState[];
   summary?: ReactNode;
-  groupByType?: boolean;
+  groupByType?: boolean | "type";
+  totalQuestionCount?: number;
+  filters?: ReactNode;
 }) {
   const titleId = useId();
-  const total = questions.length;
-  const percent = total === 0 ? 0 : Math.round((answeredCount / total) * 100);
-  const groups: Array<{ type?: QuestionType; start: number; end: number }> = [];
+  const total = totalQuestionCount ?? questions.length;
+  const percent =
+    total === 0 ? 0 : Math.round(((answeredCount ?? 0) / total) * 100);
+  const groups: Array<{ type?: QuestionType; indexes: number[] }> = [];
   questions.forEach((question, index) => {
     const type = groupByType ? question.type : undefined;
-    const previous = groups[groups.length - 1];
-    if (previous && previous.type === type) previous.end = index + 1;
-    else groups.push({ type, start: index, end: index + 1 });
+    const group =
+      groupByType === "type"
+        ? groups.find((entry) => entry.type === type)
+        : groups.at(-1);
+    if (group && group.type === type) group.indexes.push(index);
+    else groups.push({ type, indexes: [index] });
   });
 
   return (
@@ -94,46 +102,56 @@ export function AnswerSheetPanel({
         )}
         <span className="bg-muted text-ink-soft rounded-md px-2 py-0.5 text-[11px] leading-5 font-medium">
           {total} 题
-          {totalPoints ? ` · ${Number(totalPoints.toFixed(2))} 分` : ""}
+          {totalPoints !== undefined
+            ? ` · ${Number(totalPoints.toFixed(2))} 分`
+            : ""}
         </span>
       </div>
 
-      <div className="mt-4 space-y-2">
-        <div className="flex items-center justify-between gap-3 text-[13px]">
-          <span className="text-ink-soft font-medium">
-            {progressLabel} {answeredCount} / {total}
-          </span>
-          <span className="text-brand font-semibold tabular-nums">
-            {percent}%
-          </span>
-        </div>
-        <div
-          aria-hidden="true"
-          className="h-1.5 w-full overflow-hidden rounded-full bg-[#eaf1f7]"
-        >
+      {answeredCount !== undefined && (
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-ink-soft font-medium">
+              {progressLabel} {answeredCount} / {total}
+            </span>
+            <span className="text-brand font-semibold tabular-nums">
+              {percent}%
+            </span>
+          </div>
           <div
-            className="bg-brand h-full rounded-full motion-safe:transition-[width] motion-safe:duration-300"
-            style={{ width: `${percent}%` }}
-          />
+            aria-hidden="true"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-[#eaf1f7]"
+          >
+            <div
+              className="bg-brand h-full rounded-full motion-safe:transition-[width] motion-safe:duration-300"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {summary && (
         <div className="text-ink-soft mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs leading-5">
           {summary}
         </div>
       )}
+      {filters}
+      {questions.length !== total && (
+        <p role="status" className="text-ink-soft mt-3 text-xs tabular-nums">
+          显示 {questions.length} / {total} 题
+        </p>
+      )}
       <nav aria-label="题目导航" className="mt-4 space-y-4">
-        {groups.map(({ type, start, end }) => (
-          <div key={start}>
+        {groups.map(({ type, indexes }) => (
+          <div key={indexes[0]}>
             {type && (
               <h3 className="text-ink-soft mb-2 text-xs font-medium">
-                {QUESTION_TYPE_LABELS[type]} · {end - start} 题
+                {QUESTION_TYPE_LABELS[type]} · {indexes.length} 题
               </h3>
             )}
             <div className="grid grid-cols-5 gap-2">
-              {questions.slice(start, end).map((question, offset) => {
-                const index = start + offset;
+              {indexes.map((index) => {
+                const question = questions[index];
                 const current = index === activeIndex;
                 const answered = isAnswered?.(question.id);
                 const state = questionState?.(index) ?? {
@@ -145,8 +163,8 @@ export function AnswerSheetPanel({
                 return (
                   <button
                     aria-current={current ? "step" : undefined}
-                    aria-label={`第 ${question.sortOrder} 题（${state.label}）`}
-                    title={state.label}
+                    aria-label={`第 ${question.sortOrder} 题（${current ? "当前题 · " : ""}${state.label}）`}
+                    title={current ? `当前题 · ${state.label}` : state.label}
                     className={cn(
                       "flex h-10 items-center justify-center gap-0.5 rounded-lg border text-[13px] font-medium tabular-nums transition-colors",
                       "focus-visible:outline-brand focus-visible:outline-2 focus-visible:outline-offset-2",
@@ -173,6 +191,11 @@ export function AnswerSheetPanel({
             </div>
           </div>
         ))}
+        {!questions.length && (
+          <p role="status" className="text-ink-soft text-sm">
+            当前筛选下没有题目。
+          </p>
+        )}
       </nav>
 
       <ul className="text-ink-soft mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px]">

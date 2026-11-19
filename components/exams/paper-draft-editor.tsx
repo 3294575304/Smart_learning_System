@@ -1,6 +1,7 @@
 "use client";
 
 import { ExamAttemptFields } from "./exam-attempt-fields";
+import { examTypeLabels } from "@/services/exams/exam-types";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -684,6 +685,8 @@ export function PaperDraftEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [labelUnmappedBankQuestions, setLabelUnmappedBankQuestions] =
+    useState(false);
   const [publication, setPublication] = useState<{
     exam: ExamCreateInput;
     revision: number;
@@ -842,6 +845,7 @@ export function PaperDraftEditor({
       await api(`${base}/publish`, "POST", {
         expectedRevision: publication.revision,
         requestId: publication.exam.requestId,
+        labelUnmappedBankQuestions,
       });
       window.location.replace("/teacher/exams");
     } catch (reason) {
@@ -917,8 +921,11 @@ export function PaperDraftEditor({
                   setType(event.target.value as Draft["type"])
                 }
               >
-                <option value="MIDTERM">期中考试</option>
-                <option value="FINAL">期末考试</option>
+                {Object.entries(examTypeLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="text-sm">
@@ -1079,10 +1086,13 @@ export function PaperDraftEditor({
           .filter(({ id }) => publication?.exam.classroomIds.includes(id))
           .map(({ name }) => name)}
         fromPaper
+        labelUnmappedBankQuestions={labelUnmappedBankQuestions}
+        onBankLabelChange={setLabelUnmappedBankQuestions}
         busy={busy}
         error={error}
         onClose={() => {
           setPublication(null);
+          setLabelUnmappedBankQuestions(false);
           setError("");
         }}
         onConfirm={() => void publish()}

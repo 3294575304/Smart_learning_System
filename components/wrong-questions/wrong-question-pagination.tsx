@@ -1,3 +1,4 @@
+import { withStudentAnalysisReturn } from "@/services/student-experience/analysis-navigation";
 import { PageIndex } from "@/components/dashboard/page-index";
 
 import type { WrongQuestionListQuery } from "@/services/wrong-questions/schemas";
@@ -24,16 +25,24 @@ function pageHref(query: WrongQuestionListQuery, page: number): string {
 interface Props {
   query: WrongQuestionListQuery;
   total: number;
+  analysisReturn?: string;
   totalPages: number;
 }
 
-export function WrongQuestionPagination({ query, total, totalPages }: Props) {
+export function WrongQuestionPagination({
+  query,
+  total,
+  totalPages,
+  analysisReturn,
+}: Props) {
   if (totalPages <= 1) return null;
 
   return (
     <PageIndex
       ariaLabel="错题分页"
-      hrefForPage={(page) => pageHref(query, page)}
+      hrefForPage={(page) =>
+        withStudentAnalysisReturn(pageHref(query, page), analysisReturn)
+      }
       page={query.page}
       summary={`共 ${total} 道，第 ${query.page} / ${totalPages} 页`}
       totalPages={totalPages}

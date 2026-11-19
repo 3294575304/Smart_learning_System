@@ -1,4 +1,5 @@
 "use client";
+import { withStudentAnalysisReturn } from "@/services/student-experience/analysis-navigation";
 import { QuestionType } from "@prisma/client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -11,12 +12,14 @@ interface Props {
   filterOptions: WrongQuestionListResult["filterOptions"];
   chapters?: Array<{ id: string; name: string }>;
   total?: number;
+  analysisReturn?: string;
 }
 export function WrongQuestionFilters({
   query,
   filterOptions,
   chapters = [],
   total = 0,
+  analysisReturn,
 }: Props) {
   const [pending, setPending] = useState(false);
   const [keyword, setKeyword] = useState(query.keyword ?? "");
@@ -39,7 +42,12 @@ export function WrongQuestionFilters({
     setDraft({ ...draft, [name]: next });
     setPending(true);
     // 完整导航避免客户端流式路由挂起导致筛选无法完成。
-    window.location.assign(wrongQuestionFilterUrl(query, name, next, keyword));
+    window.location.assign(
+      withStudentAnalysisReturn(
+        wrongQuestionFilterUrl(query, name, next, keyword),
+        analysisReturn,
+      ),
+    );
   }
   const selectClass =
     "mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-50";
@@ -343,7 +351,10 @@ export function WrongQuestionFilters({
         {active ? (
           <Link
             className="rounded px-2 py-1 text-sky-700 hover:bg-sky-50"
-            href="/student/wrong-questions?view=wrong"
+            href={withStudentAnalysisReturn(
+              "/student/wrong-questions?view=wrong",
+              analysisReturn,
+            )}
           >
             重置筛选
           </Link>

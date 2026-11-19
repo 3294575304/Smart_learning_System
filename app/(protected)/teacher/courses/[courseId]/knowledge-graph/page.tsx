@@ -25,7 +25,7 @@ export default async function Page({
   return (
     <section className="space-y-6">
       <PageHeader
-        title={point.success ? "知识点关联题目" : "Python 课程知识图谱"}
+        title={point.success ? "知识点关联题目" : "课程知识图谱"}
         description={
           point.success
             ? "查看这个知识点在正式图谱中关联的有效题目。"
@@ -33,7 +33,7 @@ export default async function Page({
         }
         actions={
           <TeacherBackLink
-            href={`/teacher/courses/${parsed.data}${point.success ? "#course-content-coverage" : ""}`}
+            href={`/teacher/courses/${parsed.data}${point.success ? "/content-coverage" : ""}`}
           >
             {point.success ? "返回内容覆盖自检" : "返回课程"}
           </TeacherBackLink>

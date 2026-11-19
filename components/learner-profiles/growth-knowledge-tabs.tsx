@@ -16,10 +16,16 @@ export function GrowthKnowledgeTabs({
   chapterView,
   objectiveView,
   objectiveCount,
+  objectiveNotice,
 }: {
   chapterView: ReactNode;
   objectiveView: ReactNode;
   objectiveCount: number;
+  /**
+   * 目标视图的口径说明。切换维度时上方分布条不变、下方内容整块换掉，
+   * 没有一句话解释会让人以为「数据没了」或「两边数量对不上是 bug」。
+   */
+  objectiveNotice?: ReactNode;
 }) {
   const tab =
     useSearchParams().get("view") === "objective" ? "objective" : "chapter";
@@ -86,6 +92,11 @@ export function GrowthKnowledgeTabs({
         id="growth-panel-objective"
         role="tabpanel"
       >
+        {objectiveNotice ? (
+          <p className="border-line bg-muted/50 text-ink-body mb-3 rounded-lg border px-3 py-2 text-xs leading-5">
+            {objectiveNotice}
+          </p>
+        ) : null}
         {objectiveView}
       </div>
     </div>

@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const parsed = examSwitchSchema
     .extend({ submissionId: submissionIdSchema })
     .safeParse(body);
-  if (!parsed.success) return apiError("请检查切屏事件", 400);
+  if (!parsed.success) return apiError("请检查考试活动记录", 400);
   try {
     const user = await requireAuthenticatedUser([Role.STUDENT]);
     return apiSuccess(
@@ -19,6 +19,7 @@ export async function POST(request: Request) {
         user.id,
         parsed.data.submissionId,
         parsed.data.eventKey,
+        parsed.data.kind,
       ),
     );
   } catch (error) {

@@ -1,3 +1,8 @@
+import { StudentAnalysisReturnLink } from "@/components/dashboard/student-analysis-return-link";
+import {
+  readStudentAnalysisReturn,
+  studentAnalysisReturnFromHref,
+} from "@/services/student-experience/analysis-navigation";
 import { hundredPointScore } from "@/services/assignments/presentation";
 import { StudentRevokedAssignment } from "@/components/assignments/student-revoked-assignment";
 import { AssignmentRevokedError } from "@/services/assignments/errors";
@@ -7,6 +12,11 @@ import {
 } from "@/services/student-experience/task-scope";
 import { assertAssignmentTaskScope } from "@/services/student-experience/task-scope-access";
 import { QuestionText } from "@/components/assignments/question-text";
+import {
+  QuestionReviewContent,
+  questionReviewAnswerLabels,
+} from "@/components/questions/question-review-content";
+import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import { Paperclip } from "lucide-react";
 import { Role } from "@prisma/client";
 import Image from "next/image";
@@ -23,6 +33,9 @@ import { getStudentExamReview } from "@/services/exams/score-reviews";
 import { StudentAssignmentListBackLink } from "@/components/assignments/student-assignment-list-back-link";
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { examListReturn } from "@/services/student-experience/activity-query";
+import { examReportReturn } from "@/services/exams/student-report-review";
+import { ExamReceiptAnswerSheet } from "@/components/exams/exam-receipt-answer-sheet";
+import { publishedReceiptOutcome } from "@/services/assignments/answer-presentation";
 
 interface Props {
   params: Promise<{ submissionId: string }>;
@@ -40,16 +53,20 @@ export default async function ResultPage({ params, searchParams }: Props) {
   const query = await searchParams;
   const scope = studentTaskScopeSchema.safeParse(query);
   if (!scope.success) notFound();
+  const questionNumber =
+    typeof query.question === "string" && /^[1-9]\d{0,5}$/.test(query.question)
+      ? Number(query.question)
+      : undefined;
+  if (query.question !== undefined && questionNumber === undefined) notFound();
   try {
     const result = await getStudentSubmissionResult(
       student.id,
       (await params).submissionId,
+      questionNumber,
     );
     await assertAssignmentTaskScope(result.assignmentId, scope.data);
     const canReviewExam = Boolean(result.examReceipt && result.isPublished);
-    const examReview = canReviewExam
-      ? await getStudentExamReview(student.id, result.id)
-      : null;
+
     const percentage = hundredPointScore(result.score, result.maxScore);
     const feedback = result.answers.filter((answer) => answer.teacherFeedback);
     const examBack = result.examReceipt
@@ -58,20 +75,122 @@ export default async function ResultPage({ params, searchParams }: Props) {
           focus: result.assignmentId,
         })
       : null;
-    const answers = result.isPublished
-      ? result.answers
-      : result.submittedAnswers;
+    const analysisReturn =
+      readStudentAnalysisReturn(query.analysisReturn) ??
+      (examBack ? studentAnalysisReturnFromHref(examBack) : undefined);
+    const recordBack =
+      result.examAnswerSheet && scope.data.classroomId && examBack
+        ? studentTaskHref(
+            `/student/exams/${result.examAnswerSheet.examId}/record?${new URLSearchParams({ returnTo: examBack })}`,
+            scope.data,
+          )
+        : undefined;
+    const reportBack =
+      canReviewExam && result.examAnswerSheet
+        ? examReportReturn(
+            query.reportReturn,
+            result.examAnswerSheet.examId,
+            result.assignmentId,
+            scope.data,
+          )
+        : undefined;
+    if (questionNumber !== undefined) {
+      const answer =
+        canReviewExam &&
+        result.answers.find(({ sortOrder }) => sortOrder === questionNumber);
+      if (!answer || !examBack) notFound();
+      const options = answer.reviewOptions ?? [];
+      return (
+        <section className="space-y-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <StudentBackLink href={reportBack ?? examBack}>
+              {reportBack ? "返回考试报告" : "返回我的考试"}
+            </StudentBackLink>
+            {analysisReturn && (
+              <StudentAnalysisReturnLink href={analysisReturn} />
+            )}
+          </div>
+          <article className="border-line bg-card space-y-5 rounded-xl border p-5 sm:p-6">
+            <header className="border-line space-y-1 border-b pb-4">
+              <p className="text-muted-foreground text-sm">
+                {result.assignmentTitle} · 第 {answer.sortOrder} 题 ·{" "}
+                {QUESTION_TYPE_LABELS[answer.type]}
+              </p>
+              <h1 className="text-xl font-semibold [overflow-wrap:anywhere]">
+                {answer.title}
+              </h1>
+              <p className="text-muted-foreground text-sm">
+                {answer.score === null
+                  ? "待批改"
+                  : `得分 ${answer.score} / ${answer.maxScore} 分`}
+              </p>
+            </header>
+            <QuestionReviewContent
+              content={answer.content}
+              stemMedia={answer.images.map((image) => (
+                <Image
+                  key={image.id}
+                  src={image.url}
+                  width={800}
+                  height={600}
+                  unoptimized
+                  className="mt-3 max-h-[32rem] max-w-full rounded border object-contain"
+                  alt={`第 ${answer.sortOrder} 题附图`}
+                />
+              ))}
+              options={options}
+              explanation={answer.explanation}
+              answer={
+                options.some(({ isCorrect }) => isCorrect)
+                  ? undefined
+                  : {
+                      label: questionReviewAnswerLabels[answer.type],
+                      value: answer.correctAnswer,
+                    }
+              }
+            />
+            <section className="border-line space-y-2 border-t pt-4">
+              <h2 className="font-semibold">我的作答</h2>
+              <QuestionText text={answer.studentAnswer} />
+            </section>
+            {answer.teacherFeedback?.trim() && (
+              <section className="space-y-2">
+                <h2 className="font-semibold">教师反馈</h2>
+                <QuestionText text={answer.teacherFeedback} />
+              </section>
+            )}
+          </article>
+        </section>
+      );
+    }
+    const examReview = canReviewExam
+      ? await getStudentExamReview(student.id, result.id)
+      : null;
+    const answers = [
+      ...(result.isPublished ? result.answers : result.submittedAnswers),
+      ...(result.examAnswerSheet?.unansweredQuestions ?? []),
+    ].sort((a, b) => a.sortOrder - b.sortOrder);
     const grades = new Map(
       result.answers.map((answer) => [answer.assignmentQuestionId, answer]),
     );
+    const answeredIds = new Set(result.examAnswerSheet?.answeredQuestionIds);
     return (
       <section className="space-y-6">
         <div>
-          {examBack ? (
-            <StudentBackLink href={examBack}>返回我的考试</StudentBackLink>
-          ) : (
-            <StudentAssignmentListBackLink scope={scope.data} />
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {analysisReturn && (
+              <StudentAnalysisReturnLink href={analysisReturn} />
+            )}
+            {reportBack ? (
+              <StudentBackLink href={reportBack}>返回考试报告</StudentBackLink>
+            ) : recordBack ? (
+              <StudentBackLink href={recordBack}>返回考试记录</StudentBackLink>
+            ) : examBack ? (
+              <StudentBackLink href={examBack}>返回我的考试</StudentBackLink>
+            ) : (
+              <StudentAssignmentListBackLink scope={scope.data} />
+            )}
+          </div>
           <h1 className="mt-2 text-2xl font-semibold break-words">
             {result.assignmentTitle} ·{" "}
             {result.examReceipt ? "交卷回执" : "提交结果"}
@@ -82,25 +201,46 @@ export default async function ResultPage({ params, searchParams }: Props) {
           </p>
         </div>
         {result.examReceipt && (
-          <section
-            className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950"
-            aria-labelledby="exam-receipt"
-          >
-            <h2 id="exam-receipt" className="font-semibold">
-              考试已收卷
-            </h2>
-            <p className="mt-2 text-sm">
-              {result.examReceipt.reason
-                ? examReceiptLabels[result.examReceipt.reason]
-                : "历史记录未记录交卷方式"}{" "}
-              · 已收到 {result.examReceipt.answeredCount} 题作答
-            </p>
-            <p className="mt-1 text-sm">
-              {result.examReceipt.lastSavedAt &&
-                `账号最近保存 ${result.examReceipt.lastSavedAt.toLocaleString("zh-CN")} · `}
-              收卷以服务端收到的答案为准。
-            </p>
-          </section>
+          <>
+            <section
+              className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950"
+              aria-labelledby="exam-receipt"
+            >
+              <h2 id="exam-receipt" className="font-semibold">
+                考试已收卷
+              </h2>
+              <p className="mt-2 text-sm">
+                {result.examReceipt.reason
+                  ? examReceiptLabels[result.examReceipt.reason]
+                  : "历史记录未记录交卷方式"}{" "}
+                · 已收到 {result.examReceipt.answeredCount} 题作答
+              </p>
+              <p className="mt-1 text-sm">
+                {result.examReceipt.lastSavedAt &&
+                  `账号最近保存 ${result.examReceipt.lastSavedAt.toLocaleString("zh-CN")} · `}
+                收卷以服务端收到的答案为准。
+              </p>
+            </section>
+            {answers.length > 0 && (
+              <ExamReceiptAnswerSheet
+                questions={answers.map(
+                  ({ assignmentQuestionId, sortOrder, type }) => ({
+                    id: String(sortOrder),
+                    sortOrder,
+                    type,
+                    answered: answeredIds.has(assignmentQuestionId),
+                    outcome: result.isPublished
+                      ? publishedReceiptOutcome(
+                          grades.get(assignmentQuestionId),
+                        )
+                      : undefined,
+                  }),
+                )}
+                totalPoints={result.examAnswerSheet?.totalPoints}
+                published={result.isPublished}
+              />
+            )}
+          </>
         )}
         {result.isPublished ? (
           <section
@@ -244,6 +384,7 @@ export default async function ResultPage({ params, searchParams }: Props) {
                       ? `exam-question-${answer.sortOrder}`
                       : undefined
                   }
+                  tabIndex={result.examReceipt ? -1 : undefined}
                   className="border-line bg-card min-w-0 scroll-mt-24 rounded-xl border p-5 shadow-[var(--shadow-card)] sm:p-6"
                   key={answer.assignmentQuestionId}
                 >

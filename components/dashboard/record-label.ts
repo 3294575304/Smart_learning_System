@@ -1,7 +1,9 @@
+import { examTypeLabel } from "@/services/exams/exam-types";
+
 /**
  * 成绩记录的类别文案。
  *
- * kind 来自两处：在线任务的 examSession.type（MIDTERM / FINAL）或
+ * kind 来自两处：在线任务的 examSession.type 或
  * 成绩台账条目的 type，作业统一为 ASSIGNMENT。
  * 图表横轴、记录表、成绩详情共用同一套说法，避免三处各写一遍。
  */
@@ -11,7 +13,7 @@ export function isExamKind(kind: string) {
 
 export function shortKindLabel(kind: string) {
   if (!isExamKind(kind)) return "作业";
-  return kind === "MIDTERM" ? "期中考试" : "期末考试";
+  return examTypeLabel(kind);
 }
 
 export function recordLabel(kind: string, href: string) {

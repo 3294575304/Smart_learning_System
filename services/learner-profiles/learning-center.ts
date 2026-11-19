@@ -78,6 +78,7 @@ export async function getStudentCourseLearningCenter(
             id: true,
             occurredAt: true,
             eventType: true,
+            sourceId: true,
             concepts: { select: { score: true, maxScore: true } },
           },
         })
@@ -389,6 +390,45 @@ export async function getStudentCourseLearningCenter(
       ? []
       : await getObjectiveMastery(courseId, orderedPointViews);
 
+  /*
+   * 学习记录条目要能点回现场。
+   * 事件的 sourceId 是学生作答 ID（LearningEventSourceType.STUDENT_ANSWER），
+   * 作答 → 提交 一跳即可，所以作业类可以直达「本次作业结果」；
+   * 练习类的链路（recommendationAnswer → 推荐批次）没有对应的单次结果页，
+   * 保持落到课程练习记录，不假装能直达。
+   */
+  const activityEvents = events.slice(0, 8);
+  const answerIds = activityEvents
+    .filter((event) => event.eventType === LearningEventType.ASSESSMENT_GRADED)
+    .map((event) => event.sourceId);
+  const answers = answerIds.length
+    ? await prisma.studentAnswer.findMany({
+        where: { id: { in: answerIds } },
+        select: { id: true, submissionId: true },
+      })
+    : [];
+  const submissionByAnswer = new Map(
+    answers.map((answer) => [answer.id, answer.submissionId]),
+  );
+  const activityItems = activityEvents.map((event) => {
+    const isAssessment =
+      event.eventType === LearningEventType.ASSESSMENT_GRADED;
+    const submissionId = isAssessment
+      ? submissionByAnswer.get(event.sourceId)
+      : undefined;
+    return {
+      id: event.id,
+      occurredAt: event.occurredAt,
+      kind: isAssessment ? ("assignment" as const) : ("practice" as const),
+      label: isAssessment ? "作业评分已更新" : "练习结果已更新",
+      conceptCount: event.concepts.length,
+      /** 有提交 ID 才给直达链接；没有就退回课程列表，不造一个假链接。 */
+      href: submissionId
+        ? `/student/submissions/${submissionId}/result`
+        : undefined,
+    };
+  });
+
   return {
     course: graphResult.course,
     classroom,
@@ -493,15 +533,7 @@ export async function getStudentCourseLearningCenter(
       value: event.value,
       detail: event.detail,
     })),
-    recentActivity: events.slice(0, 8).map((event) => ({
-      id: event.id,
-      occurredAt: event.occurredAt,
-      label:
-        event.eventType === LearningEventType.ASSESSMENT_GRADED
-          ? "作业评分已更新"
-          : "练习结果已更新",
-      conceptCount: event.concepts.length,
-    })),
+    recentActivity: activityItems,
     heatmap: chapters,
     objectives,
     learningPath: {

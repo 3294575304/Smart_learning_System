@@ -247,11 +247,12 @@ export function buildAssessmentSchemeFromSyllabus(
         description: assessment.description,
         sourceRefs: assessment.sourceRefs,
         mappings: syllabus.objectives
+          .map((objective, objectiveIndex) => ({ objective, objectiveIndex }))
           .filter(
-            (objective) =>
-              explicitMappings.has(objective.code) || mapping !== null,
+            ({ objective }) =>
+              mapping !== null || explicitMappings.has(objective.code),
           )
-          .map((objective, objectiveIndex) => ({
+          .map(({ objective, objectiveIndex }) => ({
             objectiveCode: objective.code,
             allocationRate:
               mapping?.values[

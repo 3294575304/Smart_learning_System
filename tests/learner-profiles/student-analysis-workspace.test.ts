@@ -2,11 +2,36 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
+
+function renderWithRouter(element: React.ReactElement) {
+  return renderToStaticMarkup(
+    React.createElement(
+      AppRouterContext.Provider,
+      {
+        value: {
+          back() {},
+          forward() {},
+          refresh() {},
+          push() {},
+          replace() {},
+          prefetch() {},
+        },
+      },
+      element,
+    ),
+  );
+}
 import {
   ScoreChart,
   StudentAnalysisWorkspace,
 } from "../../components/dashboard/student-analysis-workspace";
 import { TrendChart } from "../../components/dashboard/trend-chart";
+import {
+  readStudentAnalysisReturn,
+  studentAnalysisHref,
+  studentAnalysisReturnFromHref,
+} from "../../services/student-experience/analysis-navigation";
 import type { StudentClassAnalysis } from "../../services/dashboard/student-class-analytics";
 
 test("growth shows two results as compact rows, retaining zero grades and detail links", () => {
@@ -61,6 +86,8 @@ function sample(): StudentClassAnalysis {
       teacher: { profile: null },
     },
     classroom: { id: "class", name: "示例班", status: "ACTIVE" },
+    lastClassActivityAt: 0,
+    lastPracticeAt: 0,
     assignmentProgress: { total: 0, submitted: 0, overdue: 0 },
     total: 0,
     submitted: 0,
@@ -90,7 +117,7 @@ function sample(): StudentClassAnalysis {
 test("analysis empty state does not fabricate scores, ability or access duration", () => {
   Object.assign(globalThis, { React });
   const selected = sample();
-  const html = renderToStaticMarkup(
+  const html = renderWithRouter(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],
@@ -145,7 +172,7 @@ test("analysis preserves a real zero grade and separates hidden grades from the 
       submittedAt: new Date("2026-10-29T00:00:00Z"),
     },
   ];
-  const html = renderToStaticMarkup(
+  const html = renderWithRouter(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],
@@ -174,7 +201,7 @@ test("ended exams stay outside assignment reminders and have their own counts", 
   selected.unsubmitted = 1;
   selected.overdue = 1;
   selected.completion = 67;
-  const html = renderToStaticMarkup(
+  const html = renderWithRouter(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],
@@ -213,7 +240,7 @@ test("attendance week strip marks no-class days instead of counting them absent"
     { key: "11-16", weekday: "四", status: "ABSENT" },
     { key: "11-17", weekday: "五", status: null },
   ];
-  const html = renderToStaticMarkup(
+  const html = renderWithRouter(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],
@@ -249,7 +276,7 @@ test("practice tab stays in the course scope and never enters the score axis", (
     { id: "practice:11-14", label: "11/14", answered: 6, correct: 5, rate: 83 },
     { id: "practice:11-15", label: "11/15", answered: 4, correct: 2, rate: 50 },
   ];
-  const html = renderToStaticMarkup(
+  const html = renderWithRouter(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],
@@ -266,4 +293,60 @@ test("practice tab stays in the course scope and never enters the score axis", (
   assert.match(html, /不计入课程成绩/);
   // 成绩序列（含 80 分作业）不应混进练习视图。
   assert.doesNotMatch(html, /作业一/);
+});
+
+test("learning analysis links restore the classroom and label the course-centre action by origin", () => {
+  Object.assign(globalThis, { React });
+  const selected = sample();
+  selected.practiceHistory = [
+    { id: "practice:11-14", label: "11/14", answered: 6, correct: 5, rate: 83 },
+  ];
+  selected.course.id = "cm00000000000000000000001";
+  selected.classroom.id = "cm00000000000000000000002";
+  const scope = {
+    courseId: selected.course.id,
+    classroomId: selected.classroom.id,
+  };
+  const render = (fromCourseCenter: boolean) =>
+    renderWithRouter(
+      React.createElement(StudentAnalysisWorkspace, {
+        selected,
+        contexts: [selected],
+        updatedAt: new Date("2026-11-26T00:00:00Z"),
+        initialChart: "exam",
+        fromCourseCenter,
+      }),
+    );
+  const standard = render(false);
+  assert.match(standard, /当前教学班<\/span><a[^>]*>课程学习中心/);
+  assert.doesNotMatch(standard, /返回课程学习中心/);
+  assert.match(render(true), /当前教学班<\/span><a[^>]*>.*?返回课程学习中心/);
+  for (const path of [
+    "assignments",
+    "exams",
+    "attendance",
+    "recommendations",
+    "wrong-questions",
+    "tasks",
+    "results",
+  ]) {
+    const href = [...standard.matchAll(/href="([^"]+)"/g)]
+      .map(([, value]) => value.replaceAll("&amp;", "&"))
+      .find((value) => value.startsWith("/student/" + path + "?"));
+    assert.ok(href, path);
+    assert.equal(
+      studentAnalysisReturnFromHref(href),
+      studentAnalysisHref(scope, { chart: "exam" }),
+      path,
+    );
+  }
+  assert.equal(
+    readStudentAnalysisReturn("https://external.example/student/analytics"),
+    undefined,
+  );
+  assert.equal(readStudentAnalysisReturn("/student/tasks"), undefined);
+  assert.equal(
+    readStudentAnalysisReturn("/student/analytics?courseId=invalid"),
+    undefined,
+  );
 });

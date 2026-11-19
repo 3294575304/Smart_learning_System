@@ -19,6 +19,7 @@ import { useMemo, useRef, useState, type DragEvent } from "react";
 import { requestAdminApi } from "@/components/admin/request-api";
 import type {
   QuestionImportCourseOption,
+  QuestionImportObjectiveCourse,
   QuestionImportDraft,
   QuestionImportPreview,
 } from "@/services/question-import/types";
@@ -96,17 +97,20 @@ interface QuestionFileImportProps {
   courses: QuestionImportCourseOption[];
   mode: "ADMIN" | "TEACHER";
   returnHref?: string;
+  objectiveCourses?: QuestionImportObjectiveCourse[];
 }
 
 export function QuestionFileImport({
   courses,
   mode,
   returnHref,
+  objectiveCourses = [],
 }: QuestionFileImportProps) {
   const [preview, setPreview] = useState<QuestionImportPreview | null>(null);
   const [categoryId, setCategoryId] = useState(
     courses.length === 1 ? courses[0].id : "",
   );
+  const [objectiveCourseId, setObjectiveCourseId] = useState("");
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -127,8 +131,28 @@ export function QuestionFileImport({
     returnHref ?? (isAdmin ? "/admin/questions" : "/teacher/questions");
 
   const importable = preview?.questions ?? [];
+  const objectiveOptions = objectiveCourses.filter(
+    (course) => course.categoryId === categoryId,
+  );
+  const objectiveCourse = objectiveOptions.find(
+    (course) => course.id === objectiveCourseId,
+  );
+  const objectiveLabels = objectiveCourse?.objectives ?? [];
+  function issuesFor(question: QuestionImportDraft) {
+    const issues = currentIssues(question);
+    const codes = question.objectiveCodes ?? [];
+    if (isAdmin || !codes.length) return issues;
+    if (!objectiveCourse) issues.push("有目标编码时须先选择本人课程");
+    else if (
+      codes.some((code) => !objectiveLabels.some((item) => item.code === code))
+    )
+      issues.push("目标编码不属于所选正式大纲");
+    if (codes.length > 3 || new Set(codes).size !== codes.length)
+      issues.push("每题最多填写 3 个不同的目标编码");
+    return issues;
+  }
   const invalidCount = importable.filter(
-    (question) => currentIssues(question).length > 0,
+    (question) => issuesFor(question).length > 0,
   ).length;
   const totalPages = Math.max(
     1,
@@ -217,7 +241,16 @@ export function QuestionFileImport({
           checksum: preview.source.checksum,
         },
         categoryId,
-        questions: importable,
+        objectiveScope: objectiveCourse
+          ? {
+              courseId: objectiveCourse.id,
+              syllabusStructureId: objectiveCourse.syllabusStructureId,
+            }
+          : undefined,
+        questions: importable.map((question) => ({
+          ...question,
+          objectiveCodes: isAdmin ? undefined : question.objectiveCodes,
+        })),
       }),
     });
     setBusy(false);
@@ -736,7 +769,10 @@ export function QuestionFileImport({
                   className="w-full rounded-md border bg-white px-3 py-2"
                   value={categoryId}
                   disabled={busy}
-                  onChange={(event) => setCategoryId(event.target.value)}
+                  onChange={(event) => {
+                    setCategoryId(event.target.value);
+                    setObjectiveCourseId("");
+                  }}
                 >
                   <option value="">请选择课程分类</option>
                   {courses.map((course) => (
@@ -753,6 +789,36 @@ export function QuestionFileImport({
               <p className="mt-3 text-sm text-amber-700" role="status">
                 暂无可用课程分类，请联系管理员维护目录。
               </p>
+            )}
+            {!isAdmin && (
+              <label className="mt-3 block space-y-2 text-sm">
+                <span className="font-medium">目标归属课程（选填）</span>
+                <select
+                  className="w-full rounded-md border bg-white px-3 py-2"
+                  value={objectiveCourseId}
+                  disabled={busy}
+                  onChange={(event) => setObjectiveCourseId(event.target.value)}
+                >
+                  <option value="">请选择课程及正式大纲</option>
+                  {objectiveOptions.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.name} · 大纲 v{course.versionNumber}
+                    </option>
+                  ))}
+                </select>
+                <span className="block text-slate-600">
+                  每道题可填写最多 3 个目标编码。JSON 使用 objectiveCodes
+                  数组，Word、文本或可提取文字的 PDF
+                  可在题块写「课程目标：O1，O2」。
+                </span>
+                {objectiveLabels.length > 0 && (
+                  <span className="block text-slate-600">
+                    {objectiveLabels
+                      .map(({ code, title }) => `${code} ${title}`)
+                      .join(" · ")}
+                  </span>
+                )}
+              </label>
             )}
           </section>
 
@@ -781,7 +847,7 @@ export function QuestionFileImport({
             </div>
 
             {visibleQuestions.map((question) => {
-              const issues = currentIssues(question);
+              const issues = issuesFor(question);
               return (
                 <details
                   className={`rounded-xl border bg-white p-4 ${issues.length ? "border-amber-300" : "border-emerald-200"}`}
@@ -803,6 +869,32 @@ export function QuestionFileImport({
                     )}
                   </summary>
                   <div className="mt-4 space-y-4">
+                    {!isAdmin && (
+                      <label className="block space-y-1 text-sm">
+                        <span className="font-medium">
+                          本题课程目标编码（选填）
+                        </span>
+                        <input
+                          type="text"
+                          className="w-full rounded-md border px-3 py-2"
+                          placeholder="例如 O1，O2"
+                          disabled={busy}
+                          defaultValue={
+                            question.objectiveCodes?.join("，") ?? ""
+                          }
+                          onChange={(event) => {
+                            const objectiveCodes = event.target.value
+                              .split(/[、，,;；\s]+/u)
+                              .filter(Boolean);
+                            updateQuestion(question.rowKey, (current) => ({
+                              ...current,
+                              objectiveCodes,
+                            }));
+                          }}
+                        />
+                      </label>
+                    )}
+
                     <div className="grid gap-3 md:grid-cols-[1fr_10rem_8rem]">
                       <label className="space-y-1 text-sm">
                         <span className="font-medium">标题</span>
@@ -1015,11 +1107,13 @@ export function AdminQuestionFileImport({
 export function TeacherQuestionFileImport({
   courses,
   returnHref,
+  objectiveCourses,
 }: Omit<QuestionFileImportProps, "mode">) {
   return (
     <QuestionFileImport
       courses={courses}
       mode="TEACHER"
+      objectiveCourses={objectiveCourses}
       returnHref={returnHref}
     />
   );

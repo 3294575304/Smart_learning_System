@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { examAttendanceState } from "./monitor-state";
+import { countedExamSwitchKinds } from "./switch-policy";
 
 export async function getExamMonitor(
   teacherId: string,
@@ -22,6 +23,7 @@ export async function getExamMonitor(
       status: true,
       examSession: {
         select: {
+          id: true,
           title: true,
           startsAt: true,
           endsAt: true,
@@ -58,8 +60,15 @@ export async function getExamMonitor(
           examSubmissionReason: true,
           lastSavedAt: true,
           submittedAt: true,
-          _count: { select: { examSwitchEvents: true } },
+          _count: {
+            select: {
+              examSwitchEvents: {
+                where: { kind: { in: [...countedExamSwitchKinds] } },
+              },
+            },
+          },
           examSwitchEvents: {
+            where: { kind: { in: [...countedExamSwitchKinds] } },
             orderBy: { createdAt: "desc" },
             take: 1,
             select: { createdAt: true },
@@ -70,6 +79,23 @@ export async function getExamMonitor(
   });
   const exam = assignment?.examSession;
   if (!assignment || !exam) throw new ResourceNotFoundError("考试教学班不存在");
+  const observations = assignment.submissions.length
+    ? await prisma.examSwitchEvent.groupBy({
+        by: ["submissionId", "kind"],
+        where: {
+          examSessionId: exam.id,
+          submissionId: { in: assignment.submissions.map(({ id }) => id) },
+          kind: { not: "VISIBILITY" },
+        },
+        _count: { _all: true },
+      })
+    : [];
+  const observationCounts = new Map(
+    observations.map(({ submissionId, kind, _count }) => [
+      `${submissionId}:${kind}`,
+      _count._all,
+    ]),
+  );
   const now = new Date();
   const attempts = new Map(
     assignment.submissions.map((submission) => [
@@ -113,6 +139,11 @@ export async function getExamMonitor(
           submission: attempt ? { status: attempt.status, reason } : undefined,
         }),
         switches: attempt?._count.examSwitchEvents ?? 0,
+        fullscreenExits:
+          observationCounts.get(`${attempt?.id}:FULLSCREEN_EXIT`) ?? 0,
+        windowBlurs: observationCounts.get(`${attempt?.id}:WINDOW_BLUR`) ?? 0,
+        windowSwitches:
+          observationCounts.get(`${attempt?.id}:WINDOW_SWITCH`) ?? 0,
         lastSwitchAt:
           attempt?.examSwitchEvents[0]?.createdAt.toISOString() ?? null,
         lastSavedAt: attempt?.lastSavedAt?.toISOString() ?? null,

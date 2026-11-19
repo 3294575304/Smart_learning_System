@@ -1,7 +1,11 @@
 type Vector3 = { x: number; y: number; z: number };
 
-export const HOBERMAN_MIN_RADIUS = 152;
-export const HOBERMAN_MAX_RADIUS = 252;
+/**
+ * 章节壳层半径：章节名只做课程的索引，所以收缩与展开都压在靠近球心的范围，
+ * 外圈留给各章的小知识点去发散。
+ */
+export const HOBERMAN_MIN_RADIUS = 140;
+export const HOBERMAN_MAX_RADIUS = 188;
 
 /** Keep the existing radial path; only its presentation changes. */
 export function hobermanMotion(progress: number) {

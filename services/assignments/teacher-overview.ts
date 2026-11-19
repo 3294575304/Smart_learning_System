@@ -55,6 +55,7 @@ export async function getTeacherAssignmentOverview(
         id: option.id,
         label: option.labelSnapshot,
         content: option.contentSnapshot,
+        isCorrect: option.isCorrectSnapshot,
       })),
       correctAnswer: formatCorrectAnswer(question),
       explanation: question.explanationSnapshot,

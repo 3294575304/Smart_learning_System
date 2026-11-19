@@ -37,7 +37,11 @@ warnings=string[]。Ref={page:正整数,verified:false}，仅在必要时增加 
 9. 稳定编码使用 OBJ-1、CH-1、KP-1-1、ASSESS-1 等短格式。
 10. 所有引用编码必须真实存在：映射引用 objectives/assessments 的 code，先修和 Topic 引用 knowledgePoints 的 code，practiceItems.relatedChapterCodes 引用 chapters 的 code。
 11. 同类 code 和章节 order 不得重复。JSON 必须完整闭合，完整性优先；不得通过删减课程目标原文来避免截断，必要时优先减少非目标字段的重复描述和 quote。
-12. 仅当原文明确给出“每种考核方式内各目标占比”矩阵时，按目标行、考核方式列读取 allocationRate，每列合计 100。若原文是把总评 100 分正向分解到作业、题目及课程目标的分值表，不得把分值误写为 allocationRate；此时 objectiveAssessmentMappings 返回空数组，结构化分值由程序从原表另行核验。无法确定具体数值时用 null，不得把各考核方式占总成绩权重误填为 allocationRate。${repair}`,
+12. objectiveAssessmentMappings 按下列顺序判断来源：
+(a) 原文给出“每种考核方式内各目标占比”矩阵（每列合计 100）时，按课程目标行、考核方式列原样读取 allocationRate。
+(b) 原文给出“课程目标评定方法”“课程目标考核评价方式及成绩比例”一类正向分解分值表时（行=课程目标，列=考核方式，末列为该目标合计，合计行为该考核项总分），必须逐格提取分值并换算：allocationRate = 该单元格分值 ÷ 该列合计分值 × 100，保留两位小数，换算后每列合计应为 100。列标题可能带权重后缀（如“实验(20%)”“课内讨论(10.0%)”），名称仍取括号前的部分。
+(c) 原文只有“考核方式及成绩比例”权重表、没有任何按课程目标展开的行时，objectiveAssessmentMappings 返回空数组，并在 warnings 中说明原文缺少课程目标分解，交程序兜底。
+禁止把各考核方式占总成绩的权重（如“期末笔试 40%”）当作 allocationRate；禁止把某目标的合计分值当作某一考核方式的占比；无法确定具体数值时用 null。${repair}`,
     },
     {
       role: "user",

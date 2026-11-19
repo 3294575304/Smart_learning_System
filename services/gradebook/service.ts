@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   AuditAction,
   AuditTargetType,
+  type ExamType,
   GradeSourceType,
   GradeValueStatus,
   MembershipStatus,
@@ -22,6 +23,31 @@ import type { AuditRequestContext } from "@/services/audit/types";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getTeacherCourseClassroom } from "@/services/courses/classroom-context";
+
+const examComponentTypes = {
+  MIDTERM: "MIDTERM_EXAM",
+  FINAL: "FINAL_EXAM",
+  REGULAR: "REGULAR_PERFORMANCE",
+} as const;
+
+function examGradeSyncIssue(
+  exam: { type: ExamType; cancelledAt: Date | null },
+  component: { type: string; enabled: boolean; sourceType: GradeSourceType },
+) {
+  if (exam.cancelledAt) return "已取消考试不能同步成绩";
+  if (
+    exam.type === "REGULAR" &&
+    (component.type !== examComponentTypes.REGULAR ||
+      component.sourceType !== GradeSourceType.PLATFORM_ASSIGNMENT)
+  )
+    return "平时考试只能同步至来源为平台作业的平时表现项目。";
+  if (
+    component.type !== examComponentTypes[exam.type] ||
+    component.sourceType === GradeSourceType.ATTENDANCE
+  )
+    return "考核项目与考试类型不匹配。";
+  return component.enabled ? null : "考核项目尚未启用，请先确认考核方案。";
+}
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -494,24 +520,26 @@ export async function syncTeacherPlatformAssignmentGrades(
       );
       const exam = await transaction.examSession.findFirst({
         where: {
-          assignments: { some: { id: assignmentId } },
+          teacherId,
+          assignments: {
+            some: { id: assignmentId, classroomId: gradebook.classroomId },
+          },
         },
         select: { type: true, cancelledAt: true },
       });
       if (exam?.cancelledAt)
         throw new GradebookOperationError("已取消考试不能同步成绩", 409);
-      const examComponentType =
-        exam?.type === "MIDTERM" ? "MIDTERM_EXAM" : "FINAL_EXAM";
+      const examSyncIssue =
+        exam && component ? examGradeSyncIssue(exam, component) : null;
       if (
         !component ||
         (exam
-          ? component.type !== examComponentType ||
-            component.sourceType === GradeSourceType.ATTENDANCE
+          ? component.enabled && examSyncIssue
           : component.sourceType !== GradeSourceType.PLATFORM_ASSIGNMENT ||
             ["MIDTERM_EXAM", "FINAL_EXAM"].includes(component.type))
       ) {
         throw new GradebookOperationError(
-          "考核项目与作业或考试类型不匹配。",
+          examSyncIssue ?? "考核项目与作业或考试类型不匹配。",
           409,
           "PLATFORM_COMPONENT_REQUIRED",
         );
@@ -528,9 +556,7 @@ export async function syncTeacherPlatformAssignmentGrades(
       });
       if (!assignment) throw new ResourceNotFoundError("作业不存在。");
       const categoryIssue = exam
-        ? !component.enabled
-          ? "考核项目尚未启用，请先确认考核方案。"
-          : null
+        ? examSyncIssue
         : assignmentSyncIssue(assignment.category, component);
       if (categoryIssue)
         throw new GradebookOperationError(
@@ -548,13 +574,16 @@ export async function syncTeacherPlatformAssignmentGrades(
           sourceType: true,
           assignmentId: true,
           itemWeight: true,
-          assignment: { select: { category: true } },
+          assignment: {
+            select: { category: true, examSession: { select: { type: true } } },
+          },
           _count: { select: { entries: true } },
         },
       });
       const incompatible = componentItems.some((item) => {
         if (
           exam &&
+          exam.type !== "REGULAR" &&
           item.sourceKey === `component:${componentId}:default` &&
           item._count.entries === 0
         )
@@ -562,9 +591,11 @@ export async function syncTeacherPlatformAssignmentGrades(
         return (
           item.sourceType !== GradeSourceType.PLATFORM_ASSIGNMENT ||
           !item.itemWeight.equals(1) ||
-          (exam
-            ? item.assignmentId !== assignmentId
-            : item.assignment?.category !== assignment.category)
+          (exam?.type === "REGULAR"
+            ? item.assignment?.examSession?.type !== "REGULAR"
+            : exam
+              ? item.assignmentId !== assignmentId
+              : item.assignment?.category !== assignment.category)
         );
       });
       if (incompatible)
@@ -584,7 +615,7 @@ export async function syncTeacherPlatformAssignmentGrades(
           },
         },
       });
-      if (exam && !existingItem) {
+      if (exam && exam.type !== "REGULAR" && !existingItem) {
         const defaultItem = await transaction.gradeItem.findUnique({
           where: {
             gradebookId_sourceKey: {
@@ -1082,7 +1113,7 @@ export async function getTeacherGradebookWorkspace(
           status: true,
           totalPoints: true,
           publishedAt: true,
-          examSession: { select: { type: true } },
+          examSession: { select: { type: true, cancelledAt: true } },
           category: true,
           categoryNeedsReview: true,
         },
@@ -1107,7 +1138,9 @@ export async function getTeacherGradebookWorkspace(
       syncBlockedReasons: Object.fromEntries(
         gradebook.scheme.components.map((component) => [
           component.id,
-          assignmentSyncIssue(assignment.category, component),
+          assignment.examSession
+            ? examGradeSyncIssue(assignment.examSession, component)
+            : assignmentSyncIssue(assignment.category, component),
         ]),
       ),
       legacyBindingWarning: items.some(
@@ -1116,7 +1149,9 @@ export async function getTeacherGradebookWorkspace(
           gradebook.scheme.components.some(
             (component) =>
               component.id === item.componentId &&
-              assignmentSyncIssue(assignment.category, component),
+              (assignment.examSession
+                ? examGradeSyncIssue(assignment.examSession, component)
+                : assignmentSyncIssue(assignment.category, component)),
           ),
       ),
     })),

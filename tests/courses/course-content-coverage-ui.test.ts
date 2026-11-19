@@ -24,13 +24,32 @@ const emptyCoverage: Coverage = {
   canRemediate: 0,
 };
 
-function renderCoverage(coverage: Coverage | null) {
+function renderCoverage(
+  coverage: Coverage | null,
+  options: {
+    open?: "gaps" | "evidence" | "all";
+    showAllGaps?: boolean;
+    notice?: string | null;
+  } = {},
+) {
   return renderToStaticMarkup(
     React.createElement(CourseContentCoverage, {
       courseId: "course-a",
       coverage,
+      ...options,
     }),
   );
+}
+
+function gap(index: number) {
+  return {
+    conceptId: `point-${index}`,
+    code: `LOOP-${index}`,
+    name: `知识点 ${index}`,
+    chapterName: null,
+    questionCount: 0,
+    hasEvidence: false,
+  };
 }
 
 test("课程还没有正式知识图谱时，提供图谱入口", () => {
@@ -56,23 +75,71 @@ test("补题入口携带具体课程和知识点，页面保留批量关联入�
       bindingRate: 0,
       evidenceRate: 0,
     },
-    gaps: [
-      {
-        conceptId: "point-a",
-        code: "LOOP",
-        name: "循环",
-        chapterName: null,
-        questionCount: 0,
-        hasEvidence: false,
-      },
-    ],
+    gaps: [gap(1)],
   });
   assert.match(
     html,
-    /href="\/teacher\/questions\/new\?courseId=course-a&amp;conceptId=point-a"/,
+    /href="\/teacher\/questions\/new\?courseId=course-a&amp;conceptId=point-1"/,
   );
   assert.match(html, /href="\/teacher\/courses\/course-a\/question-mapping"/);
   assert.match(html, /已绑题但暂无评分证据（0 个）/);
+});
+
+test("指标以「已绑/总数」呈现，并用文字徽标说明还差多少", () => {
+  const html = renderCoverage({
+    ...emptyCoverage,
+    graphVersion: 3,
+    totals: {
+      conceptCount: 4,
+      boundConceptCount: 3,
+      evidencedConceptCount: 1,
+      bindingRate: 75,
+      evidenceRate: 25,
+    },
+    gaps: [gap(4)],
+  });
+  // 主数字是比率而不是孤立个数，教师扫读即可判断还差多少。
+  assert.match(html, />3<span[^>]*>\/4<\/span>/);
+  assert.match(html, />1<span[^>]*>\/4<\/span>/);
+  assert.match(html, /覆盖 75%/);
+  assert.match(html, /覆盖 25%/);
+  // 达标状态不能只靠底色灰度。
+  assert.match(html, /待补 1 个/);
+  assert.match(html, /待补 3 个/);
+});
+
+test("全部知识点都已绑题时给出「已达标」而不是仅变底色", () => {
+  const html = renderCoverage({
+    ...emptyCoverage,
+    graphVersion: 3,
+    totals: {
+      conceptCount: 2,
+      boundConceptCount: 2,
+      evidencedConceptCount: 0,
+      bindingRate: 100,
+      evidenceRate: 0,
+    },
+  });
+  assert.match(html, /已达标/);
+  assert.match(html, /全部知识点均已绑定有效题目/);
+});
+
+test("页面明示「任一学生有证据」口径，并链接到课程画像核对", () => {
+  const html = renderCoverage({
+    ...emptyCoverage,
+    graphVersion: 3,
+    totals: {
+      conceptCount: 2,
+      boundConceptCount: 2,
+      evidencedConceptCount: 1,
+      bindingRate: 100,
+      evidenceRate: 50,
+    },
+  });
+  assert.match(html, /不代表全班均已练习/);
+  assert.match(html, /href="\/teacher\/courses\/course-a\/profiles"/);
+  // 模块定位必须写进界面，而不能只留在服务层注释里。
+  assert.match(html, /不作为教学考核依据/);
 });
 
 test("有题但暂无评分证据的知识点可展开，并精确链接到已绑定的题目", () => {
@@ -120,14 +187,7 @@ test("有题但暂无评分证据的知识点可展开，并精确链接到已�
 });
 
 test("未绑题知识点超过首屏条数时，其余条目仍可定位和创建", () => {
-  const gaps = Array.from({ length: 9 }, (_, index) => ({
-    conceptId: `point-${index + 1}`,
-    code: `LOOP-${index + 1}`,
-    name: `知识点 ${index + 1}`,
-    chapterName: null,
-    questionCount: 0,
-    hasEvidence: false,
-  }));
+  const gaps = Array.from({ length: 9 }, (_, index) => gap(index + 1));
   const html = renderCoverage({
     ...emptyCoverage,
     graphVersion: 2,
@@ -143,5 +203,78 @@ test("未绑题知识点超过首屏条数时，其余条目仍可定位和创�
   assert.match(
     html,
     /href="\/teacher\/questions\/new\?courseId=course-a&amp;conceptId=point-9"/,
+  );
+});
+
+test("从补题流程返回时可展开全部缺口，不再折叠", () => {
+  const gaps = Array.from({ length: 9 }, (_, index) => gap(index + 1));
+  const html = renderCoverage(
+    {
+      ...emptyCoverage,
+      graphVersion: 2,
+      totals: {
+        ...emptyCoverage.totals,
+        conceptCount: 9,
+        bindingRate: 0,
+        evidenceRate: 0,
+      },
+      gaps,
+    },
+    { open: "gaps", showAllGaps: true },
+  );
+  assert.doesNotMatch(html, /查看其余 1 个未绑题知识点/);
+  assert.match(
+    html,
+    /href="\/teacher\/questions\/new\?courseId=course-a&amp;conceptId=point-9"/,
+  );
+});
+
+test("补题成功后展示回执，教师能确认「补一个算一个」", () => {
+  const html = renderCoverage(
+    {
+      ...emptyCoverage,
+      graphVersion: 2,
+      totals: {
+        conceptCount: 1,
+        boundConceptCount: 1,
+        evidencedConceptCount: 0,
+        bindingRate: 100,
+        evidenceRate: 0,
+      },
+    },
+    { notice: "已创建题目并绑定到「循环」，该知识点已计入覆盖。" },
+  );
+  assert.match(html, /role="status"/);
+  assert.match(html, /已创建题目并绑定到「循环」/);
+});
+
+test("open=evidence 时无证据分组默认展开", () => {
+  const html = renderCoverage(
+    {
+      ...emptyCoverage,
+      graphVersion: 2,
+      totals: {
+        conceptCount: 2,
+        boundConceptCount: 2,
+        evidencedConceptCount: 1,
+        bindingRate: 100,
+        evidenceRate: 50,
+      },
+      pointsWithoutEvidence: [
+        {
+          conceptId: "point-loops",
+          code: "LOOP",
+          name: "嵌套循环",
+          chapterName: null,
+          questionCount: 1,
+          hasEvidence: false,
+        },
+      ],
+    },
+    { open: "evidence" },
+  );
+  assert.match(
+    html,
+    /<details[^>]*\bopen\b[^>]*>\s*<summary[^>]*>已绑题但暂无评分证据/u,
   );
 });

@@ -8,6 +8,14 @@ export interface QuestionImportCourseOption {
   id: string;
   name: string;
 }
+export interface QuestionImportObjectiveCourse {
+  id: string;
+  name: string;
+  categoryId: string;
+  syllabusStructureId: string;
+  versionNumber: number;
+  objectives: { code: string; title: string }[];
+}
 
 export interface QuestionImportOption {
   label: string;
@@ -22,6 +30,7 @@ export interface QuestionImportDraft {
   content: string;
   type: QuestionType;
   defaultObjectiveKind?: "KNOWLEDGE" | "ABILITY" | "LITERACY" | null;
+  objectiveCodes?: string[];
   options: QuestionImportOption[];
   answer: QuestionAnswer | null;
   explanation: string;

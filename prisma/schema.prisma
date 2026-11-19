@@ -608,6 +608,7 @@ enum AssignmentStatus {
 enum ExamType {
   MIDTERM
   FINAL
+  REGULAR
 }
 
 enum ExamSubmissionReason {
@@ -3157,8 +3158,15 @@ model QuestionCourseObjective {
   course   Course                     @relation(fields: [courseId], references: [id], onDelete: Restrict)
   syllabus PublishedSyllabusStructure @relation(fields: [syllabusStructureId], references: [id], onDelete: Restrict)
 
-  @@unique([questionId, courseId, syllabusStructureId])
+  @@unique([questionId, courseId, syllabusStructureId, objectiveCode], map: "QuestionCourseObjective_scope_code_key")
   @@index([courseId, syllabusStructureId, objectiveCode])
+}
+
+enum ExamObservationKind {
+  VISIBILITY
+  FULLSCREEN_EXIT
+  WINDOW_BLUR
+  WINDOW_SWITCH
 }
 
 model ExamSwitchEvent {
@@ -3166,6 +3174,7 @@ model ExamSwitchEvent {
   examSessionId String
   submissionId  String
   eventKey      String      @unique
+  kind          ExamObservationKind @default(VISIBILITY)
   observedAt    DateTime    @default(now())
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt

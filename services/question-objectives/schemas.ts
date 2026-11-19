@@ -9,9 +9,14 @@ export const questionObjectiveJobInputSchema = z
     revision: z.number().int().positive(),
     courseId: z.string().cuid().nullable(),
     syllabusStructureId: z.string().cuid().nullable(),
+    replacement: z
+      .object({ id: z.string().cuid(), updatedAt: z.string().datetime() })
+      .optional(),
   })
   .refine(
-    (value) => Boolean(value.courseId) === Boolean(value.syllabusStructureId),
+    (value) =>
+      Boolean(value.courseId) === Boolean(value.syllabusStructureId) &&
+      (!value.replacement || Boolean(value.courseId)),
   );
 
 export const questionObjectiveAIOutputSchema = z

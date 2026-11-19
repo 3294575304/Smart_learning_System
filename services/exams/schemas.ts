@@ -1,6 +1,8 @@
 import { ExamType, QuestionType } from "@prisma/client";
 import { z } from "zod";
 import { maxExamAttempts } from "./attempt-policy";
+import { examSwitchEventKinds } from "./switch-policy";
+import { maxExamConcepts } from "./concept-selection";
 
 export const examAttemptRulesSchema = z.object({
   autoSubmitOnExit: z.boolean().default(false),
@@ -15,6 +17,7 @@ export const teacherExamStatusLabels = {
 } as const;
 
 export const teacherExamListSchema = z.object({
+  fromCourseId: z.string().cuid().optional(),
   courseId: z.string().cuid().optional(),
   classroomId: z.string().cuid().optional(),
   keyword: z.string().trim().max(120).optional(),
@@ -44,6 +47,7 @@ export const examCreateSchema = z
         z.object({
           questionId: z.string().cuid(),
           points: z.number().positive().max(10000),
+          objectiveCode: z.string().trim().min(1).max(50).optional(),
         }),
       )
       .min(1)
@@ -72,7 +76,7 @@ export const examAutoAssembleSchema = z
     conceptIds: z
       .array(z.string().cuid())
       .min(1)
-      .max(20)
+      .max(maxExamConcepts, `最多选择 ${maxExamConcepts} 个知识点`)
       .refine((ids) => new Set(ids).size === ids.length),
     counts: z.record(
       z.nativeEnum(QuestionType),
@@ -90,5 +94,8 @@ export const examAutoAssembleSchema = z
     },
     { path: ["counts"], message: "请选择 1–200 道题" },
   );
-export const examSwitchSchema = z.object({ eventKey: z.string().uuid() });
+export const examSwitchSchema = z.object({
+  eventKey: z.string().uuid(),
+  kind: z.enum(examSwitchEventKinds).default("VISIBILITY"),
+});
 export type ExamCreateInput = z.output<typeof examCreateSchema>;

@@ -236,7 +236,7 @@ export function CourseWorkspaceNavigation({
                       : withClassroomQuery(
                           path.startsWith("/")
                             ? path === "/teacher/exams"
-                              ? `${path}?courseId=${encodeURIComponent(courseId)}`
+                              ? `${path}?courseId=${encodeURIComponent(courseId)}&fromCourseId=${encodeURIComponent(courseId)}`
                               : path
                             : `/teacher/courses/${courseId}/${path}`,
                           classroomId,

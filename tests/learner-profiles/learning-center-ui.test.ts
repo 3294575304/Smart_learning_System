@@ -56,7 +56,8 @@ test("学生课程学习中心按全课程知识点和评分记录统计", async
   assert.match(service, /progressSteps:/u);
   assert.match(service, /trackableRecommendations/u);
   assert.match(service, /learningPriority/u);
-  assert.match(service, /recentActivity: events/u);
+  // 时间线由 learningEvent 查询装配；条目改名为 activityItems 以便补提交跳转链接
+  assert.match(service, /recentActivity: activityItems/u);
   assert.match(page, /requirePageRole\(Role\.STUDENT\)/u);
   assert.match(page, /getStudentCourseLearningCenter/u);
   // 四级漏斗已从 view 组件抽到共享展示组件，断言目标随迁移同步
@@ -80,7 +81,15 @@ test("学生课程学习中心按全课程知识点和评分记录统计", async
   assert.match(page, /GrowthKnowledgeTabs/u);
   assert.match(view, /我的学习路径/u);
   assert.match(view, /优先巩固/u);
-  assert.match(view, /先补：/u);
+  // 前置知识点缺口随「优先巩固」合并进本周计划，断言目标同步迁移，语义不变
+  const weeklyPlan = await readFile(
+    new URL(
+      "../../components/learner-profiles/weekly-plan.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(weeklyPlan, /先补：/u);
   assert.match(view, /待进一步评估/u);
   assert.match(analytics, /课程学习中心/u);
   assert.match(analytics, /getStudentClassAnalytics/u);

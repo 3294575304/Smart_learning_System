@@ -43,6 +43,9 @@ export async function autoAssembleExamQuestions(
     courseId: input.courseId,
     startsAt: input.startsAt,
   });
+  const objectivesByQuestion = new Map(
+    eligible.map((item) => [item.id, item.objectiveCodes]),
+  );
   const eligibleIds = eligible
     .filter(
       (item) => !item.blocked && !input.excludeQuestionIds.includes(item.id),
@@ -97,6 +100,7 @@ export async function autoAssembleExamQuestions(
       id,
       title,
       type,
+      objectiveCodes: objectivesByQuestion.get(id) ?? [],
     })),
     shortages: result.shortages,
     coverage: result.coverage,

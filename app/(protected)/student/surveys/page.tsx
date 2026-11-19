@@ -2,6 +2,7 @@ import {
   StudentActivityFilters,
   StudentActivityPagination,
   activityCardClass,
+  activityActionClass,
 } from "@/components/dashboard/student-activity-list";
 import {
   readActivityPage,
@@ -114,7 +115,7 @@ export default async function StudentSurveysPage({
         <div className="grid gap-4 md:grid-cols-2">
           {surveys.map((survey) => (
             <Link
-              className={`${activityCardClass} transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600`}
+              className={`group ${activityCardClass} transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600`}
               href={studentTaskHref(`/student/surveys/${survey.id}`, query)}
               key={survey.id}
             >
@@ -139,7 +140,9 @@ export default async function StudentSurveysPage({
                 {survey._count.questions} 题 · 截止{" "}
                 {survey.dueAt.toLocaleString("zh-CN")}
               </p>
-              <span className="text-brand-strong mt-4 inline-flex items-center gap-1.5 text-sm font-medium">
+              <span
+                className={`${activityActionClass} mt-4 gap-1.5 group-hover:bg-sky-100`}
+              >
                 {survey.submittedAt
                   ? "查看完成状态"
                   : survey.isOpen

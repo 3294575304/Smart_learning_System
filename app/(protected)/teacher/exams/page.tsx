@@ -1,3 +1,4 @@
+import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { ExamTypeBadge } from "@/components/exams/exam-type-badge";
 import Link from "next/link";
 import { Role } from "@prisma/client";
@@ -40,6 +41,7 @@ export default async function TeacherExamsPage({
   const teacher = await requirePageRole(Role.TEACHER);
   const query = await searchParams;
   const scope = teacherExamListSchema.safeParse({
+    fromCourseId: query.fromCourseId,
     courseId: query.courseId === "" ? undefined : query.courseId,
     classroomId: query.classroomId === "" ? undefined : query.classroomId,
     keyword: query.keyword,
@@ -73,9 +75,13 @@ export default async function TeacherExamsPage({
     }),
     listPaperDrafts(teacher.id, scope.data),
   ]);
+  const fromCourse = courses.find(
+    (course) => course.id === scope.data.fromCourseId,
+  );
   const listQuery = new URLSearchParams();
   for (const [key, value] of Object.entries(scope.data)) {
-    if (value) listQuery.set(key, value);
+    if (value && (key !== "fromCourseId" || fromCourse))
+      listQuery.set(key, value);
   }
   const classrooms = courses.flatMap((course) =>
     course.classrooms.map((classroom) => ({
@@ -112,6 +118,12 @@ export default async function TeacherExamsPage({
       );
     }
   }
+  const resetHref = fromCourse
+    ? `/teacher/exams?fromCourseId=${encodeURIComponent(fromCourse.id)}`
+    : "/teacher/exams";
+  const hasFilters = Array.from(listQuery.keys()).some(
+    (key) => key !== "fromCourseId",
+  );
   const createdTitle = typeof query.created === "string" ? query.created : "";
   return (
     <section className="space-y-5">
@@ -143,6 +155,11 @@ export default async function TeacherExamsPage({
             <Plus aria-hidden="true" className="size-4" />
             新建考试
           </Link>
+          {fromCourse && (
+            <TeacherBackLink href={`/teacher/courses/${fromCourse.id}`}>
+              返回课程
+            </TeacherBackLink>
+          )}
         </div>
       </header>
       <ExamListFilters
@@ -155,6 +172,7 @@ export default async function TeacherExamsPage({
         }))}
         classrooms={classrooms}
         scope={scope.data}
+        fromCourseId={fromCourse?.id}
         archivedCourseSelected={archivedCourseSelected}
         archivedClassroomSelected={archivedClassroomSelected}
       />
@@ -270,18 +288,18 @@ export default async function TeacherExamsPage({
             </div>
             <div className="min-w-0 flex-1 basis-52">
               <p className="font-semibold text-slate-950">
-                {listQuery.size ? "没有符合条件的考试" : "暂无考试场次"}
+                {hasFilters ? "没有符合条件的考试" : "暂无考试场次"}
               </p>
               <p className="mt-1 text-sm [overflow-wrap:anywhere] text-slate-600">
-                {listQuery.size
+                {hasFilters
                   ? "可调整筛选条件，或清除筛选查看全部考试。"
                   : "新建考试或上传试卷后，可按教学班查看答卷和成绩。"}
               </p>
             </div>
-            {listQuery.size > 0 && (
+            {hasFilters && (
               <Link
                 className={`${actionClass} border border-sky-200 text-sky-800 hover:bg-sky-50`}
-                href="/teacher/exams"
+                href={resetHref}
               >
                 查看全部考试
               </Link>

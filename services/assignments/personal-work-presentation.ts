@@ -1,4 +1,5 @@
 import type { TeacherSubmissionAnswerView } from "./types";
+import type { PersonalWorkFilters } from "./personal-work-navigation";
 
 export type AnswerOutcome =
   | "CORRECT"
@@ -36,4 +37,27 @@ export function answerOutcome(
   if (answer.finalScore > 0 && answer.finalScore < answer.maxScore)
     return "PARTIAL";
   return "WRONG";
+}
+
+export function matchesAnswerOutcome(
+  outcome: AnswerOutcome,
+  filter: PersonalWorkFilters["filter"],
+) {
+  switch (filter) {
+    case "WRONG":
+      return outcome === "WRONG" || outcome === "PARTIAL";
+    case "INCORRECT":
+      return outcome === "WRONG";
+    case "PENDING":
+      return (
+        outcome === "PENDING_REVIEW" ||
+        outcome === "PENDING_JUDGE" ||
+        outcome === "JUDGE_ERROR" ||
+        outcome === "MISSING"
+      );
+    case "ALL":
+      return true;
+    default:
+      return outcome === filter;
+  }
 }

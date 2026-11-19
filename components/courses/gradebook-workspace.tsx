@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download, RefreshCw, Send, ArrowUpRight } from "lucide-react";
 import { correctGradeEntrySchema } from "@/services/gradebook/schemas";
+import { examTypeLabel } from "@/services/exams/exam-types";
 
 type Revision = {
   revisionNumber: number;
@@ -542,7 +543,10 @@ export function GradebookWorkspace({
               .filter((item) => item.status !== "DRAFT")
               .map((item) => (
                 <option key={item.id} value={item.id}>
-                  {ASSIGNMENT_CATEGORY_LABELS[item.category]} · {item.title}
+                  {item.examSession
+                    ? examTypeLabel(item.examSession.type)
+                    : ASSIGNMENT_CATEGORY_LABELS[item.category]}{" "}
+                  · {item.title}
                   {item.legacyBindingWarning ? "（原台账待核对）" : ""}
                 </option>
               ))}

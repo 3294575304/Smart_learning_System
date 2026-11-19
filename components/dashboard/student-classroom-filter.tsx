@@ -8,6 +8,8 @@ export type StudentClassroomOption = {
   name: string;
   courseName: string | null;
   term: string | null;
+  /** 已退出/被移出的历史教学班，仍可回看记录。 */
+  inactive?: boolean;
 };
 
 export function classroomFilterHref(

@@ -67,6 +67,7 @@ export const paperDraftCropSchema = z
 export const paperDraftPublishSchema = z.object({
   expectedRevision: z.number().int().positive(),
   requestId: z.string().uuid(),
+  labelUnmappedBankQuestions: z.boolean().default(false),
 });
 
 export type PaperDraftQuestion = z.output<typeof paperDraftQuestionSchema>;

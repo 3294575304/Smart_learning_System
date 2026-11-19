@@ -202,14 +202,51 @@ export async function executeClaimedQuestionObjectiveJob(
             where: {
               id: input.courseId,
               currentPublishedSyllabusStructureId: input.syllabusStructureId,
+              status: { not: "ARCHIVED" },
+              questionCategoryId: question.questionCategoryId ?? undefined,
             },
             select: { id: true },
           });
+          await tx.$queryRaw`SELECT id FROM "Question" WHERE id = ${question.id} FOR UPDATE`;
           const revision = await tx.question.findFirst({
-            where: { id: question.id, revision: input.revision },
+            where: {
+              id: question.id,
+              revision: input.revision,
+              deletedAt: null,
+              status: { in: ["ACTIVE", "DRAFT"] },
+            },
             select: { id: true },
           });
-          if (current && revision)
+          if (!current || !revision) return;
+          const scope = {
+            questionId: question.id,
+            courseId: input.courseId,
+            syllabusStructureId: input.syllabusStructureId,
+          };
+          const existing = await tx.questionCourseObjective.findMany({
+            where: scope,
+            select: { id: true, updatedAt: true, source: true },
+            take: 2,
+          });
+          if (input.replacement) {
+            const [mapping] = existing;
+            if (
+              existing.length !== 1 ||
+              mapping?.source !== "AI" ||
+              mapping.id !== input.replacement.id ||
+              mapping.updatedAt.toISOString() !== input.replacement.updatedAt
+            )
+              return;
+            await tx.questionCourseObjective.updateMany({
+              where: {
+                ...scope,
+                id: mapping.id,
+                source: "AI",
+                updatedAt: mapping.updatedAt,
+              },
+              data: { objectiveCode: output.objectiveCode },
+            });
+          } else if (existing.length === 0) {
             await tx.questionCourseObjective.createMany({
               data: [
                 {
@@ -222,6 +259,7 @@ export async function executeClaimedQuestionObjectiveJob(
               ],
               skipDuplicates: true,
             });
+          }
         } else {
           await tx.question.updateMany({
             where: {

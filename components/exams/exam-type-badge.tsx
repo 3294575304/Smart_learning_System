@@ -1,6 +1,7 @@
 import React from "react";
 import { ClipboardCheck } from "lucide-react";
 import type { ExamType } from "@prisma/client";
+import { examTypeLabel } from "@/services/exams/exam-types";
 
 export function ExamTypeBadge({ type }: { type?: ExamType }) {
   return (
@@ -10,11 +11,7 @@ export function ExamTypeBadge({ type }: { type?: ExamType }) {
         className="size-3.5"
         strokeWidth={1.75}
       />
-      {type === "MIDTERM"
-        ? "期中考试"
-        : type === "FINAL"
-          ? "期末考试"
-          : "课程考试"}
+      {examTypeLabel(type)}
     </span>
   );
 }

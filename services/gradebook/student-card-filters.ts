@@ -8,6 +8,7 @@ export function studentGradeFilterHref(
   classroomId: string,
   publication: string,
   committedQuery: string,
+  courseReturn?: { courseId: string; classroomId: string },
 ) {
   const context = contexts.find((x) => x.classroom.id === classroomId);
   if (classroomId && !context) throw new Error("Invalid classroom");
@@ -20,6 +21,10 @@ export function studentGradeFilterHref(
   }
   params.set("publication", publication);
   if (committedQuery) params.set("q", committedQuery);
+  if (courseReturn) {
+    params.set("backCourseId", courseReturn.courseId);
+    params.set("backClassroomId", courseReturn.classroomId);
+  }
   return `/student/results?${params}`;
 }
 

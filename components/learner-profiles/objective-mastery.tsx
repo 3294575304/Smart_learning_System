@@ -38,6 +38,9 @@ export function ObjectiveMasteryGrid({
   }
   return (
     <div className="grid gap-4 xl:grid-cols-2">
+      <p className="text-ink-soft text-sm xl:col-span-2">
+        同一知识点可服务多个目标。覆盖范围和已掌握情况分别统计。
+      </p>
       {objectives.map((objective) => (
         <Panel key={objective.code}>
           <SectionHeading
@@ -78,6 +81,11 @@ export function ObjectiveMasteryGrid({
               value={objective.noEvidenceCount}
             />
           </div>
+          <p className="text-ink-soft mt-3 text-xs">
+            {objective.conclusiveCount > 0
+              ? `证据充分的 ${objective.conclusiveCount} 个知识点中，已掌握 ${objective.masteredCount} 个。`
+              : "暂无证据充分的知识点。"}
+          </p>
           <div className="mt-3">
             <div className="flex items-baseline justify-between gap-2 text-xs">
               <span className="text-ink-soft">目标平均掌握度</span>

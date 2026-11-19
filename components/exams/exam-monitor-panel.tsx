@@ -1,6 +1,6 @@
 "use client";
 
-import { examClassroomHref } from "@/services/exams/classroom-navigation";
+import { personalWorkHref } from "@/services/assignments/personal-work-navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
@@ -27,10 +27,12 @@ export function ExamMonitorPanel({
   examId,
   initial,
   endpoint,
+  monitorHref,
 }: {
   examId: string;
   initial: Monitor;
   endpoint: string;
+  monitorHref: string;
 }) {
   const [monitor, setMonitor] = useState(initial);
   const [filter, setFilter] = useState<Filter>("ALL");
@@ -150,7 +152,13 @@ export function ExamMonitorPanel({
             </thead>
             <tbody className="divide-y">
               {rows.map((row) => (
-                <tr key={row.id}>
+                <tr
+                  key={row.id}
+                  id={
+                    row.submissionId ? `monitor-${row.submissionId}` : undefined
+                  }
+                  className="scroll-mt-24"
+                >
                   <td className="p-3">
                     <p className="font-medium">{row.name}</p>
                     <p className="text-xs text-slate-600">
@@ -179,6 +187,17 @@ export function ExamMonitorPanel({
                     >
                       {row.switches} 次{overLimit(row) ? " · 超限" : ""}
                     </span>
+                    {row.windowSwitches > 0 && (
+                      <p className="text-xs text-slate-600">
+                        其中窗口离开 {row.windowSwitches} 次
+                      </p>
+                    )}
+                    {(row.fullscreenExits > 0 || row.windowBlurs > 0) && (
+                      <p className="text-muted-foreground text-xs">
+                        退出全屏 {row.fullscreenExits} · 历史失焦记录{" "}
+                        {row.windowBlurs}
+                      </p>
+                    )}
                     {row.lastSwitchAt && (
                       <p className="text-xs text-slate-600">
                         {time(row.lastSwitchAt)}
@@ -192,7 +211,13 @@ export function ExamMonitorPanel({
                     {row.submissionId ? (
                       <Link
                         className="font-medium text-sky-800 hover:underline"
-                        href={`${examClassroomHref(examId, monitor.assignmentId)}/submissions/${row.submissionId}`}
+                        href={personalWorkHref(
+                          monitor.assignmentId,
+                          row.submissionId,
+                          `${monitorHref}#monitor-${row.submissionId}`,
+                          "ALL",
+                          examId,
+                        )}
                       >
                         查看答卷
                       </Link>

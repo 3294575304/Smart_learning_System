@@ -39,10 +39,17 @@ test("工作区采用深蓝交互与稳定浅底，保留登录品牌背景且�
   const forbiddenBackground =
     /\b(?:bg-black(?:\/\d+)?|bg-gray-(?:800|900)|bg-slate-(?:800|900|950))\b/u;
   for (const file of files) {
-    // The 3D graph is a deliberately dark visualization inside the light workspace.
-    if (file.replaceAll("\\", "/").endsWith("/knowledge-graph-canvas.tsx"))
-      continue;
     const source = await readFile(file, "utf8");
     assert.doesNotMatch(source, forbiddenBackground, file);
   }
+  // 三维图谱画布已改为与工作区一致的浅色舞台，不再作为深色例外。
+  const canvas = await readFile(
+    new URL(
+      "../../components/courses/knowledge-graph-canvas.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(canvas, /border-sky-100 bg-white/u);
+  assert.match(canvas, /radial-gradient\(#dceaf6 1px/u);
 });

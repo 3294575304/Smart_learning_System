@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/dashboard/page-header";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
 import Link from "next/link";
@@ -39,17 +40,15 @@ export default async function TeacherCourseProfilesPage({
     );
     return (
       <section className="space-y-6">
-        <header>
-          <TeacherBackLink href={`/teacher/courses/${path.data.courseId}`}>
-            返回课程
-          </TeacherBackLink>
-          <h1 className="mt-3 text-2xl font-semibold">
-            {result.course.name} · 班级画像概览
-          </h1>
-          <p className="text-muted-foreground mt-2 text-sm">
-            按班级查看在读学生；知识掌握度是本课程的学习画像，证据不足时明确提示。
-          </p>
-        </header>
+        <PageHeader
+          title={`${result.course.name} · 班级画像概览`}
+          description="按班级查看在读学生；知识掌握度是本课程的学习画像，证据不足时明确提示。"
+          actions={
+            <TeacherBackLink href={`/teacher/courses/${path.data.courseId}`}>
+              返回课程
+            </TeacherBackLink>
+          }
+        />
         <form
           className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4"
           method="get"

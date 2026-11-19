@@ -11,7 +11,29 @@ import {
   STUDENT_FOOTER_NAVIGATION,
 } from "../../components/dashboard/navigation";
 
-test("学生共享路径使用学生名称，顶部与面包屑保持一致", () => {
+const activityCrumbLabels: Record<string, string> = {
+  "/student/assignments": "课程作业",
+  "/student/attendance": "课堂签到",
+  "/student/exams": "课程考试",
+  "/student/surveys": "课程问卷",
+};
+
+test("学习任务四类入口共享学习任务面包屑，侧栏统一高亮", () => {
+  const items = NAVIGATION.STUDENT.flatMap((group) => group.items);
+  assert.ok(!items.some((item) => item.href === "/student/exams"));
+  for (const [pathname, label] of Object.entries(activityCrumbLabels)) {
+    assert.deepEqual(
+      buildBreadcrumbs(pathname).map((item) => item.label),
+      ["学习主页", "学习任务", label],
+    );
+    assert.equal(
+      items.find((item) => isNavigationItemActive(pathname, item))?.href,
+      "/student/tasks",
+    );
+  }
+});
+
+test("学生共享路径使用学生名称，课程任务采用任务名称", () => {
   const cases = [
     ["/student/assignments", "我的作业"],
     ["/student/tasks", "学习任务"],
@@ -25,7 +47,10 @@ test("学生共享路径使用学生名称，顶部与面包屑保持一致", ()
   ];
   for (const [pathname, label] of cases) {
     assert.equal(getDashboardPageTitle(pathname, NAVIGATION.STUDENT), label);
-    assert.equal(buildBreadcrumbs(pathname).at(-1)?.label, label);
+    assert.equal(
+      buildBreadcrumbs(pathname).at(-1)?.label,
+      activityCrumbLabels[pathname] ?? label,
+    );
   }
 });
 
@@ -103,7 +128,10 @@ test("学生命名不会影响教师同名路径或管理员导航", () => {
     ["/teacher/courses/course-123/analytics", "学情分析"],
   ]) {
     assert.equal(getDashboardPageTitle(pathname, NAVIGATION.TEACHER), label);
-    assert.equal(buildBreadcrumbs(pathname).at(-1)?.label, label);
+    assert.equal(
+      buildBreadcrumbs(pathname).at(-1)?.label,
+      activityCrumbLabels[pathname] ?? label,
+    );
   }
   assert.equal(
     getDashboardPageTitle("/admin/course-templates", NAVIGATION.ADMIN),
@@ -138,7 +166,7 @@ test("课程练习和收藏详情保留自主练习选中，面包屑不指向�
     );
   }
   assert.equal(
-    buildBreadcrumbs("/student/submissions/sub1/answer")[1].href,
+    buildBreadcrumbs("/student/submissions/sub1/answer")[2].href,
     "/student/assignments",
   );
 });
@@ -157,7 +185,7 @@ test("作答和提交结果统一选中学习任务入口", () => {
     );
   }
   assert.equal(
-    buildBreadcrumbs("/student/submissions/sub1/result")[1].href,
+    buildBreadcrumbs("/student/submissions/sub1/result")[2].href,
     "/student/assignments?view=records",
   );
 });
@@ -195,7 +223,7 @@ test("虚拟详情父级只保留可访问的模块，作答不陈列不存在�
   const crumbs = buildBreadcrumbs("/student/submissions/s1/answer");
   assert.deepEqual(
     crumbs.map((c) => c.label),
-    ["学习主页", "我的作业", "在线答题"],
+    ["学习主页", "学习任务", "课程作业", "在线答题"],
   );
   assert.ok(!crumbs.some((c) => c.href === "/student/submissions/s1"));
 });
@@ -225,7 +253,11 @@ test("学生全部已实现页面有一致标题、唯一选中导航，侧栏�
       .replace(/\[[^\]]+\]/g, "resource-123");
     const pathname = `/student${relative ? `/${relative}` : ""}`;
     const title = getDashboardPageTitle(pathname, NAVIGATION.STUDENT);
-    assert.equal(buildBreadcrumbs(pathname).at(-1)?.label, title, pathname);
+    assert.equal(
+      buildBreadcrumbs(pathname).at(-1)?.label,
+      activityCrumbLabels[pathname] ?? title,
+      pathname,
+    );
     assert.doesNotMatch(title, /resource-123|页面详情/);
     assert.equal(
       items.filter((item) => isNavigationItemActive(pathname, item)).length,

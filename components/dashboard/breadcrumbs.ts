@@ -19,6 +19,11 @@ export function buildBreadcrumbs(
     studentQueryHref?: string;
     source?: string | null;
     classroomListFilters?: TeacherClassroomFilters;
+    examList?: string;
+    /** 当前考试/记录/报告所处的课程与教学班，用于让面包屑继承筛选上下文。 */
+    studentScope?: { courseId?: string | null; classroomId?: string | null };
+    /** 从考试报告进入完整答卷时，把报告补成真实父级。 */
+    reportCrumb?: { href: string; label: string } | null;
   },
 ): BreadcrumbItem[] {
   const segments = pathname.split("/").filter(Boolean);
@@ -46,9 +51,23 @@ export function buildBreadcrumbs(
     ];
   }
 
-  return segments
+  const items = segments
     .map((segment, index) => {
       const href = `/${segments.slice(0, index + 1).join("/")}`;
+      if (segments[0] === "teacher" && segments[1] === "exams") {
+        if (index === 1)
+          return {
+            href: context?.examList ? `${href}?${context.examList}` : href,
+            label: "考试管理",
+            linkable: index < segments.length - 1,
+          };
+        if (index === 2 && !labels[segment])
+          return {
+            href: examWorkspaceHref(href, context?.examList),
+            label: "考试场次",
+            linkable: index < segments.length - 1,
+          };
+      }
       if (
         segments[0] === "teacher" &&
         segments[1] === "exams" &&
@@ -63,7 +82,11 @@ export function buildBreadcrumbs(
               : segment === "results"
                 ? "成绩统计"
                 : "答卷与批改";
-        return { href, label, linkable: index < segments.length - 1 };
+        return {
+          href: examWorkspaceHref(href, context?.examList),
+          label,
+          linkable: index < segments.length - 1,
+        };
       }
       const isTeacherCourseDetail =
         index === 2 &&
@@ -196,6 +219,52 @@ export function buildBreadcrumbs(
         ) &&
         !items.slice(index + 1).some((next) => next.href === item.href),
     );
+
+  const isStudentExamList =
+    segments[0] === "student" && segments[1] === "exams";
+  const isStudentSubmission =
+    segments[0] === "student" && segments[1] === "submissions";
+
+  if (isStudentExamList && items[1]) {
+    const scope = context?.studentScope;
+    const params = new URLSearchParams();
+    if (scope?.courseId) params.set("courseId", scope.courseId);
+    if (scope?.classroomId) params.set("classroomId", scope.classroomId);
+    if (params.size)
+      items[1] = {
+        ...items[1],
+        href: `${items[1].href.split("?")[0]}?${params}`,
+      };
+  }
+
+  if (isStudentSubmission && context?.reportCrumb && items.length > 1) {
+    const current = items[items.length - 1];
+    items.splice(items.length - 1, 0, {
+      href: context.reportCrumb.href,
+      label: context.reportCrumb.label,
+      linkable: true,
+    });
+    if (context.source === "exam" && current.label === "提交结果")
+      items[items.length - 1] = { ...current, label: "完整答卷" };
+  }
+
+  const activityLabels: Record<string, string> = {
+    "/student/exams": "课程考试",
+    "/student/assignments": "课程作业",
+    "/student/attendance": "课堂签到",
+    "/student/surveys": "课程问卷",
+  };
+  const activity = items[1];
+  const activityLabel = activity && activityLabels[activity.href.split("?")[0]];
+  if (segments[0] === "student" && activityLabel) {
+    items[1] = { ...activity, label: activityLabel };
+    items.splice(1, 0, {
+      href: "/student/tasks",
+      label: "学习任务",
+      linkable: true,
+    });
+  }
+  return items;
 }
 import {
   isTeacherClassroomHistory,
@@ -203,3 +272,4 @@ import {
   teacherClassroomListHref,
   type TeacherClassroomFilters,
 } from "@/lib/teacher-classroom-list-route";
+import { examWorkspaceHref } from "@/services/exams/classroom-navigation";

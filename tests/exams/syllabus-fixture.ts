@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type { SyllabusParseOutput } from "@/services/syllabus-parsing/schemas";
 
-const structure: SyllabusParseOutput = {
+const defaultStructure: SyllabusParseOutput = {
   courseInfo: {
     courseName: "Python",
     courseCode: "PY",
@@ -60,20 +60,7 @@ const structure: SyllabusParseOutput = {
       sourceRefs: [{ page: 1, verified: true }],
     },
   ],
-  objectiveAssessmentMappings: [
-    {
-      objectiveCode: "O1",
-      assessmentCode: "A1",
-      allocationRate: 50,
-      sourceRefs: [{ page: 1, verified: true }],
-    },
-    {
-      objectiveCode: "O2",
-      assessmentCode: "A1",
-      allocationRate: 50,
-      sourceRefs: [{ page: 1, verified: true }],
-    },
-  ],
+  objectiveAssessmentMappings: [],
   materials: [],
   warnings: [],
 };
@@ -82,7 +69,27 @@ export async function publishExamTestSyllabus(
   prisma: PrismaClient,
   courseId: string,
   teacherId: string,
+  objectiveCount: 2 | 4 = 2,
 ) {
+  const objectives = [
+    ...defaultStructure.objectives,
+    ...Array.from({ length: objectiveCount - 2 }, (_, index) => ({
+      code: `O${index + 3}`,
+      title: `正式目标 ${index + 3}`,
+      description: "用于验证多目标数量限制",
+      sourceRefs: [{ page: 1, verified: true }],
+    })),
+  ];
+  const structure: SyllabusParseOutput = {
+    ...defaultStructure,
+    objectives,
+    objectiveAssessmentMappings: objectives.map(({ code, sourceRefs }) => ({
+      objectiveCode: code,
+      assessmentCode: "A1",
+      allocationRate: 100 / objectiveCount,
+      sourceRefs,
+    })),
+  };
   const source = await prisma.courseSyllabus.create({
     data: {
       courseId,
