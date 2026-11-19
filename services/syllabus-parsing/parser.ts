@@ -5,6 +5,11 @@ import {
   SYLLABUS_MAX_AI_ATTEMPTS,
 } from "@/services/syllabus-parsing/constants";
 import { SyllabusParseOperationError } from "@/services/syllabus-parsing/errors";
+import {
+  buildDraftMappings,
+  findAssessmentGrids,
+  mapGridToAssessments,
+} from "@/services/syllabus-parsing/assessment-grid";
 import { extractObjectiveAssessmentMatrix } from "@/services/syllabus-parsing/objective-assessment-matrix";
 import {
   syllabusParseOutputSchema,
@@ -236,6 +241,52 @@ function applyDeterministicWarnings(
   return { ...output, warnings: [...warnings] };
 }
 
+function mappingKey(objectiveCode: string, assessmentCode: string): string {
+  return `${objectiveCode}\u0000${assessmentCode}`;
+}
+
+/**
+ * Returns the AI matrix only when every assessment is covered by every
+ * objective and each column already totals 100 (the publishable contract).
+ * Small rounding drift is absorbed by the last objective so downstream
+ * validation does not reject an otherwise complete matrix.
+ */
+function completeMatrixRates(
+  output: SyllabusParseOutput,
+): Map<string, number> | null {
+  if (output.objectives.length === 0 || output.assessments.length === 0) {
+    return null;
+  }
+  const rates = new Map<string, number>();
+  for (const mapping of output.objectiveAssessmentMappings) {
+    if (mapping.allocationRate === null) continue;
+    rates.set(
+      mappingKey(mapping.objectiveCode, mapping.assessmentCode),
+      mapping.allocationRate,
+    );
+  }
+  for (const assessment of output.assessments) {
+    let total = 0;
+    for (const objective of output.objectives) {
+      const rate = rates.get(mappingKey(objective.code, assessment.code));
+      if (rate === undefined) return null;
+      total += rate;
+    }
+    if (Math.abs(total - 100) > 0.5) return null;
+    if (Math.abs(total - 100) > 0.000001) {
+      const last = output.objectives[output.objectives.length - 1]!;
+      rates.set(
+        mappingKey(last.code, assessment.code),
+        Math.round(
+          (rates.get(mappingKey(last.code, assessment.code))! + (100 - total)) *
+            100,
+        ) / 100,
+      );
+    }
+  }
+  return rates;
+}
+
 function enrichObjectiveAssessmentMatrix(
   output: SyllabusParseOutput,
   input: SyllabusParseInput,
@@ -257,32 +308,139 @@ function enrichObjectiveAssessmentMatrix(
           ],
     };
   }
-  const extracted = extractObjectiveAssessmentMatrix(
-    input.pages,
-    output.objectives.length,
-    output.assessments.length,
+
+  const warnings = new Set(
+    output.warnings.filter(
+      // The AI explains why it returned no mapping; once the deterministic
+      // reader fills the matrix that explanation only confuses the review page.
+      (warning) => !/objectiveAssessmentMappings\s*返回空数组/u.test(warning),
+    ),
   );
-  if (!extracted) return output;
-  const sourceRefs = extracted.sourcePages.map((page, index) => ({
-    page,
-    ...(index === 0 ? { quote: "课程目标在各考核方式中占比" } : {}),
-    verified: false,
-  }));
+  const rates = new Map<string, number>();
+  const refs = new Map<
+    string,
+    SyllabusParseOutput["objectiveAssessmentMappings"][number]["sourceRefs"]
+  >();
+  for (const mapping of output.objectiveAssessmentMappings) {
+    if (mapping.allocationRate === null) continue;
+    const key = mappingKey(mapping.objectiveCode, mapping.assessmentCode);
+    rates.set(key, mapping.allocationRate);
+    refs.set(key, mapping.sourceRefs);
+  }
+
+  // 1. A syllabus table is the authoritative source: it carries both the column
+  // totals and the objective rows, so a column-relative share is exact.
+  const best = findAssessmentGrids(input.pages)
+    .map((item) => ({
+      ...item,
+      result: mapGridToAssessments(
+        item.grid,
+        output.objectives,
+        output.assessments,
+        item.page,
+      ),
+    }))
+    .filter((item) => item.result.matchedColumns > 0)
+    .sort(
+      (left, right) => right.result.matchedColumns - left.result.matchedColumns,
+    )[0];
+
+  if (best) {
+    for (const mapping of best.result.mappings) {
+      const key = mappingKey(mapping.objectiveCode, mapping.assessmentCode);
+      rates.set(key, mapping.allocationRate);
+      refs.set(key, [{ page: best.page, verified: false }]);
+    }
+    best.result.warnings.forEach((warning) => warnings.add(warning));
+  } else {
+    // 2. A complete AI matrix only rounds its drift; values stay untouched.
+    const complete = completeMatrixRates(output);
+    if (complete) {
+      for (const [key, value] of complete) rates.set(key, value);
+    } else {
+      // 3. Percentage matrices on paged PDFs whose text has no table cells.
+      const extracted = extractObjectiveAssessmentMatrix(
+        input.pages,
+        output.objectives.length,
+        output.assessments.length,
+      );
+      if (extracted) {
+        const matrixRefs = extracted.sourcePages.map((page, index) => ({
+          page,
+          ...(index === 0 ? { quote: "课程目标在各考核方式中占比" } : {}),
+          verified: false,
+        }));
+        output.objectives.forEach((objective, objectiveIndex) => {
+          output.assessments.forEach((assessment, assessmentIndex) => {
+            const value =
+              extracted.values[
+                objectiveIndex * output.assessments.length + assessmentIndex
+              ];
+            if (value !== undefined) {
+              const key = mappingKey(objective.code, assessment.code);
+              rates.set(key, value);
+              refs.set(key, matrixRefs);
+            }
+          });
+        });
+        warnings.add(
+          `已从教学大纲原文第 ${extracted.sourcePages.join("、")} 页百分比矩阵提取课程目标占比。`,
+        );
+      }
+    }
+  }
+
+  // 4. Whatever the syllabus never states becomes an explicit even draft, so
+  // the review page is never a blank grid the teacher has to start from zero.
+  const drafted: string[] = [];
+  if (output.objectives.length > 0) {
+    for (const assessment of output.assessments) {
+      const covered = output.objectives.every((objective) =>
+        rates.has(mappingKey(objective.code, assessment.code)),
+      );
+      if (covered) continue;
+      for (const mapping of buildDraftMappings(output.objectives, [assessment])
+        .mappings) {
+        rates.set(
+          mappingKey(mapping.objectiveCode, mapping.assessmentCode),
+          mapping.allocationRate,
+        );
+      }
+      drafted.push(assessment.name);
+    }
+  }
+  if (drafted.length > 0) {
+    warnings.add(
+      `考核方式「${drafted.join("、")}」未能从原文提取课程目标分解，系统已按 ${output.objectives.length} 个课程目标等分生成草稿，请对照大纲核对后再发布。`,
+    );
+  }
+
+  const mappings = output.objectives.flatMap((objective) =>
+    output.assessments.map((assessment) => {
+      const key = mappingKey(objective.code, assessment.code);
+      return {
+        objectiveCode: objective.code,
+        assessmentCode: assessment.code,
+        allocationRate: rates.get(key) ?? null,
+        sourceRefs: refs.get(key) ?? [],
+      };
+    }),
+  );
+  if (!mappings.some((mapping) => mapping.allocationRate !== null)) {
+    return output;
+  }
+  const complete = mappings.every((mapping) => mapping.allocationRate !== null);
   return {
     ...output,
     assessmentMethod: "REVERSE_MATRIX",
-    objectiveAssessmentMappings: output.objectives.flatMap(
-      (objective, objectiveIndex) =>
-        output.assessments.map((assessment, assessmentIndex) => ({
-          objectiveCode: objective.code,
-          assessmentCode: assessment.code,
-          allocationRate:
-            extracted.values[
-              objectiveIndex * output.assessments.length + assessmentIndex
-            ] ?? null,
-          sourceRefs,
-        })),
-    ),
+    objectiveAssessmentMappings: mappings,
+    warnings: complete
+      ? [...warnings].filter(
+          // The model reported the gap before this reader filled the matrix;
+          // keeping that note next to a complete grid contradicts itself.
+          (warning) => !/仅提取\s*\d+\/\d+\s*个数值/u.test(warning),
+        )
+      : [...warnings],
   };
 }
 

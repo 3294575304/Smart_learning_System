@@ -6,7 +6,6 @@ import {
   Layers3,
   Maximize2,
   Minus,
-  Network,
   Orbit,
   Plus,
   RotateCcw,
@@ -98,9 +97,9 @@ const ForceGraph3D = dynamic<ForceGraphWithRefProps>(
   },
 );
 const relationColor: Record<GraphEdge["type"], string> = {
-  CONTAINS: "#64748b",
-  PREREQUISITE: "#fbbf24",
-  RELATED: "#a78bfa",
+  CONTAINS: "#94a3b8",
+  PREREQUISITE: "#d97706",
+  RELATED: "#7c3aed",
 };
 const relationLabel: Record<GraphEdge["type"], string> = {
   CONTAINS: "包含",
@@ -113,13 +112,35 @@ const linkArrowLength = (link: ForceLink) =>
 const linkEndpoint = (node: string | ForceNode) =>
   typeof node === "string" ? node : node.id;
 const toolbarButton =
-  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-700 px-2.5 text-xs text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:cursor-default disabled:opacity-35";
+  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-default disabled:opacity-40";
 const motionToggleButton =
-  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:cursor-default disabled:opacity-35";
+  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-default disabled:opacity-40";
 const motionToggleOn =
-  "border-sky-400 bg-sky-600 text-white shadow-[0_0_0_1px_rgba(125,211,252,0.4)]";
+  "border-sky-300 bg-sky-100 text-sky-800 hover:border-sky-400 hover:bg-sky-200";
 const motionToggleOff =
-  "border-slate-700 text-slate-300 hover:border-slate-500 hover:bg-slate-800 hover:text-white";
+  "border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-800";
+/**
+ * 「3D 图谱」模式图标：线框球体加两个高亮点，避免与自动旋转的轨道图标重复。
+ * 细描边保证在浅色工具栏上与 14px 文字同重。
+ */
+function SphereGraphIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="12" r="8" strokeLinecap="round" />
+      <ellipse cx="12" cy="12" rx="8" ry="3.2" />
+      <ellipse cx="12" cy="12" rx="3.2" ry="8" />
+      <circle cx="12" cy="4" fill="currentColor" r="1.5" stroke="none" />
+      <circle cx="18.6" cy="15.4" fill="currentColor" r="1.5" stroke="none" />
+    </svg>
+  );
+}
 const cameraDirection = new THREE.Vector3();
 const projected = new THREE.Vector3();
 /** 估算章节标签的屏幕宽度：中文按全角、西文按半角计。 */
@@ -185,8 +206,9 @@ export function KnowledgeGraphCanvas3D({
   const [layoutMode, setLayoutMode] = useState<"CHAPTER" | "SPHERE">("SPHERE");
   const [expansion, setExpansion] = useState(0);
   const [displayExpansion, setDisplayExpansion] = useState(0);
-  const [breathing, setBreathing] = useState(false);
-  const [autoRotate, setAutoRotate] = useState(false);
+  // 进入图谱即呈现动态：呼吸与自转默认开启，用户仍可随时独立关闭。
+  const [breathing, setBreathing] = useState(true);
+  const [autoRotate, setAutoRotate] = useState(true);
   const [motionVisible, setMotionVisible] = useState(true);
   const [reduceMotion, setReduceMotion] = useState(false);
   expansionRef.current = expansion;
@@ -387,7 +409,7 @@ export function KnowledgeGraphCanvas3D({
         linkEndpoint(link.target) === focusKey;
       const color = new THREE.Color(link.color).getStyle();
       const opacity =
-        focusKey && incident ? 0.95 : link.type === "CONTAINS" ? 0.45 : 0.6;
+        focusKey && incident ? 1 : link.type === "CONTAINS" ? 0.55 : 0.7;
       return color.replace("rgb(", "rgba(").replace(")", `,${opacity})`);
     },
     [focusKey],
@@ -611,14 +633,14 @@ export function KnowledgeGraphCanvas3D({
   useEffect(() => {
     const fg = fgRef.current;
     if (!graphReady || !fg) return;
-    // 柔和主光与冷色轮廓光塑造釉面质感，避免高环境光抹平球体层次。
-    const key = new THREE.DirectionalLight("#fff5eb", 2.1);
+    // 浅色底不需要自发光撑亮度：主光给高光，冷色补光与紫色轮廓光拉开球体层次。
+    const key = new THREE.DirectionalLight("#ffffff", 1.9);
     key.position.set(-600, 800, 1200);
-    const fill = new THREE.DirectionalLight("#93c5fd", 0.5);
+    const fill = new THREE.DirectionalLight("#cfe3f7", 0.55);
     fill.position.set(700, -200, -800);
-    const rim = new THREE.DirectionalLight("#c4b5fd", 1.3);
+    const rim = new THREE.DirectionalLight("#e0e7ff", 0.5);
     rim.position.set(200, 500, -700);
-    fg.lights([new THREE.AmbientLight("#dbeafe", 0.5), key, fill, rim]);
+    fg.lights([new THREE.AmbientLight("#ffffff", 1.05), key, fill, rim]);
   }, [graphReady]);
   useEffect(() => {
     const fg = fgRef.current;
@@ -666,8 +688,8 @@ export function KnowledgeGraphCanvas3D({
       size / 2,
       size / 2,
     );
-    gradient.addColorStop(0, "rgba(224,242,254,0.95)");
-    gradient.addColorStop(0.3, "rgba(56,189,248,0.42)");
+    gradient.addColorStop(0, "rgba(125,211,252,0.55)");
+    gradient.addColorStop(0.3, "rgba(56,189,248,0.24)");
     gradient.addColorStop(1, "rgba(14,165,233,0)");
     context.fillStyle = gradient;
     context.fillRect(0, 0, size, size);
@@ -676,8 +698,8 @@ export function KnowledgeGraphCanvas3D({
     const material = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
-      opacity: 0.28,
-      blending: THREE.AdditiveBlending,
+      // 叠加混合在浅色底上会被冲成白色，改用普通混合保留淡蓝光晕。
+      opacity: 0.3,
       depthWrite: false,
     });
     const sprite = new THREE.Sprite(material);
@@ -732,7 +754,7 @@ export function KnowledgeGraphCanvas3D({
         courseGlow.current.visible = sphereNodeVisible("COURSE", progress);
         courseGlow.current.scale.setScalar(motion.radius * 0.5);
         (courseGlow.current.material as THREE.SpriteMaterial).opacity =
-          0.1 + 0.22 * progress;
+          0.12 + 0.2 * progress;
       }
       fg.refresh();
       requestLabelUpdate();
@@ -748,6 +770,12 @@ export function KnowledgeGraphCanvas3D({
         breathing,
         autoRotate,
       });
+      // 拖拽时冻结机构推进：每帧写回的固定坐标会把手指或鼠标的位移顶回去，
+      // 松手后再从当前展开度继续呼吸，不会突然弹回。
+      if (dragging.current) {
+        frame = window.requestAnimationFrame(step);
+        return;
+      }
       if (modes.breathe) {
         breathPhase.current += (elapsed / 6000) * Math.PI * 2;
         currentExpansion.current = breathingExpansion(breathPhase.current);
@@ -1046,6 +1074,34 @@ export function KnowledgeGraphCanvas3D({
       fitView(0);
     }
   }, [updateNodeVisuals, fitView]);
+  /**
+   * 呼吸开启时球体持续张合，逐帧统计可读节点会让数字不断跳动；
+   * 此时改为汇报当前筛选下的全图规模，静态查看时仍显示真实可见数量。
+   */
+  const autoMotion =
+    layoutMode === "SPHERE" && breathing && !reduceMotion && !selectedKey;
+  const visibleNodeCount = graphData.nodes.filter((node) =>
+    layoutMode === "SPHERE"
+      ? sphereNodeVisible(node.type, displayExpansion) &&
+        (node.type === "COURSE" ||
+          !onlyRelated ||
+          !selectedNeighbors ||
+          selectedNeighbors.has(node.id))
+      : nodeVisible(node),
+  ).length;
+  const visibleLinkCount =
+    layoutMode === "SPHERE" && displayExpansion <= 0.45
+      ? 0
+      : graphData.links.filter((link) =>
+          layoutMode === "SPHERE"
+            ? !onlyRelated ||
+              !selectedNeighbors ||
+              (selectedNeighbors.has(linkEndpoint(link.source)) &&
+                selectedNeighbors.has(linkEndpoint(link.target)))
+            : linkVisible(link),
+        ).length;
+  const nodeCount = autoMotion ? graphData.nodes.length : visibleNodeCount;
+  const linkCount = autoMotion ? graphData.links.length : visibleLinkCount;
   function clearSelection() {
     setOnlyRelated(false);
     setHoverKey(null);
@@ -1065,7 +1121,7 @@ export function KnowledgeGraphCanvas3D({
   return (
     <div
       ref={figureRef}
-      className="min-w-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#0b1220] text-slate-200 shadow-lg [&:fullscreen]:flex [&:fullscreen]:flex-col [&:fullscreen]:rounded-none"
+      className="min-w-0 overflow-hidden rounded-2xl border border-sky-100 bg-white text-slate-700 shadow-sm [&:fullscreen]:flex [&:fullscreen]:flex-col [&:fullscreen]:rounded-none"
       role="figure"
       aria-label="课程知识图谱，可拖动节点、平移并使用按钮缩放"
       onPointerDownCapture={() => {
@@ -1077,15 +1133,15 @@ export function KnowledgeGraphCanvas3D({
         needsFit.current = false;
       }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700/60 bg-[#111b2d] px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-4 py-3">
         <div
-          className="inline-flex rounded-xl border border-slate-700/60 bg-slate-950/40 p-1"
+          className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1"
           role="group"
           aria-label="图谱显示模式"
         >
           {(
             [
-              ["SPHERE", "伸缩球"],
+              ["SPHERE", "3D 图谱"],
               ["CHAPTER", "章节总览"],
             ] as const
           ).map(([mode, label]) => (
@@ -1093,11 +1149,11 @@ export function KnowledgeGraphCanvas3D({
               key={mode}
               type="button"
               aria-pressed={layoutMode === mode}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-sky-400 ${layoutMode === mode ? "bg-slate-700 text-white" : "text-slate-400 hover:text-slate-100"}`}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${layoutMode === mode ? "bg-white text-sky-800 shadow-sm ring-1 ring-sky-100" : "text-slate-500 hover:text-sky-800"}`}
               onClick={() => changeLayout(mode)}
             >
               {mode === "SPHERE" ? (
-                <Network className="size-3.5" aria-hidden="true" />
+                <SphereGraphIcon className="size-3.5" />
               ) : (
                 <Layers3 className="size-3.5" aria-hidden="true" />
               )}
@@ -1114,12 +1170,12 @@ export function KnowledgeGraphCanvas3D({
             <div
               className="mr-2 flex flex-wrap items-center gap-2"
               role="group"
-              aria-label="球体伸缩控制"
+              aria-label="三维图谱伸缩控制"
             >
               <button
                 type="button"
                 className={toolbarButton}
-                aria-label="收起球体"
+                aria-label="收起图谱"
                 onClick={() => setManualExpansion(0)}
               >
                 收起
@@ -1129,8 +1185,8 @@ export function KnowledgeGraphCanvas3D({
                 min="0"
                 max="100"
                 value={Math.round(displayExpansion * 100)}
-                aria-label="球体展开程度"
-                className="w-20 accent-sky-400 sm:w-28"
+                aria-label="图谱展开程度"
+                className="w-20 accent-sky-600 sm:w-28"
                 onChange={(event) =>
                   setManualExpansion(Number(event.target.value) / 100)
                 }
@@ -1138,7 +1194,7 @@ export function KnowledgeGraphCanvas3D({
               <button
                 type="button"
                 className={toolbarButton}
-                aria-label="展开球体"
+                aria-label="展开图谱"
                 onClick={() => setManualExpansion(1)}
               >
                 展开
@@ -1226,14 +1282,16 @@ export function KnowledgeGraphCanvas3D({
       </div>
       <div
         style={{
-          // 柔和中心补光保持知识点与真实关系线的对比度。
-          background:
-            "radial-gradient(125% 95% at 50% 40%, #16233a 0%, #0d1524 46%, #070b12 100%)",
+          // 浅色渲染色：中心近白、四周落回页面同族浅蓝，球体才有悬浮的纵深。
+          // 点阵网格只做空间提示，对比度压低到不抢节点。
+          backgroundImage:
+            "radial-gradient(#dceaf6 1px, transparent 1px), radial-gradient(120% 95% at 50% 40%, #ffffff 0%, #f5fafe 46%, #e6f1fa 100%)",
+          backgroundSize: "26px 26px, auto",
         }}
         className={
           compact
-            ? "relative h-[480px] w-full cursor-grab bg-[#070b12] sm:h-[620px] [[role=figure]:fullscreen_&]:h-auto [[role=figure]:fullscreen_&]:flex-1"
-            : "relative h-[680px] w-full cursor-grab bg-[#070b12] [[role=figure]:fullscreen_&]:h-auto [[role=figure]:fullscreen_&]:flex-1"
+            ? "relative h-[480px] w-full cursor-grab sm:h-[620px] [[role=figure]:fullscreen_&]:h-auto [[role=figure]:fullscreen_&]:flex-1"
+            : "relative h-[680px] w-full cursor-grab [[role=figure]:fullscreen_&]:h-auto [[role=figure]:fullscreen_&]:flex-1"
         }
         ref={containerRef}
       >
@@ -1270,22 +1328,22 @@ export function KnowledgeGraphCanvas3D({
         ) : null}
         {nodes.length ? (
           <div className="pointer-events-none absolute inset-x-4 top-4 flex items-start justify-between gap-3">
-            <div className="max-w-[75%] rounded-xl border border-slate-700/70 bg-[#111b2d]/95 px-3.5 py-3">
+            <div className="max-w-[75%] rounded-xl border border-sky-100 bg-white/92 px-3.5 py-3 shadow-sm backdrop-blur-sm">
               {selectedNode ? (
                 <>
-                  <div className="flex items-center gap-2 text-[10px] tracking-widest text-slate-400">
+                  <div className="flex items-center gap-2 text-[10px] tracking-widest text-sky-700">
                     <Focus className="size-3" aria-hidden="true" />
                     当前聚焦
                   </div>
                   <p
-                    className="mt-1.5 truncate text-sm font-medium text-white"
+                    className="mt-1.5 truncate text-sm font-medium text-slate-900"
                     title={selectedNode.name}
                   >
                     {selectedNode.name}
                   </p>
                   <button
                     type="button"
-                    className="pointer-events-auto mt-2 inline-flex items-center gap-1 text-xs text-sky-300 hover:text-white focus-visible:outline-2 focus-visible:outline-sky-400"
+                    className="pointer-events-auto mt-2 inline-flex items-center gap-1 text-xs text-sky-700 hover:text-sky-900 focus-visible:outline-2 focus-visible:outline-sky-600"
                     onClick={clearSelection}
                   >
                     <X className="size-3" aria-hidden="true" />
@@ -1294,66 +1352,46 @@ export function KnowledgeGraphCanvas3D({
                 </>
               ) : (
                 <>
-                  <p className="text-xs font-medium text-slate-200">
+                  <p className="text-xs font-medium text-slate-700">
                     {layoutMode === "SPHERE"
-                      ? "滚轮向上展开球体，查看内部知识点"
+                      ? "滚轮向上展开图谱，查看内部知识点"
                       : "从课程核心探索章节网络"}
                   </p>
-                  <p className="mt-1.5 text-[11px] text-slate-400">
+                  <p className="mt-1.5 text-[11px] text-slate-500">
                     悬停查看关联 · 点击节点聚焦
                   </p>
                 </>
               )}
             </div>
             <span
-              className="shrink-0 rounded-full border border-slate-700/70 bg-[#111b2d]/95 px-3 py-1.5 text-[11px] text-slate-400"
+              className="shrink-0 rounded-full border border-slate-200 bg-white/92 px-3 py-1.5 text-[11px] text-slate-500 shadow-sm backdrop-blur-sm"
               role="status"
             >
-              {layoutMode === "SPHERE"
-                ? graphData.nodes.filter(
-                    (node) =>
-                      sphereNodeVisible(node.type, displayExpansion) &&
-                      (node.type === "COURSE" ||
-                        !onlyRelated ||
-                        !selectedNeighbors ||
-                        selectedNeighbors.has(node.id)),
-                  ).length
-                : graphData.nodes.filter(nodeVisible).length}{" "}
-              节点 /{" "}
-              {layoutMode === "SPHERE" && displayExpansion <= 0.45
-                ? 0
-                : graphData.links.filter((link) =>
-                    layoutMode === "SPHERE"
-                      ? !onlyRelated ||
-                        !selectedNeighbors ||
-                        (selectedNeighbors.has(linkEndpoint(link.source)) &&
-                          selectedNeighbors.has(linkEndpoint(link.target)))
-                      : linkVisible(link),
-                  ).length}{" "}
-              关系
+              {autoMotion ? "共 " : ""}
+              {nodeCount} 节点 / {linkCount} 关系
             </span>
           </div>
         ) : null}
         {!nodes.length ? (
           <p
             role="status"
-            className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-slate-400"
+            className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-slate-500"
           >
             没有匹配节点，请调整章节、类型或搜索条件。
           </p>
         ) : null}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 border-t border-slate-700/60 bg-[#111b2d] px-4 py-3 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 border-t border-slate-100 bg-white px-4 py-3 text-xs">
         <div
-          className="flex flex-wrap items-center gap-4 text-slate-400"
+          className="flex flex-wrap items-center gap-4 text-slate-500"
           aria-label="关系图例"
         >
           <span className="flex items-center gap-1.5">
-            <span className="h-px w-4 bg-slate-500" />
+            <span className="h-px w-4 bg-slate-300" />
             包含
           </span>
-          <span className="text-amber-300">→ 先修</span>
-          <span className="flex items-center gap-1.5 text-violet-300">
+          <span className="text-amber-700">→ 先修</span>
+          <span className="flex items-center gap-1.5 text-violet-700">
             <span className="h-px w-4 bg-violet-400" />
             相关
           </span>
@@ -1361,7 +1399,7 @@ export function KnowledgeGraphCanvas3D({
         <div className="flex flex-wrap items-center gap-4">
           <label className="flex cursor-pointer items-center gap-2 text-slate-300">
             <input
-              className="accent-sky-500"
+              className="accent-sky-600"
               type="checkbox"
               checked={showPointNames}
               onChange={(event) => setShowPointNames(event.target.checked)}
@@ -1370,7 +1408,7 @@ export function KnowledgeGraphCanvas3D({
           </label>
           <button
             type="button"
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 transition focus-visible:outline-2 focus-visible:outline-sky-400 disabled:opacity-35 ${onlyRelated && selectedNode ? "border-sky-700 bg-sky-950 text-sky-200" : "border-slate-700 text-slate-300 hover:bg-slate-800"}`}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 transition focus-visible:outline-2 focus-visible:outline-sky-600 disabled:opacity-40 ${onlyRelated && selectedNode ? "border-sky-300 bg-sky-50 text-sky-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
             disabled={!selectedNode}
             aria-pressed={onlyRelated && Boolean(selectedNode)}
             onClick={() => setOnlyRelated((value) => !value)}
@@ -1379,15 +1417,15 @@ export function KnowledgeGraphCanvas3D({
             只看直接关联
           </button>
         </div>
-        <p className="w-full text-[11px] leading-5 text-slate-400">
+        <p className="w-full text-[11px] leading-5 text-slate-500">
           {nodeColorHelp ?? "同章节点同色，点击节点平滑飞入查看。"}
-          <span className="mx-2 text-slate-600">|</span>
+          <span className="mx-2 text-slate-300">|</span>
           {layoutMode === "SPHERE"
             ? "左键旋转 · 右键平移 · 滚轮向上展开、向下收起 · 呼吸与自动旋转可独立开启"
             : "拖动节点移动 · 拖动画布平移 · 滚轮缩放 · 正面视角已锁定"}
         </p>
         {fullscreenError ? (
-          <p role="status" className="text-xs text-amber-300">
+          <p role="status" className="text-xs text-amber-700">
             {fullscreenError}
           </p>
         ) : null}
