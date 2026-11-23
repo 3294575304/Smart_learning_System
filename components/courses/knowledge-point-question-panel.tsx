@@ -88,7 +88,7 @@ export function KnowledgePointQuestionPanel({
         </h5>
         <Link
           className="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-800 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
-          href={`/teacher/courses/${courseId}/question-mapping`}
+          href={`/teacher/courses/${courseId}/question-mapping?from=knowledge-graph`}
           target="_blank"
           rel="noreferrer"
         >

@@ -9,22 +9,33 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseQuestionMappingPathSchema } from "@/services/question-mapping/schemas";
 import { listUnboundTeacherQuestions } from "@/services/question-mapping/service";
 
-type Props = { params: Promise<{ courseId: string }> };
+type Props = {
+  params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
+};
 
-export default async function QuestionMappingPage({ params }: Props) {
+export default async function QuestionMappingPage({
+  params,
+  searchParams,
+}: Props) {
   const teacher = await requirePageRole(Role.TEACHER);
   const path = courseQuestionMappingPathSchema.safeParse(await params);
   if (!path.success) notFound();
+  const courseBase = `/teacher/courses/${path.data.courseId}`;
+  const fromKnowledgeGraph = (await searchParams).from === "knowledge-graph";
+  const backHref = fromKnowledgeGraph
+    ? `${courseBase}/knowledge-graph`
+    : courseBase;
+  const backLabel = fromKnowledgeGraph ? "返回知识图谱" : "返回课程";
   try {
     const result = await listUnboundTeacherQuestions(
       teacher.id,
       path.data.courseId,
     );
     if (!result.ready) {
-      const courseBase = `/teacher/courses/${path.data.courseId}`;
       return (
         <section className="space-y-6">
-          <TeacherBackLink href={courseBase}>返回课程</TeacherBackLink>
+          <TeacherBackLink href={backHref}>{backLabel}</TeacherBackLink>
           <div className="rounded-xl border bg-white p-6 shadow-sm sm:p-8">
             <h1 className="text-2xl font-semibold">
               {result.course.name} · 题目知识点映射
@@ -61,9 +72,7 @@ export default async function QuestionMappingPage({ params }: Props) {
     return (
       <section className="space-y-6">
         <header>
-          <TeacherBackLink href={`/teacher/courses/${path.data.courseId}`}>
-            返回课程
-          </TeacherBackLink>
+          <TeacherBackLink href={backHref}>{backLabel}</TeacherBackLink>
           <h1 className="mt-3 text-2xl font-semibold">
             {result.course.name} · 一键关联绑定题目
           </h1>
