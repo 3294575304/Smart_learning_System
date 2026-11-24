@@ -43,7 +43,7 @@ export function auditQualityReportDraft(
   const add = (...value: Parameters<typeof issue>) =>
     issues.push(issue(...value));
 
-  if (!source.syllabus) {
+  if (!source.syllabus && source.sourceReference.standalone !== true) {
     add(
       "SYLLABUS_NOT_PUBLISHED",
       "ERROR",
@@ -53,7 +53,7 @@ export function auditQualityReportDraft(
       "先完成教学大纲解析、教师审核和显式发布，再重新生成报告。",
       ["syllabus"],
     );
-  } else {
+  } else if (source.syllabus) {
     const reportName = normalized(source.course.name);
     const syllabusName = normalized(source.syllabus.courseName);
     if (reportName && syllabusName && reportName !== syllabusName) {

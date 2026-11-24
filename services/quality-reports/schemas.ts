@@ -57,10 +57,10 @@ export const reportStudentSchema = z.object({
 
 export const qualityReportSurveySnapshotSchema = z
   .object({
-    surveyId: z.string().cuid(),
+    surveyId: z.string().cuid().nullable(),
     title: z.string(),
     mode: z.enum(["IDENTIFIED", "ANONYMOUS"]),
-    summaryRevisionId: z.string().cuid(),
+    summaryRevisionId: z.string().cuid().nullable(),
     summaryRevisionNumber: z.number().int().positive(),
     responseCount: z.number().int().nonnegative(),
     eligibleCount: z.number().int().nonnegative(),
@@ -98,7 +98,7 @@ export const qualityReportSurveySnapshotSchema = z
 
 export const qualityReportSourceSnapshotSchema = z.object({
   course: z.object({
-    id: z.string().cuid(),
+    id: z.string().cuid().nullable(),
     name: z.string(),
     courseNo: z.string(),
     term: z.string(),

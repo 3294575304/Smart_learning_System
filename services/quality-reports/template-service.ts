@@ -20,17 +20,25 @@ import {
   type TemplateSnapshot,
 } from "./template-schema";
 
-async function owned(teacherId: string, courseId: string) {
+async function owned(teacherId: string, courseId: string | null) {
+  if (courseId === null) return;
   const course = await prisma.course.findFirst({
     where: { id: courseId, teacherId },
     select: { id: true },
   });
   if (!course) throw new ResourceNotFoundError("课程不存在。");
 }
-export async function listReportTemplates(teacherId: string, courseId: string) {
+export async function listReportTemplates(
+  teacherId: string,
+  courseId: string | null,
+) {
   await owned(teacherId, courseId);
   const files = await prisma.courseFileVersion.findMany({
-    where: { courseId, fileKind: CourseFileKind.REPORT_TEMPLATE },
+    where: {
+      courseId,
+      uploadedById: courseId === null ? teacherId : undefined,
+      fileKind: CourseFileKind.REPORT_TEMPLATE,
+    },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -55,7 +63,7 @@ export async function listReportTemplates(teacherId: string, courseId: string) {
 }
 export async function uploadReportTemplate(
   teacherId: string,
-  courseId: string,
+  courseId: string | null,
   file: File,
   context: AuditRequestContext,
 ) {
@@ -76,6 +84,7 @@ export async function uploadReportTemplate(
   const existing = await prisma.courseFileVersion.findFirst({
     where: {
       courseId,
+      uploadedById: courseId === null ? teacherId : undefined,
       fileKind: CourseFileKind.REPORT_TEMPLATE,
       checksumSha256: checksum,
     },
@@ -83,7 +92,9 @@ export async function uploadReportTemplate(
   });
   if (existing) return { id: existing.id, reused: true };
   const storage = getStorageService(),
-    storageKey = `courses/${courseId}/report-templates/${randomUUID()}.docx`;
+    storageKey = courseId
+      ? `courses/${courseId}/report-templates/${randomUUID()}.docx`
+      : `quality-reports/standalone/${teacherId}/templates/${randomUUID()}.docx`;
   await storage.save(storageKey, data);
   try {
     const record = await prisma.$transaction(async (tx) => {
@@ -129,6 +140,7 @@ export async function uploadReportTemplate(
       const duplicate = await prisma.courseFileVersion.findFirst({
         where: {
           courseId,
+          uploadedById: courseId === null ? teacherId : undefined,
           fileKind: CourseFileKind.REPORT_TEMPLATE,
           checksumSha256: checksum,
         },
@@ -141,7 +153,7 @@ export async function uploadReportTemplate(
 }
 export async function resolveReportTemplate(
   teacherId: string,
-  courseId: string,
+  courseId: string | null,
   selection: TemplateSelection,
 ): Promise<TemplateSnapshot | undefined> {
   await owned(teacherId, courseId);
@@ -157,6 +169,7 @@ export async function resolveReportTemplate(
     where: {
       id: selection.templateFileVersionId,
       courseId,
+      uploadedById: courseId === null ? teacherId : undefined,
       fileKind: CourseFileKind.REPORT_TEMPLATE,
     },
   });
@@ -179,13 +192,17 @@ export async function resolveReportTemplate(
   };
 }
 export async function readFrozenReportTemplate(
-  courseId: string,
+  courseId: string | null,
   snapshot: TemplateSnapshot,
+  teacherId?: string,
 ): Promise<Buffer> {
+  if (courseId === null && !teacherId)
+    throw new QualityReportOperationError("报告模板归属信息缺失。", 409);
   const file = await prisma.courseFileVersion.findFirst({
     where: {
       id: snapshot.fileVersionId,
       courseId,
+      uploadedById: courseId === null ? teacherId : undefined,
       fileKind: CourseFileKind.REPORT_TEMPLATE,
     },
   });

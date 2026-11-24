@@ -26,7 +26,7 @@ export function QualityReportTemplatePicker({
   onChange,
   onBusyChange,
 }: {
-  courseId: string;
+  courseId?: string;
   disabled: boolean;
   onChange: (value: TemplateSelection) => void;
   onBusyChange: (value: boolean) => void;
@@ -40,13 +40,13 @@ export function QualityReportTemplatePicker({
   const [expanded, setExpanded] = useState(false);
   const [onlyPending, setOnlyPending] = useState(false);
   const [query, setQuery] = useState("");
+  const endpoint = courseId
+    ? `/api/teacher/courses/${courseId}/quality-report-templates`
+    : "/api/teacher/quality-reports/standalone/templates";
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `/api/teacher/courses/${courseId}/quality-report-templates`,
-        { cache: "no-store" },
-      );
+      const response = await fetch(endpoint, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok || !payload.success)
         throw new Error(payload.error ?? "模板加载失败");
@@ -56,7 +56,7 @@ export function QualityReportTemplatePicker({
     } finally {
       setLoading(false);
     }
-  }, [courseId]);
+  }, [endpoint]);
   useEffect(() => {
     void load().catch((reason: unknown) =>
       setError(reason instanceof Error ? reason.message : "模板加载失败"),
@@ -94,10 +94,7 @@ export function QualityReportTemplatePicker({
     try {
       const body = new FormData();
       body.set("file", file);
-      const response = await fetch(
-        `/api/teacher/courses/${courseId}/quality-report-templates`,
-        { method: "POST", body },
-      );
+      const response = await fetch(endpoint, { method: "POST", body });
       const payload = await response.json();
       if (!response.ok || !payload.success)
         throw new Error(payload.error ?? "模板上传失败");

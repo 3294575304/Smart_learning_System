@@ -1858,7 +1858,9 @@ model StudentOutcomeAttainmentResult {
 
 model CourseQualityReport {
   id                         String                    @id @default(cuid())
-  courseId                   String
+  courseId                   String?
+  standaloneKey              String?                   @unique @db.Char(64)
+  standaloneVersion          Int?
   classroomId                String?
   gradebookId                String?
   outcomeAttainmentRunId     String?
@@ -1903,7 +1905,7 @@ model CourseQualityReport {
   createdAt                  DateTime                  @default(now())
   updatedAt                  DateTime                  @updatedAt
 
-  course               Course                      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  course               Course?                     @relation(fields: [courseId], references: [id], onDelete: Restrict)
   classroom            Classroom?                  @relation(fields: [classroomId], references: [id], onDelete: Restrict)
   gradebook            CourseGradebook?            @relation(fields: [gradebookId], references: [id], onDelete: Restrict)
   outcomeAttainmentRun CourseOutcomeAttainmentRun? @relation(fields: [outcomeAttainmentRunId], references: [id], onDelete: Restrict)
@@ -1914,6 +1916,7 @@ model CourseQualityReport {
 
   @@unique([courseId, versionNumber])
   @@unique([courseId, inputFingerprint])
+  @@unique([requestedById, standaloneVersion])
   @@index([courseId, status, createdAt])
   @@index([classroomId, createdAt])
   @@index([gradebookId, createdAt])

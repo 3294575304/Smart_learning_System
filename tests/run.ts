@@ -63,6 +63,7 @@ const serverOnlyTests = new Set([
   "courses/syllabus-service.test.ts",
   "course-recommendations/learning-assistant-stream.test.ts",
   "quality-reports/evaluation-workflow.test.ts",
+  "quality-reports/standalone.test.ts",
 ]);
 
 function run(args: string[], env: NodeJS.ProcessEnv): void {

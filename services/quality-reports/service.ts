@@ -73,7 +73,7 @@ const json = (value: unknown) =>
 const sha256 = (data: Buffer | string) =>
   createHash("sha256").update(data).digest("hex");
 
-interface ReportUploadFile {
+export interface ReportUploadFile {
   name: string;
   type: string;
   size: number;
@@ -696,20 +696,32 @@ async function uploadSource(
   };
 }
 
-async function queueReport(
+export async function queueReport(
   teacherId: string,
-  courseId: string,
+  courseId: string | null,
   source: QualityReportSourceSnapshot,
   context: AuditRequestContext,
-  upload?: Awaited<ReturnType<typeof uploadSource>>,
+  upload?: {
+    data: Buffer;
+    extension: "xls" | "xlsx" | "csv";
+    fileName: string;
+    mimeType: string;
+    checksum: string;
+  },
+  attempt = 0,
 ) {
   const inputFingerprint = backgroundJobFingerprint({
     source,
     templateVersion: QUALITY_REPORT_TEMPLATE_VERSION,
     ruleVersion: QUALITY_REPORT_RULE_VERSION,
   });
-  const existing = await prisma.courseQualityReport.findUnique({
-    where: { courseId_inputFingerprint: { courseId, inputFingerprint } },
+  const standaloneKey =
+    courseId === null ? sha256(`${teacherId}:${inputFingerprint}`) : null;
+  const existing = await prisma.courseQualityReport.findFirst({
+    where:
+      courseId === null
+        ? { standaloneKey, requestedById: teacherId }
+        : { courseId, inputFingerprint },
     include: { backgroundJob: true },
   });
   if (existing) {
@@ -757,14 +769,17 @@ async function queueReport(
   }
   const storage = getStorageService();
   const sourceStorageKey = upload
-    ? `quality-reports/${courseId}/sources/${randomUUID()}.${upload.extension}`
+    ? `quality-reports/${courseId ?? `standalone/${teacherId}`}/sources/${randomUUID()}.${upload.extension}`
     : null;
   if (upload && sourceStorageKey)
     await storage.save(sourceStorageKey, upload.data);
   try {
     const created = await prisma.$transaction(async (transaction) => {
       const latest = await transaction.courseQualityReport.findFirst({
-        where: { courseId },
+        where:
+          courseId === null
+            ? { courseId: null, requestedById: teacherId }
+            : { courseId },
         orderBy: { versionNumber: "desc" },
         select: { versionNumber: true },
       });
@@ -773,6 +788,7 @@ async function queueReport(
         const latestFile = await transaction.courseFileVersion.findFirst({
           where: {
             courseId,
+            uploadedById: courseId === null ? teacherId : undefined,
             fileKind: "REPORT_GRADE_SOURCE",
             fileKey: "quality-report-grade-source",
           },
@@ -800,6 +816,9 @@ async function queueReport(
       const report = await transaction.courseQualityReport.create({
         data: {
           courseId,
+          standaloneKey,
+          standaloneVersion:
+            courseId === null ? (latest?.versionNumber ?? 0) + 1 : null,
           classroomId: source.classroom.id,
           gradebookId:
             source.sourceType === QualityReportSourceType.PLATFORM
@@ -859,6 +878,31 @@ async function queueReport(
     return { report: created, reused: false, shouldExecute: true };
   } catch (error) {
     if (sourceStorageKey) await storage.delete(sourceStorageKey);
+    if (
+      standaloneKey &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      const duplicate = await prisma.courseQualityReport.findFirst({
+        where: { standaloneKey, requestedById: teacherId },
+        include: { backgroundJob: true },
+      });
+      if (duplicate)
+        return {
+          report: duplicate,
+          reused: true,
+          shouldExecute: duplicate.status === QualityReportStatus.QUEUED,
+        };
+      if (attempt < 2)
+        return queueReport(
+          teacherId,
+          courseId,
+          source,
+          context,
+          upload,
+          attempt + 1,
+        );
+    }
     throw error;
   }
 }
@@ -1025,8 +1069,9 @@ export async function executeClaimedQualityReportJob(
       buildQualityReportDocx(source, statistics, narrative),
       Promise.resolve(buildQualityReportWorkbook(source)),
     ]);
-    docxKey = `quality-reports/${report.courseId}/drafts/${report.id}-${leaseId}.docx`;
-    workbookKey = `quality-reports/${report.courseId}/outputs/${report.id}-${leaseId}.xlsx`;
+    const reportScope = report.courseId ?? `standalone/${report.requestedById}`;
+    docxKey = `quality-reports/${reportScope}/drafts/${report.id}-${leaseId}.docx`;
+    workbookKey = `quality-reports/${reportScope}/outputs/${report.id}-${leaseId}.xlsx`;
     await storage.save(docxKey, docx);
     await storage.save(workbookKey, workbook);
     await heartbeatBackgroundJob(backgroundJobId, {
@@ -1121,14 +1166,20 @@ export async function executeClaimedQualityReportJob(
 
 export async function approveTeacherQualityReport(
   teacherId: string,
-  courseId: string,
+  courseId: string | null,
   reportId: string,
   rawInput: unknown,
   context: AuditRequestContext,
 ) {
   const input = qualityReportReviewSchema.parse(rawInput);
   const report = await prisma.courseQualityReport.findFirst({
-    where: { id: reportId, courseId, course: { teacherId } },
+    where: {
+      id: reportId,
+      courseId,
+      ...(courseId === null
+        ? { requestedById: teacherId }
+        : { course: { teacherId } }),
+    },
   });
   if (!report || report.status !== QualityReportStatus.SUCCEEDED)
     throw new ResourceNotFoundError("待审核报告不存在。");
@@ -1203,7 +1254,7 @@ export async function approveTeacherQualityReport(
     { reviewed: true },
   );
   const storage = getStorageService();
-  const storageKey = `quality-reports/${courseId}/approved/${reportId}-${randomUUID()}.docx`;
+  const storageKey = `quality-reports/${courseId ?? `standalone/${teacherId}`}/approved/${reportId}-${randomUUID()}.docx`;
   await storage.save(storageKey, docx);
   try {
     const approved = await prisma.$transaction(async (transaction) => {
@@ -1377,13 +1428,19 @@ export async function getTeacherQualityReports(
 
 export async function downloadTeacherQualityReport(
   teacherId: string,
-  courseId: string,
+  courseId: string | null,
   reportId: string,
   artifact: "draft-docx" | "docx" | "xlsx",
   context: AuditRequestContext,
 ) {
   const report = await prisma.courseQualityReport.findFirst({
-    where: { id: reportId, courseId, course: { teacherId } },
+    where: {
+      id: reportId,
+      courseId,
+      ...(courseId === null
+        ? { requestedById: teacherId }
+        : { course: { teacherId } }),
+    },
   });
   if (!report || report.status !== QualityReportStatus.SUCCEEDED)
     throw new ResourceNotFoundError("报告文件不存在。");

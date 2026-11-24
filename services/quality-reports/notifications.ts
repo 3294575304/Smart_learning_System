@@ -50,7 +50,7 @@ export async function deliverQualityReportNotifications() {
         });
         if (!claimed.count) return;
         if (
-          report.course.teacherId !== report.requestedById ||
+          (report.course && report.course.teacherId !== report.requestedById) ||
           report.requestedBy.role !== "TEACHER" ||
           report.requestedBy.status !== "ACTIVE" ||
           report.requestedBy.deletedAt ||
@@ -72,7 +72,10 @@ export async function deliverQualityReportNotifications() {
           });
           if (!recipient.teacherNotifyQualityReportReady) return;
         }
-        const scope = [report.course.name, report.classroom?.name]
+        const scope = [
+          report.course?.name ?? "独立上传",
+          report.classroom?.name,
+        ]
           .filter(Boolean)
           .join(" · ");
         await createNotification(
@@ -85,10 +88,12 @@ export async function deliverQualityReportNotifications() {
             content: failed
               ? `${scope} 的报告 v${report.versionNumber} 生成失败。查看生成记录后可重新提交。`
               : `${scope} 的报告 v${report.versionNumber} 初稿已生成。请核对统计、分析文字和改进措施。`,
-            actionUrl: withClassroomQuery(
-              `/teacher/courses/${report.courseId}/quality-report?reportId=${report.id}`,
-              report.classroomId,
-            ),
+            actionUrl: report.courseId
+              ? withClassroomQuery(
+                  `/teacher/courses/${report.courseId}/quality-report?reportId=${report.id}`,
+                  report.classroomId,
+                )
+              : `/teacher/quality-reports/standalone?reportId=${report.id}`,
             sourceType: "QUALITY_REPORT",
             sourceId: report.id,
             deduplicationKey: `quality-report:${report.id}:${report.status}`,
