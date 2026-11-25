@@ -4,6 +4,7 @@ import {
   previewStandaloneWorkbook,
   standaloneInputSchema,
 } from "@/services/quality-reports/standalone";
+import { qualityReportSourceSnapshotSchema } from "@/services/quality-reports/schemas";
 
 const valid = {
   courseName: "Python 程序设计",
@@ -79,6 +80,49 @@ test("独立报告要求总评权重和目标分配各为 100%", () => {
     }).success,
     false,
   );
+});
+
+test("独立报告允许教师手写大纲信息，并校验 AI 来源引用", () => {
+  const manual = standaloneInputSchema.parse({
+    ...valid,
+    teachingContent: "第一章 Python 基础\n第二章 函数",
+    scoringCriteria: "期末考试占 100%",
+  });
+  assert.equal(manual.syllabusReference, undefined);
+  assert.equal(manual.teachingContent.includes("函数"), true);
+  const reference = {
+    jobId: "cm12345678901234567890123",
+    fileVersionId: "cm12345678901234567890124",
+    checksumSha256: "a".repeat(64),
+  };
+  assert.equal(
+    standaloneInputSchema.safeParse({ ...valid, syllabusReference: reference })
+      .success,
+    true,
+  );
+  assert.equal(
+    standaloneInputSchema.safeParse({
+      ...valid,
+      syllabusReference: { ...reference, checksumSha256: "bad" },
+    }).success,
+    false,
+  );
+  const source = qualityReportSourceSnapshotSchema.shape.syllabus.parse({
+    publishedStructureId: null,
+    versionNumber: 1,
+    courseName: valid.courseName,
+    courseCategory: null,
+    courseNature: null,
+    credits: null,
+    teachingCollege: null,
+    applicableMajors: null,
+    objectiveCount: 1,
+    assessmentCount: 1,
+    assessments: [{ code: "C1", name: "考试", weight: 1 }],
+    teachingContent: ["第一章 Python 基础"],
+    assessmentDescriptions: ["期末考试占 100%"],
+  });
+  assert.equal(source?.publishedStructureId, null);
 });
 
 test("文件预览仅返回表头和行数，拒绝重复表头", async () => {

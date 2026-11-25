@@ -32,6 +32,11 @@ import {
 import { QUALITY_REPORT_JOB_TYPE } from "@/services/quality-reports/constants";
 import { deliverQualityReportNotifications } from "@/services/quality-reports/notifications";
 import { executeClaimedQualityReportJob } from "@/services/quality-reports/service";
+import {
+  STANDALONE_SYLLABUS_JOB_TYPE,
+  standaloneSyllabusJobInputSchema,
+  executeClaimedStandaloneSyllabusParseJob,
+} from "@/services/quality-reports/standalone-syllabus";
 import { QUESTION_MAPPING_JOB_TYPE } from "@/services/question-mapping/schemas";
 import { executeClaimedQuestionMappingJob } from "@/services/question-mapping/service";
 import {
@@ -62,6 +67,7 @@ const ACCEPTED_TYPES = [
   KNOWLEDGE_GRAPH_JOB_TYPE,
   KNOWLEDGE_GRAPH_AI_ENHANCEMENT_JOB_TYPE,
   SYLLABUS_PARSE_JOB_TYPE,
+  STANDALONE_SYLLABUS_JOB_TYPE,
   QUESTION_MAPPING_JOB_TYPE,
   AI_QUESTION_JOB_TYPE,
   EXAM_PAPER_JOB_TYPE,
@@ -276,6 +282,14 @@ export class PersistentLongTaskWorker {
         job.id,
         leaseId,
         syllabusParseJobInputSchema.parse(job.input),
+      );
+      return;
+    }
+    if (job.type === STANDALONE_SYLLABUS_JOB_TYPE) {
+      await executeClaimedStandaloneSyllabusParseJob(
+        job.id,
+        leaseId,
+        standaloneSyllabusJobInputSchema.parse(job.input),
       );
       return;
     }

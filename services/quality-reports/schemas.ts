@@ -142,7 +142,7 @@ export const qualityReportSourceSnapshotSchema = z.object({
   survey: qualityReportSurveySnapshotSchema.default(null),
   syllabus: z
     .object({
-      publishedStructureId: z.string().cuid(),
+      publishedStructureId: z.string().cuid().nullable(),
       versionNumber: z.number().int().positive(),
       courseName: z.string().nullable(),
       courseCategory: z.string().nullable(),

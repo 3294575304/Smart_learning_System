@@ -53,7 +53,7 @@ export function auditQualityReportDraft(
       "先完成教学大纲解析、教师审核和显式发布，再重新生成报告。",
       ["syllabus"],
     );
-  } else if (source.syllabus) {
+  } else if (source.syllabus && source.sourceReference.standalone !== true) {
     const reportName = normalized(source.course.name);
     const syllabusName = normalized(source.syllabus.courseName);
     if (reportName && syllabusName && reportName !== syllabusName) {

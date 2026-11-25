@@ -1229,6 +1229,7 @@ model Course {
 }
 
 model CourseFileVersion {
+  /// Database check allows course, classroom, or the explicitly scoped standalone report file kinds.
   id               String         @id @default(cuid())
   courseId         String?
   classroomId      String?

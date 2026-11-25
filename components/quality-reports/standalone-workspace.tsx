@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { QualityReportTemplatePicker } from "./quality-report-template-picker";
 import { ReviewEditor, type ReportItem } from "./quality-report-workspace";
 import type { TemplateSelection } from "@/services/quality-reports/template-schema";
@@ -14,6 +14,49 @@ type Outcome = {
   allocations: Record<string, number>;
 };
 type Report = ReportItem & { courseName: string };
+type SourceRef = { page: number; quote?: string; verified?: boolean };
+type SyllabusResult = {
+  fileVersionId: string;
+  checksumSha256: string;
+  fileName: string;
+  courseInfo: {
+    courseName: string | null;
+    courseCode: string | null;
+    credits: number | null;
+    courseNature?: string | null;
+    applicableMajors?: string | null;
+    teachingCollege?: string | null;
+    offeredTerm?: string | null;
+    sourceRefs: SourceRef[];
+  };
+  assessments: Array<{
+    code: string;
+    name: string;
+    weight: number | null;
+    description: string | null;
+    sourceRefs: SourceRef[];
+  }>;
+  objectives: Array<{
+    code: string;
+    title: string;
+    description: string;
+    sourceRefs: SourceRef[];
+  }>;
+  objectiveAssessmentMappings: Array<{
+    objectiveCode: string;
+    assessmentCode: string;
+    allocationRate: number | null;
+  }>;
+  teachingContent: string[];
+  warnings: string[];
+};
+type SyllabusJob = {
+  jobId: string;
+  status: string;
+  progress: number;
+  errorCode: string | null;
+  result: SyllabusResult | null;
+};
 type CalculationPreview = {
   courseName: string;
   templateName: string;
@@ -75,6 +118,12 @@ function ColumnSelect({
 }
 
 export function StandaloneQualityReportWorkspace() {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
+  const [syllabusJob, setSyllabusJob] = useState<SyllabusJob | null>(null);
+  const [syllabusBusy, setSyllabusBusy] = useState(false);
+  const [syllabusApplied, setSyllabusApplied] = useState(false);
+  const [syllabusError, setSyllabusError] = useState("");
   const [template, setTemplate] = useState<TemplateSelection>({});
   const [templateBusy, setTemplateBusy] = useState(false);
   const [gradeFile, setGradeFile] = useState<File | null>(null);
@@ -133,6 +182,128 @@ export function StandaloneQualityReportWorkspace() {
     );
     return () => window.clearInterval(timer);
   }, [loadReports, reports]);
+  useEffect(() => {
+    if (!syllabusJob || !["PENDING", "RUNNING"].includes(syllabusJob.status))
+      return;
+    const timer = window.setInterval(() => {
+      void fetch(`${base}/syllabus/${syllabusJob.jobId}`, { cache: "no-store" })
+        .then(async (response) => {
+          const payload = (await response.json()) as Envelope<SyllabusJob>;
+          if (!response.ok || !payload.success || !payload.data)
+            throw new Error(payload.error ?? "大纲解析进度获取失败");
+          setSyllabusJob(payload.data);
+          if (payload.data.status === "FAILED")
+            setSyllabusError("教学大纲解析失败，请重新上传或手动填写。");
+        })
+        .catch((reason: unknown) =>
+          setSyllabusError(
+            reason instanceof Error ? reason.message : "大纲解析进度获取失败",
+          ),
+        );
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [syllabusJob]);
+  async function parseSyllabus() {
+    if (!syllabusFile) return;
+    setSyllabusBusy(true);
+    setSyllabusError("");
+    setSyllabusApplied(false);
+    try {
+      const values = new FormData(formRef.current ?? undefined);
+      const body = new FormData();
+      body.set("file", syllabusFile);
+      for (const key of ["courseName", "courseNo", "term"])
+        body.set(key, String(values.get(key) ?? ""));
+      const response = await fetch(`${base}/syllabus`, {
+        method: "POST",
+        body,
+      });
+      const payload = (await response.json()) as Envelope<{
+        jobId: string;
+        status: string;
+      }>;
+      if (!response.ok || !payload.success || !payload.data)
+        throw new Error(payload.error ?? "教学大纲上传失败");
+      const jobResponse = await fetch(
+        `${base}/syllabus/${payload.data.jobId}`,
+        { cache: "no-store" },
+      );
+      const jobPayload = (await jobResponse.json()) as Envelope<SyllabusJob>;
+      if (!jobResponse.ok || !jobPayload.success || !jobPayload.data)
+        throw new Error(jobPayload.error ?? "大纲解析状态获取失败");
+      setSyllabusJob(jobPayload.data);
+    } catch (reason) {
+      setSyllabusError(
+        reason instanceof Error ? reason.message : "教学大纲上传失败",
+      );
+    } finally {
+      setSyllabusBusy(false);
+    }
+  }
+  function applySyllabus(result: SyllabusResult) {
+    const elements = formRef.current?.elements;
+    const fill = (name: string, value: string | number | null | undefined) => {
+      const field = elements?.namedItem(name);
+      if (
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLTextAreaElement
+      )
+        if (value !== null && value !== undefined) field.value = String(value);
+    };
+    fill("courseName", result.courseInfo.courseName);
+    fill("courseNo", result.courseInfo.courseCode);
+    fill("term", result.courseInfo.offeredTerm);
+    fill("credits", result.courseInfo.credits);
+    fill("courseNature", result.courseInfo.courseNature);
+    fill("college", result.courseInfo.teachingCollege);
+    fill("major", result.courseInfo.applicableMajors);
+    fill("teachingContent", result.teachingContent.join("\n"));
+    fill(
+      "scoringCriteria",
+      result.assessments
+        .filter((item) => item.description)
+        .map((item) => `${item.name}：${item.description}`)
+        .join("\n")
+        .slice(0, 2000),
+    );
+    const selected = result.assessments.slice(0, 30);
+    if (selected.length)
+      setComponents(
+        selected.map((item) => ({
+          code: item.code,
+          name: item.name,
+          weight: item.weight ?? 0,
+          column:
+            gradePreview?.headers.find(
+              (header) => header === item.name || header.includes(item.name),
+            ) ?? "",
+        })),
+      );
+    if (result.objectives.length)
+      setOutcomes(
+        result.objectives.slice(0, 30).map((item) => ({
+          code: item.code,
+          title: item.title,
+          threshold: 60,
+          allocations: Object.fromEntries(
+            result.objectiveAssessmentMappings
+              .filter(
+                (mapping) =>
+                  mapping.objectiveCode === item.code &&
+                  mapping.allocationRate !== null,
+              )
+              .map((mapping) => [
+                mapping.assessmentCode,
+                mapping.allocationRate ?? 0,
+              ]),
+          ),
+        })),
+      );
+    setSyllabusApplied(true);
+    setCalculationPreview(null);
+    setPreviewKey("");
+    setSuccess("大纲建议已填入，请核对并补全成绩列、权重和目标分配。");
+  }
   async function preview(file: File, type: "grade" | "survey") {
     setError("");
     const body = new FormData();
@@ -157,8 +328,19 @@ export function StandaloneQualityReportWorkspace() {
         (item) =>
           /成绩|分数|考试|作业|实验/u.test(item) && !/总评|最终/u.test(item),
       );
-      setComponents(
-        first ? [{ code: "C1", name: first, column: first, weight: 100 }] : [],
+      setComponents((current) =>
+        current.length && syllabusApplied
+          ? current.map((item) => ({
+              ...item,
+              column:
+                payload.data!.headers.find(
+                  (header) =>
+                    header === item.name || header.includes(item.name),
+                ) ?? item.column,
+            }))
+          : first
+            ? [{ code: "C1", name: first, column: first, weight: 100 }]
+            : [],
       );
     } else {
       setSurveyFile(file);
@@ -208,6 +390,15 @@ export function StandaloneQualityReportWorkspace() {
         major: values.get("major"),
         teachingMethodDetails: values.get("teachingMethodDetails"),
         scoringCriteria: values.get("scoringCriteria"),
+        teachingContent: values.get("teachingContent"),
+        syllabusReference:
+          syllabusApplied && syllabusJob?.result
+            ? {
+                jobId: syllabusJob.jobId,
+                fileVersionId: syllabusJob.result.fileVersionId,
+                checksumSha256: syllabusJob.result.checksumSha256,
+              }
+            : undefined,
         grade: {
           studentNoColumn: idColumn || undefined,
           nameColumn: nameColumn || undefined,
@@ -283,6 +474,7 @@ export function StandaloneQualityReportWorkspace() {
   return (
     <div className="space-y-6">
       <form
+        ref={formRef}
         className="space-y-6 rounded-xl border bg-white p-5"
         onSubmit={(event) => {
           event.preventDefault();
@@ -301,6 +493,122 @@ export function StandaloneQualityReportWorkspace() {
           onChange={setTemplate}
           onBusyChange={setTemplateBusy}
         />
+        <section className="space-y-3 border-t pt-5">
+          <h3 className="font-semibold">教学大纲（可选）</h3>
+          <p className="text-sm text-slate-600">
+            上传文本型 PDF 或 DOCX，由 AI
+            提取课程信息、考核方式和课程目标。解析建议须由教师核对后应用；也可直接在下方自行填写。
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              aria-label="上传教学大纲"
+              type="file"
+              accept=".pdf,.docx"
+              className={`${inputClass} max-w-lg`}
+              onChange={(event) => {
+                setSyllabusFile(event.target.files?.[0] ?? null);
+                setSyllabusJob(null);
+                setSyllabusApplied(false);
+                setSyllabusError("");
+              }}
+            />
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={!syllabusFile || syllabusBusy}
+              onClick={() => void parseSyllabus()}
+            >
+              {syllabusBusy ? "正在上传…" : "AI 解析教学大纲"}
+            </button>
+          </div>
+          {syllabusJob &&
+            ["PENDING", "RUNNING"].includes(syllabusJob.status) && (
+              <p role="status" className="text-sm">
+                大纲解析中，进度 {syllabusJob.progress}%。可继续填写其他信息。
+              </p>
+            )}
+          {syllabusError && (
+            <p role="alert" className="text-sm text-red-700">
+              {syllabusError}
+            </p>
+          )}
+          {syllabusJob?.status === "SUCCEEDED" && syllabusJob.result && (
+            <div className="space-y-2 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm">
+              <p className="font-medium">
+                解析建议 · {syllabusJob.result.fileName}
+              </p>
+              <p>
+                课程：{syllabusJob.result.courseInfo.courseName ?? "未识别"}
+                ；课程号：{syllabusJob.result.courseInfo.courseCode ?? "未识别"}
+                ；学分：{syllabusJob.result.courseInfo.credits ?? "未识别"}。
+              </p>
+              <ul className="list-inside list-disc">
+                <li>
+                  基本信息来源：
+                  {syllabusJob.result.courseInfo.sourceRefs
+                    .map(
+                      (ref) =>
+                        `第 ${ref.page} 页${ref.quote ? `「${ref.quote}」` : ""}`,
+                    )
+                    .join("；") || "待核对"}
+                </li>
+              </ul>
+              <div>
+                <p className="font-medium">考核方式</p>
+                <ul className="list-inside list-disc">
+                  {syllabusJob.result.assessments.map((item) => (
+                    <li key={item.code}>
+                      {item.name} ·{" "}
+                      {item.weight === null ? "权重待核对" : `${item.weight}%`}
+                      ；来源：
+                      {item.sourceRefs
+                        .map(
+                          (ref) =>
+                            `第 ${ref.page} 页${ref.quote ? `「${ref.quote}」` : ""}`,
+                        )
+                        .join("；") || "待核对"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="font-medium">课程目标</p>
+                <ul className="list-inside list-disc">
+                  {syllabusJob.result.objectives.map((item) => (
+                    <li key={item.code}>
+                      {item.code} {item.title}；来源：
+                      {item.sourceRefs
+                        .map(
+                          (ref) =>
+                            `第 ${ref.page} 页${ref.quote ? `「${ref.quote}」` : ""}`,
+                        )
+                        .join("；") || "待核对"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {syllabusJob.result.warnings.length > 0 && (
+                <p className="text-amber-800">
+                  待核对：{syllabusJob.result.warnings.join("；")}
+                </p>
+              )}
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => {
+                  if (syllabusJob.result) applySyllabus(syllabusJob.result);
+                }}
+              >
+                {syllabusApplied ? "重新应用解析建议" : "核对后应用到表单"}
+              </button>
+              {syllabusApplied && (
+                <span className="ml-2 text-emerald-800">
+                  已应用，可在下方修改
+                </span>
+              )}
+            </div>
+          )}
+        </section>
         <section className="space-y-3 border-t pt-5">
           <h3 className="font-semibold">课程信息</h3>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -330,6 +638,15 @@ export function StandaloneQualityReportWorkspace() {
               </label>
             ))}
           </div>
+          <label className="block space-y-1 text-sm">
+            教学内容与章节（每行一项）
+            <textarea
+              className={inputClass}
+              name="teachingContent"
+              maxLength={6000}
+              rows={4}
+            />
+          </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-sm">
               教学方式说明

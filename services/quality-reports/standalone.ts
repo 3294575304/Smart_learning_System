@@ -18,6 +18,10 @@ import { queueReport, type ReportUploadFile } from "./service";
 import { resolveReportTemplate } from "./template-service";
 import { qualityReportSourceSnapshotSchema } from "./schemas";
 import { templateSelectionShape } from "./template-schema";
+import {
+  standaloneSyllabusReferenceSchema,
+  verifyStandaloneSyllabusReference,
+} from "./standalone-syllabus";
 
 const column = z.string().trim().min(1).max(300);
 const component = z
@@ -49,6 +53,8 @@ export const standaloneInputSchema = z
     major: z.string().trim().max(200).default(""),
     teachingMethodDetails: z.string().trim().max(2000).default(""),
     scoringCriteria: z.string().trim().max(2000).default(""),
+    teachingContent: z.string().trim().max(6000).default(""),
+    syllabusReference: standaloneSyllabusReferenceSchema.optional(),
     grade: z
       .object({
         studentNoColumn: column.optional(),
@@ -482,6 +488,12 @@ async function prepareStandaloneQualityReport(
   const reportTemplate = await resolveReportTemplate(teacherId, null, input);
   if (!reportTemplate)
     throw new QualityReportOperationError("请先上传并确认报告模板。", 400);
+  const syllabusReference = input.syllabusReference
+    ? await verifyStandaloneSyllabusReference(
+        teacherId,
+        input.syllabusReference,
+      )
+    : null;
   const source = qualityReportSourceSnapshotSchema.parse({
     course: {
       id: null,
@@ -509,10 +521,32 @@ async function prepareStandaloneQualityReport(
     ),
     attendance: { sessionCount: 0, presentRate: null },
     survey: reportSurvey,
-    syllabus: null,
+    syllabus: {
+      publishedStructureId: null,
+      versionNumber: 1,
+      courseName: input.courseName,
+      courseCategory: null,
+      courseNature: input.courseNature || null,
+      credits: input.credits || null,
+      teachingCollege: input.college || null,
+      applicableMajors: input.major || null,
+      objectiveCount: input.outcomes.length,
+      assessmentCount: components.length,
+      assessments: components,
+      teachingContent: input.teachingContent
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter(Boolean),
+      assessmentDescriptions: input.scoringCriteria
+        ? [input.scoringCriteria]
+        : [],
+    },
     sourceReference: {
       standalone: true,
       ownerId: teacherId,
+      syllabusSource: syllabusReference
+        ? { mode: "AI_REVIEWED", ...syllabusReference }
+        : { mode: "MANUAL" },
       gradeFileName: grade.name,
       gradeChecksumSha256: createHash("sha256")
         .update(grade.data)
