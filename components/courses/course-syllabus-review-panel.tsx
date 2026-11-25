@@ -99,6 +99,69 @@ function Field({
 
 const inputClass = "w-full rounded-md border bg-white px-3 py-2 text-sm";
 
+function prepareObjectiveEditor(
+  value: SyllabusParseOutput,
+  original?: SyllabusParseOutput,
+  autoFillOverall = false,
+): SyllabusParseOutput {
+  const next = structuredClone(value);
+  const hasOverallRates = next.objectives.some(
+    (objective) => objective.overallAllocationRate != null,
+  );
+  for (const objective of next.objectives) {
+    if (objective.sourceObjectiveCode === undefined) {
+      const match =
+        original?.objectives.find(
+          (candidate) => candidate.code === objective.code,
+        ) ??
+        original?.objectives.find(
+          (candidate) =>
+            objective.sourceRefs.length > 0 &&
+            JSON.stringify(candidate.sourceRefs) ===
+              JSON.stringify(objective.sourceRefs),
+        );
+      objective.sourceObjectiveCode = match?.code ?? objective.code;
+    }
+  }
+  if (hasOverallRates || !autoFillOverall) return next;
+  // 只有普通情况（反向占比矩阵）才推导总体比例：各考核项权重 × 该目标在该
+  // 考核项内的占比，加权求和即该目标占总成绩的百分比。
+  // 正向分解表的 objectiveTotals 是原文计分项的原始分值，不是占比，不能直接
+  // 当总体比例填入，需由教师按 100% 口径人工确认。
+  if (
+    next.assessmentMethod === "FORWARD_DECOMPOSITION" ||
+    next.assessments.length === 0 ||
+    !next.assessments.every((assessment) => assessment.weight != null) ||
+    !next.objectives.every((objective) =>
+      next.assessments.every((assessment) =>
+        next.objectiveAssessmentMappings.some(
+          (mapping) =>
+            mapping.objectiveCode === objective.code &&
+            mapping.assessmentCode === assessment.code &&
+            mapping.allocationRate != null,
+        ),
+      ),
+    )
+  ) {
+    return next;
+  }
+  next.objectives.forEach((objective) => {
+    objective.overallAllocationRate = next.assessments.reduce(
+      (sum, assessment) =>
+        sum +
+        ((assessment.weight ?? 0) *
+          (next.objectiveAssessmentMappings.find(
+            (mapping) =>
+              mapping.objectiveCode === objective.code &&
+              mapping.assessmentCode === assessment.code,
+          )?.allocationRate ?? 0)) /
+          100,
+      0,
+    );
+  });
+  return next;
+}
+
 export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
   const [state, setState] = useState<ParseState | null>(null);
   const [structure, setStructure] = useState<SyllabusParseOutput | null>(null);
@@ -129,7 +192,18 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
       (result.data.current?.hasFieldSourceRefs
         ? (result.data.current.result as SyllabusParseOutput | null)
         : null);
-    setStructure(editable ? structuredClone(editable) : null);
+    const original = result.data.current?.hasFieldSourceRefs
+      ? (result.data.current.result as SyllabusParseOutput | null)
+      : null;
+    setStructure(
+      editable
+        ? prepareObjectiveEditor(
+            editable,
+            original ?? undefined,
+            !result.data.review,
+          )
+        : null,
+    );
     setDirty(false);
     return result.data;
   }, [courseId]);
@@ -248,7 +322,9 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
       setError("发布结果未能从服务端恢复，请重试发布以修复课程正式大纲指针。");
       return;
     }
-    setNotice(`课程大纲结构第 ${result.data.versionNumber} 版已发布。`);
+    setNotice(
+      `课程大纲结构第 ${result.data.versionNumber} 版已发布。请核对并重新确认引用旧目标的考核方案和问卷；历史成绩与报告快照不会改写。`,
+    );
   }
 
   const isCurrentReviewPublished = Boolean(
@@ -494,15 +570,96 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
           </div>
 
           <div className="rounded-lg border p-4">
-            <h3 className="font-medium">课程目标</h3>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-medium">课程目标</h3>
+              <button
+                className="rounded-md border bg-white px-3 py-1.5 text-sm disabled:opacity-50"
+                disabled={structure.objectives.length >= 100}
+                onClick={() =>
+                  change((draft) => {
+                    let number = draft.objectives.length + 1;
+                    while (
+                      draft.objectives.some(
+                        (item) => item.code === `OBJ-${number}`,
+                      )
+                    )
+                      number += 1;
+                    draft.objectives.push({
+                      code: `OBJ-${number}`,
+                      title: `课程目标 ${number}`,
+                      description: "",
+                      overallAllocationRate: null,
+                      sourceObjectiveCode: null,
+                      sourceRefs: [],
+                    });
+                    if (draft.forwardAssessmentTable) {
+                      draft.forwardAssessmentTable.objectiveTotals.push(0);
+                      draft.forwardAssessmentTable.items.forEach((item) =>
+                        item.objectivePoints.push(0),
+                      );
+                    }
+                  })
+                }
+                type="button"
+              >
+                新增课程目标
+              </button>
+            </div>
+            <p className="text-muted-foreground mt-2 text-sm">
+              总体比例仅作展示和审核，不参与课程目标达成度计算；填写时所有目标合计须为
+              100%。
+            </p>
             <div className="mt-3 space-y-3">
               {structure.objectives.map((objective, index) => (
                 <div
                   className="rounded-md bg-sky-50/60 p-3"
                   key={`${objective.code}-${index}`}
                 >
-                  <div className="mb-2 flex justify-end">
-                    <SourceRefs refs={objective.sourceRefs} />
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground text-xs">
+                      {objective.sourceObjectiveCode === null
+                        ? "教师新增"
+                        : "大纲解析 / 教师审核"}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <SourceRefs refs={objective.sourceRefs} />
+                      <button
+                        className="rounded-md border bg-white px-2 py-1 text-xs disabled:opacity-50"
+                        disabled={structure.objectives.length <= 1}
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `删除课程目标“${objective.title}”？`,
+                            )
+                          )
+                            return;
+                          change((draft) => {
+                            const removed = draft.objectives.splice(
+                              index,
+                              1,
+                            )[0];
+                            if (!removed) return;
+                            draft.objectiveAssessmentMappings =
+                              draft.objectiveAssessmentMappings.filter(
+                                (mapping) =>
+                                  mapping.objectiveCode !== removed.code,
+                              );
+                            if (draft.forwardAssessmentTable) {
+                              draft.forwardAssessmentTable.objectiveTotals.splice(
+                                index,
+                                1,
+                              );
+                              draft.forwardAssessmentTable.items.forEach(
+                                (item) => item.objectivePoints.splice(index, 1),
+                              );
+                            }
+                          });
+                        }}
+                        type="button"
+                      >
+                        删除
+                      </button>
+                    </div>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-[140px_1fr]">
                     <input
@@ -542,6 +699,26 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                       })
                     }
                   />
+                  <label className="mt-2 block max-w-52 text-sm">
+                    <span className="font-medium">总体比例（%）</span>
+                    <input
+                      aria-label={`目标 ${index + 1} 总体比例`}
+                      className={`${inputClass} mt-1`}
+                      max="100"
+                      min="0"
+                      step="0.01"
+                      type="number"
+                      value={objective.overallAllocationRate ?? ""}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.objectives[index]!.overallAllocationRate =
+                            event.target.value === ""
+                              ? null
+                              : Number(event.target.value);
+                        })
+                      }
+                    />
+                  </label>
                 </div>
               ))}
             </div>
@@ -847,7 +1024,34 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                             className="border-r px-3 py-2 text-center"
                             key={index}
                           >
-                            {points}
+                            <input
+                              aria-label={`${item.name}对目标 ${index + 1} 的分值`}
+                              className="w-24 rounded-md border bg-white px-2 py-1.5 text-center"
+                              max="100"
+                              min="0"
+                              step="0.01"
+                              type="number"
+                              value={points}
+                              onChange={(event) =>
+                                change((draft) => {
+                                  const table = draft.forwardAssessmentTable;
+                                  if (!table) return;
+                                  table.items.find(
+                                    (entry) => entry.code === item.code,
+                                  )!.objectivePoints[index] = Number(
+                                    event.target.value,
+                                  );
+                                  table.sourceRefs = [];
+                                  table.objectiveTotals[index] =
+                                    table.items.reduce(
+                                      (sum, entry) =>
+                                        sum +
+                                        (entry.objectivePoints[index] ?? 0),
+                                      0,
+                                    );
+                                })
+                              }
+                            />
                           </td>
                         ))}
                         <td className="px-3 py-2 text-center">{item.points}</td>
@@ -872,6 +1076,9 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                     </tr>
                   </tbody>
                 </table>
+                <p className="text-muted-foreground px-3 py-2 text-sm">
+                  每个计分项分配给课程目标的分值之和须等于该项分值；目标合计自动更新。
+                </p>
               </div>
             ) : null}
             {structure.assessmentMethod !== "FORWARD_DECOMPOSITION" &&
@@ -947,6 +1154,7 @@ export function CourseSyllabusReviewPanel({ courseId }: { courseId: string }) {
                                     target.allocationRate = event.target.value
                                       ? Number(event.target.value)
                                       : null;
+                                    target.sourceRefs = [];
                                   })
                                 }
                               />

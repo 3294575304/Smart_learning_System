@@ -69,8 +69,34 @@ function sourceRefsByPath(
   structure: SyllabusParseOutput,
 ): Map<string, Set<string>> {
   const result = new Map<string, Set<string>>();
+  const sourceCodes = new Map(
+    structure.objectives.map((objective) => [
+      objective.code,
+      objective.sourceObjectiveCode === null
+        ? `manual:${objective.code}`
+        : (objective.sourceObjectiveCode ?? objective.code),
+    ]),
+  );
   const visit = (value: unknown, path: string): void => {
     if (Array.isArray(value)) {
+      if (path === "objectives") {
+        value.forEach((item) => {
+          const objective = item as SyllabusParseOutput["objectives"][number];
+          visit(item, `objectives[${sourceCodes.get(objective.code)}]`);
+        });
+        return;
+      }
+      if (path === "objectiveAssessmentMappings") {
+        value.forEach((item) => {
+          const mapping =
+            item as SyllabusParseOutput["objectiveAssessmentMappings"][number];
+          visit(
+            item,
+            `objectiveAssessmentMappings[${sourceCodes.get(mapping.objectiveCode) ?? mapping.objectiveCode}:${mapping.assessmentCode}]`,
+          );
+        });
+        return;
+      }
       value.forEach((item, index) => visit(item, `${path}[${index}]`));
       return;
     }
@@ -98,9 +124,49 @@ function validateReviewSourceRefs(
   structure: SyllabusParseOutput,
   original: SyllabusParseOutput,
 ) {
+  const originalCodes = new Set(original.objectives.map((item) => item.code));
+  const claimedCodes = new Set<string>();
+  for (const objective of structure.objectives) {
+    const sourceCode = objective.sourceObjectiveCode ?? objective.code;
+    if (objective.sourceObjectiveCode === null) continue;
+    if (objective.sourceObjectiveCode && !originalCodes.has(sourceCode)) {
+      throw new SyllabusParseOperationError(
+        "课程目标来源不存在于原始解析结果。",
+        400,
+        "SOURCE_REFERENCE_MODIFIED",
+      );
+    }
+    if (originalCodes.has(sourceCode)) {
+      if (claimedCodes.has(sourceCode)) {
+        throw new SyllabusParseOperationError(
+          "同一原始课程目标不能被重复声明为来源。",
+          400,
+          "SOURCE_REFERENCE_MODIFIED",
+        );
+      }
+      claimedCodes.add(sourceCode);
+    }
+  }
   const allowed = sourceRefsByPath(original);
   for (const [path, refs] of sourceRefsByPath(structure)) {
-    const allowedAtPath = allowed.get(path) ?? new Set<string>();
+    let allowedAtPath = allowed.get(path) ?? new Set<string>();
+    if (
+      allowedAtPath.size === 0 &&
+      path.startsWith("objectiveAssessmentMappings[")
+    ) {
+      const objectiveCode = path
+        .slice("objectiveAssessmentMappings[".length)
+        .split(":")[0];
+      allowedAtPath = new Set(
+        [...allowed.entries()]
+          .filter(([originalPath]) =>
+            originalPath.startsWith(
+              `objectiveAssessmentMappings[${objectiveCode}:`,
+            ),
+          )
+          .flatMap(([, values]) => [...values]),
+      );
+    }
     for (const ref of refs) {
       if (!allowedAtPath.has(ref)) {
         throw new SyllabusParseOperationError(
@@ -111,6 +177,35 @@ function validateReviewSourceRefs(
       }
     }
   }
+}
+
+function withReviewedObjectiveAllocation(
+  structure: SyllabusParseOutput,
+  original: SyllabusParseOutput,
+): SyllabusParseOutput {
+  const allocation = (value: SyllabusParseOutput) => ({
+    objectives: value.objectives.map((item) => item.code),
+    assessments: value.assessments.map((item) => item.code),
+    mappings: value.objectiveAssessmentMappings
+      .map((item) => [
+        item.objectiveCode,
+        item.assessmentCode,
+        item.allocationRate,
+      ])
+      .sort((left, right) =>
+        JSON.stringify(left).localeCompare(JSON.stringify(right)),
+      ),
+    forwardAssessmentTable: value.forwardAssessmentTable?.items.map((item) => [
+      item.code,
+      item.objectivePoints,
+    ]),
+  });
+  return {
+    ...structure,
+    reviewedObjectiveAllocation:
+      JSON.stringify(allocation(structure)) !==
+      JSON.stringify(allocation(original)),
+  };
 }
 
 function pageCountFromMetadata(value: unknown): number {
@@ -289,10 +384,11 @@ export async function saveTeacherSyllabusReview(
         "REVIEW_REVISION_CONFLICT",
       );
     }
-    const structure =
+    const submitted =
       input.expectedRevisionNumber === 0
         ? (input.structure ?? original)
         : input.structure;
+    const structure = withReviewedObjectiveAllocation(submitted, original);
     validateSourcePages(
       structure,
       pageCountFromMetadata(draft.extractedTextMetadata),
@@ -341,7 +437,7 @@ async function publishTransaction(
       let course = await ownedCourseOrThrow(teacherId, courseId, transaction);
       await transaction.$queryRaw`SELECT "id" FROM "Course" WHERE "id" = ${courseId} FOR UPDATE`;
       course = await ownedCourseOrThrow(teacherId, courseId, transaction);
-      const { draft, currentSyllabus } = await editableDraftOrThrow(
+      const { draft, currentSyllabus, original } = await editableDraftOrThrow(
         teacherId,
         courseId,
         draftId,
@@ -408,8 +504,12 @@ async function publishTransaction(
         }
         return publishedView(existing, currentSyllabus.id);
       }
-      const parsed = publishableSyllabusStructureSchema.safeParse(
+      const reviewStructure = storedSyllabusParseOutputSchema.safeParse(
         review.structureJson,
+      );
+      if (!reviewStructure.success) invalidStructure(reviewStructure.error);
+      const parsed = publishableSyllabusStructureSchema.safeParse(
+        withReviewedObjectiveAllocation(reviewStructure.data, original),
       );
       if (!parsed.success) invalidStructure(parsed.error);
       validateSourcePages(
