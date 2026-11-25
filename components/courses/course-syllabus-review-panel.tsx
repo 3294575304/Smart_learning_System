@@ -124,15 +124,20 @@ function prepareObjectiveEditor(
     }
   }
   if (hasOverallRates || !autoFillOverall) return next;
-  // 只有普通情况（反向占比矩阵）才推导总体比例：各考核项权重 × 该目标在该
-  // 考核项内的占比，加权求和即该目标占总成绩的百分比。
-  // 正向分解表的 objectiveTotals 是原文计分项的原始分值，不是占比，不能直接
-  // 当总体比例填入，需由教师按 100% 口径人工确认。
   if (
-    next.assessmentMethod === "FORWARD_DECOMPOSITION" ||
-    next.assessments.length === 0 ||
-    !next.assessments.every((assessment) => assessment.weight != null) ||
-    !next.objectives.every((objective) =>
+    next.assessmentMethod === "FORWARD_DECOMPOSITION" &&
+    next.forwardAssessmentTable &&
+    next.forwardAssessmentTable.objectiveTotals.length ===
+      next.objectives.length
+  ) {
+    next.objectives.forEach((objective, index) => {
+      objective.overallAllocationRate =
+        next.forwardAssessmentTable!.objectiveTotals[index] ?? null;
+    });
+  } else if (
+    next.assessments.length > 0 &&
+    next.assessments.every((assessment) => assessment.weight != null) &&
+    next.objectives.every((objective) =>
       next.assessments.every((assessment) =>
         next.objectiveAssessmentMappings.some(
           (mapping) =>
@@ -143,22 +148,21 @@ function prepareObjectiveEditor(
       ),
     )
   ) {
-    return next;
+    next.objectives.forEach((objective) => {
+      objective.overallAllocationRate = next.assessments.reduce(
+        (sum, assessment) =>
+          sum +
+          ((assessment.weight ?? 0) *
+            (next.objectiveAssessmentMappings.find(
+              (mapping) =>
+                mapping.objectiveCode === objective.code &&
+                mapping.assessmentCode === assessment.code,
+            )?.allocationRate ?? 0)) /
+            100,
+        0,
+      );
+    });
   }
-  next.objectives.forEach((objective) => {
-    objective.overallAllocationRate = next.assessments.reduce(
-      (sum, assessment) =>
-        sum +
-        ((assessment.weight ?? 0) *
-          (next.objectiveAssessmentMappings.find(
-            (mapping) =>
-              mapping.objectiveCode === objective.code &&
-              mapping.assessmentCode === assessment.code,
-          )?.allocationRate ?? 0)) /
-          100,
-      0,
-    );
-  });
   return next;
 }
 
