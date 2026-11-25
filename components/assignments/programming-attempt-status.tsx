@@ -26,11 +26,16 @@ export function ProgrammingAttemptStatus({
   attemptId,
   onComplete,
   displayMaxScore,
+  showAttemptReference = true,
+  title = "Python 正式判题",
 }: {
   assignmentQuestionId: string;
   attemptId: string;
   onComplete?: (score: number, maxScore: number) => void;
   displayMaxScore?: number | null;
+  /** 题目与 Attempt 内部 ID 只对排障有意义，嵌进题目卡片时可关闭。 */
+  showAttemptReference?: boolean;
+  title?: string;
 }) {
   const [attempt, setAttempt] = useState<AttemptDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,10 +73,12 @@ export function ProgrammingAttemptStatus({
     <article className="space-y-3 rounded-xl border bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Python 正式判题</h2>
-          <p className="text-muted-foreground mt-1 text-xs">
-            题目 {assignmentQuestionId} · Attempt {attemptId.slice(-8)}
-          </p>
+          <h2 className="font-semibold">{title}</h2>
+          {showAttemptReference ? (
+            <p className="text-muted-foreground mt-1 text-xs">
+              题目 {assignmentQuestionId} · Attempt {attemptId.slice(-8)}
+            </p>
+          ) : null}
         </div>
         <span className="text-sm">
           {!attempt

@@ -4,6 +4,7 @@
 
 # Next.js
 /.next
+/.next.bak-*
 /out
 
 # production

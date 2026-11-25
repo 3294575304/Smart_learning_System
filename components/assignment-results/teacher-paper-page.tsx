@@ -57,6 +57,7 @@ export default async function TeacherAssignmentPage({
       id,
       order,
       type,
+      points: question.points,
       content: (
         <article key={id} className="rounded-xl border bg-white p-5">
           <div className="flex items-start justify-between gap-3">
@@ -258,13 +259,9 @@ export default async function TeacherAssignmentPage({
             </details>
           </section>
         ) : questions.length ? (
-          examSessionId || assignment.category === "COURSE_EXPERIMENT" ? (
-            <div className="space-y-3">
-              {questionCards.map(({ content }) => content)}
-            </div>
-          ) : (
-            <TeacherPaperQuestionList questions={questionCards} />
-          )
+          // 题目型作业统一走带答题卡的列表：课程实验与考试场次此前直接平铺，
+          // 缺了题号导航，这里按同一套交互补齐。
+          <TeacherPaperQuestionList questions={questionCards} />
         ) : (
           <div className="rounded-xl border border-dashed bg-white p-6 text-sm text-slate-500">
             当前草稿尚未添加题目，请编辑草稿后发布。

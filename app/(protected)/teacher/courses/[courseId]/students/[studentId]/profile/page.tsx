@@ -8,11 +8,16 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { teacherProfilePathSchema } from "@/services/learner-profiles/schemas";
 import { getTeacherStudentLearnerProfile } from "@/services/learner-profiles/service";
 import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
+import { keepAnalyticsOrigin } from "@/lib/analytics-origin";
 import { withClassroomQuery } from "@/lib/course-classroom";
 
 type Props = {
   params: Promise<{ courseId: string; studentId: string }>;
-  searchParams: Promise<{ classroomId?: string }>;
+  searchParams: Promise<{
+    classroomId?: string;
+    section?: string;
+    from?: string;
+  }>;
 };
 
 export default async function TeacherStudentProfilePage({
@@ -22,10 +27,11 @@ export default async function TeacherStudentProfilePage({
   const teacher = await requirePageRole(Role.TEACHER);
   const path = teacherProfilePathSchema.safeParse(await params);
   if (!path.success) notFound();
+  const query = await searchParams;
   const classroom = await getTeacherCourseClassroomForPage(
     teacher.id,
     path.data.courseId,
-    (await searchParams).classroomId,
+    query.classroomId,
   );
   try {
     const profile = await getTeacherStudentLearnerProfile(
@@ -37,9 +43,12 @@ export default async function TeacherStudentProfilePage({
       <section className="space-y-6">
         <header>
           <TeacherBackLink
-            href={withClassroomQuery(
-              `/teacher/courses/${path.data.courseId}/profiles`,
-              classroom?.id,
+            href={keepAnalyticsOrigin(
+              withClassroomQuery(
+                `/teacher/courses/${path.data.courseId}/profiles`,
+                classroom?.id,
+              ),
+              { from: query.from, section: query.section },
             )}
           >
             返回班级画像

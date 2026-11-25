@@ -130,7 +130,7 @@ function CreateCourseForm({
       </div>
       <div>
         <label className="text-sm font-medium" htmlFor="course-category">
-          题库课程分类
+          课程分类
         </label>
         <select
           {...register("questionCategoryId")}
@@ -289,7 +289,7 @@ function EditCourseForm({
       </div>
       <div>
         <label className="text-sm font-medium" htmlFor="course-category">
-          题库课程分类
+          课程分类
         </label>
         <select
           {...register("questionCategoryId")}

@@ -44,12 +44,13 @@ export function buildSchoolDistribution(schools: ShowcaseSchool[]) {
 }
 
 // A continuous light-to-dark scale; zero remains distinct from every nonzero count.
+// 色阶与系统品牌蓝同族：空 #e9f2f9 → 深 #0369a1。
 export function provinceFill(count: number, maxCount: number): string {
-  if (count <= 0) return "#e6eee8";
+  if (count <= 0) return "#e9f2f9";
   const ratio = Math.min(1, count / Math.max(1, maxCount));
   const intensity = ratio ** 0.65;
-  const from = [162, 201, 189],
-    to = [23, 93, 90];
+  const from = [186, 214, 234],
+    to = [3, 105, 161];
   return (
     "#" +
     from

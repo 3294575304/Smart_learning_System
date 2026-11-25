@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { requestApi } from "@/components/courses/request-api";
 
-interface Category {
+export interface AdminCourseCategory {
   id: string;
   name: string;
   isActive: boolean;
@@ -12,11 +12,11 @@ interface Category {
 }
 
 interface Props {
-  initialCategories: Category[];
+  categories: AdminCourseCategory[];
+  onChange: (next: AdminCourseCategory[]) => void;
 }
 
-export function QuestionCourseCategoryManager({ initialCategories }: Props) {
-  const [categories, setCategories] = useState(initialCategories);
+export function QuestionCourseCategoryManager({ categories, onChange }: Props) {
   const [name, setName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -29,7 +29,7 @@ export function QuestionCourseCategoryManager({ initialCategories }: Props) {
     setError(null);
     setNotice(null);
     const result = editingId
-      ? await requestApi<Category>(
+      ? await requestApi<AdminCourseCategory>(
           `/api/admin/question-course-categories/${editingId}`,
           {
             method: "PATCH",
@@ -37,32 +37,35 @@ export function QuestionCourseCategoryManager({ initialCategories }: Props) {
             body: JSON.stringify({ name }),
           },
         )
-      : await requestApi<Category>("/api/admin/question-course-categories", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name }),
-        });
+      : await requestApi<AdminCourseCategory>(
+          "/api/admin/question-course-categories",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name }),
+          },
+        );
     setPending(false);
     if (!result.success) {
       setError(result.error);
       return;
     }
-    setCategories((items) => {
-      const next = items.filter((item) => item.id !== result.data.id);
-      return [...next, result.data].sort((a, b) =>
+    const next = categories.filter((item) => item.id !== result.data.id);
+    onChange(
+      [...next, result.data].sort((a, b) =>
         a.name.localeCompare(b.name, "zh-CN"),
-      );
-    });
+      ),
+    );
     setName("");
     setEditingId(null);
     setNotice(editingId ? "课程分类已更新。" : "课程分类已创建。");
   }
 
-  async function toggle(category: Category) {
+  async function toggle(category: AdminCourseCategory) {
     setPending(true);
     setError(null);
     setNotice(null);
-    const result = await requestApi<Category>(
+    const result = await requestApi<AdminCourseCategory>(
       `/api/admin/question-course-categories/${category.id}`,
       {
         method: "PATCH",
@@ -78,8 +81,10 @@ export function QuestionCourseCategoryManager({ initialCategories }: Props) {
       setError(result.error);
       return;
     }
-    setCategories((items) =>
-      items.map((item) => (item.id === result.data.id ? result.data : item)),
+    onChange(
+      categories.map((item) =>
+        item.id === result.data.id ? result.data : item,
+      ),
     );
     setNotice(category.isActive ? "课程分类已停用。" : "课程分类已启用。");
   }

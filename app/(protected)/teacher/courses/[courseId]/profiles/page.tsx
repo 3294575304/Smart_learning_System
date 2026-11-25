@@ -7,6 +7,11 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { studentProfilePathSchema } from "@/services/learner-profiles/schemas";
 import { listTeacherCourseLearnerProfiles } from "@/services/learner-profiles/service";
+import {
+  analyticsSearchParams,
+  isAnalyticsOrigin,
+  keepAnalyticsOrigin,
+} from "@/lib/analytics-origin";
 import { withClassroomQuery } from "@/lib/course-classroom";
 
 const stateLabels: Record<string, string> = {
@@ -17,7 +22,12 @@ const stateLabels: Record<string, string> = {
 
 type Props = {
   params: Promise<{ courseId: string }>;
-  searchParams: Promise<{ classroomId?: string; page?: string }>;
+  searchParams: Promise<{
+    classroomId?: string;
+    section?: string;
+    from?: string;
+    page?: string;
+  }>;
 };
 
 export default async function TeacherCourseProfilesPage({
@@ -28,6 +38,24 @@ export default async function TeacherCourseProfilesPage({
   const path = studentProfilePathSchema.safeParse(await params);
   if (!path.success) notFound();
   const query = await searchParams;
+  // 从学情分析进来时左上角返回学情分析（并带回课程 / 班级 / 统计范围），否则返回课程工作台。
+  const analyticsBackHref = isAnalyticsOrigin(query.from)
+    ? `/teacher/results?${analyticsSearchParams({
+        courseId: path.data.courseId,
+        classroomId: query.classroomId,
+        section: query.section,
+      }).toString()}`
+    : null;
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams({ page: String(page) });
+    if (query.classroomId) params.set("classroomId", query.classroomId);
+    if (analyticsBackHref) {
+      params.set("from", "analytics");
+      if (query.section && query.section !== "ALL")
+        params.set("section", query.section);
+    }
+    return `?${params.toString()}`;
+  };
   try {
     const result = await listTeacherCourseLearnerProfiles(
       teacher.id,
@@ -40,8 +68,10 @@ export default async function TeacherCourseProfilesPage({
     return (
       <section className="space-y-6">
         <header>
-          <TeacherBackLink href={`/teacher/courses/${path.data.courseId}`}>
-            返回课程
+          <TeacherBackLink
+            href={analyticsBackHref ?? `/teacher/courses/${path.data.courseId}`}
+          >
+            {analyticsBackHref ? "返回学情分析" : "返回课程"}
           </TeacherBackLink>
           <h1 className="mt-3 text-2xl font-semibold">
             {result.course.name} · 班级画像概览
@@ -72,6 +102,14 @@ export default async function TeacherCourseProfilesPage({
           <button className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white">
             查看画像
           </button>
+          {analyticsBackHref ? (
+            <>
+              <input name="from" type="hidden" value="analytics" />
+              {query.section && query.section !== "ALL" ? (
+                <input name="section" type="hidden" value={query.section} />
+              ) : null}
+            </>
+          ) : null}
           <span className="text-sm text-slate-500">
             共 {result.pagination.total} 名学生
           </span>
@@ -108,9 +146,12 @@ export default async function TeacherCourseProfilesPage({
                 </p>
                 <a
                   className="mt-4 inline-flex rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white"
-                  href={withClassroomQuery(
-                    `/teacher/courses/${path.data.courseId}/students/${item.student.id}/profile`,
-                    query.classroomId,
+                  href={keepAnalyticsOrigin(
+                    withClassroomQuery(
+                      `/teacher/courses/${path.data.courseId}/students/${item.student.id}/profile`,
+                      query.classroomId,
+                    ),
+                    { from: query.from, section: query.section },
                   )}
                 >
                   查看证据详情
@@ -125,18 +166,10 @@ export default async function TeacherCourseProfilesPage({
           </span>
           <div className="flex gap-4">
             {result.pagination.page > 1 && (
-              <Link
-                href={`?page=${result.pagination.page - 1}&classroomId=${query.classroomId ?? ""}`}
-              >
-                上一页
-              </Link>
+              <Link href={pageHref(result.pagination.page - 1)}>上一页</Link>
             )}
             {result.pagination.page < result.pagination.totalPages && (
-              <Link
-                href={`?page=${result.pagination.page + 1}&classroomId=${query.classroomId ?? ""}`}
-              >
-                下一页
-              </Link>
+              <Link href={pageHref(result.pagination.page + 1)}>下一页</Link>
             )}
           </div>
         </nav>

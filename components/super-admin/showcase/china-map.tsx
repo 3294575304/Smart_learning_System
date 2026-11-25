@@ -53,8 +53,6 @@ export function ChinaMap({
               d={province.path}
               fill={provinceFill(counts[province.code] ?? 0, maxCount)}
               fillRule="evenodd"
-              stroke="#a9c5bc"
-              strokeWidth={0.6}
               strokeLinejoin="round"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
@@ -86,9 +84,7 @@ export function ChinaMap({
           ))}
           <path
             d={map.maritimePath}
-            fill="#91aaa0"
-            stroke="#91aaa0"
-            strokeWidth="0.5"
+            className={styles.sea}
             pointerEvents="none"
           />
         </g>
@@ -105,9 +101,7 @@ export function ChinaMap({
               province.label[1] !== province.center[1] ? (
                 <path
                   d={`M${province.center.join(",")}L${province.label.join(",")}`}
-                  stroke="#91b1a5"
-                  strokeWidth="0.8"
-                  fill="none"
+                  className={styles.leader}
                 />
               ) : null}
               <text
@@ -120,7 +114,7 @@ export function ChinaMap({
                 fill={
                   (counts[province.code] ?? 0) / maxCount > 0.4
                     ? "#fff"
-                    : "#3f625b"
+                    : "#3d5e77"
                 }
                 stroke={provinceFill(counts[province.code] ?? 0, maxCount)}
                 strokeWidth="2"
@@ -131,28 +125,21 @@ export function ChinaMap({
             </g>
           ))}
         </g>
-        {/* Draw interaction outlines last so neighboring fills cannot cover half the stroke. */}
+        {/* Draw interaction outlines last so neighboring fills cannot cover half the stroke.
+            Hover keeps the default border color and only thickens; selection and keyboard
+            focus use one step darker in the same blue family. */}
         <g aria-hidden="true" pointerEvents="none">
           {outlines.map((code) => {
             const province = map.provinces.find((item) => item.code === code);
             if (!province) return null;
-            const color =
-              code === hovered
-                ? code === selected
-                  ? "#428a79"
-                  : "#77a99a"
-                : code === focused
-                  ? "#337664"
-                  : "#428a79";
+            const emphasized = code === selected || code === focused;
             return (
               <path
                 key={code}
                 d={province.path}
-                fill="none"
-                stroke={color}
-                strokeWidth={1.15}
-                strokeLinejoin="round"
-                strokeLinecap="round"
+                className={styles.outline}
+                stroke={emphasized ? "#a3c6dd" : "#cddfec"}
+                strokeWidth={code === focused ? 1.5 : emphasized ? 1.35 : 1.15}
                 vectorEffect="non-scaling-stroke"
               />
             );
@@ -164,17 +151,13 @@ export function ChinaMap({
               cx={active.capital[0]}
               cy={active.capital[1]}
               r="7"
-              fill="white"
-              stroke="#78ad99"
-              strokeWidth="1.5"
+              className={styles.capitalRing}
             />
             <circle
               cx={active.capital[0]}
               cy={active.capital[1]}
               r="3"
-              fill="#27866c"
-              stroke="white"
-              strokeWidth="1.5"
+              className={styles.capitalDot}
             />
           </g>
         ) : null}
@@ -184,9 +167,8 @@ export function ChinaMap({
         y="508"
         width="168"
         height="190"
-        rx="7"
-        fill="#f4f8f3"
-        stroke="#cbdcd2"
+        rx="4"
+        className={styles.insetFrame}
       />
       <g clipPath={`url(#${uid}-inset)`} aria-hidden="true">
         {map.provinces.map((province) => (
@@ -194,19 +176,13 @@ export function ChinaMap({
             key={province.code}
             d={province.insetPath}
             fill={provinceFill(counts[province.code] ?? 0, maxCount)}
-            stroke="#b6cddd"
-            strokeWidth="0.5"
             fillRule="evenodd"
+            className={styles.insetProvince}
           />
         ))}
-        <path
-          d={map.maritimeInsetPath}
-          fill="#91aaa0"
-          stroke="#91aaa0"
-          strokeWidth="0.5"
-        />
+        <path d={map.maritimeInsetPath} className={styles.sea} />
       </g>
-      <text x="888" y="719" textAnchor="middle" fill="#718d80" fontSize="12">
+      <text x="888" y="719" textAnchor="middle" className={styles.insetLabel}>
         南海诸岛
       </text>
     </svg>

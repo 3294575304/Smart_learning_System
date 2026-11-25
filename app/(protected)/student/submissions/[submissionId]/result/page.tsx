@@ -14,6 +14,11 @@ import { notFound } from "next/navigation";
 
 import { LearningAnalysisCard } from "@/components/learning-analysis/learning-analysis-card";
 import { ProgrammingAttemptStatus } from "@/components/assignments/programming-attempt-status";
+import { ReadOnlyAnswerCard } from "@/components/assignments/read-only-answer-card";
+import {
+  studentResultAnswerCardLegend,
+  studentResultAnswerCardState,
+} from "@/components/assignments/answer-card-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
@@ -64,6 +69,17 @@ export default async function ResultPage({ params, searchParams }: Props) {
     const grades = new Map(
       result.answers.map((answer) => [answer.assignmentQuestionId, answer]),
     );
+    // 判题结果跟随题目卡片展示，不再在页面顶部单独罗列。
+    const attempts = new Map(
+      result.programmingAttempts.map((attempt) => [
+        attempt.assignmentQuestionId,
+        attempt,
+      ]),
+    );
+    const navigatorTargetId = (sortOrder: number, questionId: string) =>
+      result.examReceipt
+        ? `exam-question-${sortOrder}`
+        : `result-question-${questionId}`;
     return (
       <section className="space-y-6">
         <div>
@@ -202,20 +218,6 @@ export default async function ResultPage({ params, searchParams }: Props) {
         {canReviewExam && (
           <ExamScoreReview submissionId={result.id} initial={examReview} />
         )}
-        {result.programmingAttempts.length > 0 ? (
-          <div className="space-y-4">
-            {result.programmingAttempts.map((attempt) => (
-              <ProgrammingAttemptStatus
-                assignmentQuestionId={attempt.assignmentQuestionId}
-                attemptId={attempt.id}
-                displayMaxScore={
-                  grades.get(attempt.assignmentQuestionId)?.maxScore
-                }
-                key={attempt.id}
-              />
-            ))}
-          </div>
-        ) : null}
         {answers.length > 0 && (
           <section className="space-y-4" aria-labelledby="submitted-answers">
             <h2 id="submitted-answers" className="font-semibold text-slate-900">
@@ -223,6 +225,7 @@ export default async function ResultPage({ params, searchParams }: Props) {
             </h2>
             {answers.map((answer) => {
               const graded = grades.get(answer.assignmentQuestionId);
+              const attempt = attempts.get(answer.assignmentQuestionId);
               const files = result.attachments.filter(
                 (file) =>
                   file.assignmentQuestionId === answer.assignmentQuestionId,
@@ -239,12 +242,12 @@ export default async function ResultPage({ params, searchParams }: Props) {
                 : null;
               return (
                 <article
-                  id={
-                    result.examReceipt
-                      ? `exam-question-${answer.sortOrder}`
-                      : undefined
-                  }
-                  className="border-line bg-card min-w-0 scroll-mt-24 rounded-xl border p-5 shadow-[var(--shadow-card)] sm:p-6"
+                  id={navigatorTargetId(
+                    answer.sortOrder,
+                    answer.assignmentQuestionId,
+                  )}
+                  tabIndex={-1}
+                  className="border-line bg-card min-w-0 scroll-mt-24 rounded-xl border p-5 shadow-[var(--shadow-card)] focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none sm:p-6"
                   key={answer.assignmentQuestionId}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -315,6 +318,16 @@ export default async function ResultPage({ params, searchParams }: Props) {
                       </div>
                     )}
                   </dl>
+                  {attempt ? (
+                    <div className="mt-3">
+                      <ProgrammingAttemptStatus
+                        assignmentQuestionId={answer.assignmentQuestionId}
+                        attemptId={attempt.id}
+                        displayMaxScore={graded?.maxScore}
+                        showAttemptReference={false}
+                      />
+                    </div>
+                  ) : null}
                   {files.length > 0 && (
                     <div className="mt-3">
                       <p className="text-sm font-medium">作业附件</p>
@@ -352,6 +365,32 @@ export default async function ResultPage({ params, searchParams }: Props) {
             })}
           </section>
         )}
+        {answers.length > 0 ? (
+          <ReadOnlyAnswerCard
+            legendItems={studentResultAnswerCardLegend}
+            progress={{
+              label: "已作答",
+              answeredCount: answers.filter(
+                (answer) =>
+                  answer.studentAnswer.trim().length > 0 &&
+                  answer.studentAnswer !== "未作答",
+              ).length,
+            }}
+            totalPoints={result.maxScore ?? undefined}
+            questions={answers.map((answer) => ({
+              id: answer.assignmentQuestionId,
+              sortOrder: answer.sortOrder,
+              type: answer.type,
+              targetId: navigatorTargetId(
+                answer.sortOrder,
+                answer.assignmentQuestionId,
+              ),
+              state: studentResultAnswerCardState(
+                grades.get(answer.assignmentQuestionId),
+              ),
+            }))}
+          />
+        ) : null}
         {result.isPublished ? (
           <LearningAnalysisCard
             knowledgePointLabels={Object.fromEntries(

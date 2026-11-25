@@ -150,13 +150,14 @@ test("学情分析保留课程权限、班级筛选和最近作业入口", async
     /本阶段教学待办|系统按课程建设、学习证据和结课评价|当前课程关键环节均已完成/u,
   );
   assert.match(view, /章节掌握度/u);
+  assert.match(view, /withClassroomQuery\(courseBase \+ path, classroomId\)/u);
+  assert.match(view, /courseSectionHref\("\/profiles"\)/u);
+  assert.match(view, /courseSectionHref\("\/gradebook"\)/u);
+  assert.match(view, /courseSectionHref\("\/surveys"\)/u);
+  assert.match(view, /courseSectionHref\("\/quality-report"\)/u);
   assert.match(
     view,
-    /withClassroomQuery\(courseBase \+ "\/surveys", classroomId\)/u,
-  );
-  assert.match(
-    view,
-    /withClassroomQuery\([\s\S]*?courseBase \+ "\/quality-report"/u,
+    /withAnalyticsOrigin\(href, \{[\s\S]*?section: data\.reportingSection/u,
   );
   assert.match(view, /data\.overview\.completedSurveyCount/u);
   assert.match(view, /data\.overview\.surveyResponseCount/u);

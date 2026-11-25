@@ -83,7 +83,7 @@ function adminInput(schoolId: string) {
   };
 }
 
-test("新增合作学校的课程模板和题库课程分类初始为空", async () => {
+test("新增合作学校的课程模板和课程分类初始为空", async () => {
   const partner = await school();
   assert.equal(
     await prisma.courseTemplate.count({ where: { schoolId: partner.id } }),

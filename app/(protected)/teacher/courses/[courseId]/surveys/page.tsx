@@ -10,22 +10,38 @@ import { courseIdSchema } from "@/services/courses/schemas";
 import { getTeacherCourse } from "@/services/courses/service";
 import { listTeacherCourseSurveys } from "@/services/course-surveys/service";
 import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
+import {
+  analyticsSearchParams,
+  isAnalyticsOrigin,
+} from "@/lib/analytics-origin";
 
 export default async function TeacherCourseSurveysPage({
   params,
   searchParams,
 }: {
   params: Promise<{ courseId: string }>;
-  searchParams: Promise<{ classroomId?: string }>;
+  searchParams: Promise<{
+    classroomId?: string;
+    section?: string;
+    from?: string;
+  }>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
   const courseId = courseIdSchema.safeParse((await params).courseId);
   if (!courseId.success) notFound();
+  const query = await searchParams;
   const classroom = await getTeacherCourseClassroomForPage(
     teacher.id,
     courseId.data,
-    (await searchParams).classroomId,
+    query.classroomId,
   );
+  const analyticsBackHref = isAnalyticsOrigin(query.from)
+    ? `/teacher/results?${analyticsSearchParams({
+        courseId: courseId.data,
+        classroomId: classroom?.id,
+        section: query.section,
+      }).toString()}`
+    : null;
   try {
     const [course, surveys] = await Promise.all([
       getTeacherCourse(teacher.id, courseId.data),
@@ -37,8 +53,10 @@ export default async function TeacherCourseSurveysPage({
       <section className="space-y-6">
         <PageHeader
           actions={
-            <TeacherBackLink href={`/teacher/courses/${courseId.data}`}>
-              返回课程
+            <TeacherBackLink
+              href={analyticsBackHref ?? `/teacher/courses/${courseId.data}`}
+            >
+              {analyticsBackHref ? "返回学情分析" : "返回课程"}
             </TeacherBackLink>
           }
           description="从正式教学大纲生成可审核问卷，实名或匿名发布，并以小样本保护规则汇总课程目标自评和开放题主题。"

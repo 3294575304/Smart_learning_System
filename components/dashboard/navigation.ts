@@ -63,7 +63,7 @@ export const NAVIGATION: Record<Role, NavigationGroup[]> = {
         { href: "/admin/questions", label: "共享题库", icon: BookOpenCheck },
         {
           href: "/admin/question-course-categories",
-          label: "题库课程分类",
+          label: "课程分类",
           icon: BookOpenCheck,
         },
         { href: "/admin/classrooms", label: "班级治理", icon: School },
@@ -181,7 +181,7 @@ export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   "system-config": "系统配置",
   announcements: "系统公告",
   "course-templates": "课程模板",
-  "question-course-categories": "题库课程分类",
+  "question-course-categories": "课程分类",
   "random-picker": "随机选人",
   ai: "AI出题",
   profile: "学生画像",

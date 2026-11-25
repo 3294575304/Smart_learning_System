@@ -40,6 +40,8 @@ import type {
 import { scrubSensitiveCode, scrubSensitiveText } from "@/services/ai/privacy";
 import type { ExamPaperAIInput } from "@/services/exams/paper-ai";
 import type { QuestionObjectiveAIInput } from "@/services/question-objectives/schemas";
+import type { CourseCatalogAIInput } from "@/services/question-course-categories/catalog-schemas";
+import { COURSE_CATALOG_SYSTEM_PROMPT } from "@/services/question-course-categories/catalog-prompt";
 import type { ProgrammingCodeScoreInput } from "@/services/programming-scoring/schemas";
 
 type AIMessagePart =
@@ -213,6 +215,39 @@ export class OpenAICompatibleProvider implements AIProvider {
       options.signal,
       this.config.syllabusMaxCompletionTokens ?? 32_768,
     );
+  }
+
+  async extractCourseCatalog(
+    input: CourseCatalogAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    const repair = options.validationError
+      ? `上次输出无效：${options.validationError}。请修复后重新输出 JSON。`
+      : "";
+    return (
+      await this.completeJson(
+        [
+          {
+            role: "system",
+            content: repair
+              ? `${COURSE_CATALOG_SYSTEM_PROMPT}\n${repair}`
+              : COURSE_CATALOG_SYSTEM_PROMPT,
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              fileName: input.fileName,
+              sheetName: input.sheetName,
+              headerLabels: input.headerLabels,
+              rows: input.rows,
+            }),
+          },
+        ],
+        options.signal,
+        4_000,
+        "course_catalog_extraction",
+      )
+    ).content;
   }
 
   async inferKnowledgeGraphRelations(

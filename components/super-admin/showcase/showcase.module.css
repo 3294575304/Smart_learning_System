@@ -1,21 +1,28 @@
 .screen {
-  --showcase-ink: #284b3e;
-  --showcase-muted: #61776b;
-  --showcase-soft: #6f8074;
-  --showcase-accent: #356d58;
-  --showcase-border: #d7e1d6;
-  --showcase-surface: #fafbf5d9;
-  --showcase-wash: #edf3e9;
+  /* 全部映射到系统令牌：浅蓝画布 + 白卡 + 品牌蓝，不再自带一套山水配色 */
+  --showcase-ink: var(--ink, #10243a);
+  --showcase-muted: var(--ink-soft, #4a6376);
+  --showcase-soft: var(--ink-muted, #7d93a8);
+  --showcase-accent: var(--brand, #0369a1);
+  --showcase-accent-strong: var(--brand-strong, #075985);
+  --showcase-accent-soft: var(--brand-soft, #e0f2fe);
+  --showcase-border: var(--line, #e3edf5);
+  --showcase-divider: var(--line-soft, #eef4f9);
+  --showcase-field: #cfe4f0;
+  --showcase-surface: #fff;
+  --showcase-wash: #f4fafd;
+  --showcase-board: #edf5fa;
+
   position: relative;
   overflow: hidden;
   min-height: 70vh;
-  padding: clamp(18px, 2vw, 28px);
+  padding: clamp(18px, 1.8vw, 26px);
   border: 1px solid var(--showcase-border);
-  border-radius: 20px;
+  border-radius: 8px;
   color: var(--showcase-ink);
-  background: #f5f8f4;
+  background: var(--showcase-board);
   isolation: isolate;
-  box-shadow: 0 18px 65px #27493f0c;
+  box-shadow: 0 1px 2px rgb(10 30 46 / 0.03);
 }
 .screen::before {
   position: absolute;
@@ -23,41 +30,58 @@
   inset: 0;
   content: "";
   pointer-events: none;
-  background:
-    linear-gradient(180deg, #f8faf5f5 0%, #f8faf5e0 42%, #f8faf5cc 100%),
-    url("/images/showcase/misty-mountains.jpg") center bottom / auto 85%
-      no-repeat;
+  background: radial-gradient(
+    760px 320px at 8% -14%,
+    rgb(224 242 254 / 0.65) 0%,
+    rgb(224 242 254 / 0) 72%
+  );
 }
 .screen:fullscreen {
   overflow-y: auto;
   border-radius: 0;
   padding: 28px 3vw;
-  background-color: #f5f8f4;
+  background-color: var(--showcase-board);
 }
 .header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+}
+.header > div:first-child {
+  padding-left: 13px;
+  border-left: 3px solid var(--showcase-accent);
 }
 .header h1 {
   color: var(--showcase-ink);
-  font-family: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", serif;
-  font-size: clamp(26px, 2.3vw, 36px);
-  line-height: 1.4;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-family: inherit;
+  font-size: clamp(24px, 1.9vw, 26px);
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 .overline {
-  margin-bottom: 8px;
-  color: #8d7955;
-  font-size: 11px;
-  letter-spacing: 0.24em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  color: var(--showcase-accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+.overline::after {
+  display: block;
+  width: 24px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.32;
+  content: "";
 }
 .subtitle {
-  margin-top: 8px;
-  font-size: 13px;
+  margin-top: 7px;
+  font-size: 12px;
   line-height: 1.6;
   color: var(--showcase-muted);
 }
@@ -65,31 +89,38 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 6px;
+  padding-top: 2px;
 }
 .actions button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 9px 13px;
-  border: 1px solid var(--showcase-border);
-  border-radius: 8px;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--showcase-field);
+  border-radius: 4px;
   color: var(--showcase-accent);
   background: var(--showcase-surface);
-  font-size: 13px;
+  font-size: 12px;
   transition:
-    background 0.15s,
+    background-color 0.15s,
     border-color 0.15s;
 }
 .actions button:hover {
-  background: var(--showcase-wash);
-  border-color: #9bb7a2;
+  background: var(--showcase-accent-soft);
+  border-color: #9ed0ec;
 }
+/* 主操作沿用系统里的实心品牌按钮 */
 .actions button:last-child {
-  background: var(--showcase-wash);
-  border-color: var(--showcase-border);
-  color: var(--showcase-accent);
+  border-color: var(--showcase-accent);
+  background: var(--showcase-accent);
+  color: #fff;
+}
+.actions button:last-child:hover {
+  border-color: var(--showcase-accent-strong);
+  background: var(--showcase-accent-strong);
 }
 .actions button:disabled {
   opacity: 0.55;
@@ -98,43 +129,55 @@
 .provinceSelect:focus-visible,
 .search:focus-within {
   outline: 2px solid var(--showcase-accent);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 14px;
+  margin-bottom: 16px;
 }
 .metric {
+  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 22px;
+  padding: 18px 20px 16px;
   border: 1px solid var(--showcase-border);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--showcase-surface);
-  box-shadow: 0 2px 4px #27493f05;
+  box-shadow: 0 1px 2px rgb(10 30 46 / 0.03);
+}
+/* 左上角一小段品牌色短线，作为指标卡的视觉锚点 */
+.metric::before {
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 58px;
+  height: 2px;
+  content: "";
+  background: var(--showcase-accent);
 }
 .metric p {
   color: var(--showcase-muted);
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.03em;
 }
 .metric strong {
   display: block;
-  margin: 8px 0 5px;
-  color: var(--showcase-accent);
-  font-size: 36px;
-  font-weight: 600;
-  line-height: 1.15;
+  margin: 9px 0 4px;
+  color: var(--showcase-accent-strong);
+  font-size: 34px;
+  font-weight: 650;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.035em;
 }
 .metric strong > span {
-  margin-left: 9px;
+  margin-left: 8px;
   color: var(--showcase-soft);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
   letter-spacing: 0;
 }
@@ -143,16 +186,17 @@
   font-size: 11px;
 }
 .metric > svg {
-  width: 22px;
-  height: 22px;
-  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
   color: var(--showcase-accent);
-  stroke-width: 1.5;
+  opacity: 0.75;
+  stroke-width: 1.6;
 }
 .content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 29%);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 29%);
+  gap: 16px;
   align-items: start;
 }
 .mapPanel,
@@ -160,87 +204,65 @@
 .rankingPanel {
   overflow: hidden;
   border: 1px solid var(--showcase-border);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--showcase-surface);
-  box-shadow: 0 8px 28px #254d4310;
-  backdrop-filter: blur(12px);
+  box-shadow: 0 1px 2px rgb(10 30 46 / 0.03);
 }
 .panelHeading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 20px;
-  border-bottom: 1px solid #e2e9df;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--showcase-divider);
 }
 .panelHeading h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--showcase-ink);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 650;
+}
+.panelHeading h2::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  content: "";
+  background: var(--showcase-accent);
 }
 .panelHeading > p {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--showcase-soft);
+  letter-spacing: 0.03em;
 }
 .mapArea {
   position: relative;
   isolation: isolate;
-  background: #edf3ef;
-}
-.mapArea::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  content: "";
-  pointer-events: none;
-  background: url("/images/showcase/misty-mountains.jpg") center / cover
-    no-repeat;
-  filter: grayscale(1) sepia(0.15);
-  opacity: 0.2;
-  mask-image: linear-gradient(
-    180deg,
-    transparent 3%,
-    #000 45%,
-    #000 92%,
-    transparent
-  );
-}
-.mapArea::after {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  content: "";
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse at 50% 42%,
-    #fbfffbd9 0%,
-    #f9fcf780 48%,
-    transparent 76%
-  );
+  background: #f7fbfe;
 }
 .map {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 670px;
-  filter: drop-shadow(0 12px 14px #234f4522);
+  max-height: 640px;
 }
 .mapHint {
   position: absolute;
   z-index: 1;
-  top: 16px;
-  left: 18px;
+  top: 14px;
+  left: 16px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 6px 10px;
   border: 1px solid var(--showcase-border);
-  border-radius: 7px;
-  background: #f8faf2ed;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.95);
   color: var(--showcase-muted);
-  font-size: 11px;
+  font-size: 10.5px;
   pointer-events: none;
-  box-shadow: 0 2px 6px #27493f08;
+  box-shadow: 0 1px 2px rgb(10 30 46 / 0.05);
 }
 .mapHint svg {
   color: var(--showcase-accent);
@@ -253,10 +275,22 @@
   color: var(--showcase-soft);
   font-weight: 400;
 }
+/* 省界统一一种颜色：悬停与键盘焦点只加粗，不换色 */
 .province {
   cursor: pointer;
   outline: none;
-  transition: fill 0.2s;
+  stroke: #cddfec;
+  stroke-width: 0.6;
+  transition:
+    fill 0.18s,
+    stroke-width 0.12s;
+}
+.province:hover {
+  stroke-width: 1.15;
+}
+.province:focus-visible {
+  stroke: #a3c6dd;
+  stroke-width: 1.5;
 }
 .label {
   cursor: pointer;
@@ -264,28 +298,70 @@
 .label text {
   user-select: none;
 }
+.label:hover text {
+  font-weight: 700;
+}
+/* 地图上的静态色（SVG 里不再写死 hex，换肤只改这里） */
+.leader {
+  stroke: #b6ccdb;
+  stroke-width: 0.8;
+  fill: none;
+}
+.sea {
+  fill: #c3d7e5;
+  stroke: #c3d7e5;
+  stroke-width: 0.5;
+}
+.outline {
+  fill: none;
+  stroke: #a3c6dd;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.capitalRing {
+  fill: #fff;
+  stroke: #a3c6dd;
+  stroke-width: 1.5;
+}
+.capitalDot {
+  fill: var(--showcase-accent);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+.insetFrame {
+  fill: #f7fbfe;
+  stroke: #d3e4ef;
+}
+.insetProvince {
+  stroke: #d3e4ef;
+  stroke-width: 0.5;
+}
+.insetLabel {
+  fill: var(--showcase-soft);
+  font-size: 12px;
+}
 .legend {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 15px 18px 8px;
-  color: var(--showcase-muted);
-  font-size: 11px;
+  gap: 8px;
+  padding: 14px 16px 6px;
+  color: var(--showcase-soft);
+  font-size: 10.5px;
 }
 .legend > div {
-  width: 125px;
-  height: 7px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, #e6eee8, #a2c9bd, #175d5a);
+  width: 126px;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #e9f2f9, #7db6d9, #0369a1);
 }
 .legend > small {
   color: var(--showcase-soft);
   font-size: 10px;
 }
 .mapSource {
-  margin: 5px 20px 16px;
+  margin: 4px 18px 14px;
   text-align: center;
   color: var(--showcase-soft);
   font-size: 10px;
@@ -299,10 +375,10 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: #c9d7c8 transparent;
+  scrollbar-color: #dbe7f0 transparent;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 @media (min-width: 1101px) {
   .schoolList {
@@ -312,92 +388,115 @@
 }
 .provinceSelect {
   display: block;
-  width: calc(100% - 40px);
-  margin: 18px 20px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--showcase-border);
-  border-radius: 7px;
-  background: var(--showcase-wash);
-  color: var(--showcase-accent);
-  font-size: 13px;
+  width: calc(100% - 36px);
+  height: 32px;
+  margin: 14px 18px 0;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--showcase-field);
+  border-radius: 4px;
+  background-color: var(--showcase-surface);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 13px;
+  color: var(--showcase-muted);
+  font-size: 12px;
   color-scheme: light;
+  appearance: none;
+  cursor: pointer;
 }
 .provinceSummary {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  align-items: center;
   gap: 12px;
-  padding: 20px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--showcase-divider);
 }
 .provinceSummary p {
   color: var(--showcase-soft);
-  font-size: 11px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
 }
 .provinceSummary h3 {
-  margin-top: 5px;
+  margin-top: 4px;
   color: var(--showcase-ink);
-  font-size: 21px;
-  font-weight: 600;
+  font-size: 19px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 .provinceSummary strong {
   color: var(--showcase-accent);
-  font-size: 26px;
-  font-weight: 500;
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 .provinceSummary strong span {
+  margin-left: 4px;
   color: var(--showcase-soft);
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
 }
 .schoolList {
-  max-height: 360px;
+  display: flex;
+  max-height: 330px;
   overflow-y: auto;
+  flex-direction: column;
+  gap: 8px;
   scrollbar-width: thin;
-  scrollbar-color: #c9d7c8 transparent;
-  padding: 0 18px 20px;
+  scrollbar-color: #dbe7f0 transparent;
+  padding: 12px 14px 14px;
 }
 .schoolCard {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin-top: 10px;
-  padding: 16px 14px;
-  border: 1px solid var(--showcase-border);
-  border-radius: 9px;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--showcase-divider);
+  border-radius: 6px;
   background: var(--showcase-wash);
+  transition: border-color 0.15s;
 }
 .schoolCard:first-child {
   margin-top: 0;
 }
+.schoolCard:hover {
+  border-color: var(--showcase-accent-soft);
+}
 .schoolIcon {
   flex-shrink: 0;
-  width: 19px;
-  height: 19px;
-  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  margin-top: 4px;
   color: var(--showcase-accent);
   stroke-width: 1.5;
 }
 .schoolLogo {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  margin-top: -2px;
+  width: 30px;
+  height: 30px;
+  margin-top: -1px;
+  border: 1px solid var(--showcase-border);
   border-radius: 50%;
   background: #fff;
   object-fit: contain;
 }
 .schoolCard h4 {
   color: var(--showcase-ink);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.7;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
 }
 .schoolCard p {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 7px;
-  margin: 6px 0 5px;
+  gap: 6px;
+  margin: 4px 0 3px;
   color: var(--showcase-muted);
   font-size: 11px;
 }
@@ -406,7 +505,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--showcase-accent);
+  background: var(--ok, #047857);
 }
 .schoolCard small {
   color: var(--showcase-soft);
@@ -416,10 +515,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 20px 14px;
-  padding: 9px 10px;
-  border: 1px solid var(--showcase-border);
-  border-radius: 7px;
+  margin: 0 18px 12px;
+  padding: 6px 9px;
+  border: 1px solid var(--showcase-field);
+  border-radius: 4px;
+  background: var(--showcase-surface);
   color: var(--showcase-soft);
 }
 .search input::placeholder {
@@ -435,7 +535,7 @@
   background: transparent;
 }
 .empty {
-  padding: 30px 12px 34px;
+  padding: 26px 10px 30px;
   color: var(--showcase-soft);
   text-align: center;
 }
@@ -447,7 +547,7 @@
 }
 .empty p {
   color: var(--showcase-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 .empty small {
   display: block;
@@ -456,34 +556,43 @@
   font-size: 11px;
 }
 .rankingPanel {
-  padding-bottom: 14px;
+  padding-bottom: 12px;
 }
 .rankingTag {
   color: var(--showcase-soft);
-  font-size: 11px;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
 }
 .rankRow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: calc(100% - 32px);
-  margin: 12px 16px 0;
-  padding: 8px 6px;
-  border-radius: 6px;
+  gap: 10px;
+  width: calc(100% - 24px);
+  margin: 6px 12px 0;
+  padding: 6px;
+  border-radius: 3px;
   text-align: left;
 }
 .rankRow:hover,
 .rankRow[aria-pressed="true"] {
   background: var(--showcase-wash);
 }
+.rankRow[aria-pressed="true"] {
+  box-shadow: inset 2px 0 0 var(--showcase-accent);
+}
 .rankRow:focus-visible {
-  outline: 2px solid #9bb7a2;
+  outline: 2px solid var(--showcase-accent);
   outline-offset: 1px;
 }
 .rankRow > span {
   min-width: 12px;
+  color: var(--showcase-soft);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.rankRow[aria-pressed="true"] > span {
   color: var(--showcase-accent);
-  font-size: 12px;
 }
 .rankRow > div {
   flex: 1;
@@ -491,62 +600,73 @@
 }
 .rankRow p {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
+  gap: 8px;
   color: var(--showcase-muted);
   font-size: 12px;
 }
 .rankRow strong {
   color: var(--showcase-accent);
-  font-weight: 500;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 .rankRow small {
   color: var(--showcase-soft);
+  font-size: 9.5px;
   font-weight: 400;
 }
 .rankTrack {
   overflow: hidden;
-  height: 4px;
-  margin-top: 9px;
-  border-radius: 3px;
-  background: var(--showcase-wash);
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--showcase-divider);
 }
 .rankTrack > div {
   height: 100%;
-  border-radius: 3px;
-  background: #7b9e86;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #56aed7, #0369a1);
 }
 .noRanking {
-  padding: 22px 20px;
+  padding: 20px 18px;
   color: var(--showcase-soft);
   font-size: 12px;
 }
 .footer {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
-  padding-top: 20px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--showcase-border);
   color: var(--showcase-soft);
   font-size: 10px;
   line-height: 1.7;
 }
 .footer button {
-  margin-left: 10px;
-  color: #9c7952;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--showcase-accent);
+  font-size: 10px;
   text-decoration: underline;
 }
 .feedback {
   margin-bottom: 16px;
-  padding: 10px 14px;
-  border: 1px solid #ead9bb;
-  border-radius: 8px;
-  background: #fff9ee;
-  color: #9b743f;
-  font-size: 12px;
+  padding: 9px 12px;
+  border: 1px solid #f2dfc4;
+  border-radius: 4px;
+  background: var(--warn-soft, #fff7ed);
+  color: var(--warn, #b45309);
+  font-size: 11.5px;
 }
 @media (min-width: 1800px) {
   .screen:fullscreen .content {
-    grid-template-columns: minmax(0, 1fr) minmax(330px, 26%);
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 26%);
   }
 }
 @media (min-width: 1101px) {
@@ -564,21 +684,22 @@
   .sidebar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
     max-height: none;
     overflow: visible;
   }
   .schoolList {
-    max-height: 360px;
+    max-height: 330px;
     overflow-y: auto;
   }
   .metric {
-    padding: 17px;
+    padding: 16px;
   }
 }
 @media (max-width: 640px) {
   .screen {
     padding: 16px;
-    border-radius: 12px;
+    border-radius: 8px;
   }
   .header {
     flex-direction: column;
@@ -602,7 +723,7 @@
     font-size: 11px;
   }
   .metric strong {
-    font-size: 28px;
+    font-size: 26px;
   }
   .metric strong > span {
     margin-left: 4px;
@@ -612,7 +733,7 @@
     display: flex;
   }
   .panelHeading {
-    padding: 15px;
+    padding: 12px 14px;
   }
   .mapHint {
     top: 8px;

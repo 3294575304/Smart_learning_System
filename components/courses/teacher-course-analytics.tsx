@@ -5,6 +5,7 @@ import { CourseChapterMastery } from "@/components/courses/course-chapter-master
 import { CourseAttentionConcepts } from "@/components/courses/course-attention-concepts";
 import type { TeacherResultOverviewItem } from "@/services/assignment-results/types";
 import type { TeacherCourseAnalytics } from "@/services/course-analytics/service";
+import { withAnalyticsOrigin } from "@/lib/analytics-origin";
 import { withClassroomQuery } from "@/lib/course-classroom";
 import { REPORTING_SECTION_LABELS } from "@/services/assignments/reporting";
 
@@ -279,11 +280,13 @@ function RecentAssignmentsPanel({
   gradebookExams,
   allAssignmentsHref,
   statistics,
+  withOrigin,
 }: {
   assignments: TeacherResultOverviewItem[];
   gradebookExams: TeacherCourseAnalytics["recentGradebookExams"];
   allAssignmentsHref: string;
   statistics: TeacherCourseAnalytics["assignmentStatistics"];
+  withOrigin: (href: string) => string;
 }) {
   return (
     <section
@@ -322,11 +325,11 @@ function RecentAssignmentsPanel({
                 <Link
                   aria-label={`查看${assignment.title}成绩详情；${summary}；${statusLabel}`}
                   className="block px-2 py-2 hover:bg-sky-50/50"
-                  href={
+                  href={withOrigin(
                     assignment.gradebookId && assignment.courseId
                       ? `/teacher/courses/${assignment.courseId}/gradebook/${assignment.gradebookId}`
-                      : `/teacher/assignments/${assignment.id}/results`
-                  }
+                      : `/teacher/assignments/${assignment.id}/results`,
+                  )}
                   key={assignment.id}
                 >
                   <span className="flex min-w-0 items-center gap-2">
@@ -397,7 +400,9 @@ function RecentAssignmentsPanel({
             {gradebookExams.map((exam) => (
               <Link
                 className="block px-2 py-3 text-sm hover:bg-sky-50/50"
-                href={`/teacher/courses/${exam.courseId}/gradebook/${exam.gradebookId}`}
+                href={withOrigin(
+                  `/teacher/courses/${exam.courseId}/gradebook/${exam.gradebookId}`,
+                )}
                 key={exam.id}
               >
                 {exam.type === "MIDTERM" ? "期中考试" : "期末考试"} ·{" "}
@@ -426,6 +431,14 @@ export function TeacherCourseAnalyticsView({
   recentAssignments: TeacherResultOverviewItem[];
 }) {
   const courseBase = "/teacher/courses/" + data.course.id;
+  // 学情分析里跳去课程子页面时带上来源，子页面左上角才能返回学情分析而不是课程。
+  const withOrigin = (href: string) =>
+    withAnalyticsOrigin(href, {
+      classroomId,
+      section: data.reportingSection,
+    });
+  const courseSectionHref = (path: string) =>
+    withOrigin(withClassroomQuery(courseBase + path, classroomId));
   const statistics = data.assignmentStatistics;
   const scoreTrend = data.assignmentScoreTrend;
   const assignmentParams = new URLSearchParams({ courseId: data.course.id });
@@ -445,7 +458,7 @@ export function TeacherCourseAnalyticsView({
               </h2>
             </div>
             <Link
-              href={withClassroomQuery(courseBase + "/profiles", classroomId)}
+              href={courseSectionHref("/profiles")}
               className="text-sm font-medium text-sky-700 hover:text-sky-900"
             >
               查看课程画像 →
@@ -499,7 +512,7 @@ export function TeacherCourseAnalyticsView({
                 {data.evaluationNextStep.action ? (
                   <Link
                     className="mt-2 inline-flex rounded-md bg-violet-700 px-3 py-2 text-sm font-medium text-white hover:bg-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700"
-                    href={data.evaluationNextStep.action.href}
+                    href={withOrigin(data.evaluationNextStep.action.href)}
                   >
                     {data.evaluationNextStep.action.label}
                   </Link>
@@ -529,10 +542,7 @@ export function TeacherCourseAnalyticsView({
             </div>
             <div className="mt-4 grid gap-2">
               <Link
-                href={withClassroomQuery(
-                  courseBase + "/gradebook",
-                  classroomId,
-                )}
+                href={courseSectionHref("/gradebook")}
                 className="flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm transition-colors hover:border-sky-300 hover:bg-sky-100"
               >
                 <span className="font-medium text-sky-800">成绩台账</span>
@@ -542,7 +552,7 @@ export function TeacherCourseAnalyticsView({
                 />
               </Link>
               <Link
-                href={withClassroomQuery(courseBase + "/surveys", classroomId)}
+                href={courseSectionHref("/surveys")}
                 className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/70 px-4 py-3 text-sm transition-colors hover:border-teal-300 hover:bg-teal-100"
               >
                 <span className="font-medium text-teal-800">结课问卷</span>
@@ -552,10 +562,7 @@ export function TeacherCourseAnalyticsView({
                 />
               </Link>
               <Link
-                href={withClassroomQuery(
-                  courseBase + "/quality-report",
-                  classroomId,
-                )}
+                href={courseSectionHref("/quality-report")}
                 className="flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-3 text-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
               >
                 <span className="font-medium text-violet-800">
@@ -690,6 +697,7 @@ export function TeacherCourseAnalyticsView({
             assignments={recentAssignments}
             gradebookExams={data.recentGradebookExams}
             statistics={statistics}
+            withOrigin={withOrigin}
           />
         </div>
       </section>

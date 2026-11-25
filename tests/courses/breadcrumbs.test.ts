@@ -201,7 +201,7 @@ test("三角色模块及补充功能使用明确的导航内容", () => {
   for (const [path, label] of [
     ["/admin/classrooms", "班级治理"],
     ["/admin/questions", "共享题库"],
-    ["/admin/question-course-categories", "题库课程分类"],
+    ["/admin/question-course-categories", "课程分类"],
     ["/student/course-grades", "课程总评"],
     ["/teacher/questions/ai", "AI出题"],
     ["/teacher/courses/course-a/random-picker", "随机选人"],

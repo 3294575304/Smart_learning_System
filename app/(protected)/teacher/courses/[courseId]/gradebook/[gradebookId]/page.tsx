@@ -8,6 +8,10 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
 import { gradebookIdSchema } from "@/services/gradebook/schemas";
 import { getTeacherCourseClassroomForPage } from "@/services/courses/page-context";
+import {
+  analyticsSearchParams,
+  isAnalyticsOrigin,
+} from "@/lib/analytics-origin";
 import { withClassroomQuery } from "@/lib/course-classroom";
 
 export default async function GradebookPage({
@@ -15,18 +19,31 @@ export default async function GradebookPage({
   searchParams,
 }: {
   params: Promise<{ courseId: string; gradebookId: string }>;
-  searchParams: Promise<{ classroomId?: string }>;
+  searchParams: Promise<{
+    classroomId?: string;
+    section?: string;
+    from?: string;
+  }>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
   const values = await params;
   const courseId = courseIdSchema.safeParse(values.courseId);
   const gradebookId = gradebookIdSchema.safeParse(values.gradebookId);
   if (!courseId.success || !gradebookId.success) notFound();
+  const query = await searchParams;
   const classroom = await getTeacherCourseClassroomForPage(
     teacher.id,
     courseId.data,
-    (await searchParams).classroomId,
+    query.classroomId,
   );
+  // 学情分析的「最近作业与考试」会直接跳到台账详情，返回入口要回到学情分析。
+  const analyticsBackHref = isAnalyticsOrigin(query.from)
+    ? `/teacher/results?${analyticsSearchParams({
+        courseId: courseId.data,
+        classroomId: classroom?.id,
+        section: query.section,
+      }).toString()}`
+    : null;
   return (
     <section className="space-y-6">
       <PageHeader
@@ -34,12 +51,15 @@ export default async function GradebookPage({
         description="查看班级成绩，按考核项目录入、核对并发布。"
         actions={
           <TeacherBackLink
-            href={withClassroomQuery(
-              `/teacher/courses/${courseId.data}/gradebook`,
-              classroom?.id,
-            )}
+            href={
+              analyticsBackHref ??
+              withClassroomQuery(
+                `/teacher/courses/${courseId.data}/gradebook`,
+                classroom?.id,
+              )
+            }
           >
-            返回台账列表
+            {analyticsBackHref ? "返回学情分析" : "返回台账列表"}
           </TeacherBackLink>
         }
       />

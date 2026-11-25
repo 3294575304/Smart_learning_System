@@ -18,7 +18,8 @@ export type AICapability =
   | "teacher_evaluation_intent"
   | "recommend_explain"
   | "self_reflection"
-  | "programming_code_scoring";
+  | "programming_code_scoring"
+  | "course_catalog";
 
 export interface AIRequestScope {
   capability: AICapability;

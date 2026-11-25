@@ -24,6 +24,10 @@ import {
 import { assignmentIdSchema } from "@/services/assignments/schemas";
 import { resolveTeacherAssessmentPage } from "@/services/exams/classroom-page-scope";
 import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
+import {
+  analyticsSearchParams,
+  isAnalyticsOrigin,
+} from "@/lib/analytics-origin";
 
 interface ResultsPageProps {
   params: Promise<{ assignmentId: string; examId?: string }>;
@@ -74,6 +78,27 @@ export default async function AssignmentResultsPage({
     returnTo: singleValue(rawQuery.returnTo),
   });
   if (!parsedId.success || !parsedQuery.success) notFound();
+  const analyticsCourseId = singleValue(rawQuery.courseId);
+  const analyticsClassroomId = singleValue(rawQuery.classroomId);
+  const analyticsSection = singleValue(rawQuery.section);
+  // 学情分析的「最近作业与考试」直接跳进成绩页，返回入口要回学情分析而不是作业管理。
+  const analyticsBackHref =
+    isAnalyticsOrigin(rawQuery.from) && analyticsCourseId
+      ? `/teacher/results?${analyticsSearchParams({
+          courseId: analyticsCourseId,
+          classroomId: analyticsClassroomId,
+          section: analyticsSection,
+        }).toString()}`
+      : null;
+  const keepOriginParams = (params: URLSearchParams) => {
+    if (!analyticsBackHref || !analyticsCourseId) return params;
+    params.set("from", "analytics");
+    params.set("courseId", analyticsCourseId);
+    if (analyticsClassroomId) params.set("classroomId", analyticsClassroomId);
+    if (analyticsSection && analyticsSection !== "ALL")
+      params.set("section", analyticsSection);
+    return params;
+  };
   const examSessionId = await resolveTeacherAssessmentPage(
     teacher.id,
     parsedId.data,
@@ -140,7 +165,12 @@ export default async function AssignmentResultsPage({
     );
     if (parsedQuery.data.page !== results.students.page) {
       redirect(
-        `${base}/results?page=${results.students.page}&pageSize=${parsedQuery.data.pageSize}`,
+        `${base}/results?${keepOriginParams(
+          new URLSearchParams({
+            page: String(results.students.page),
+            pageSize: String(parsedQuery.data.pageSize),
+          }),
+        ).toString()}`,
       );
     }
 
@@ -156,10 +186,14 @@ export default async function AssignmentResultsPage({
             href={
               examSessionId
                 ? `/teacher/exams/${examSessionId}`
-                : "/teacher/assignments"
+                : (analyticsBackHref ?? "/teacher/assignments")
             }
           >
-            {examSessionId ? "返回考试场次" : "返回作业管理"}
+            {examSessionId
+              ? "返回考试场次"
+              : analyticsBackHref
+                ? "返回学情分析"
+                : "返回作业管理"}
           </TeacherBackLink>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
             <div>

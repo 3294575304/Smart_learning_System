@@ -9,6 +9,11 @@ import { QuestionText } from "@/components/assignments/question-text";
 import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
 import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
+import { AnswerSheetPanel } from "@/components/assignments/answer-sheet-panel";
+import {
+  gradingAnswerCardLegend,
+  gradingAnswerCardState,
+} from "@/components/assignments/answer-card-states";
 import { ManualGradeForm } from "./manual-grade-form";
 import { CompleteGradingButton } from "./complete-grading-button";
 import { ProgrammingAttemptActions } from "./programming-attempt-actions";
@@ -459,7 +464,7 @@ export function SubmissionGradingWorkspace({
         >
           <PanelRight className="size-4" aria-hidden="true" />
           <span className="leading-5 tracking-widest [writing-mode:vertical-rl]">
-            题号导航
+            答题卡
           </span>
         </button>
       ) : null}
@@ -683,7 +688,7 @@ export function SubmissionGradingWorkspace({
         </div>
         <EditorDialog
           open={questionNavigatorOpen}
-          title="题号与筛选"
+          title="答题卡"
           placement="right"
           dialogId={questionNavigatorId}
           showCloseButton
@@ -695,18 +700,26 @@ export function SubmissionGradingWorkspace({
               questionNavigatorButton.current?.focus({ preventScroll: true });
               return;
             }
-            const target = document.getElementById(`question-${questionId}`);
-            if (!target) {
-              questionNavigatorButton.current?.focus({ preventScroll: true });
-              return;
-            }
-            window.history.replaceState(
-              null,
-              "",
-              `${window.location.pathname}${window.location.search}#question-${questionId}`,
-            );
-            target.scrollIntoView({ behavior: "smooth", block: "start" });
-            target.focus({ preventScroll: true });
+            const jump = () => {
+              const target = document.getElementById(`question-${questionId}`);
+              if (!target) return false;
+              window.history.replaceState(
+                null,
+                "",
+                `${window.location.pathname}${window.location.search}#question-${questionId}`,
+              );
+              target.scrollIntoView({ behavior: "smooth", block: "start" });
+              target.focus({ preventScroll: true });
+              return true;
+            };
+            if (jump()) return;
+            // 目标题被当前筛选隐藏：先回到「全部」，下一帧再滚动，
+            // 避免点了题号却停在原处。
+            selectFilter("ALL");
+            window.requestAnimationFrame(() => {
+              if (!jump())
+                questionNavigatorButton.current?.focus({ preventScroll: true });
+            });
           }}
         >
           <section className="mt-4 space-y-5">
@@ -761,50 +774,26 @@ export function SubmissionGradingWorkspace({
                 })}
               </nav>
             </div>
-            <div>
-              <div className="flex items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold">题号</h3>
-                <span className="text-xs text-slate-500 tabular-nums">
-                  {shown.length} / {questions.length}
-                </span>
-              </div>
-              <nav
-                aria-label="题号导航"
-                className="mt-3 grid grid-cols-5 gap-2"
-              >
-                {shown.map((question) => {
-                  const pendingOutcome = [
-                    "PENDING_REVIEW",
-                    "PENDING_JUDGE",
-                    "JUDGE_ERROR",
-                    "MISSING",
-                  ].includes(question.outcome);
-                  const numberTone =
-                    question.outcome === "CORRECT"
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300"
-                      : ["WRONG", "PARTIAL"].includes(question.outcome)
-                        ? "border-rose-200 bg-rose-50 text-rose-900 hover:border-rose-300"
-                        : pendingOutcome
-                          ? "border-violet-200 bg-violet-50 text-violet-900 hover:border-violet-300"
-                          : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300";
-                  return (
-                    <button
-                      key={question.id}
-                      type="button"
-                      aria-label={`跳转到第 ${question.sortOrder} 题：${outcomeLabels[question.outcome]}`}
-                      title={outcomeLabels[question.outcome]}
-                      className={`flex h-11 items-center justify-center rounded-lg border text-[13px] font-medium tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 ${numberTone}`}
-                      onClick={() => {
-                        selectedQuestionId.current = question.id;
-                        setQuestionNavigatorOpen(false);
-                      }}
-                    >
-                      {question.sortOrder}
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
+            <AnswerSheetPanel
+              activeIndex={-1}
+              answeredCount={questions.length - pending}
+              className="border-0 bg-transparent p-0 shadow-none"
+              groupByType
+              legendItems={gradingAnswerCardLegend}
+              onSelect={(index) => {
+                const question = questions[index];
+                if (!question) return;
+                selectedQuestionId.current = question.id;
+                setQuestionNavigatorOpen(false);
+              }}
+              progressLabel="已批改"
+              questionState={(index) =>
+                gradingAnswerCardState(questions[index].outcome)
+              }
+              questions={questions}
+              showTitle={false}
+              totalPoints={submission.maxScore}
+            />
           </section>
         </EditorDialog>
       </div>

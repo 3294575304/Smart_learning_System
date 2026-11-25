@@ -14,6 +14,7 @@ import type { QuestionObjectiveAIInput } from "@/services/question-objectives/sc
 
 import type { AssemblyProviderInput } from "@/services/assignments/editor-assistance-schemas";
 import type { CourseRecommendationFocusInput } from "@/services/course-recommendations/reason-focus";
+import type { CourseCatalogAIInput } from "@/services/question-course-categories/catalog-schemas";
 import type { ProgrammingCodeScoreInput } from "@/services/programming-scoring/schemas";
 
 export interface AIProviderOptions {
@@ -87,6 +88,11 @@ export interface AIProvider {
 
   parseSyllabus(
     input: SyllabusParseInput,
+    options: AIProviderOptions,
+  ): Promise<unknown>;
+
+  extractCourseCatalog?(
+    input: CourseCatalogAIInput,
     options: AIProviderOptions,
   ): Promise<unknown>;
 

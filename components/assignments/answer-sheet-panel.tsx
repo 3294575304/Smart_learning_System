@@ -4,7 +4,12 @@ import { useId, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import type { QuestionType } from "@prisma/client";
-import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
+import {
+  QuestionNumberGrid,
+  groupQuestionsByType,
+  questionNumberNeutralTone,
+  type QuestionNumberItem,
+} from "./question-number-grid";
 
 export interface AnswerSheetQuestion {
   id: string;
@@ -33,6 +38,10 @@ const legend = [
  * 3. 提交类主操作放在面板底部——正文区只保留翻页，避免出现第二个主按钮。
  *
  * 可按连续题型分段，保持试卷题序和原有跳题索引。
+ *
+ * 只读场景（教师查看试卷、学生查看提交结果、教师批改）复用同一个面板：
+ * - `plainNumbers` 关闭作答状态，只保留题型分段与题号；
+ * - `showProgress` 在无可信完成度时隐藏进度条，避免「0 / N」误导。
  */
 export function AnswerSheetPanel({
   questions,
@@ -50,6 +59,8 @@ export function AnswerSheetPanel({
   legendItems = legend,
   summary,
   groupByType = false,
+  plainNumbers = false,
+  showProgress = true,
 }: {
   questions: AnswerSheetQuestion[];
   activeIndex: number;
@@ -66,17 +77,46 @@ export function AnswerSheetPanel({
   legendItems?: readonly AnswerSheetState[];
   summary?: ReactNode;
   groupByType?: boolean;
+  plainNumbers?: boolean;
+  showProgress?: boolean;
 }) {
   const titleId = useId();
   const total = questions.length;
   const percent = total === 0 ? 0 : Math.round((answeredCount / total) * 100);
-  const groups: Array<{ type?: QuestionType; start: number; end: number }> = [];
-  questions.forEach((question, index) => {
-    const type = groupByType ? question.type : undefined;
-    const previous = groups[groups.length - 1];
-    if (previous && previous.type === type) previous.end = index + 1;
-    else groups.push({ type, start: index, end: index + 1 });
-  });
+  const ordered = groupByType
+    ? questions
+    : questions.map((question) => ({ ...question, type: undefined }));
+  const gridGroups = groupQuestionsByType(ordered).map((group) => ({
+    key: group.key,
+    type: group.type,
+    items: ordered
+      .slice(group.start, group.end)
+      .map((question, offset): QuestionNumberItem => {
+        const index = group.start + offset;
+        const current = index === activeIndex;
+        const answered = isAnswered?.(question.id);
+        const state = plainNumbers
+          ? { label: "题目", className: questionNumberNeutralTone }
+          : (questionState?.(index) ?? {
+              label: answered ? "已作答" : "未作答",
+              className: answered
+                ? "bg-brand-soft text-brand-strong border-sky-200 hover:border-sky-300"
+                : "border-line text-ink-soft bg-white hover:border-sky-300 hover:bg-sky-50/60",
+            });
+        return {
+          id: question.id,
+          label: question.sortOrder,
+          ariaLabel: plainNumbers
+            ? `第 ${question.sortOrder} 题`
+            : `第 ${question.sortOrder} 题（${state.label}）`,
+          title: plainNumbers ? undefined : state.label,
+          toneClassName: state.className,
+          mark: state.mark,
+          current,
+          disabled,
+        };
+      }),
+  }));
 
   return (
     <section
@@ -98,82 +138,44 @@ export function AnswerSheetPanel({
         </span>
       </div>
 
-      <div className="mt-4 space-y-2">
-        <div className="flex items-center justify-between gap-3 text-[13px]">
-          <span className="text-ink-soft font-medium">
-            {progressLabel} {answeredCount} / {total}
-          </span>
-          <span className="text-brand font-semibold tabular-nums">
-            {percent}%
-          </span>
-        </div>
-        <div
-          aria-hidden="true"
-          className="h-1.5 w-full overflow-hidden rounded-full bg-[#eaf1f7]"
-        >
+      {showProgress && (
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-ink-soft font-medium">
+              {progressLabel} {answeredCount} / {total}
+            </span>
+            <span className="text-brand font-semibold tabular-nums">
+              {percent}%
+            </span>
+          </div>
           <div
-            className="bg-brand h-full rounded-full motion-safe:transition-[width] motion-safe:duration-300"
-            style={{ width: `${percent}%` }}
-          />
+            aria-hidden="true"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-[#eaf1f7]"
+          >
+            <div
+              className="bg-brand h-full rounded-full motion-safe:transition-[width] motion-safe:duration-300"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {summary && (
         <div className="text-ink-soft mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs leading-5">
           {summary}
         </div>
       )}
-      <nav aria-label="题目导航" className="mt-4 space-y-4">
-        {groups.map(({ type, start, end }) => (
-          <div key={start}>
-            {type && (
-              <h3 className="text-ink-soft mb-2 text-xs font-medium">
-                {QUESTION_TYPE_LABELS[type]} · {end - start} 题
-              </h3>
-            )}
-            <div className="grid grid-cols-5 gap-2">
-              {questions.slice(start, end).map((question, offset) => {
-                const index = start + offset;
-                const current = index === activeIndex;
-                const answered = isAnswered?.(question.id);
-                const state = questionState?.(index) ?? {
-                  label: answered ? "已作答" : "未作答",
-                  className: answered
-                    ? "bg-brand-soft text-brand-strong border-sky-200 hover:border-sky-300"
-                    : "border-line text-ink-soft bg-white hover:border-sky-300 hover:bg-sky-50/60",
-                };
-                return (
-                  <button
-                    aria-current={current ? "step" : undefined}
-                    aria-label={`第 ${question.sortOrder} 题（${state.label}）`}
-                    title={state.label}
-                    className={cn(
-                      "flex h-10 items-center justify-center gap-0.5 rounded-lg border text-[13px] font-medium tabular-nums transition-colors",
-                      "focus-visible:outline-brand focus-visible:outline-2 focus-visible:outline-offset-2",
-                      current
-                        ? "border-brand bg-brand text-white shadow-[0_3px_8px_-1px_rgb(1_105_161_/_0.3)]"
-                        : state.className,
-                      disabled &&
-                        "hover:border-line cursor-not-allowed opacity-60 hover:bg-white",
-                    )}
-                    disabled={disabled}
-                    key={question.id}
-                    onClick={() => onSelect(index)}
-                    type="button"
-                  >
-                    {question.sortOrder}
-                    {state.mark && (
-                      <span aria-hidden="true" className="text-[10px]">
-                        {state.mark}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </nav>
+      <QuestionNumberGrid
+        ariaLabel="题目导航"
+        className="mt-4"
+        groups={gridGroups}
+        onSelect={(questionId) => {
+          const index = questions.findIndex(
+            (question) => question.id === questionId,
+          );
+          if (index >= 0) onSelect(index);
+        }}
+      />
 
       <ul className="text-ink-soft mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px]">
         {legendItems.map((item) => (

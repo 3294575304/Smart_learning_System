@@ -395,16 +395,6 @@ export function ApplicationShowcase({
       </div>
       <footer className={styles.footer}>
         <p>
-          山水底图：
-          <a
-            href="https://asia-archive.si.edu/object/F1909.197/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Smithsonian · Misty Mountains（CC0）
-          </a>
-        </p>
-        <p>
           统计范围：已绑定高校管理员的学校，每校计一次。
           {data.unlocated.length > 0 ? (
             <button type="button" onClick={() => selectProvince("unlocated")}>

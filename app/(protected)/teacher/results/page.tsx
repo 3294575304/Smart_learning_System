@@ -15,6 +15,7 @@ import { listTeacherResultsOverview } from "@/services/assignment-results/servic
 import { getTeacherReportingScope } from "@/services/assignment-results/scope";
 import { REPORTING_SECTION_LABELS } from "@/services/assignments/reporting";
 import { listTeacherCourses } from "@/services/courses/service";
+import { getTeacherWorkbenchPreferences } from "@/services/dashboard/teacher-settings";
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -35,21 +36,35 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
       section: rawQuery.section,
     });
   if (!filters.success) notFound();
+  const now = new Date();
+  const [courses, preferences] = await Promise.all([
+    listTeacherCourses(teacher.id),
+    getTeacherWorkbenchPreferences(teacher.id),
+  ]);
+  // 从左侧目录进入（没有显式课程/班级参数）时，默认带入「教师工作台」绑定的默认课程；
+  // 显式选择「全部课程」（courseId=）或指定班级时保持原行为，不覆盖用户选择。
+  const defaultCourseId =
+    rawQuery.courseId === undefined && rawQuery.classroomId === undefined
+      ? (courses.find((course) => course.id === preferences.defaultCourseId)
+          ?.id ?? undefined)
+      : undefined;
+  // 左侧导航直接进入（地址没有显式课程）时不显示「返回课程管理」，避免给出不存在的上级入口；
+  // 从课程工作台跳进来（?courseId=...）才展示。
+  const enteredFromCourse = Boolean(firstValue(rawQuery.courseId));
   const parsedQuery: TeacherResultsOverviewQuery = {
     ...filters.data,
+    courseId: filters.data.courseId ?? defaultCourseId,
     page: 1,
     pageSize: 5,
   };
-  const now = new Date();
-  const [classrooms, courses] = await Promise.all([
-    getTeacherReportingScope(teacher.id, parsedQuery, now).catch(
-      (error: unknown) => {
-        if (error instanceof ResourceNotFoundError) notFound();
-        throw error;
-      },
-    ),
-    listTeacherCourses(teacher.id),
-  ]);
+  const classrooms = await getTeacherReportingScope(
+    teacher.id,
+    parsedQuery,
+    now,
+  ).catch((error: unknown) => {
+    if (error instanceof ResourceNotFoundError) notFound();
+    throw error;
+  });
   const selectedCourse = parsedQuery.courseId
     ? (courses.find((course) => course.id === parsedQuery.courseId) ?? null)
     : null;
@@ -112,7 +127,7 @@ export default async function TeacherResultsPage({ searchParams }: Props) {
           在线任务统计范围：{REPORTING_SECTION_LABELS[query.section]}
           。作业与已结束考试按现有有效成员关系实时统计，未冻结历史名单；入班前已截止的任务也计入应交。已退出、移除成员的作答单独保留，不计入应交和缺交。仅台账录入的考试参与成绩分析，不计提交率。章节掌握度仍展示当前有效授课班级的学情。
         </p>
-        {selectedCourse ? (
+        {selectedCourse && enteredFromCourse ? (
           <Link
             className="inline-block rounded-md border px-4 py-2 text-sm text-sky-700 hover:bg-sky-50"
             href={`/teacher/courses/${selectedCourse.id}`}

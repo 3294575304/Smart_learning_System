@@ -10,6 +10,10 @@ import { getTeacherCourseClassroomForPage } from "@/services/courses/page-contex
 import { gradebookIdSchema } from "@/services/gradebook/schemas";
 import { z } from "zod";
 import { PageContainer } from "@/components/ui/workspace";
+import {
+  analyticsSearchParams,
+  isAnalyticsOrigin,
+} from "@/lib/analytics-origin";
 
 export default async function QualityReportPage({
   params,
@@ -20,6 +24,8 @@ export default async function QualityReportPage({
     classroomId?: string;
     gradebookId?: string;
     reportId?: string;
+    section?: string;
+    from?: string;
   }>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
@@ -34,12 +40,21 @@ export default async function QualityReportPage({
     courseId.data,
     query.classroomId,
   );
+  const analyticsBackHref = isAnalyticsOrigin(query.from)
+    ? `/teacher/results?${analyticsSearchParams({
+        courseId: courseId.data,
+        classroomId: classroom?.id,
+        section: query.section,
+      }).toString()}`
+    : null;
   return (
     <PageContainer density="compact">
       <PageHeader
         actions={
-          <TeacherBackLink href={`/teacher/courses/${courseId.data}`}>
-            返回课程
+          <TeacherBackLink
+            href={analyticsBackHref ?? `/teacher/courses/${courseId.data}`}
+          >
+            {analyticsBackHref ? "返回学情分析" : "返回课程"}
           </TeacherBackLink>
         }
         description="汇总课程成绩、目标达成与教学反馈，支持自定义 Word 模板。"

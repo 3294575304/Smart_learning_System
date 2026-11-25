@@ -16,6 +16,7 @@ import type {
 import { QuestionType } from "@prisma/client";
 import type { ExamPaperAIInput } from "@/services/exams/paper-ai";
 import type { QuestionObjectiveAIInput } from "@/services/question-objectives/schemas";
+import type { CourseCatalogAIInput } from "@/services/question-course-categories/catalog-schemas";
 import type { ProgrammingCodeScoreInput } from "@/services/programming-scoring/schemas";
 import { parseQuestionImportText } from "@/services/question-import/parser";
 
@@ -43,6 +44,17 @@ export class MockAIProvider implements AIProvider {
       throw new DOMException("AI request aborted", "AbortError");
     }
     return this.responder(input, options);
+  }
+
+  async extractCourseCatalog(
+    _input: CourseCatalogAIInput,
+    options: AIProviderOptions,
+  ): Promise<unknown> {
+    if (options.signal.aborted) {
+      throw new DOMException("AI request aborted", "AbortError");
+    }
+    // Mock 不臆造课程名，返回空清单，由调用方回落到规则识别。
+    return { courses: [] };
   }
 
   async parseSyllabus(
