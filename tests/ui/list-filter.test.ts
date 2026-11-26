@@ -114,7 +114,7 @@ test("链接里的文本参数去掉首尾空白并限制长度", () => {
 });
 
 test("两个列表把筛选条件镜像到地址栏，页面从 searchParams 读回", async () => {
-  const [classroomList, courseList, classroomPage, coursePage] =
+  const [classroomList, courseList, classroomPage, classroomRoute, coursePage] =
     await Promise.all([
       readFile(
         new URL(
@@ -138,6 +138,10 @@ test("两个列表把筛选条件镜像到地址栏，页面从 searchParams 读
         "utf8",
       ),
       readFile(
+        new URL("../../lib/teacher-classroom-list-route.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
         new URL(
           "../../app/(protected)/teacher/courses/page.tsx",
           import.meta.url,
@@ -154,10 +158,12 @@ test("两个列表把筛选条件镜像到地址栏，页面从 searchParams 读
   assert.match(courseList, /initialFilters\?\.|initialFilters = \{/u);
 
   // 页面侧：从 searchParams 读回同一批 key，刷新与分享可还原
-  assert.match(classroomPage, /readTextParam\(params\.keyword\)/u);
-  assert.match(classroomPage, /readAllowedParam\(\s*params\.status/u);
-  assert.match(classroomPage, /readTextParam\(params\.courseId, 64\)/u);
+  // 班级列表的参数解析已抽到 lib/teacher-classroom-list-route，断言落在解析函数上
+  assert.match(classroomPage, /readTeacherClassroomListFilters\(params\)/u);
   assert.match(classroomPage, /initialFilters=\{initialFilters\}/u);
+  assert.match(classroomRoute, /keyword: readTextParam\(/u);
+  assert.match(classroomRoute, /status: readAllowedParam\(/u);
+  assert.match(classroomRoute, /courseId: readTextParam\(/u);
   assert.match(coursePage, /readTextParam\(params\.keyword\)/u);
   assert.match(coursePage, /readAllowedParam\(\s*params\.status/u);
   assert.match(coursePage, /readTextParam\(params\.term, 40\)/u);
