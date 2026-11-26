@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   const parsed = questionCourseCategoryInputSchema.safeParse(body);
   if (!parsed.success) {
     return apiError(
-      "请检查课程分类名称",
+      "请检查课程分类名称与课程号",
       400,
       definedFieldErrors(parsed.error.flatten().fieldErrors),
     );

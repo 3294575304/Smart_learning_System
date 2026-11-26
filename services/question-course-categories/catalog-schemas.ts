@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+import { courseNoSchema } from "@/lib/course-no";
+import { questionCourseCategoryIdSchema } from "@/services/question-course-categories/schemas";
+
 const optionalText = (max: number) =>
   z
     .union([z.string(), z.number()])
@@ -81,6 +84,15 @@ export const courseCatalogAIOutputSchema = z
 export type CourseCatalogAICourse = z.infer<typeof aiCourseSchema>;
 export type CourseCatalogAIOutput = z.infer<typeof courseCatalogAIOutputSchema>;
 
+export type CourseCategoryImportConflict =
+  | "MISSING_COURSE_NO"
+  | "IN_FILE_NAME_CONFLICT"
+  | "IN_FILE_NO_CONFLICT"
+  | "EXISTING_NAME_NO_MISMATCH"
+  | "COURSE_NO_TAKEN";
+
+export type CourseCategoryImportAction = "CREATE" | "BACKFILL" | "SKIP";
+
 export interface CourseCategoryImportCandidate {
   key: string;
   name: string;
@@ -91,7 +103,12 @@ export interface CourseCategoryImportCandidate {
   category: string;
   nature: string;
   rowNumber: number | null;
+  /** 兼容字段：等价于 action === "SKIP"。 */
   exists: boolean;
+  existingCategoryId: string | null;
+  existingCourseNo: string | null;
+  action: CourseCategoryImportAction;
+  conflicts: CourseCategoryImportConflict[];
 }
 
 export interface CourseCategoryImportPreview {
@@ -108,12 +125,24 @@ export interface CourseCategoryImportPreview {
     available: number;
     existing: number;
     ignored: number;
+    backfillable: number;
+    conflicts: number;
+    missingCourseNo: number;
   };
 }
 
+export const courseCategoryBulkItemSchema = z
+  .object({
+    name: z.string().trim().min(1, "课程名称不能为空").max(100),
+    courseNo: courseNoSchema,
+    /** 仅补全已有分类课程号时提供。 */
+    categoryId: questionCourseCategoryIdSchema.optional(),
+  })
+  .strict();
+
 export const courseCategoryBulkInputSchema = z
   .object({
-    names: z.array(z.string().trim().min(1).max(100)).min(1).max(300),
+    items: z.array(courseCategoryBulkItemSchema).min(1).max(300),
     sourceFileName: z.string().trim().max(200).optional(),
     extractor: z.enum(["AI", "RULE"]).optional(),
   })

@@ -2,6 +2,7 @@ import "server-only";
 
 import path from "node:path";
 
+import { normalizeCourseNo } from "@/lib/course-no";
 import { prisma } from "@/lib/prisma";
 import { GovernanceOperationError } from "@/services/admin/governance-errors";
 import type { AIProvider } from "@/services/ai/provider";
@@ -19,7 +20,9 @@ import {
   courseCatalogAIOutputSchema,
   type CourseCatalogAICourse,
   type CourseCatalogAIInput,
+  type CourseCategoryImportAction,
   type CourseCategoryImportCandidate,
+  type CourseCategoryImportConflict,
   type CourseCategoryImportPreview,
 } from "@/services/question-course-categories/catalog-schemas";
 import { requireUserSchoolId } from "@/services/schools/tenant";
@@ -153,9 +156,20 @@ export async function previewCourseCategoryImport(
   const schoolId = await requireUserSchoolId(actorId);
   const existing = await prisma.questionCourseCategory.findMany({
     where: { schoolId },
-    select: { normalizedName: true },
+    select: { id: true, normalizedName: true, courseNo: true },
   });
   const existingKeys = new Set(existing.map((item) => item.normalizedName));
+  const existingByName = new Map(
+    existing.map((item) => [item.normalizedName, item] as const),
+  );
+  const existingByCourseNo = new Map(
+    existing
+      .filter(
+        (item): item is (typeof existing)[number] & { courseNo: string } =>
+          item.courseNo !== null,
+      )
+      .map((item) => [item.courseNo, item] as const),
+  );
 
   const ai = await runAICatalogExtraction(
     providerFor(actorId, dependencies),
@@ -164,34 +178,131 @@ export async function previewCourseCategoryImport(
   const merged = ai.courses.length
     ? mergeCatalogWithAI(table, ai.courses, { namePool, existingKeys })
     : null;
-  const candidates: Array<CourseCategoryImportCandidate> = (
+
+  // 先统一课程号形态，再按「文件内同名/同号」与「库内同名/同号」分类。
+  const baseCandidates: CourseCategoryImportCandidate[] = (
     merged
       ? merged.candidates
       : ruleCatalogCandidates(table, existingKeys).map((row) => ({ ...row }))
   )
     .slice(0, MAX_CANDIDATES)
-    .map((row) => ({
-      key: courseNameKey(row.name),
-      name: row.name,
-      courseNo: row.courseNo,
-      credits: row.credits,
-      hours: row.hours,
-      term: row.term,
-      category: row.category,
-      nature: row.nature,
-      rowNumber: row.rowNumber ?? null,
-      exists: row.exists,
-    }));
+    .map((row, index) => {
+      const nameKey = courseNameKey(row.name);
+      const existingCategory = existingByName.get(nameKey);
+      return {
+        key: `${nameKey}#${row.rowNumber ?? index}`,
+        name: row.name,
+        courseNo: normalizeCourseNo(row.courseNo),
+        credits: row.credits,
+        hours: row.hours,
+        term: row.term,
+        category: row.category,
+        nature: row.nature,
+        rowNumber: row.rowNumber ?? null,
+        exists: Boolean(existingCategory),
+        existingCategoryId: existingCategory?.id ?? null,
+        existingCourseNo: existingCategory?.courseNo ?? null,
+        action: "CREATE" as CourseCategoryImportAction,
+        conflicts: [] as CourseCategoryImportConflict[],
+      };
+    });
 
-  if (!candidates.length) {
+  if (!baseCandidates.length) {
     throw new GovernanceOperationError(
       "文件里没有可用的课程行，请检查课程名称列是否有内容。",
       400,
     );
   }
 
-  const existingCount = candidates.filter((item) => item.exists).length;
+  const fileNameIndex = new Map<string, Set<string>>();
+  const fileCourseNoIndex = new Map<string, Set<string>>();
+  for (const candidate of baseCandidates) {
+    if (!candidate.courseNo) continue;
+    const nameKey = courseNameKey(candidate.name);
+    const numbers = fileNameIndex.get(nameKey) ?? new Set<string>();
+    numbers.add(candidate.courseNo);
+    fileNameIndex.set(nameKey, numbers);
+    const names =
+      fileCourseNoIndex.get(candidate.courseNo) ?? new Set<string>();
+    names.add(nameKey);
+    fileCourseNoIndex.set(candidate.courseNo, names);
+  }
+
+  const candidates = baseCandidates.map((candidate) => {
+    const conflicts: CourseCategoryImportConflict[] = [];
+    const nameKey = courseNameKey(candidate.name);
+    const existingCategory = existingByName.get(nameKey);
+    let action: CourseCategoryImportAction = "CREATE";
+
+    if (!candidate.courseNo) {
+      conflicts.push("MISSING_COURSE_NO");
+    } else {
+      if ((fileNameIndex.get(nameKey)?.size ?? 0) > 1) {
+        conflicts.push("IN_FILE_NAME_CONFLICT");
+      }
+      if ((fileCourseNoIndex.get(candidate.courseNo)?.size ?? 0) > 1) {
+        conflicts.push("IN_FILE_NO_CONFLICT");
+      }
+    }
+
+    if (existingCategory) {
+      if (existingCategory.courseNo === candidate.courseNo) {
+        action = "SKIP";
+      } else if (existingCategory.courseNo === null) {
+        action = candidate.courseNo ? "BACKFILL" : "SKIP";
+      } else {
+        conflicts.push("EXISTING_NAME_NO_MISMATCH");
+        action = "SKIP";
+      }
+    }
+
+    if (candidate.courseNo) {
+      const taken = existingByCourseNo.get(candidate.courseNo);
+      if (taken && taken.id !== existingCategory?.id) {
+        conflicts.push("COURSE_NO_TAKEN");
+        if (action === "CREATE") action = "SKIP";
+      }
+    }
+
+    return {
+      ...candidate,
+      exists: Boolean(existingCategory),
+      existingCategoryId: existingCategory?.id ?? null,
+      existingCourseNo: existingCategory?.courseNo ?? null,
+      action,
+      conflicts,
+    };
+  });
+
+  const availableCount = candidates.filter(
+    (item) => item.action === "CREATE" && item.conflicts.length === 0,
+  ).length;
+  const existingCount = candidates.filter(
+    (item) => item.action === "SKIP",
+  ).length;
+  const backfillableCount = candidates.filter(
+    (item) => item.action === "BACKFILL",
+  ).length;
+  const conflictCount = candidates.filter(
+    (item) => item.conflicts.length > 0,
+  ).length;
+  const missingCourseNoCount = candidates.filter((item) =>
+    item.conflicts.includes("MISSING_COURSE_NO"),
+  ).length;
+  const nameConflictCount = candidates.filter((item) =>
+    item.conflicts.includes("IN_FILE_NAME_CONFLICT"),
+  ).length;
+  const noConflictCount = candidates.filter((item) =>
+    item.conflicts.includes("IN_FILE_NO_CONFLICT"),
+  ).length;
+  const mismatchCount = candidates.filter((item) =>
+    item.conflicts.includes("EXISTING_NAME_NO_MISMATCH"),
+  ).length;
+  const takenCount = candidates.filter((item) =>
+    item.conflicts.includes("COURSE_NO_TAKEN"),
+  ).length;
   const ignored = Math.max(0, table.rows.length - candidates.length);
+
   const warnings: string[] = [];
   if (ai.note) warnings.push(ai.note);
   if (merged && merged.unverifiedCount > 0) {
@@ -199,14 +310,19 @@ export async function previewCourseCategoryImport(
       `${merged.unverifiedCount} 个 AI 返回的课程名未在表格中原样出现，已忽略，请补充识别或手工添加。`,
     );
   }
+  if (merged && merged.courseNoRejectedCount > 0) {
+    warnings.push(
+      `${merged.courseNoRejectedCount} 个 AI 返回的课程号与表格不一致，已改用表格原值。`,
+    );
+  }
   if (merged && merged.duplicateCount > 0) {
     warnings.push(
-      `${merged.duplicateCount} 门课程在表格中重复出现，已合并为一条。`,
+      `${merged.duplicateCount} 门课程在表格中完全重复（同名同号），已合并为一条。`,
     );
   }
   if (!merged && table.duplicateCount > 0) {
     warnings.push(
-      `${table.duplicateCount} 门课程在表格中重复出现，已合并为一条。`,
+      `${table.duplicateCount} 门课程在表格中完全重复（同名同号），已合并为一条。`,
     );
   }
   if (ignored > 0) {
@@ -214,9 +330,37 @@ export async function previewCourseCategoryImport(
       `${ignored} 行未被识别为课程（合计、学分要求或说明文字），如为正式课程请手工添加。`,
     );
   }
+  if (missingCourseNoCount > 0) {
+    warnings.push(`${missingCourseNoCount} 门课程缺少课程号，补全后才能创建。`);
+  }
+  if (nameConflictCount > 0) {
+    warnings.push(
+      `${nameConflictCount} 门课程在表格中出现同名不同课程号，已分别列出，请确认是否为同一门课。`,
+    );
+  }
+  if (noConflictCount > 0) {
+    warnings.push(
+      `${noConflictCount} 门课程的课程号在表格中被不同课程名重复使用，请核对后逐行修改。`,
+    );
+  }
+  if (mismatchCount > 0) {
+    warnings.push(
+      `${mismatchCount} 门课程与已有分类同名但课程号不同，不会自动更新，请在列表中处理。`,
+    );
+  }
+  if (takenCount > 0) {
+    warnings.push(
+      `${takenCount} 门课程的课程号已被其他分类占用，请核对后修改或跳过。`,
+    );
+  }
+  if (backfillableCount > 0) {
+    warnings.push(
+      `${backfillableCount} 门已有分类缺少课程号，可用表格中的课程号回填（默认不勾选）。`,
+    );
+  }
   if (existingCount > 0) {
     warnings.push(
-      `${existingCount} 门课程已有同名分类，确认添加时会自动跳过。`,
+      `${existingCount} 门课程已存在同名分类且课程号一致，确认时会自动跳过。`,
     );
   }
   if (table.rows.length > MAX_CANDIDATES) {
@@ -236,9 +380,12 @@ export async function previewCourseCategoryImport(
     warnings,
     summary: {
       total: candidates.length,
-      available: candidates.length - existingCount,
+      available: availableCount,
       existing: existingCount,
       ignored,
+      backfillable: backfillableCount,
+      conflicts: conflictCount,
+      missingCourseNo: missingCourseNoCount,
     },
   };
 }

@@ -1138,6 +1138,8 @@ model QuestionCourseCategory {
   id              String           @id @default(cuid())
   schoolId        String?
   name            String           @db.VarChar(100)
+  // 同校课程号唯一由迁移中的部分唯一索引保证（排除 schoolId/courseNo 为空的历史行）。
+  courseNo        String?          @db.VarChar(50)
   normalizedName  String           @db.VarChar(100)
   isActive        Boolean          @default(true)
   createdAt       DateTime         @default(now())

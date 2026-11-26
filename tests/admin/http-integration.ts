@@ -207,37 +207,51 @@ async function main(): Promise<void> {
       categoryPath,
       adminCookie,
       "POST",
-      { name: " " },
+      { name: " ", courseNo: " " },
     );
     assert.equal(invalidCategory.status, 400);
     assert.equal(
       (
         await requestJson(categoryPath, teacherCookie, "POST", {
           name: `管理员课程分类 ${testSuffix}`,
+          courseNo: `CAT-${testSuffix}`,
         })
       ).status,
       403,
     );
     const categoryName = `管理员课程分类 ${testSuffix}`;
+    const categoryNo = `CAT-${testSuffix}`.toUpperCase();
     const createCategoryResponse = await requestJson(
       categoryPath,
       adminCookie,
       "POST",
-      { name: categoryName },
+      { name: categoryName, courseNo: categoryNo },
     );
     assert.equal(createCategoryResponse.status, 201);
     const createdCategory =
       (await createCategoryResponse.json()) as ApiSuccess<{
         id: string;
         name: string;
+        courseNo: string | null;
         isActive: boolean;
       }>;
     assert.equal(createdCategory.data.name, categoryName);
+    assert.equal(createdCategory.data.courseNo, categoryNo);
     assert.equal(createdCategory.data.isActive, true);
     assert.equal(
       (
         await requestJson(categoryPath, adminCookie, "POST", {
           name: categoryName,
+          courseNo: `OTHER-${testSuffix}`,
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await requestJson(categoryPath, adminCookie, "POST", {
+          name: `另一个课程分类 ${testSuffix}`,
+          courseNo: categoryNo,
         })
       ).status,
       409,

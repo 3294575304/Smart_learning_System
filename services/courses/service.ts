@@ -781,6 +781,27 @@ export async function downloadTeacherCourseSyllabus(
   }
 }
 
+/**
+ * 课程号由课程目录（QuestionCourseCategory.courseNo）决定。
+ * 目录未维护课程号时允许教师手填；目录已维护时必须以目录为准。
+ *
+ * allowLegacyMismatch 只用于编辑场景中「分类与课程号都未改动」的存量课程，
+ * 避免强制改写历史数据，但任何一次改号或换分类都必须回到目录值。
+ */
+function assertCourseNoMatchesCatalog(
+  categoryCourseNo: string | null,
+  courseNo: string,
+  options: { allowLegacyMismatch?: boolean } = {},
+) {
+  if (!categoryCourseNo) return;
+  if (courseNo === categoryCourseNo) return;
+  if (options.allowLegacyMismatch) return;
+  throw new CourseOperationError(
+    `课程号必须与课程目录一致：该课程在目录中的课程号是 ${categoryCourseNo}`,
+    400,
+  );
+}
+
 export async function createTeacherCourse(
   teacherId: string,
   input: CreateCourseData,
@@ -802,6 +823,7 @@ export async function createTeacherCourse(
         teacherId,
         transaction,
       );
+      assertCourseNoMatchesCatalog(questionCategory.courseNo, input.courseNo);
       const created = await transaction.course.create({
         data: {
           templateId: template.id,
@@ -932,6 +954,14 @@ export async function updateTeacherCourse(
       teacherId,
       transaction,
     );
+
+    // 只改名称/学期/描述等字段时，不动存量的课程号不一致；
+    // 一旦改课程号或换分类，就必须回到目录值。
+    assertCourseNoMatchesCatalog(questionCategory.courseNo, input.courseNo, {
+      allowLegacyMismatch:
+        input.questionCategoryId === before.questionCategoryId &&
+        input.courseNo === before.courseNo,
+    });
 
     try {
       await transaction.course.update({

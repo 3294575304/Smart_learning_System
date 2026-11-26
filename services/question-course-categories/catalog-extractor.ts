@@ -3,6 +3,7 @@ import type {
   ParsedSpreadsheetWorkbook,
 } from "@/services/student-imports/spreadsheet-parser";
 
+import { normalizeCourseNo } from "@/lib/course-no";
 import type {
   CourseCatalogAICourse,
   CourseCatalogColumns,
@@ -189,7 +190,8 @@ export function extractSheetCatalog(
         : cleanCellText(cellAt(row, columns.term));
     if (!courseNo && !credits && !hours && !term) continue;
 
-    const key = courseNameKey(name);
+    // 同名但课程号不同的行必须分别保留，交给预览阶段提示人工确认。
+    const key = `${courseNameKey(name)}|${normalizeCourseNo(courseNo)}`;
     if (seen.has(key)) {
       duplicateCount += 1;
       continue;
@@ -319,12 +321,20 @@ export interface CatalogCandidate extends Omit<CourseCatalogRow, "rowNumber"> {
 export interface MergedCatalog {
   candidates: CatalogCandidate[];
   unverifiedCount: number;
+  /** AI 返回的课程号与表格原值不一致、已回落到表格值的次数。 */
+  courseNoRejectedCount: number;
   duplicateCount: number;
+}
+
+function catalogRowKey(
+  row: Pick<CourseCatalogRow, "name" | "courseNo">,
+): string {
+  return `${courseNameKey(row.name)}|${normalizeCourseNo(row.courseNo)}`;
 }
 
 /**
  * 合并 AI 结果与规则结果：AI 给出的课程名必须能在表格名称列里找到原文，
- * 否则视为幻觉丢弃；元数据缺失时回落到规则结果。
+ * 否则视为幻觉丢弃；课程号只信任表格原值，元数据缺失时回落到规则结果。
  */
 export function mergeCatalogWithAI(
   table: CourseCatalogTable,
@@ -332,42 +342,88 @@ export function mergeCatalogWithAI(
   options: MergeCatalogOptions,
 ): MergedCatalog {
   const ruleByKey = new Map(
-    table.rows.map((row) => [courseNameKey(row.name), row] as const),
+    table.rows.map((row) => [catalogRowKey(row), row] as const),
   );
+  // 只有名称在表格中唯一时，才允许按名称回退（AI 可能不返回课程号）。
+  const ruleByName = new Map<string, CourseCatalogRow | null>();
+  for (const row of table.rows) {
+    const key = courseNameKey(row.name);
+    ruleByName.set(key, ruleByName.has(key) ? null : row);
+  }
   const existingKeys = options.existingKeys ?? new Set<string>();
   const seen = new Set<string>();
   const candidates: CatalogCandidate[] = [];
   let unverifiedCount = 0;
+  let courseNoRejectedCount = 0;
   let duplicateCount = table.duplicateCount;
 
   for (const course of aiCourses) {
     const name = cleanCourseName(course.name);
     if (!name || name.length > 100) continue;
-    const key = courseNameKey(name);
-    if (!options.namePool.has(key)) {
+    const nameKey = courseNameKey(name);
+    if (!options.namePool.has(nameKey)) {
       unverifiedCount += 1;
       continue;
     }
+    const aiCourseNo = normalizeCourseNo(course.courseNo ?? "");
+    let rule = ruleByKey.get(`${nameKey}|${aiCourseNo}`);
+    if (!rule) {
+      const nameMatch = ruleByName.get(nameKey);
+      if (nameMatch) {
+        rule = nameMatch;
+      } else if (aiCourseNo) {
+        // 同名多行且课程号对不上，无法定位到具体行，按未验证丢弃。
+        unverifiedCount += 1;
+        continue;
+      }
+    }
+    // 定位到规则行后以规则行为键，避免 AI 省略课程号时同一行被补齐循环重复加入。
+    const key = rule ? catalogRowKey(rule) : `${nameKey}|${aiCourseNo}`;
     if (seen.has(key)) {
       duplicateCount += 1;
       continue;
     }
     seen.add(key);
-    const rule = ruleByKey.get(key);
+
+    const ruleCourseNo = rule?.courseNo ? normalizeCourseNo(rule.courseNo) : "";
+    let courseNo = rule?.courseNo || course.courseNo || "";
+    if (aiCourseNo && ruleCourseNo && aiCourseNo !== ruleCourseNo) {
+      courseNoRejectedCount += 1;
+      courseNo = ruleCourseNo;
+    } else if (aiCourseNo && !ruleCourseNo) {
+      courseNo = course.courseNo ?? "";
+    }
+
     candidates.push({
       rowNumber: rule?.rowNumber ?? null,
       name: rule?.name ?? name,
-      courseNo: course.courseNo || rule?.courseNo || "",
+      courseNo,
       credits: course.credits || rule?.credits || "",
       hours: course.hours || rule?.hours || "",
       term: course.term || rule?.term || "",
       category: course.category || rule?.category || "",
       nature: course.nature || rule?.nature || "",
-      exists: existingKeys.has(key),
+      exists: existingKeys.has(nameKey),
     });
   }
 
-  return { candidates, unverifiedCount, duplicateCount };
+  // AI 可能只返回部分行；补齐规则识别到但 AI 未覆盖的行，避免静默丢课。
+  for (const row of table.rows) {
+    const key = catalogRowKey(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({
+      ...row,
+      exists: existingKeys.has(courseNameKey(row.name)),
+    });
+  }
+
+  return {
+    candidates,
+    unverifiedCount,
+    courseNoRejectedCount,
+    duplicateCount,
+  };
 }
 
 /** 规则结果直接生成候选，并标注与已有分类的重复。 */

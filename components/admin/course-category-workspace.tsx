@@ -13,15 +13,19 @@ interface Props {
   initialCategories: AdminCourseCategory[];
 }
 
+function sortCategories(items: AdminCourseCategory[]) {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+}
+
 function mergeCategories(
   items: AdminCourseCategory[],
   incoming: AdminCourseCategory[],
 ) {
   const incomingIds = new Set(incoming.map((item) => item.id));
-  return [
+  return sortCategories([
     ...items.filter((item) => !incomingIds.has(item.id)),
     ...incoming,
-  ].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+  ]);
 }
 
 export function CourseCategoryWorkspace({ initialCategories }: Props) {
@@ -31,7 +35,7 @@ export function CourseCategoryWorkspace({ initialCategories }: Props) {
   return (
     <section className="mx-auto max-w-5xl space-y-6">
       <PageHeader
-        description="管理本校教师开课和题库使用的课程分类。"
+        description="维护本校课程目录，课程名称与课程号一一对应；教师开课时按课程号或名称选择课程。"
         title="课程分类"
         actions={
           <button
@@ -49,9 +53,20 @@ export function CourseCategoryWorkspace({ initialCategories }: Props) {
       />
       <CourseCategoryImportDialog
         onClose={() => setImportOpen(false)}
-        onCreated={(created) =>
-          setCategories((items) => mergeCategories(items, created))
-        }
+        onCompleted={({ created, backfilled }) => {
+          const backfilledById = new Map(
+            backfilled.map((item) => [item.id, item] as const),
+          );
+          setCategories((items) =>
+            mergeCategories(
+              items.map((item) => {
+                const patched = backfilledById.get(item.id);
+                return patched ? { ...item, courseNo: patched.courseNo } : item;
+              }),
+              created,
+            ),
+          );
+        }}
         open={importOpen}
       />
     </section>

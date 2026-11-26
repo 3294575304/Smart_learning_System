@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { COURSE_COVER_KEYS } from "@/lib/course-covers";
+import { courseNoSchema } from "@/lib/course-no";
 import { questionCourseCategoryIdSchema } from "@/services/question-course-categories/schemas";
 
 const templateCodeSchema = z
@@ -36,13 +37,6 @@ const coverKeySchema = z.enum(COURSE_COVER_KEYS, {
   invalid_type_error: "请选择课程封面",
   required_error: "请选择课程封面",
 });
-
-const courseNoSchema = z
-  .string()
-  .trim()
-  .min(1, "课程号不能为空")
-  .max(50, "课程号不能超过 50 个字符")
-  .transform((value) => value.toUpperCase());
 
 const termSchema = z
   .string()

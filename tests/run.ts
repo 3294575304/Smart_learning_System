@@ -58,6 +58,7 @@ const serverOnlyTests = new Set([
   "course-files/service.test.ts",
   "course-files/student-import-execution.test.ts",
   "course-files/student-import-preview.test.ts",
+  "courses/catalog-binding.test.ts",
   "courses/service.test.ts",
   "courses/syllabus-parsing.test.ts",
   "courses/syllabus-review.test.ts",

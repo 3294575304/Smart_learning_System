@@ -351,7 +351,7 @@ export function TeacherCourseList({
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {createEntry ?? (
             <EmptyState
-              description="先基于课程模板创建一门课程，再在课程建设中创建班级。"
+              description="先创建一门课程，再在课程建设中创建班级。"
               icon={School}
               title="暂无课程"
             />

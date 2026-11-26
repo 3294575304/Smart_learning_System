@@ -27,6 +27,13 @@ export interface TeacherCourseTemplateOption {
   isBuiltin: boolean;
 }
 
+/** 教师建课时可选的课程目录项，课程号由管理员维护。 */
+export interface TeacherCourseCategoryOption {
+  id: string;
+  name: string;
+  courseNo: string | null;
+}
+
 export interface TeacherCourseClassroomView {
   id: string;
   name: string;

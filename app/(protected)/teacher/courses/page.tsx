@@ -81,21 +81,25 @@ export default async function TeacherCoursesPage({
               categories={categories}
               templates={templates}
             />
-            <details className="border-t pt-3">
-              <summary className="cursor-pointer text-sm text-sky-800">
-                查看模板说明
-              </summary>
-              <ul className="mt-2 space-y-2 text-sm text-slate-600">
-                {templates.map((template) => (
-                  <li key={template.id} className="rounded-lg bg-sky-50 p-3">
-                    <strong className="text-slate-800">{template.name}</strong>
-                    {" · 版本 "}
-                    {template.version}
-                    {template.description && <p>{template.description}</p>}
-                  </li>
-                ))}
-              </ul>
-            </details>
+            {templates.length > 1 ? (
+              <details className="border-t pt-3">
+                <summary className="cursor-pointer text-sm text-sky-800">
+                  查看模板说明
+                </summary>
+                <ul className="mt-2 space-y-2 text-sm text-slate-600">
+                  {templates.map((template) => (
+                    <li key={template.id} className="rounded-lg bg-sky-50 p-3">
+                      <strong className="text-slate-800">
+                        {template.name}
+                      </strong>
+                      {" · 版本 "}
+                      {template.version}
+                      {template.description && <p>{template.description}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </div>
         ) : (
           <EmptyState

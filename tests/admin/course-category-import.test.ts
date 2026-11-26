@@ -103,9 +103,10 @@ test("AI 返回的课程名必须与表格原文一致，元数据缺失时回�
     },
   );
   assert.equal(merged.unverifiedCount, 1);
+  // AI 只返回部分行时，规则识别到的其余课程仍需保留，避免静默丢课。
   assert.deepEqual(
     merged.candidates.map((row) => row.name),
-    ["形势与政策"],
+    ["形势与政策", "体育（1）", "四史教育"],
   );
   assert.equal(merged.candidates[0]?.courseNo, "15000001");
 
@@ -116,25 +117,38 @@ test("AI 返回的课程名必须与表格原文一致，元数据缺失时回�
   assert.equal(withHistory.candidates[0]?.exists, true);
 });
 
-test("上传教学计划表时按 AI 结果生成可编辑预览，并标注已存在分类", async () => {
+test("上传教学计划表时按 AI 结果生成可编辑预览，并标注已存在与待回填分类", async () => {
   const admin = await prisma.user.findFirstOrThrow({
     where: { role: Role.ADMIN, schoolId: { not: null } },
     select: { id: true, schoolId: true },
   });
   const suffix = randomUUID().slice(0, 8);
   const existingName = `识别已存在课程-${suffix}`;
-  await prisma.questionCourseCategory.create({
-    data: {
-      schoolId: admin.schoolId!,
-      name: existingName,
-      normalizedName: courseNameKey(existingName),
-    },
+  const backfillName = `识别待回填课程-${suffix}`;
+  await prisma.questionCourseCategory.createMany({
+    data: [
+      {
+        schoolId: admin.schoolId!,
+        name: existingName,
+        normalizedName: courseNameKey(existingName),
+        courseNo: "15000009",
+      },
+      {
+        schoolId: admin.schoolId!,
+        name: backfillName,
+        normalizedName: courseNameKey(backfillName),
+      },
+    ],
   });
 
   const buffer = buildXlsFixture({
     name: "教学计划运行表",
     headers: TEACHING_PLAN_HEADERS,
-    rows: [...planRows(), ["", "", "15000009", existingName, "32", "2", "1"]],
+    rows: [
+      ...planRows(),
+      ["", "", "15000009", existingName, "32", "2", "1"],
+      ["", "", "15000010", backfillName, "16", "1", "2"],
+    ],
   });
   const file = uploadBufferAsFile(
     "教学计划运行表.xls",
@@ -148,6 +162,7 @@ test("上传教学计划表时按 AI 结果生成可编辑预览，并标注已�
         { name: "形势与政策", courseNo: "15000001", credits: "2", term: "各" },
         { name: "体育（1）", courseNo: "15000002" },
         { name: existingName },
+        { name: backfillName },
         { name: "模型臆造课程" },
       ]),
     });
@@ -156,13 +171,21 @@ test("上传教学计划表时按 AI 结果生成可编辑预览，并标注已�
     assert.equal(preview.format, "xls");
     assert.deepEqual(
       preview.candidates.map((row) => row.name),
-      ["形势与政策", "体育（1）", existingName],
+      ["形势与政策", "体育（1）", existingName, backfillName, "四史教育"],
     );
-    assert.equal(
-      preview.candidates.find((row) => row.name === existingName)?.exists,
-      true,
+    const existingCandidate = preview.candidates.find(
+      (row) => row.name === existingName,
     );
+    assert.equal(existingCandidate?.exists, true);
+    assert.equal(existingCandidate?.action, "SKIP");
+    const backfillCandidate = preview.candidates.find(
+      (row) => row.name === backfillName,
+    );
+    assert.equal(backfillCandidate?.action, "BACKFILL");
+    assert.equal(backfillCandidate?.existingCourseNo, null);
     assert.equal(preview.summary.existing, 1);
+    assert.equal(preview.summary.backfillable, 1);
+    assert.equal(preview.summary.missingCourseNo, 1);
     assert.equal(
       preview.warnings.some((warning) =>
         warning.includes("未在表格中原样出现"),
@@ -171,7 +194,10 @@ test("上传教学计划表时按 AI 结果生成可编辑预览，并标注已�
     );
   } finally {
     await prisma.questionCourseCategory.deleteMany({
-      where: { schoolId: admin.schoolId!, name: existingName },
+      where: {
+        schoolId: admin.schoolId!,
+        name: { in: [existingName, backfillName] },
+      },
     });
   }
 });
@@ -179,11 +205,15 @@ test("上传教学计划表时按 AI 结果生成可编辑预览，并标注已�
 test("一键添加课程分类在事务内去重、跳过已存在并写审计", async () => {
   const admin = await prisma.user.findFirstOrThrow({
     where: { role: Role.ADMIN, schoolId: { not: null } },
-    select: { id: true },
+    select: { id: true, schoolId: true },
   });
   const suffix = randomUUID().slice(0, 8);
   const first = `批量新增课程-${suffix}-A`;
   const second = `批量新增课程-${suffix}-B`;
+  const third = `批量新增课程-${suffix}-C`;
+  const firstNo = `BULK-${suffix}-A`.toUpperCase();
+  const secondNo = `BULK-${suffix}-B`.toUpperCase();
+  const thirdNo = `BULK-${suffix}-C`.toUpperCase();
   const context = { ipAddress: null, userAgent: null };
   const createdIds: string[] = [];
 
@@ -191,7 +221,11 @@ test("一键添加课程分类在事务内去重、跳过已存在并写审计",
     const result = await createQuestionCourseCategoriesInBulk(
       admin.id,
       {
-        names: [first, ` ${first} `, "", second],
+        items: [
+          { name: first, courseNo: firstNo },
+          { name: ` ${first} `, courseNo: firstNo },
+          { name: second, courseNo: secondNo },
+        ],
         sourceFileName: `教学计划-${suffix}.xls`,
         extractor: "AI",
       },
@@ -201,6 +235,10 @@ test("一键添加课程分类在事务内去重、跳过已存在并写审计",
     assert.deepEqual(
       result.skipped.map((item) => item.reason),
       ["DUPLICATE"],
+    );
+    assert.deepEqual(
+      result.created.map((item) => item.courseNo).sort(),
+      [firstNo, secondNo].sort(),
     );
     createdIds.push(...result.created.map((item) => item.id));
 
@@ -226,7 +264,12 @@ test("一键添加课程分类在事务内去重、跳过已存在并写审计",
 
     const again = await createQuestionCourseCategoriesInBulk(
       admin.id,
-      { names: [first, second] },
+      {
+        items: [
+          { name: first, courseNo: firstNo },
+          { name: second, courseNo: secondNo },
+        ],
+      },
       context,
     );
     assert.equal(again.created.length, 0);
@@ -234,12 +277,42 @@ test("一键添加课程分类在事务内去重、跳过已存在并写审计",
       again.skipped.map((item) => item.reason),
       ["EXISTS", "EXISTS"],
     );
+
+    // 同号不同名不能新建，避免一个课程号对应两门课程。
+    const taken = await createQuestionCourseCategoriesInBulk(
+      admin.id,
+      { items: [{ name: third, courseNo: firstNo }] },
+      context,
+    );
+    assert.equal(taken.created.length, 0);
+    assert.deepEqual(
+      taken.skipped.map((item) => item.reason),
+      ["COURSE_NO_TAKEN"],
+    );
+
+    // 已有分类缺课程号时按显式 categoryId 回填。
+    const pending = await prisma.questionCourseCategory.create({
+      data: {
+        schoolId: admin.schoolId!,
+        name: third,
+        normalizedName: third.toLocaleLowerCase("zh-CN"),
+      },
+      select: { id: true },
+    });
+    const backfill = await createQuestionCourseCategoriesInBulk(
+      admin.id,
+      { items: [{ name: third, courseNo: thirdNo, categoryId: pending.id }] },
+      context,
+    );
+    assert.equal(backfill.backfilled.length, 1);
+    assert.equal(backfill.backfilled[0]?.courseNo, thirdNo.toUpperCase());
+    createdIds.push(pending.id);
   } finally {
     await prisma.auditLog.deleteMany({
       where: { targetId: { in: createdIds } },
     });
     await prisma.questionCourseCategory.deleteMany({
-      where: { name: { in: [first, second] } },
+      where: { name: { in: [first, second, third] } },
     });
   }
 });
