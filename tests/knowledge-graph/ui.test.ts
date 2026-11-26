@@ -242,6 +242,6 @@ test("三维图谱以浅色舞台呈现，并默认开启呼吸与自动旋转",
   assert.match(canvas, /border-sky-100 bg-white/u);
   assert.match(visual, /rgba\(255, 255, 255, 0\.94\)/u);
   assert.doesNotMatch(visual, /rgba\(8, 15, 30/u);
-  // 页面主标题固定为“课程知识图谱”，不再绑定具体课程名。
-  assert.match(page, /title="课程知识图谱"/u);
+  // 页面主标题在无知识点上下文时固定为“课程知识图谱”，不绑定具体课程名。
+  assert.match(page, /: "课程知识图谱"/u);
 });

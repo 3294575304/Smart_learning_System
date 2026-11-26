@@ -48,6 +48,160 @@ function findVariableInitializer(
   return initializer;
 }
 
+const moduleCache = new Map<string, ts.SourceFile | undefined>();
+
+function loadModule(file: string): ts.SourceFile | undefined {
+  if (moduleCache.has(file)) return moduleCache.get(file);
+  let tree: ts.SourceFile | undefined;
+  for (const candidate of [
+    file,
+    `${file}.ts`,
+    `${file}.tsx`,
+    `${file}/index.ts`,
+  ]) {
+    try {
+      const source = readFileSync(candidate, "utf8");
+      tree = ts.createSourceFile(
+        candidate,
+        source,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX,
+      );
+      break;
+    } catch {
+      // 换下一个候选扩展名
+    }
+  }
+  moduleCache.set(file, tree);
+  return tree;
+}
+
+/** 找到 `name` 在本文件里是从哪个模块导入的，并把别名解析成磁盘路径。 */
+function importedModuleFile(
+  tree: ts.SourceFile,
+  name: string,
+): string | undefined {
+  for (const statement of tree.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    const matched = bindings.elements.some(
+      (element) => element.name.text === name,
+    );
+    if (!matched) continue;
+    const specifier = statement.moduleSpecifier;
+    if (!ts.isStringLiteral(specifier)) return undefined;
+    const value = specifier.text;
+    if (value.startsWith("@/")) return path.resolve(value.slice(2));
+    if (value.startsWith(".")) {
+      return path.resolve(path.dirname(tree.fileName), value);
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function findFunctionLike(
+  tree: ts.SourceFile,
+  name: string,
+):
+  | ts.FunctionDeclaration
+  | ts.ArrowFunction
+  | ts.FunctionExpression
+  | undefined {
+  for (const statement of tree.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) {
+      return statement;
+    }
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.name.text === name &&
+          declaration.initializer &&
+          (ts.isArrowFunction(declaration.initializer) ||
+            ts.isFunctionExpression(declaration.initializer))
+        ) {
+          return declaration.initializer;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+/** 收集函数体里所有 return 表达式，跳过内部嵌套函数。 */
+function collectReturnExpressions(
+  node: ts.Node,
+  out: ts.Expression[] = [],
+): ts.Expression[] {
+  if (ts.isReturnStatement(node)) {
+    if (node.expression) out.push(node.expression);
+    return out;
+  }
+  if (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isClassDeclaration(node)
+  ) {
+    return out;
+  }
+  // 注意：ts.forEachChild 的回调一旦返回真值就会中断遍历，这里必须包一层 void。
+  ts.forEachChild(node, (child) => {
+    collectReturnExpressions(child, out);
+  });
+  return out;
+}
+
+/**
+ * 链接可能由抽到 lib 里的构造函数拼出来（如 teacherClassroomListHref）。
+ * 这里顺着 import 找到实现，再把它的 return 表达式当作候选目标解析。
+ */
+function resolveImportedReturns(
+  name: string,
+  tree: ts.SourceFile,
+  visited: Set<string>,
+): string[] {
+  const moduleFile = importedModuleFile(tree, name);
+  if (!moduleFile) return [];
+  const key = `${moduleFile}#${name}`;
+  if (visited.has(key)) return [];
+  const importedTree = loadModule(moduleFile);
+  if (!importedTree) return [];
+  const fn = findFunctionLike(importedTree, name);
+  if (!fn || !fn.body) return [];
+  const nextVisited = new Set(visited).add(key);
+  const expressions = ts.isBlock(fn.body)
+    ? collectReturnExpressions(fn.body)
+    : [fn.body];
+  return expressions.flatMap((expression) =>
+    resolveHrefTargets(expression, importedTree, nextVisited),
+  );
+}
+
+/** 模板串里的占位符若指向字符串常量，就直接内联，避免把已知前缀当成资源 ID。 */
+function resolveSpanLiteral(
+  expression: ts.Expression,
+  tree: ts.SourceFile,
+  visited: Set<string>,
+): string | undefined {
+  if (!ts.isIdentifier(expression)) return undefined;
+  const initializer = findVariableInitializer(tree, expression.text);
+  if (!initializer) return undefined;
+  const resolved = resolveHrefTargets(
+    initializer,
+    tree,
+    new Set(visited).add(expression.text),
+  );
+  if (resolved.length !== 1 || resolved[0].includes("resource-id")) {
+    return undefined;
+  }
+  return resolved[0];
+}
+
 function resolveHrefTargets(
   expression: ts.Expression,
   tree: ts.SourceFile,
@@ -68,7 +222,8 @@ function resolveHrefTargets(
   if (ts.isTemplateExpression(expression)) {
     let target = expression.head.text;
     for (const span of expression.templateSpans) {
-      target += "resource-id" + span.literal.text;
+      const literal = resolveSpanLiteral(span.expression, tree, visited);
+      target += (literal ?? "resource-id") + span.literal.text;
     }
     return [target];
   }
@@ -94,17 +249,30 @@ function resolveHrefTargets(
     if (right.length) return right.map((suffix) => "resource-id" + suffix);
     return [];
   }
-  if (ts.isCallExpression(expression) && expression.arguments[0]) {
-    if (
-      ts.isIdentifier(expression.expression) &&
-      expression.expression.text === "safeStudentReturn"
-    ) {
+  if (ts.isCallExpression(expression)) {
+    const callee = ts.isIdentifier(expression.expression)
+      ? expression.expression.text
+      : undefined;
+    if (callee === "safeStudentReturn") {
       return [
         safeStudentReturn(),
         safeStudentReturn("/teacher/assignments?view=STUDENTS&page=2"),
       ];
     }
-    return resolveHrefTargets(expression.arguments[0], tree, visited);
+    if (callee) {
+      // 只接受能解析成绝对路径的结果；像 withClassroomQuery 这种对入参做 URL 运算的
+      // 构造函数在这里只会得到占位串，交给下面的实参回退逻辑处理。
+      const fromImportedFunction = resolveImportedReturns(
+        callee,
+        tree,
+        visited,
+      ).filter((target) => target.startsWith("/"));
+      if (fromImportedFunction.length) return fromImportedFunction;
+    }
+    if (expression.arguments[0]) {
+      return resolveHrefTargets(expression.arguments[0], tree, visited);
+    }
+    return [];
   }
   if (ts.isIdentifier(expression) && !visited.has(expression.text)) {
     const nextVisited = new Set(visited).add(expression.text);

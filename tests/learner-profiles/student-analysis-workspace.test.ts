@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import {
   ScoreChart,
   StudentAnalysisWorkspace,
 } from "../../components/dashboard/student-analysis-workspace";
 import { TrendChart } from "../../components/dashboard/trend-chart";
 import type { StudentClassAnalysis } from "../../services/dashboard/student-class-analytics";
+import { renderWithRouter as render } from "../helpers/render-with-router";
 
 test("growth shows two results as compact rows, retaining zero grades and detail links", () => {
   Object.assign(globalThis, { React });
-  const score = renderToStaticMarkup(
+  const score = render(
     React.createElement(ScoreChart, {
       compactSmallSample: true,
       points: [
@@ -38,7 +38,7 @@ test("growth shows two results as compact rows, retaining zero grades and detail
   assert.match(score, /0 分/);
   assert.match(score, /\/student\/submissions\/second\/result/);
   assert.doesNotMatch(score, /<svg/);
-  const trend = renderToStaticMarkup(
+  const trend = render(
     React.createElement(TrendChart, {
       compactSmallSample: true,
       showDetails: true,
@@ -91,7 +91,7 @@ function sample(): StudentClassAnalysis {
 test("analysis empty state does not fabricate scores, ability or access duration", () => {
   Object.assign(globalThis, { React });
   const selected = sample();
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],
@@ -146,7 +146,7 @@ test("analysis preserves a real zero grade and separates hidden grades from the 
       submittedAt: new Date("2026-10-29T00:00:00Z"),
     },
   ];
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],
@@ -175,7 +175,7 @@ test("ended exams stay outside assignment reminders and have their own counts", 
   selected.unsubmitted = 1;
   selected.overdue = 1;
   selected.completion = 67;
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],
@@ -214,7 +214,7 @@ test("attendance week strip marks no-class days instead of counting them absent"
     { key: "11-16", weekday: "四", status: "ABSENT" },
     { key: "11-17", weekday: "五", status: null },
   ];
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],
@@ -250,7 +250,7 @@ test("practice tab stays in the course scope and never enters the score axis", (
     { id: "practice:11-14", label: "11/14", answered: 6, correct: 5, rate: 83 },
     { id: "practice:11-15", label: "11/15", answered: 4, correct: 2, rate: 50 },
   ];
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(StudentAnalysisWorkspace, {
       selected,
       contexts: [selected],

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderWithRouter as render } from "../helpers/render-with-router";
 import { StudentHomeInsights } from "../../components/dashboard/student-home-insights";
 import type { StudentClassAnalysis } from "../../services/dashboard/student-class-analytics";
 import type { StudentHomePulse } from "../../services/dashboard/student-home-pulse";
@@ -97,7 +97,7 @@ function task(
 }
 
 test("空看板不补造学习时长、连续天数或知识评估", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(StudentHomeInsights, {
       chapters: [],
       classes: [],
@@ -151,7 +151,7 @@ test("同名课程分别展示，待办数与最近截止都来自同一次统�
     weekly: { minutes: 192, previousMinutes: 168 },
     streak: { days: 9, longest: 12 },
   };
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(StudentHomeInsights, {
       chapters: [],
       classes,
@@ -183,7 +183,7 @@ test("作业环图区分未到期、逾期和已交，无作业不显示零提�
     ...item("one", 9, 6),
     assignmentProgress: { total: 9, submitted: 6, overdue: 2 },
   };
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(StudentAssignmentRings, {
       classes: [row, item("two", 0, 0)],
     }),

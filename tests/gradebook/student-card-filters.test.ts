@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderWithRouter as render } from "../helpers/render-with-router";
 import { filterStudentGradeCards } from "../../services/gradebook/student-card-filters";
 import { studentGradeFilterHref } from "../../services/gradebook/student-card-filters";
 import { StudentCourseEvaluationCard } from "../../components/grades/student-course-evaluation-card";
@@ -40,7 +40,7 @@ test("下拉跳转同时更新课程与状态，只保留已提交的搜索条�
   assert.throws(() => studentGradeFilterHref(contexts, "foreign", "ALL", ""));
 });
 test("学生总评只显示一个课程选择框，每个已加入班级独立成项", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(StudentGradeFilters, {
       contexts,
       courseId: "c1",
@@ -131,7 +131,7 @@ test("总评卡片区分零分、缺失、待发布及特殊状态，仅已发�
     classrooms: [{ ...contexts[0].classroom, status: "ACTIVE" }],
     grades: [],
   };
-  const pending = renderToStaticMarkup(
+  const pending = render(
     React.createElement(StudentCourseEvaluationCard, props),
   );
   assert.match(pending, /教师发布后可查看/);
@@ -141,7 +141,7 @@ test("总评卡片区分零分、缺失、待发布及特殊状态，仅已发�
     [null, "SCORED", "尚未录入"],
     [null, "ABSENT", "缺考"],
   ] as const) {
-    const markup = renderToStaticMarkup(
+    const markup = render(
       React.createElement(StudentCourseEvaluationCard, {
         ...props,
         grades: [

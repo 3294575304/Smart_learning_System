@@ -203,6 +203,8 @@ test("考核方案草稿乐观并发、正式发布不可变且重复发布幂�
     assert.equal(replay.revisionNumber, 1);
 
     const confirmed = structuredClone(generated.structure);
+    // 正式发布要求教师显式确认达成线与计算方法，等价于界面上的勾选框。
+    confirmed.thresholdConfirmed = true;
     confirmed.outcomes[0]!.attainmentThreshold = 60;
     confirmed.components[0]!.fullScore = 100;
     confirmed.components[0]!.sourceType = GradeSourceType.MANUAL;

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { CoursePracticeCenter } from "../../components/recommendations/course-practice-center";
+import { renderWithRouter as render } from "../helpers/render-with-router";
 
 Object.assign(globalThis, { React });
 
 test("未配置授课进度仍显示可用自主练习入口与实际题量说明", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(CoursePracticeCenter, {
       courses: courses.map((course) => ({
         ...course,
@@ -43,7 +43,7 @@ const courses = [
 ];
 
 test("AI 章节入口进入练习中心后只预选对应章节", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(CoursePracticeCenter, {
       courses,
       initialCourseId: "python",
@@ -55,7 +55,7 @@ test("AI 章节入口进入练习中心后只预选对应章节", () => {
   assert.match(html, /1 个大章节/u);
 });
 test("AI 测试入口预选测试模式与固定测试模板", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(CoursePracticeCenter, {
       courses,
       initialCourseId: "python",
@@ -68,7 +68,7 @@ test("AI 测试入口预选测试模式与固定测试模板", () => {
   assert.doesNotMatch(html, /练习模板/u);
 });
 test("陌生章节不会被当作已确认的练习范围", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(CoursePracticeCenter, {
       courses,
       initialCourseId: "python",
@@ -79,7 +79,7 @@ test("陌生章节不会被当作已确认的练习范围", () => {
 });
 
 test("AI 多章节确认入口预选所有章节与模板", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     React.createElement(CoursePracticeCenter, {
       courses,
       initialCourseId: "python",
