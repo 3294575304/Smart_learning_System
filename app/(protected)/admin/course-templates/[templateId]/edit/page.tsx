@@ -62,6 +62,7 @@ export default async function AdminCourseTemplateEditPage({
               name: template.name,
               description: template.description ?? "",
               version: template.version,
+              coverKey: template.coverKey,
             }}
             isActive={template.isActive}
             isBuiltin={template.isBuiltin}

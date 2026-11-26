@@ -21,6 +21,7 @@ function course(
       description: null,
       version: "1.0",
       isBuiltin: true,
+      coverKey: "engineering",
     },
     questionCategoryId: "category-python",
     questionCategoryName: "Python 程序设计",
@@ -66,6 +67,7 @@ const archivedDs = course({
     description: null,
     version: "2.0",
     isBuiltin: false,
+    coverKey: "engineering",
   },
   classroomCount: 1,
   activeClassroomCount: 0,
@@ -175,8 +177,8 @@ test("课程列表渲染搜索框、状态与学期筛选以及结果摘要", ()
   assert.match(markup, /学期/u);
   assert.match(markup, /全部学期/u);
   assert.doesNotMatch(markup, />重置<\/button>/u);
-  assert.match(markup, /aria-live="polite"/u);
-  assert.match(markup, /共 3 门课程/u);
+  assert.doesNotMatch(markup, /aria-live="polite"/u);
+  assert.match(markup, /全部<em>3<\/em>/u);
   assert.match(markup, /role="tab"[^>]*>启用/u);
   assert.match(markup, /role="tab"[^>]*>草稿/u);
   assert.doesNotMatch(markup, /<option value="ARCHIVED">/u);
@@ -194,7 +196,7 @@ test("只有启用课程时隐藏状态筛选，并忽略旧草稿筛选链接",
   );
   assert.doesNotMatch(markup, /全部状态/u);
   assert.match(markup, /全部学期/u);
-  assert.match(markup, /共 1 门课程/u);
+  assert.match(markup, /启用<em>1<\/em>/u);
 });
 
 test("无课程时不显示筛选工具栏，仍保留创建引导", () => {
@@ -216,8 +218,8 @@ test("带筛选参数的链接直接渲染筛选后的结果，便于刷新与�
 
   assert.match(byTerm, /数据结构/u);
   assert.doesNotMatch(byTerm, /（进阶）/u);
-  assert.match(byTerm, /找到 1 \/ 3 门课程/u);
-  assert.match(byTerm, /当前条件：学期「2025-2026-2」/u);
+  assert.match(byTerm, /全部<em>3<\/em>/u);
+  assert.doesNotMatch(byTerm, /找到 1 \/ 3 门课程/u);
   assert.match(byTerm, />重置<\/button>/u);
 
   const byStatus = renderToStaticMarkup(
@@ -247,5 +249,7 @@ test("链接里的失效学期与状态条件被忽略，不会出现空列表�
     }),
   );
 
-  assert.match(markup, /共 3 门课程/u);
+  assert.match(markup, /全部<em>3<\/em>/u);
+  assert.match(markup, /数据结构/u);
+  assert.match(markup, /（进阶）/u);
 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { COURSE_COVER_KEYS } from "@/lib/course-covers";
 import { questionCourseCategoryIdSchema } from "@/services/question-course-categories/schemas";
 
 const templateCodeSchema = z
@@ -30,6 +31,11 @@ const templateVersionSchema = z
   .trim()
   .min(1, "课程模板版本不能为空")
   .max(20, "课程模板版本不能超过 20 个字符");
+
+const coverKeySchema = z.enum(COURSE_COVER_KEYS, {
+  invalid_type_error: "请选择课程封面",
+  required_error: "请选择课程封面",
+});
 
 const courseNoSchema = z
   .string()
@@ -81,6 +87,7 @@ export const createCourseTemplateSchema = z
     name: templateNameSchema,
     description: templateDescriptionSchema,
     version: templateVersionSchema,
+    coverKey: coverKeySchema.default("engineering"),
   })
   .strict();
 
@@ -89,6 +96,7 @@ export const updateCourseTemplateSchema = z
     name: templateNameSchema,
     description: templateDescriptionSchema,
     version: templateVersionSchema,
+    coverKey: coverKeySchema.optional(),
   })
   .strict();
 
@@ -105,6 +113,7 @@ export const createCourseSchema = z
 
 export const updateCourseSchema = z
   .object({
+    templateId: courseTemplateIdSchema.optional(),
     questionCategoryId: questionCategoryIdSchema,
     courseNo: courseNoSchema,
     term: termSchema,

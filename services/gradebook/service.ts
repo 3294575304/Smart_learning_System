@@ -1339,6 +1339,7 @@ export async function listStudentCourseEvaluationContexts(studentId: string) {
               term: true,
               status: true,
               courseNo: true,
+              template: { select: { coverKey: true } },
               teacher: {
                 select: { profile: { select: { displayName: true } } },
               },

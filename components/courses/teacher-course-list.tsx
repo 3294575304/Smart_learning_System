@@ -17,10 +17,10 @@ import Link from "next/link";
 import React, { useMemo, useState } from "react";
 
 import { requestApi } from "@/components/courses/request-api";
+import { CourseCover } from "@/components/courses/course-cover";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { useListFilterUrlSync } from "@/components/dashboard/use-list-filter-url-sync";
 import {
-  describeFilterSummary,
   hasActiveFilterCondition,
   matchesFilterKeyword,
 } from "@/lib/list-filter";
@@ -324,14 +324,6 @@ export function TeacherCourseList({
     ...(effectiveTerm ? [`学期「${effectiveTerm}」`] : []),
   ];
 
-  const summary = describeFilterSummary({
-    visibleCount: visibleCourses.length,
-    totalCount: courses.length,
-    unit: "门课程",
-    conditions,
-    idleHint: "可按课程名称、课程号或学期搜索",
-  });
-
   function resetFilters() {
     setKeyword("");
     setStatus("");
@@ -449,10 +441,6 @@ export function TeacherCourseList({
             ) : null}
           </div>
 
-          <p aria-live="polite" className="tt-hint">
-            {summary}
-          </p>
-
           {visibleCourses.length === 0 ? (
             <EmptyState
               action={
@@ -475,9 +463,13 @@ export function TeacherCourseList({
                   className="tt-course-card min-w-0 rounded-xl border border-slate-200 bg-white transition-colors hover:border-sky-300"
                   key={course.id}
                 >
-                  <div className="tt-course-cover" aria-hidden="true">
-                    <span>{course.courseNo}</span>
-                  </div>
+                  {/* 不再复用 .tt-course-cover：主题里那条规则是 align-items:flex-end，
+                      会把图标和课程号压到条底，和设计稿的居中排布冲突 */}
+                  <CourseCover
+                    courseNo={course.courseNo}
+                    coverKey={course.template.coverKey}
+                    height={56}
+                  />
                   <div className="tt-course-body">
                     <div className="flex items-start justify-between gap-3">
                       <Link

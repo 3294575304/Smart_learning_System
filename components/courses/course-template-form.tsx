@@ -6,6 +6,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { requestApi } from "@/components/courses/request-api";
+import { CourseCoverPicker } from "@/components/courses/course-cover-picker";
+import { DEFAULT_COURSE_COVER_KEY } from "@/lib/course-covers";
 import {
   createCourseTemplateSchema,
   updateCourseTemplateSchema,
@@ -41,6 +43,8 @@ function CreateCourseTemplateForm({ defaultValues }: CreateProps) {
     register,
     handleSubmit,
     setError,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CreateCourseTemplateInput, unknown, CreateCourseTemplateData>({
     resolver: zodResolver(createCourseTemplateSchema),
@@ -49,8 +53,11 @@ function CreateCourseTemplateForm({ defaultValues }: CreateProps) {
       name: "",
       description: "",
       version: "1.0",
+      coverKey: DEFAULT_COURSE_COVER_KEY,
     },
   });
+
+  const coverKey = watch("coverKey") ?? DEFAULT_COURSE_COVER_KEY;
 
   const onSubmit = handleSubmit(async (input) => {
     setServerError(null);
@@ -65,7 +72,13 @@ function CreateCourseTemplateForm({ defaultValues }: CreateProps) {
 
     if (!result.success) {
       setServerError(result.error);
-      for (const field of ["code", "name", "description", "version"] as const) {
+      for (const field of [
+        "code",
+        "name",
+        "description",
+        "version",
+        "coverKey",
+      ] as const) {
         const message = result.fieldErrors?.[field]?.[0];
         if (message) {
           setError(field, { message });
@@ -125,6 +138,26 @@ function CreateCourseTemplateForm({ defaultValues }: CreateProps) {
         ) : null}
       </div>
       <div>
+        <span className="text-sm font-medium">课程封面</span>
+        <input type="hidden" {...register("coverKey")} />
+        <div className="mt-2">
+          <CourseCoverPicker
+            onSelect={(key) =>
+              setValue("coverKey", key, {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
+            value={coverKey}
+          />
+        </div>
+        {errors.coverKey ? (
+          <p className="text-destructive mt-1 text-sm">
+            {errors.coverKey.message}
+          </p>
+        ) : null}
+      </div>
+      <div>
         <label className="text-sm font-medium" htmlFor="template-description">
           模板描述
         </label>
@@ -169,11 +202,15 @@ function EditCourseTemplateForm({
     register,
     handleSubmit,
     setError,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<UpdateCourseTemplateInput, unknown, UpdateCourseTemplateData>({
     resolver: zodResolver(updateCourseTemplateSchema),
     defaultValues,
   });
+
+  const coverKey = watch("coverKey") ?? DEFAULT_COURSE_COVER_KEY;
 
   const onSubmit = handleSubmit(async (input) => {
     if (!templateId) return;
@@ -189,7 +226,7 @@ function EditCourseTemplateForm({
 
     if (!result.success) {
       setServerError(result.error);
-      for (const field of ["name", "description", "version"] as const) {
+      for (const field of ["name", "description", "version", "coverKey"] as const) {
         const message = result.fieldErrors?.[field]?.[0];
         if (message) {
           setError(field, { message });
@@ -235,6 +272,26 @@ function EditCourseTemplateForm({
         {errors.version ? (
           <p className="text-destructive mt-1 text-sm">
             {errors.version.message}
+          </p>
+        ) : null}
+      </div>
+      <div>
+        <span className="text-sm font-medium">课程封面</span>
+        <input type="hidden" {...register("coverKey")} />
+        <div className="mt-2">
+          <CourseCoverPicker
+            onSelect={(key) =>
+              setValue("coverKey", key, {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
+            value={coverKey}
+          />
+        </div>
+        {errors.coverKey ? (
+          <p className="text-destructive mt-1 text-sm">
+            {errors.coverKey.message}
           </p>
         ) : null}
       </div>

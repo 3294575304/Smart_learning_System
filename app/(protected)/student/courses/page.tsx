@@ -1,6 +1,6 @@
 import { Role } from "@prisma/client";
-import { ArrowRight } from "lucide-react";
 import { StudentJoinClassroomButton } from "@/components/classrooms/student-join-classroom-button";
+import { CourseCover } from "@/components/courses/course-cover";
 import { StudentCourseFilters } from "@/components/courses/student-course-filters";
 import { StudentPageLink } from "@/components/dashboard/student-page-link";
 import { requirePageRole } from "@/services/auth/page-authorization";
@@ -30,18 +30,12 @@ export default async function StudentCoursesPage() {
         searchText: [course.name, classroom.name, course.courseNo ?? ""],
         card: (
           <article className="st-course-card group border-border bg-card hover:border-brand/55 relative isolate flex min-w-0 flex-col overflow-hidden rounded-lg border transition-colors">
-            <div className="st-course-cover border-border bg-muted text-foreground flex min-h-14 flex-wrap items-end justify-between gap-x-3 gap-y-1 border-b px-3 py-2 text-xs">
-              <span className="min-w-0 font-mono [overflow-wrap:anywhere]">
-                {course.courseNo ? `课程号 ${course.courseNo}` : "课程号未设置"}
-              </span>
-              <span
-                aria-hidden="true"
-                className="text-brand-strong inline-flex items-center gap-1 font-medium"
-              >
-                {readOnly ? "查看教学班" : "进入课程"}
-                <ArrowRight className="size-3.5" />
-              </span>
-            </div>
+            <CourseCover
+              action={readOnly ? "查看教学班" : "进入课程"}
+              className="st-course-cover"
+              courseNo={course.courseNo}
+              coverKey={course.template.coverKey}
+            />
             <div className="flex flex-1 flex-col gap-1 p-3">
               <h2 className="font-semibold [overflow-wrap:anywhere]">
                 <StudentPageLink

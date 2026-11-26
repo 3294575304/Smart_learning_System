@@ -12,6 +12,7 @@ import { PDFDocument } from "pdf-lib";
 import { extractQuestionFile } from "@/services/question-import/file-extractor";
 
 import { prisma } from "@/lib/prisma";
+import { courseCoverOf } from "@/lib/course-covers";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type {
@@ -197,6 +198,7 @@ function templateSnapshot(template: CourseTemplateRecord): AuditConfigSnapshot {
     name: template.name,
     description: template.description,
     version: template.version,
+    coverKey: template.coverKey,
     isBuiltin: template.isBuiltin,
     isActive: template.isActive,
     courseCount: template._count.courses,
@@ -279,6 +281,7 @@ function templateViewFromRecord(
     name: template.name,
     description: template.description,
     version: template.version,
+    coverKey: courseCoverOf(template.coverKey).key,
     isBuiltin: template.isBuiltin,
     isActive: template.isActive,
     courseCount: template._count.courses,
@@ -307,6 +310,7 @@ function courseItemFromRecord(
       name: record.template.name,
       description: null,
       version: record.template.version,
+      coverKey: courseCoverOf(record.template.coverKey).key,
       isBuiltin: record.template.isBuiltin,
     },
     questionCategoryId: record.questionCategoryId,
@@ -433,6 +437,7 @@ export async function createAdminCourseTemplate(
           name: input.name,
           description: input.description,
           version: input.version,
+          coverKey: input.coverKey,
           isBuiltin: false,
           isActive: true,
         },
@@ -443,6 +448,7 @@ export async function createAdminCourseTemplate(
           name: true,
           description: true,
           version: true,
+          coverKey: true,
           isBuiltin: true,
           isActive: true,
           createdAt: true,
@@ -489,10 +495,12 @@ export async function updateAdminCourseTemplate(
     const nextName = input.name;
     const nextDescription = input.description;
     const nextVersion = input.version;
+    const nextCoverKey = input.coverKey ?? before.coverKey;
     const changed =
       nextName !== before.name ||
       nextDescription !== before.description ||
-      nextVersion !== before.version;
+      nextVersion !== before.version ||
+      nextCoverKey !== before.coverKey;
 
     if (!changed) {
       return templateViewFromRecord(before);
@@ -504,6 +512,7 @@ export async function updateAdminCourseTemplate(
         name: nextName,
         description: nextDescription,
         version: nextVersion,
+        coverKey: nextCoverKey,
       },
       select: {
         id: true,
@@ -512,6 +521,7 @@ export async function updateAdminCourseTemplate(
         name: true,
         description: true,
         version: true,
+        coverKey: true,
         isBuiltin: true,
         isActive: true,
         createdAt: true,
@@ -566,6 +576,7 @@ export async function setAdminCourseTemplateActive(
         name: true,
         description: true,
         version: true,
+        coverKey: true,
         isBuiltin: true,
         isActive: true,
         createdAt: true,
@@ -822,6 +833,7 @@ export async function createTeacherCourse(
               code: true,
               name: true,
               version: true,
+              coverKey: true,
               isBuiltin: true,
             },
           },
@@ -885,12 +897,15 @@ export async function updateTeacherCourse(
     }
 
     const beforeView = courseItemFromRecord(before);
+    const nextTemplateId = input.templateId ?? before.templateId;
+    const templateChanged = nextTemplateId !== before.templateId;
     const changed =
       input.courseNo !== before.courseNo ||
       input.questionCategoryId !== before.questionCategoryId ||
       input.term !== before.term ||
       input.name !== before.name ||
-      input.description !== before.description;
+      input.description !== before.description ||
+      templateChanged;
 
     if (!changed) {
       const classrooms = await loadTeacherClassroomsForCourseLink(
@@ -898,6 +913,18 @@ export async function updateTeacherCourse(
         transaction,
       );
       return courseDetailFromRecords(before, classrooms);
+    }
+
+    if (templateChanged) {
+      const schoolId = await requireUserSchoolId(teacherId, transaction);
+      const template = await resolveActiveCourseTemplateForSchool(
+        nextTemplateId,
+        schoolId,
+        transaction,
+      );
+      if (!template) {
+        throw new CourseOperationError("该课程模板不可用或已停用", 400);
+      }
     }
 
     const questionCategory = await requireActiveQuestionCourseCategory(
@@ -910,6 +937,7 @@ export async function updateTeacherCourse(
       await transaction.course.update({
         where: { id: courseId },
         data: {
+          templateId: nextTemplateId,
           courseNo: input.courseNo,
           questionCategoryId: questionCategory.id,
           term: input.term,

@@ -132,11 +132,8 @@ export function QuestionList({
                     ))}
                   </div>
                 ) : null}
-                {!question.courseGraphConcepts ? (
-                  <p className="tq-scope-note">
-                    选择课程后查看该课程的知识点分类
-                  </p>
-                ) : question.courseGraphConcepts.length === 0 ? (
+                {question.courseGraphConcepts &&
+                question.courseGraphConcepts.length === 0 ? (
                   <p className="tq-scope-note">此题尚未绑定到所选课程</p>
                 ) : null}
               </div>

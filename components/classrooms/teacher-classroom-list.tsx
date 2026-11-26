@@ -17,7 +17,6 @@ import { useListFilterUrlSync } from "@/components/dashboard/use-list-filter-url
 import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 import type { TeacherClassroomListItem } from "@/services/classrooms/service";
 import {
-  describeFilterSummary,
   hasActiveFilterCondition,
   matchesFilterKeyword,
 } from "@/lib/list-filter";
@@ -133,14 +132,6 @@ export function TeacherClassroomList({
       : []),
   ];
 
-  const summary = describeFilterSummary({
-    visibleCount: visibleClassrooms.length,
-    totalCount: classrooms.length,
-    unit: "个班级",
-    conditions,
-    idleHint: "可按班级名称、邀请码、关联课程搜索与筛选",
-  });
-
   function resetFilters() {
     setKeyword("");
     setStatus("");
@@ -216,7 +207,6 @@ export function TeacherClassroomList({
               searchLabel="搜索班级"
               searchPlaceholder="班级名称、邀请码或关联课程"
               searchScope="班级名称、班级说明、邀请码、关联课程名称、班级状态；多个关键词用空格分隔，需同时命中"
-              summary={summary}
             />
           </div>
 

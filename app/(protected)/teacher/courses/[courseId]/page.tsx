@@ -14,6 +14,7 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { courseIdSchema } from "@/services/courses/schemas";
 import {
   getTeacherCourse,
+  listTeacherCourseTemplates,
   listTeacherQuestionCourseCategories,
 } from "@/services/courses/service";
 import { getTeacherCourseSetupProgress } from "@/services/courses/setup-service";
@@ -51,22 +52,25 @@ export default async function TeacherCourseDetailPage({
   let setupProgress;
   let categories;
   let coverage;
+  let templates;
   try {
-    [course, setupProgress, categories, coverage] = await Promise.all([
-      getTeacherCourse(teacher.id, parsedId.data),
-      getTeacherCourseSetupProgress(teacher.id, parsedId.data),
-      listTeacherQuestionCourseCategories(teacher.id),
-      getTeacherCourseContentCoverage(teacher.id, parsedId.data).catch(
-        (error: unknown) => {
-          if (error instanceof ResourceNotFoundError) throw error;
-          console.error(
-            "Course content coverage query failed",
-            error instanceof Error ? error.name : "UnknownError",
-          );
-          return null;
-        },
-      ),
-    ]);
+    [course, setupProgress, categories, coverage, templates] =
+      await Promise.all([
+        getTeacherCourse(teacher.id, parsedId.data),
+        getTeacherCourseSetupProgress(teacher.id, parsedId.data),
+        listTeacherQuestionCourseCategories(teacher.id),
+        getTeacherCourseContentCoverage(teacher.id, parsedId.data).catch(
+          (error: unknown) => {
+            if (error instanceof ResourceNotFoundError) throw error;
+            console.error(
+              "Course content coverage query failed",
+              error instanceof Error ? error.name : "UnknownError",
+            );
+            return null;
+          },
+        ),
+        listTeacherCourseTemplates(teacher.id),
+      ]);
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundError) {
       notFound();
@@ -204,11 +208,12 @@ export default async function TeacherCourseDetailPage({
                 编辑课程基础信息
               </summary>
               <p className="text-muted-foreground mt-1 mb-5 text-sm">
-                这里只修改课程号、学期、名称和描述，不影响班级关联。
+                可修改课程模板（同时更换课程封面）、课程号、学期、名称和描述，不影响班级关联。
               </p>
               <CourseForm
                 courseId={course.id}
                 defaultValues={{
+                  templateId: course.template.id,
                   courseNo: course.courseNo,
                   questionCategoryId: course.questionCategoryId,
                   term: course.term,
@@ -218,6 +223,7 @@ export default async function TeacherCourseDetailPage({
                 mode="edit"
                 categories={categories}
                 template={course.template}
+                templates={templates}
               />
             </details>
           </CourseDetailDisclosure>

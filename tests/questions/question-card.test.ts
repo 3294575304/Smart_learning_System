@@ -79,7 +79,7 @@ test("课程目标未分类与未绑定课程知识点不会伪装成全局分�
   assert.match(unbound, /此题尚未绑定到所选课程/u);
   assert.doesNotMatch(unbound, /课程目标：1 · 知识/u);
   const noCourse = render([{ ...base, courseGraphConcepts: undefined }]);
-  assert.match(noCourse, /选择课程后查看该课程的知识点分类/u);
+  assert.doesNotMatch(noCourse, /选择课程后查看该课程的知识点分类/u);
 });
 
 test("草稿、题干核对与空结果继续保留，卡片不增加不存在的作答预览", () => {

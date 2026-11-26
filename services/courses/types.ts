@@ -1,12 +1,15 @@
 import type { Buffer } from "node:buffer";
 import type { ClassroomStatus, CourseStatus } from "@prisma/client";
 
+import type { CourseCoverKey } from "@/lib/course-covers";
+
 export interface CourseTemplateView {
   id: string;
   code: string;
   name: string;
   description: string | null;
   version: string;
+  coverKey: CourseCoverKey;
   isBuiltin: boolean;
   isActive: boolean;
   courseCount: number;
@@ -20,6 +23,7 @@ export interface TeacherCourseTemplateOption {
   name: string;
   description: string | null;
   version: string;
+  coverKey: CourseCoverKey;
   isBuiltin: boolean;
 }
 

@@ -1118,6 +1118,8 @@ model CourseTemplate {
   name        String
   description String?  @db.Text
   version     String   @default("1.0")
+  /// 课程封面库 key（engineering / science / humanities / general），见 lib/course-covers.ts
+  coverKey    String   @default("engineering") @db.VarChar(32)
   isBuiltin   Boolean  @default(false)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())

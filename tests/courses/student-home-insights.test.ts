@@ -46,6 +46,7 @@ function item(
       courseNo: "001",
       term: "2026",
       status: "ACTIVE",
+      template: { coverKey: "engineering" },
       teacher: { profile: null },
     },
     classroom: { id, name: `班级${id}`, status },

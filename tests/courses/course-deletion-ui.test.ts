@@ -6,8 +6,9 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { TeacherCourseList } from "../../components/courses/teacher-course-list";
+import type { TeacherCourseListItem } from "../../services/courses/types";
 
-const course = {
+const course: TeacherCourseListItem = {
   id: "course-delete-ui",
   questionCategoryId: "ccategory00000000000000001",
   questionCategoryName: "Python 程序设计",
@@ -18,6 +19,7 @@ const course = {
     description: null,
     version: "1.0",
     isBuiltin: true,
+    coverKey: "engineering",
   },
   courseNo: "PY-DELETE-01",
   term: "2026-2027-1",

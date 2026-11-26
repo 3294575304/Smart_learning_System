@@ -164,6 +164,7 @@ test("课程模板可以创建、编辑、停用和重新启用", async () => {
       name: "测试课程模板",
       description: "模板说明",
       version: "1.0",
+      coverKey: "science",
     },
     auditContext,
   );

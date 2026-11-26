@@ -15,6 +15,7 @@ function sample(): StudentClassAnalysis {
       status: "ACTIVE",
       courseNo: "TEST",
       teacher: { profile: null },
+      template: { coverKey: "engineering" },
     },
     classroom: { id: "class", name: "示例班", status: "ACTIVE" },
     assignmentProgress: { total: 0, submitted: 0, overdue: 0 },

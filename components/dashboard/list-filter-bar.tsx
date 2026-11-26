@@ -33,8 +33,8 @@ interface ListFilterBarProps {
   filters: ListFilterSelect[];
   onReset: () => void;
   isFiltered: boolean;
-  /** 由 describeFilterSummary 生成，同时用于视觉提示与 aria-live 播报 */
-  summary: string;
+  /** 由 describeFilterSummary 生成的结果播报；空字符串表示不展示这一行 */
+  summary?: string;
 }
 
 /**
@@ -152,9 +152,11 @@ export function ListFilterBar({
         </button>
       </div>
 
-      <p aria-live="polite" className="text-muted-foreground text-xs leading-5">
-        {summary}
-      </p>
+      {summary ? (
+        <p aria-live="polite" className="text-muted-foreground text-xs leading-5">
+          {summary}
+        </p>
+      ) : null}
       <p className="text-muted-foreground text-xs leading-5">
         可搜索范围：{searchScope}
       </p>

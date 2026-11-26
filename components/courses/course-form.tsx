@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { requestApi } from "@/components/courses/request-api";
+import { CourseCover } from "@/components/courses/course-cover";
 import {
   createCourseSchema,
   updateCourseSchema,
@@ -30,6 +31,7 @@ interface EditCourseFormProps {
   mode: "edit";
   courseId: string;
   template: TeacherCourseTemplateOption;
+  templates: TeacherCourseTemplateOption[];
   categories: QuestionCategoryOption[];
   defaultValues: UpdateCourseInput;
 }
@@ -231,6 +233,7 @@ function CreateCourseForm({
 function EditCourseForm({
   courseId,
   template,
+  templates,
   categories,
   defaultValues,
 }: EditCourseFormProps) {
@@ -240,11 +243,17 @@ function EditCourseForm({
     register,
     handleSubmit,
     setError,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<UpdateCourseInput, unknown, UpdateCourseData>({
     resolver: zodResolver(updateCourseSchema),
-    defaultValues,
+    defaultValues: { ...defaultValues, templateId: template.id },
   });
+
+  const templateId = watch("templateId") ?? template.id;
+  const selectedTemplate =
+    templates.find((item) => item.id === templateId) ?? template;
+  const courseNo = watch("courseNo");
 
   const onSubmit = handleSubmit(async (input) => {
     setServerError(null);
@@ -260,6 +269,7 @@ function EditCourseForm({
     if (!result.success) {
       setServerError(result.error);
       for (const field of [
+        "templateId",
         "courseNo",
         "questionCategoryId",
         "term",
@@ -279,13 +289,33 @@ function EditCourseForm({
 
   return (
     <form className="space-y-4" onSubmit={onSubmit} noValidate>
-      <div className="rounded-lg border bg-sky-50/70 p-3 text-sm">
-        <p className="font-medium">
-          课程模板：{template.name} ({template.code})
-        </p>
-        <p className="text-muted-foreground mt-1">
-          {template.isBuiltin ? "内置模板" : "自定义模板"}
-        </p>
+      <div>
+        <label className="text-sm font-medium" htmlFor="course-template">
+          课程模板
+        </label>
+        <select
+          {...register("templateId")}
+          className="border-input focus:ring-ring mt-2 w-full rounded-md border bg-white px-3 py-2 outline-none focus:ring-2"
+          id="course-template"
+        >
+          {templates.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}（{item.code}）
+            </option>
+          ))}
+        </select>
+        {errors.templateId ? (
+          <p className="text-destructive mt-1 text-sm">
+            {errors.templateId.message}
+          </p>
+        ) : null}
+        <div className="mt-2 overflow-hidden rounded-lg border">
+          <CourseCover
+            courseNo={courseNo}
+            coverKey={selectedTemplate.coverKey}
+            height={52}
+          />
+        </div>
       </div>
       <div>
         <label className="text-sm font-medium" htmlFor="course-category">

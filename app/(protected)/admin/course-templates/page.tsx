@@ -1,7 +1,8 @@
 import { Role } from "@prisma/client";
-import { BookOpenCheck, Pencil, Plus } from "lucide-react";
+import { BookOpenCheck, LayoutGrid, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 
+import { CourseCover } from "@/components/courses/course-cover";
 import { CourseTemplateActions } from "@/components/courses/course-template-actions";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -21,13 +22,22 @@ export default async function AdminCourseTemplatesPage() {
     <section className="space-y-6">
       <PageHeader
         actions={
-          <Link
-            className="flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
-            href="/admin/course-templates/new"
-          >
-            <Plus className="h-4 w-4" />
-            创建模板
-          </Link>
+          <>
+            <Link
+              className="flex items-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium transition hover:bg-sky-50/70"
+              href="/admin/course-templates/covers"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              课程封面库
+            </Link>
+            <Link
+              className="flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
+              href="/admin/course-templates/new"
+            >
+              <Plus className="h-4 w-4" />
+              创建模板
+            </Link>
+          </>
         }
         description="管理本校课程模板的基础信息和可用状态。教师只能使用本校已启用的模板创建课程。"
         title="课程模板管理"
@@ -43,67 +53,75 @@ export default async function AdminCourseTemplatesPage() {
         <div className="grid gap-4 md:grid-cols-2">
           {templates.map((template) => (
             <article
-              className="bg-card rounded-xl border p-5"
+              className="bg-card overflow-hidden rounded-xl border"
               key={template.id}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="truncate font-semibold">{template.name}</h3>
-                  <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
-                    {template.description ?? "暂无模板说明"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs ${
-                      template.isActive
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {
-                      STATUS_LABELS[
-                        String(template.isActive) as "true" | "false"
-                      ]
-                    }
-                  </span>
-                  {template.isBuiltin ? (
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700">
-                      内置
+              <CourseCover
+                coverKey={template.coverKey}
+                height={62}
+                subtitle={template.code}
+                title={template.name}
+              />
+              <div className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate font-semibold">{template.name}</h3>
+                    <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+                      {template.description ?? "暂无模板说明"}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs ${
+                        template.isActive
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {
+                        STATUS_LABELS[
+                          String(template.isActive) as "true" | "false"
+                        ]
+                      }
                     </span>
-                  ) : null}
+                    {template.isBuiltin ? (
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700">
+                        内置
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
 
-              <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                <div>
-                  <p className="text-muted-foreground text-xs">编码</p>
-                  <p className="mt-1 font-medium">{template.code}</p>
+                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                  <div>
+                    <p className="text-muted-foreground text-xs">编码</p>
+                    <p className="mt-1 font-medium">{template.code}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">版本</p>
+                    <p className="mt-1 font-medium">{template.version}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">课程数</p>
+                    <p className="mt-1 font-medium">{template.courseCount}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">版本</p>
-                  <p className="mt-1 font-medium">{template.version}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">课程数</p>
-                  <p className="mt-1 font-medium">{template.courseCount}</p>
-                </div>
-              </div>
 
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <Link
-                  aria-label={`编辑模板 ${template.name}`}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
-                  href={`/admin/course-templates/${template.id}/edit`}
-                  title="编辑课程模板"
-                >
-                  <Pencil aria-hidden="true" className="size-4" />
-                  编辑
-                </Link>
-                <CourseTemplateActions
-                  isActive={template.isActive}
-                  templateId={template.id}
-                />
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <Link
+                    aria-label={`编辑模板 ${template.name}`}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none sm:text-sm"
+                    href={`/admin/course-templates/${template.id}/edit`}
+                    title="编辑课程模板"
+                  >
+                    <Pencil aria-hidden="true" className="size-4" />
+                    编辑
+                  </Link>
+                  <CourseTemplateActions
+                    isActive={template.isActive}
+                    templateId={template.id}
+                  />
+                </div>
               </div>
             </article>
           ))}
