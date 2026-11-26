@@ -99,7 +99,9 @@ export function ReadOnlyAnswerCard({
             }}
             plainNumbers={plainNumbers}
             progressLabel={progress?.label}
-            questionState={(index) => questions[index]?.state ?? { label: "题目", className: "" }}
+            questionState={(index) =>
+              questions[index]?.state ?? { label: "题目", className: "" }
+            }
             questions={questions}
             showProgress={Boolean(progress)}
             showTitle={false}

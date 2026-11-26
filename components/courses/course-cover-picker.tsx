@@ -21,7 +21,11 @@ export function CourseCoverPicker({
   sampleCourseNo?: string;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="课程封面">
+    <div
+      className="grid gap-3 sm:grid-cols-2"
+      role="radiogroup"
+      aria-label="课程封面"
+    >
       {COURSE_COVER_LIST.map((cover) => {
         const selected = cover.key === value;
         return (

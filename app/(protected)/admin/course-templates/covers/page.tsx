@@ -118,11 +118,15 @@ export default async function AdminCourseCoversPage() {
         })}
       </div>
 
-      <p className="text-muted-foreground rounded-xl border bg-sky-50/40 p-4 text-sm leading-6">
-        封面绑定在<b>课程模板</b>上，而不是单门课程：模板创建时选定封面，之后可在「编辑课程模板」里更换；
-        更换后该模板下的所有课程会同步更新，教师端与学生端都不需要单独设置。
-        封面只有图标与配色两个信息，课堂上不出现「工科 / 理科」字样。
-      </p>
+      <div className="text-muted-foreground space-y-1 rounded-xl border bg-sky-50/40 p-4 text-sm leading-6">
+        <p>
+          封面绑定在<b>课程模板</b>上，而不是单门课程。
+        </p>
+        <p>
+          模板创建时选定封面，之后可在「编辑课程模板」里更换；更换后该模板下所有课程同步更新，教师端与学生端都不需要单独设置。
+        </p>
+        <p>封面只有图标与配色两个信息，课堂上不出现「工科 / 理科」字样。</p>
+      </div>
     </section>
   );
 }

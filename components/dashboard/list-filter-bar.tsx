@@ -153,7 +153,10 @@ export function ListFilterBar({
       </div>
 
       {summary ? (
-        <p aria-live="polite" className="text-muted-foreground text-xs leading-5">
+        <p
+          aria-live="polite"
+          className="text-muted-foreground text-xs leading-5"
+        >
           {summary}
         </p>
       ) : null}

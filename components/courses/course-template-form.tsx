@@ -226,7 +226,12 @@ function EditCourseTemplateForm({
 
     if (!result.success) {
       setServerError(result.error);
-      for (const field of ["name", "description", "version", "coverKey"] as const) {
+      for (const field of [
+        "name",
+        "description",
+        "version",
+        "coverKey",
+      ] as const) {
         const message = result.fieldErrors?.[field]?.[0];
         if (message) {
           setError(field, { message });

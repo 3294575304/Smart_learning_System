@@ -39,7 +39,8 @@ export async function confirmDerivedConceptObjectiveLinksAction(
   const teacher = await requireAuthenticatedUser([Role.TEACHER]);
   const courseId = String(formData.get("courseId") ?? "");
   if (!courseId) return;
-  const objectiveCode = String(formData.get("objectiveCode") ?? "") || undefined;
+  const objectiveCode =
+    String(formData.get("objectiveCode") ?? "") || undefined;
   await confirmDerivedConceptObjectiveLinks({
     teacherId: teacher.id,
     courseId,
