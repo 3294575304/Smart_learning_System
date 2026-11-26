@@ -56,6 +56,7 @@ prisma/*.db-journal
 /docs/
 /output/
 /outputs/
+/artifacts/
 
 # Per-machine Windows startup configuration; keep the local copy out of GitHub.
 /start-all.ps1

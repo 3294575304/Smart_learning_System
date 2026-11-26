@@ -163,6 +163,14 @@ export function TeacherAssistantConversation({
   const state = reply?.evaluation?.state;
   return (
     <div className="space-y-4">
+      <Link
+        href="/teacher/quality-reports/standalone"
+        onNavigate={onNavigate}
+        className="block rounded-xl border border-violet-300 bg-violet-50 px-3 py-2.5 text-sm font-semibold text-violet-900 hover:bg-violet-100"
+      >
+        上传模板、成绩和问卷汇总，生成教学质量报告{" "}
+        <ArrowUpRight className="inline size-4" aria-hidden="true" />
+      </Link>
       <div className="flex flex-wrap gap-2" aria-label="试着问我">
         {assistantStarters.map((starter) => (
           <button

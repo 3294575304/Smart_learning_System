@@ -95,6 +95,23 @@ export async function resolveTeacherAssistant(
 ): Promise<TeacherAssistantResult> {
   if (!teacherEvaluationAssistantEnabled())
     throw new ResourceNotFoundError("教师 AI 助手暂未开放，请使用工作台入口。");
+  if (
+    /报告/u.test(input.text) &&
+    /上传|独立/u.test(input.text) &&
+    /成绩|问卷|模板/u.test(input.text)
+  )
+    return {
+      topic: "QUALITY_REPORT",
+      message:
+        "可以上传模板、成绩和问卷汇总，在独立报告工作台核对后生成待审核稿。",
+      cards: [
+        {
+          label: "打开独立报告工作台",
+          href: "/teacher/quality-reports/standalone",
+          detail: "无需先创建课程；上传文件并确认字段、权重和课程目标。",
+        },
+      ],
+    };
   const { topics, mode, followUp } = readAssistantIntent(input.text);
   const denied = /不要|不想|不用|别再/u.test(input.text) && !input.topic;
   if (!denied && !input.topic && topics.length > 1)

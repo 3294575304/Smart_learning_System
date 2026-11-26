@@ -288,6 +288,7 @@ export function buildDeterministicNarrative(
   }));
   const studentEvaluation = buildStudentEvaluation(source);
   const assessments = source.syllabus?.assessments;
+  const standalone = source.sourceReference.standalone === true;
   const assessmentMatches =
     assessments?.length === source.components.length &&
     assessments.every((assessment) =>
@@ -322,8 +323,8 @@ export function buildDeterministicNarrative(
       ? "问卷反馈较少，暂不开展目标达成与学生评价的比较。"
       : "尚无可对应课程目标的学生评价，需补充后比较学习表现与学生感受。";
   const summary = [
-    `教学内容与授课方式：${source.syllabus?.teachingContent?.length ? `正式大纲涵盖${source.syllabus.teachingContent.slice(0, 3).join("、")}等内容。` : "需结合正式大纲核对教学内容对课程目标的覆盖。"}${evaluated.length ? "目标评价可用于判断整体学习要求的落实情况；" : "当前目标达成资料尚不完整；"}实际授课方式及其支撑效果仍需教师结合教学实施情况核实。`,
-    `考核与评分标准：${assessments?.length ? (assessmentMatches ? "当前考核项目及权重与正式大纲一致。" : "当前考核项目或权重与正式大纲存在差异，需核对后说明。") : "尚缺正式大纲考核信息，不能确认考核一致性。"}${mapped ? "已配置考核项目与课程目标的对应关系。" : "考核与课程目标的对应关系需进一步核实。"}评分标准是否明确、合理，需教师结合实际评分细则与执行情况确认。`,
+    `教学内容与授课方式：${source.syllabus?.teachingContent?.length ? `${standalone ? "教师提供的教学内容包括" : "正式大纲涵盖"}${source.syllabus.teachingContent.slice(0, 3).join("、")}等内容。` : standalone ? "教学内容待教师补充，并核对其对课程目标的覆盖。" : "需结合正式大纲核对教学内容对课程目标的覆盖。"}${evaluated.length ? "目标评价可用于判断整体学习要求的落实情况；" : "当前目标达成资料尚不完整；"}实际授课方式及其支撑效果仍需教师结合教学实施情况核实。`,
+    `考核与评分标准：${standalone ? "考核项目及权重由教师在本次报告中确认。" : assessments?.length ? (assessmentMatches ? "当前考核项目及权重与正式大纲一致。" : "当前考核项目或权重与正式大纲存在差异，需核对后说明。") : "尚缺正式大纲考核信息，不能确认考核一致性。"}${mapped ? "已配置考核项目与课程目标的对应关系。" : "考核与课程目标的对应关系需进一步核实。"}评分标准是否明确、合理，需教师结合实际评分细则与执行情况确认。`,
     `课程目标达成：${outcomeAnalysis}${hasDifference ? `“${weakest.name}”环节表现相对薄弱，宜结合目标要求检查相关学习困难。` : "后续应结合目标对应的作答情况开展巩固与反馈。"}`,
     `达成情况与学生评价比较：${comparison}`,
   ];

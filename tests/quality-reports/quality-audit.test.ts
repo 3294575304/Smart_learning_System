@@ -111,6 +111,38 @@ test("自动审查区分大纲、基础信息、目标达成和问卷缺口", ()
     assert.ok(codes.has(code), code);
 });
 
+test("独立报告使用教师确认的大纲信息，不误报未发布正式大纲", () => {
+  const input = source();
+  input.sourceReference = {
+    standalone: true,
+    syllabusSource: { mode: "MANUAL" },
+  };
+  input.syllabus = {
+    publishedStructureId: null,
+    versionNumber: 1,
+    courseName: input.course.name,
+    courseCategory: null,
+    courseNature: null,
+    credits: null,
+    teachingCollege: null,
+    applicableMajors: null,
+    objectiveCount: 1,
+    assessmentCount: 1,
+    assessments: input.components,
+    teachingContent: ["Python 基础"],
+  };
+  const stats = calculateQualityReportStatistics(input);
+  const narrative = buildDeterministicNarrative(input, stats);
+  const codes = new Set(
+    auditQualityReportDraft(input, stats, narrative).issues.map(
+      (item) => item.code,
+    ),
+  );
+  assert.equal(codes.has("SYLLABUS_NOT_PUBLISHED"), false);
+  assert.equal(codes.has("SYLLABUS_OBJECTIVES_MISSING"), false);
+  assert.equal(narrative.courseSummary.includes("正式大纲"), false);
+});
+
 test("有正式目标但未计算达成度时给出补算提示而非目标缺失", () => {
   const input: QualityReportSourceSnapshot = {
     ...source(),

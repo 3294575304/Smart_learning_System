@@ -192,32 +192,43 @@ export function buildAssessmentSchemeFromSyllabus(
     syllabus.objectives.length,
     syllabus.assessments.length,
   );
-  const mapping = extractedMatrix ?? structuredMappingPercentages(syllabus);
+  const reviewedMapping = structuredMappingPercentages(syllabus);
+  const useReviewedMapping = Boolean(syllabus.reviewedObjectiveAllocation);
+  const mapping = useReviewedMapping
+    ? reviewedMapping
+    : (extractedMatrix ?? reviewedMapping);
   const rubric = gradingBands(pages);
   const warnings: string[] = [];
-  if (!mapping && syllabus.objectiveAssessmentMappings.length > 0) {
-    warnings.push(
-      "正式大纲结构包含课程目标关联，但未能从原文确定性提取数值比例，请教师对照原文补充。",
-    );
+  if (!mapping) {
+    if (useReviewedMapping) {
+      warnings.push(
+        "教师调整后的课程目标占比尚未覆盖全部考核项目，请在考核方案中补充并确认。",
+      );
+    } else if (syllabus.objectiveAssessmentMappings.length > 0) {
+      warnings.push(
+        "正式大纲结构包含课程目标关联，但未能从原文确定性提取数值比例，请教师对照原文补充。",
+      );
+    }
   }
   if (!rubric) {
     warnings.push(
       "未能从正式大纲原文确定性提取完整评分分档；考核项目满分默认 100，默认 60% 达成线须教师确认。",
     );
   }
-  const mappingRefs = extractedMatrix
-    ? extractedMatrix.sourcePages.map((page, index) => ({
-        page,
-        ...(index === 0 ? { quote: "课程目标在各考核方式中占比" } : {}),
-        verified: true,
-      }))
-    : [
-        ...new Map(
-          syllabus.objectiveAssessmentMappings
-            .flatMap((item) => item.sourceRefs)
-            .map((ref) => [JSON.stringify(ref), ref]),
-        ).values(),
-      ];
+  const mappingRefs =
+    extractedMatrix && !useReviewedMapping
+      ? extractedMatrix.sourcePages.map((page, index) => ({
+          page,
+          ...(index === 0 ? { quote: "课程目标在各考核方式中占比" } : {}),
+          verified: true,
+        }))
+      : [
+          ...new Map(
+            syllabus.objectiveAssessmentMappings
+              .flatMap((item) => item.sourceRefs)
+              .map((ref) => [JSON.stringify(ref), ref]),
+          ).values(),
+        ];
   return {
     calculationMethod: "REVERSE_MATRIX",
     thresholdConfirmed: false,
@@ -258,7 +269,13 @@ export function buildAssessmentSchemeFromSyllabus(
               mapping?.values[
                 objectiveIndex * syllabus.assessments.length + assessmentIndex
               ] ?? null,
-            sourceRefs: mappingRefs,
+            sourceRefs: useReviewedMapping
+              ? (syllabus.objectiveAssessmentMappings.find(
+                  (item) =>
+                    item.objectiveCode === objective.code &&
+                    item.assessmentCode === assessment.code,
+                )?.sourceRefs ?? [])
+              : mappingRefs,
           })),
         rubricBands: rubric?.bands ?? [],
       };

@@ -21,7 +21,7 @@ interface GradebookOption {
     gradebookPublicationId: string;
   }>;
 }
-interface ReportItem {
+export interface ReportItem {
   classroom: { id: string | null; name: string } | null;
   templateName: string;
   id: string;
@@ -163,12 +163,12 @@ function qualityAuditValue(value: unknown): QualityAudit | null {
   };
 }
 
-function ReviewEditor({
+export function ReviewEditor({
   courseId,
   report,
   onApproved,
 }: {
-  courseId: string;
+  courseId: string | null;
   report: ReportItem;
   onApproved: () => Promise<void>;
 }) {
@@ -195,7 +195,9 @@ function ReviewEditor({
     setError(null);
     try {
       const response = await fetch(
-        `/api/teacher/courses/${courseId}/quality-reports/${report.id}/review`,
+        courseId
+          ? `/api/teacher/courses/${courseId}/quality-reports/${report.id}/review`
+          : `/api/teacher/quality-reports/standalone/${report.id}/review`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -359,7 +361,11 @@ function ReviewEditor({
       <div className="flex flex-wrap gap-2">
         <a
           className="rounded-md border bg-white px-3 py-2 text-sm"
-          href={`/api/teacher/courses/${courseId}/quality-reports/${report.id}/download?artifact=draft-docx`}
+          href={
+            courseId
+              ? `/api/teacher/courses/${courseId}/quality-reports/${report.id}/download?artifact=draft-docx`
+              : `/api/teacher/quality-reports/standalone/${report.id}/download?artifact=draft-docx`
+          }
         >
           下载 AI 审核稿
         </a>

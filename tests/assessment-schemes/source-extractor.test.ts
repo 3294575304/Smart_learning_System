@@ -169,6 +169,30 @@ test("原文数值优先；缺少原文时使用已审核结构化占比", () =>
   );
 });
 
+test("教师已修改目标占比时，考核方案使用正式审核值而非重新提取的原文值", () => {
+  const reviewed = structuredClone(syllabus);
+  reviewed.reviewedObjectiveAllocation = true;
+  reviewed.objectiveAssessmentMappings.forEach((mapping) => {
+    const objectiveIndex = reviewed.objectives.findIndex(
+      (item) => item.code === mapping.objectiveCode,
+    );
+    const assessmentIndex = reviewed.assessments.findIndex(
+      (item) => item.code === mapping.assessmentCode,
+    );
+    const rates = [
+      [40, 60, 60, 50, 60],
+      [35, 20, 30, 25, 30],
+      [25, 20, 10, 25, 10],
+    ];
+    mapping.allocationRate = rates[objectiveIndex]?.[assessmentIndex] ?? null;
+  });
+  const result = buildAssessmentSchemeFromSyllabus(reviewed, pages);
+  assert.deepEqual(
+    result.components[0]?.mappings.map((item) => item.allocationRate),
+    [40, 35, 25],
+  );
+});
+
 test("发布校验区分来源待确认并验证权重与目标比例", () => {
   const draft = buildAssessmentSchemeFromSyllabus(syllabus, pages);
   assert.equal(

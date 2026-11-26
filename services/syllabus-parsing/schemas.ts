@@ -108,6 +108,14 @@ const syllabusObjectiveSchema = z
     code: codeSchema,
     title: nameSchema,
     description: z.string().trim().min(1).max(6_000),
+    overallAllocationRate: z
+      .number()
+      .finite()
+      .min(0)
+      .max(100)
+      .nullable()
+      .optional(),
+    sourceObjectiveCode: codeSchema.nullable().optional(),
     ...sourced,
   })
   .strict();
@@ -252,6 +260,7 @@ export const syllabusParseOutputSchema = z
     objectiveAssessmentMappings: z
       .array(objectiveAssessmentMappingSchema)
       .max(500),
+    reviewedObjectiveAllocation: z.boolean().optional(),
     assessmentMethod: z
       .enum(["REVERSE_MATRIX", "FORWARD_DECOMPOSITION"])
       .optional(),
@@ -410,6 +419,29 @@ export const publishableSyllabusStructureSchema =
         path: ["objectives"],
         message: "至少需要一个课程目标",
       });
+    }
+    const overallRates = value.objectives.map(
+      (item) => item.overallAllocationRate ?? null,
+    );
+    if (overallRates.some((rate) => rate !== null)) {
+      if (overallRates.some((rate) => rate === null)) {
+        context.addIssue({
+          code: "custom",
+          path: ["objectives"],
+          message: "填写总体比例时必须覆盖全部课程目标",
+        });
+      } else if (
+        Math.abs(
+          overallRates.reduce<number>((sum, rate) => sum + (rate ?? 0), 0) -
+            100,
+        ) > 0.000001
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["objectives"],
+          message: "课程目标总体比例合计必须为 100%",
+        });
+      }
     }
     if (value.chapters.length === 0) {
       context.addIssue({

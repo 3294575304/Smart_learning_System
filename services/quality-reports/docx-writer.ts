@@ -51,6 +51,9 @@ export async function buildQualityReportDocx(
     const template = await readFrozenReportTemplate(
       source.course.id,
       source.reportTemplate,
+      typeof source.sourceReference.ownerId === "string"
+        ? source.sourceReference.ownerId
+        : undefined,
     );
     const percent = (value: number | null) =>
       value === null ? "暂无数据" : `${(value * 100).toFixed(2)}%`;
