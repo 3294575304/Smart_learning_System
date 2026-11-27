@@ -111,6 +111,12 @@ test("班级选择器仅显示关联班级，三个分类的入口都携带默�
       ?.searchParams.get("courseId"),
     "course-a",
   );
+  assert.equal(
+    links
+      .find((url) => url.pathname === "/teacher/exams")
+      ?.searchParams.get("fromCourseId"),
+    "course-a",
+  );
   assert.ok(
     links.some(
       (url) => url.pathname === "/teacher/courses/course-a/random-picker",
@@ -289,7 +295,11 @@ test("课程准备进度随完成情况变化，四项始终保留直接入口",
     [complete, 2],
   ] as const) {
     assert.equal((html.match(/<details\b/g) ?? []).length, detailsCount);
-    assert.equal((html.match(/<a\b/g) ?? []).length, 6);
+    const toolSection = html.indexOf(
+      'aria-labelledby="course-question-tools-title"',
+    );
+    assert.equal((html.slice(0, toolSection).match(/<a\b/g) ?? []).length, 4);
+    assert.equal((html.slice(toolSection).match(/<a\b/g) ?? []).length, 3);
     assert.doesNotMatch(html, /展开详情|收起详情|data-setup-entry/u);
   }
   assert.doesNotMatch(empty, /id="course-completed-setup-details"/u);
@@ -397,6 +407,10 @@ test("题目入口独立于准备区域并始终可见，班级操作进入独�
       /href="\/teacher\/courses\/course-a\/question-mapping"/u,
     );
     assert.match(tools, /href="\/teacher\/questions\?courseId=course-a"/u);
+    assert.match(
+      tools,
+      /id="course-content-coverage"[^>]*href="\/teacher\/courses\/course-a\/content-coverage"/u,
+    );
     assert.match(
       preparation,
       /href="\/teacher\/courses\/course-a\/classrooms"/u,

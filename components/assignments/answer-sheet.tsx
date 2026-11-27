@@ -30,6 +30,7 @@ import {
   answerSecondaryButton,
 } from "./student-answer-workspace";
 import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
+import { cn } from "@/lib/utils";
 
 import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { EditorDialog } from "@/components/assignments/editor-dialog";
@@ -245,8 +246,11 @@ export function AnswerSheet({
   const [attachmentOperations, setAttachmentOperations] = useState(0);
   const attachmentPending = attachmentOperations > 0;
   const [examConfirmation, setExamConfirmation] = useState(false);
+  const [examExitConfirmation, setExamExitConfirmation] = useState(false);
   const [examSubmitError, setExamSubmitError] = useState<string | null>(null);
   const questionPanel = useRef<HTMLElement>(null);
+  const answerWorkspace = useRef<HTMLElement>(null);
+  const examBanner = useRef<HTMLDivElement>(null);
   const [finalAction, setFinalAction] = useState<FinalAction | null>(null);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [pendingDraft, setPendingDraft] = useState<AssignmentLocalDraft | null>(
@@ -268,6 +272,21 @@ export function AnswerSheet({
   useEffect(() => {
     workLockedRef.current = workLocked;
   }, [workLocked]);
+  useEffect(() => {
+    const workspace = answerWorkspace.current;
+    const stickyBanner = examBanner.current;
+    if (!workspace || !stickyBanner) return;
+    const measure = () => {
+      workspace.style.setProperty(
+        "--exam-banner-height",
+        `${stickyBanner.getBoundingClientRect().height}px`,
+      );
+    };
+    const observer = new ResizeObserver(measure);
+    measure();
+    observer.observe(stickyBanner);
+    return () => observer.disconnect();
+  }, [exam]);
   const finalActionRef = useRef<FinalAction | null>(null);
   const leavingRef = useRef(false);
   const hydratedRef = useRef(false);
@@ -559,14 +578,18 @@ export function AnswerSheet({
         if (examExit) {
           const error = await examExit();
           if (error) {
-            setSaveState("failed");
-            setSaveError(error);
+            setExamSubmitError(error);
             return;
           }
         }
         leavingRef.current = true;
         window.location.replace(
-          exitHref ??
+          (examExit
+            ? studentTaskHref(
+                `/student/submissions/${submission.id}/result`,
+                scope,
+              )
+            : exitHref) ??
             studentTaskHref(
               exam ? "/student/exams" : "/student/assignments?status=TODO",
               scope,
@@ -698,8 +721,17 @@ export function AnswerSheet({
     totalPoints,
   };
   const submitNote = exam
-    ? "保存并退出后考试继续计时。交卷后答案不能修改。"
+    ? examExit
+      ? "退出会交卷，交卷后不能修改答案。"
+      : "保存并退出后考试继续计时。交卷后答案不能修改。"
     : "提交后本次答案不能修改。";
+
+  function requestExit() {
+    if (examExit && !workLocked) {
+      setExamSubmitError(null);
+      setExamExitConfirmation(true);
+    } else void finish("exit");
+  }
 
   function resolveDraft(useLocal: boolean) {
     if (useLocal && pendingDraft) {
@@ -726,7 +758,9 @@ export function AnswerSheet({
               ? "正在处理附件，请稍等。"
               : finalAction === "exit"
                 ? exam
-                  ? "正在保存考试作答，保存成功后返回考试列表。"
+                  ? examExit
+                    ? "正在保存作答并确认交卷。"
+                    : "正在保存考试作答，保存成功后返回考试列表。"
                   : "正在保存草稿，保存成功后返回作业列表。"
                 : saveState === "saving"
                   ? "正在保存草稿…"
@@ -734,7 +768,9 @@ export function AnswerSheet({
                     ? "已保存到账号，仍可继续作答。"
                     : pendingDraft
                       ? "选择恢复方式后可继续作答。"
-                      : "修改后会自动保存，也可以保存并退出。"}
+                      : examExit
+                        ? "修改后会自动保存。本场考试退出时会交卷。"
+                        : "修改后会自动保存，也可以保存并退出。"}
       </p>
       {saveState === "failed" && (
         <>
@@ -774,7 +810,11 @@ export function AnswerSheet({
     <article
       ref={questionPanel}
       tabIndex={-1}
-      className={answerQuestionCard}
+      className={cn(
+        answerQuestionCard,
+        exam &&
+          "scroll-mt-[calc(var(--dashboard-header-height)+var(--exam-banner-height,0px)+0.75rem)]",
+      )}
       aria-label={`第 ${question.sortOrder} 题：${question.title}`}
       key={question.id}
     >
@@ -871,7 +911,11 @@ export function AnswerSheet({
   );
 
   return (
-    <section className="space-y-4" data-back-to-top-hidden={exam || undefined}>
+    <section
+      ref={answerWorkspace}
+      className="space-y-4"
+      data-back-to-top-hidden={exam || undefined}
+    >
       {workLocked && !exam && (
         <p
           role="status"
@@ -928,7 +972,10 @@ export function AnswerSheet({
         </p>
       )}
       {banner && (
-        <div className="sticky top-(--dashboard-header-height) z-10">
+        <div
+          ref={exam ? examBanner : undefined}
+          className="sticky top-(--dashboard-header-height) z-10"
+        >
           {banner}
         </div>
       )}
@@ -1000,8 +1047,51 @@ export function AnswerSheet({
         </EditorDialog>
       )}
 
+      {examExit && (
+        <EditorDialog
+          open={examExitConfirmation && !workLocked}
+          title="确认退出并交卷"
+          busy={Boolean(finalAction)}
+          onClose={() => setExamExitConfirmation(false)}
+        >
+          <p className="mt-3 text-sm">
+            退出会提交这次答卷，之后不能修改答案。
+            {blankExamQuestions.length > 0 &&
+              `还有 ${blankExamQuestions.length} 题未作答。`}
+          </p>
+          {(examSubmitError || (saveState === "failed" && saveError)) && (
+            <p role="alert" className="mt-2 text-sm text-rose-800">
+              {examSubmitError || saveError}。请检查网络后重试。
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className={answerSecondaryButton}
+              disabled={Boolean(finalAction)}
+              onClick={() => setExamExitConfirmation(false)}
+            >
+              继续作答
+            </button>
+            <button
+              type="button"
+              className={answerPrimaryButton}
+              disabled={Boolean(finalAction)}
+              onClick={() => {
+                setExamSubmitError(null);
+                void finish("exit");
+              }}
+            >
+              {finalAction ? "正在确认交卷…" : "退出并交卷"}
+            </button>
+          </div>
+        </EditorDialog>
+      )}
       <StudentAnswerWorkspace
         busy={Boolean(finalAction)}
+        firstUnanswered={
+          exam ? (blankExamQuestions[0]?.index ?? -1) : undefined
+        }
         header={{
           title: submission.assignmentTitle,
           details: (
@@ -1020,7 +1110,7 @@ export function AnswerSheet({
             <button
               className={answerSecondaryButton}
               disabled={Boolean(finalAction) || attachmentPending}
-              onClick={() => void finish("exit")}
+              onClick={requestExit}
               type="button"
             >
               <ArrowLeft aria-hidden="true" className="size-4" />
@@ -1036,7 +1126,29 @@ export function AnswerSheet({
           actions: (
             <StatusChip tone={headerChip.tone}>{headerChip.label}</StatusChip>
           ),
-          status: saveNotice,
+          status: exam ? (
+            <>
+              {totalQuestions > 0 && (
+                <div
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-sm"
+                  aria-label="考试作答进度"
+                >
+                  <span>
+                    已答 {answeredCount} · 未答 {totalQuestions - answeredCount}
+                  </span>
+                  <progress
+                    className="accent-brand h-2 w-28"
+                    aria-label="已作答题数"
+                    value={answeredCount}
+                    max={totalQuestions}
+                  />
+                </div>
+              )}
+              {saveNotice}
+            </>
+          ) : (
+            saveNotice
+          ),
         }}
         navigator={{
           ...answerCard,
@@ -1057,11 +1169,17 @@ export function AnswerSheet({
                 <button
                   className={answerSecondaryButton}
                   disabled={Boolean(finalAction) || attachmentPending}
-                  onClick={() => void finish("exit")}
+                  onClick={requestExit}
                   type="button"
                 >
                   <Save aria-hidden="true" className="size-4" />
-                  {finalAction === "exit" ? "正在保存…" : "保存并退出"}
+                  {finalAction === "exit"
+                    ? examExit
+                      ? "正在确认交卷…"
+                      : "正在保存…"
+                    : examExit
+                      ? "退出并交卷"
+                      : "保存并退出"}
                 </button>
                 <button
                   className={answerPrimaryButton}

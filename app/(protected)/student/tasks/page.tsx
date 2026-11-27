@@ -1,3 +1,4 @@
+import { StudentAnalysisReturnLink } from "@/components/dashboard/student-analysis-return-link";
 import { ExamAttemptBadge } from "@/components/exams/exam-attempt-badge";
 import Link from "next/link";
 import { Role } from "@prisma/client";
@@ -65,6 +66,11 @@ export default async function StudentTasksPage({
     <section className="space-y-4">
       <SurveyAvailabilityRefresh at={overview.nextChangeAt?.toISOString()} />
       <StudentPageHeader
+        actions={
+          query.analysisReturn ? (
+            <StudentAnalysisReturnLink href={query.analysisReturn} />
+          ) : undefined
+        }
         title="学习任务"
         description="作业、考试、签到与问卷都在这一个列表里，按截止时间排。"
       />

@@ -34,23 +34,28 @@ export default async function NewAssignmentPage({
     <section className="space-y-5">
       <header className="workspace-page-header flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0 space-y-1">
-          <TeacherBackLink
-            href={
-              selectedClassroom?.courseId
-                ? `/teacher/courses/${selectedClassroom.courseId}`
-                : "/teacher/assignments"
-            }
-          >
-            {selectedClassroom ? "返回课程" : "返回作业管理"}
-          </TeacherBackLink>
+          {!selectedClassroom?.courseId && (
+            <TeacherBackLink href="/teacher/assignments">
+              返回作业管理
+            </TeacherBackLink>
+          )}
           <h1 className="mt-1">创建作业</h1>
         </div>
-        <Link
-          className="border-border bg-card text-brand-strong hover:bg-muted inline-flex min-h-9 items-center rounded-md border px-3 text-sm font-medium"
-          href={`/teacher/assignments?status=DRAFT${selectedClassroom ? `&classroomId=${selectedClassroom.id}` : ""}`}
-        >
-          草稿管理
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            className="border-border bg-card text-brand-strong hover:bg-muted inline-flex min-h-11 items-center rounded-lg border px-4 py-2 text-sm font-medium"
+            href={`/teacher/assignments?status=DRAFT${selectedClassroom ? `&classroomId=${selectedClassroom.id}` : ""}`}
+          >
+            草稿管理
+          </Link>
+          {selectedClassroom?.courseId && (
+            <TeacherBackLink
+              href={`/teacher/courses/${selectedClassroom.courseId}`}
+            >
+              返回课程
+            </TeacherBackLink>
+          )}
+        </div>
       </header>
       {options.classrooms.length === 0 ? (
         <div className="rounded-xl border border-dashed p-10 text-center text-gray-500">

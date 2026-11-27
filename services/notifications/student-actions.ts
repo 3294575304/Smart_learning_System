@@ -7,6 +7,8 @@ import {
 } from "@/services/student-experience/task-policy";
 import { studentTaskHref } from "@/services/student-experience/task-scope";
 import { courseSurveyAvailability } from "@/services/course-surveys/availability";
+import { availableStudentExamReports } from "@/services/exams/student-report";
+import { EFFECTIVE_SUBMISSION_STATUSES } from "@/services/assignments/reporting";
 import { notificationActionUrlSchema, notificationIdSchema } from "./schemas";
 import type { NotificationListItem, StudentNotificationAction } from "./types";
 
@@ -41,7 +43,11 @@ export async function withStudentNotificationActions<
           where: {
             id: { in: submissionIds },
             studentId: recipientId,
-            status: { not: "WITHDRAWN" },
+            status: { in: EFFECTIVE_SUBMISSION_STATUSES },
+            assignment: {
+              deletedAt: null,
+              status: { in: ["PUBLISHED", "CLOSED", "ARCHIVED"] },
+            },
           },
           select: { id: true, assignmentId: true, status: true },
         })
@@ -106,14 +112,78 @@ export async function withStudentNotificationActions<
         })
       : Promise.resolve([]),
   ]);
-  const assignments = await studentAssignmentActionContexts(
+  const assignmentIds = [
+    ...new Set([
+      ...ids("ASSIGNMENT"),
+      ...submissions.map(({ assignmentId }) => assignmentId),
+    ]),
+  ];
+  const [assignments, exams] = await Promise.all([
+    studentAssignmentActionContexts(recipientId, assignmentIds, now),
+    assignmentIds.length
+      ? prisma.assignment.findMany({
+          where: {
+            id: { in: assignmentIds },
+            deletedAt: null,
+            status: { in: ["PUBLISHED", "CLOSED"] },
+            examSession: { cancelledAt: null },
+            classroom: {
+              memberships: {
+                some: { studentId: recipientId, status: "ACTIVE" },
+              },
+            },
+          },
+          select: {
+            id: true,
+            classroomId: true,
+            status: true,
+            title: true,
+            publishedAt: true,
+            dueAt: true,
+            classroom: { select: { courseId: true, status: true } },
+            examSession: {
+              select: {
+                id: true,
+                courseId: true,
+                startsAt: true,
+                endsAt: true,
+              },
+            },
+            submissions: {
+              where: {
+                studentId: recipientId,
+                status: "PUBLISHED",
+                score: { not: null },
+                maxScore: { not: null },
+              },
+              select: { id: true },
+              take: 1,
+            },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+  const examByAssignment = new Map(
+    exams.flatMap((assignment) =>
+      assignment.examSession &&
+      assignment.examSession.courseId === assignment.classroom.courseId
+        ? [
+            [
+              assignment.id,
+              { ...assignment, exam: assignment.examSession },
+            ] as const,
+          ]
+        : [],
+    ),
+  );
+  const reports = await availableStudentExamReports(
     recipientId,
-    [
-      ...new Set([
-        ...ids("ASSIGNMENT"),
-        ...submissions.map((submission) => submission.assignmentId),
-      ]),
-    ],
+    [...examByAssignment.values()].map((assignment) => ({
+      id: assignment.id,
+      classroomId: assignment.classroomId,
+      endsAt: assignment.exam.endsAt,
+      hasPublishedScore: assignment.submissions.length > 0,
+    })),
     now,
   );
   const byAssignment = new Map(
@@ -167,10 +237,60 @@ export async function withStudentNotificationActions<
         item.sourceType === "SUBMISSION"
           ? bySubmission.get(item.sourceId ?? "")
           : undefined;
-      const context = byAssignment.get(
+      const assignmentId =
         submitted?.assignmentId ??
-          (item.sourceType === "ASSIGNMENT" ? (item.sourceId ?? "") : ""),
-      );
+        (item.sourceType === "ASSIGNMENT" ? (item.sourceId ?? "") : "");
+      const examAssignment = examByAssignment.get(assignmentId);
+      if (examAssignment && item.type !== "ASSIGNMENT_REVOKED") {
+        const { exam, classroomId, classroom, publishedAt, dueAt, status } =
+          examAssignment;
+        const scope = { courseId: exam.courseId, classroomId };
+        const report = reports.has(assignmentId);
+        const grading = item.type === "ASSIGNMENT_GRADED";
+        const available =
+          status === "PUBLISHED" &&
+          classroom.status === "ACTIVE" &&
+          publishedAt !== null &&
+          now >= publishedAt &&
+          now >= exam.startsAt &&
+          now < exam.endsAt &&
+          (!dueAt || now < dueAt);
+        return {
+          ...resolved({
+            kind: "LINK",
+            href: studentTaskHref(
+              report
+                ? `/student/exams/${exam.id}/report`
+                : !grading && available
+                  ? `/student/assignments/${assignmentId}`
+                  : `/student/exams/${exam.id}/record`,
+              scope,
+            ),
+            label: report
+              ? "查看考试报告"
+              : !grading && available
+                ? "前往考试"
+                : "查看考试记录",
+          }),
+          title: grading
+            ? report
+              ? "考试成绩已公布"
+              : "考试已批改"
+            : item.type === "ASSIGNMENT_DUE_SOON"
+              ? "考试即将截止"
+              : "考试已安排",
+          content: grading
+            ? `《${examAssignment.title}》已完成批改。${report ? "可以查看个人考试报告。" : "可以查看交卷记录。"}`
+            : `查看《${examAssignment.title}》的考试安排。`,
+        };
+      }
+      const context = byAssignment.get(assignmentId);
+      if (!context && submitted)
+        return resolved({
+          kind: "LINK",
+          href: `/student/submissions/${submitted.id}/result`,
+          label: submitted.status === "PUBLISHED" ? "查看成绩" : "查看提交记录",
+        });
       if (!context)
         return resolved(
           null,
@@ -256,8 +376,17 @@ export async function withStudentNotificationActions<
     }
     const url = notificationActionUrlSchema.safeParse(item.actionUrl);
     return resolved(
-      url.success
-        ? { kind: "LINK", href: url.data, label: "打开相关内容" }
+      url.success && url.data !== "/notifications"
+        ? {
+            kind: "LINK",
+            href: url.data,
+            label:
+              item.type === "LEARNING_ANALYSIS_READY"
+                ? "查看学习分析"
+                : item.type === "RECOMMENDATION_READY"
+                  ? "查看自主练习"
+                  : "打开相关内容",
+          }
         : null,
     );
   });

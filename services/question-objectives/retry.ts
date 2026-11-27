@@ -11,6 +11,7 @@ export async function retryQuestionObjectiveClassification(
   questionId: string,
   courseId: string | null,
   requestId: string,
+  reclassify = false,
 ) {
   const question = await prisma.question.findFirst({
     where: {
@@ -18,6 +19,7 @@ export async function retryQuestionObjectiveClassification(
       ...teacherQuestionAccessWhere(teacherId),
       deletedAt: null,
       status: { in: ["ACTIVE", "DRAFT"] },
+      ...(reclassify ? { isAssignmentOnly: false } : {}),
     },
     select: {
       id: true,
@@ -28,7 +30,12 @@ export async function retryQuestionObjectiveClassification(
   });
   if (!question) throw new ResourceNotFoundError("题目不存在");
 
+  if (reclassify && !courseId) return { status: "PROTECTED" as const };
+  const requestKey = reclassify
+    ? `${questionId}:reclassify:${courseId}:${teacherId}:${requestId}`
+    : `${questionId}:retry:${requestId}`;
   let syllabusStructureId: string | null = null;
+  let replacement: { id: string; updatedAt: string } | undefined;
   if (courseId) {
     if (!question.questionCategoryId)
       throw new ResourceNotFoundError("题目尚未归属课程分类");
@@ -45,24 +52,45 @@ export async function retryQuestionObjectiveClassification(
     if (!course || course.currentPublishedSyllabusStructureId === null)
       throw new ResourceNotFoundError("课程不存在或尚无正式大纲");
     syllabusStructureId = course.currentPublishedSyllabusStructureId;
-    const existing = await prisma.questionCourseObjective.findUnique({
-      where: {
-        questionId_courseId_syllabusStructureId: {
-          questionId,
-          courseId,
-          syllabusStructureId,
+    if (reclassify) {
+      const prior = await prisma.backgroundJob.findUnique({
+        where: {
+          type_idempotencyKey: {
+            type: QUESTION_OBJECTIVE_JOB_TYPE,
+            idempotencyKey: requestKey,
+          },
         },
+        select: { id: true },
+      });
+      if (prior) return { status: "QUEUED" as const, jobId: prior.id };
+    }
+    const existing = await prisma.questionCourseObjective.findMany({
+      where: {
+        questionId,
+        courseId,
+        syllabusStructureId,
       },
-      select: { id: true },
+      select: { id: true, source: true, updatedAt: true },
+      take: 2,
     });
-    if (existing) return { status: "CLASSIFIED" as const };
+    if (reclassify) {
+      const [mapping] = existing;
+      if (existing.length !== 1 || mapping?.source !== "AI")
+        return { status: "PROTECTED" as const };
+      replacement = {
+        id: mapping.id,
+        updatedAt: mapping.updatedAt.toISOString(),
+      };
+    } else if (existing.length) {
+      return { status: "CLASSIFIED" as const };
+    }
   } else if (question.defaultObjectiveKind) {
     return { status: "CLASSIFIED" as const };
   }
 
   const job = await createBackgroundJob({
     type: QUESTION_OBJECTIVE_JOB_TYPE,
-    idempotencyKey: `${questionId}:retry:${requestId}`,
+    idempotencyKey: requestKey,
     requestedById: teacherId,
     courseId,
     input: {
@@ -70,6 +98,7 @@ export async function retryQuestionObjectiveClassification(
       revision: question.revision,
       courseId,
       syllabusStructureId,
+      ...(replacement ? { replacement } : {}),
     },
     maxAttempts: 3,
   });

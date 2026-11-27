@@ -1,4 +1,34 @@
-import { QuestionType } from "@prisma/client";
+import { QuestionType, type GradingStatus } from "@prisma/client";
+
+export type PublishedReceiptOutcome =
+  "CORRECT" | "INCORRECT" | "PARTIAL" | "PENDING";
+
+export function publishedReceiptOutcome(answer?: {
+  score: number | null;
+  maxScore: number;
+  gradingStatus: GradingStatus;
+}): PublishedReceiptOutcome {
+  if (
+    !answer ||
+    answer.score === null ||
+    (answer.gradingStatus !== "GRADED" &&
+      answer.gradingStatus !== "AUTO_GRADED")
+  )
+    return "PENDING";
+  if (answer.score === 0) return "INCORRECT";
+  return answer.score >= answer.maxScore ? "CORRECT" : "PARTIAL";
+}
+
+export function hasRecordedStudentAnswer(
+  answer: { booleanAnswer: boolean | null; textAnswer: string | null },
+  selectedOptionCount: number,
+) {
+  return (
+    answer.booleanAnswer !== null ||
+    selectedOptionCount > 0 ||
+    Boolean(answer.textAnswer?.trim())
+  );
+}
 
 interface PresentedOption {
   labelSnapshot: string;
@@ -51,6 +81,19 @@ export function formatStudentAnswer(
     return answer.booleanAnswer ? "正确" : "错误";
   }
   return answer.textAnswer?.trim() || "未作答";
+}
+
+export function hasStudentAnswer(
+  answer: PresentedAnswer,
+  type: QuestionType,
+): boolean {
+  if (
+    type === QuestionType.SINGLE_CHOICE ||
+    type === QuestionType.MULTIPLE_CHOICE
+  )
+    return answer.selectedOptions.length > 0;
+  if (type === QuestionType.TRUE_FALSE) return answer.booleanAnswer !== null;
+  return Boolean(answer.textAnswer?.trim());
 }
 
 export function formatCorrectAnswer(question: PresentedQuestion): string {

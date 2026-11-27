@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { scrubSensitiveText } from "@/services/ai/privacy";
 import { createAIProvider } from "@/services/ai/provider-factory";
 import { AIProviderRequestError } from "@/services/ai/provider";
+import { examConceptIndex } from "@/services/exams/concept-selection";
 import {
   completeBackgroundJob,
   failBackgroundJob,
@@ -176,8 +177,11 @@ async function loadEvidence(batch: {
             : {}),
           ...(chapterNodeIds ? { id: { in: chapterNodeIds } } : {}),
         },
-        orderBy: { sortOrder: "asc" },
-        take: 60,
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        take:
+          request.balancedConcepts && request.conceptIds.length
+            ? request.conceptIds.length
+            : 60,
         select: {
           id: true,
           conceptId: true,
@@ -300,11 +304,13 @@ async function loadEvidence(batch: {
             {
               id: node.conceptId,
               name: scrubSensitiveText(node.name, privateNames, 120),
+              evidenceId: `GRAPH:${node.id}`,
             },
           ]
         : [],
     ),
     sourceQuestion,
+    evidenceById: new Map(evidence.map((item) => [item.id, item])),
     privateNames,
   };
 }
@@ -487,6 +493,26 @@ export async function executeClaimedAIQuestionGenerationJob(
       offset += count;
       if (!missing.length) continue;
       for (const ordinal of missing) {
+        const targetConcept =
+          source.request.balancedConcepts && source.concepts.length
+            ? source.concepts[
+                examConceptIndex(
+                  ordinal,
+                  source.concepts.length,
+                  batch.requestedCount,
+                )
+              ]
+            : null;
+        const targetEvidence =
+          targetConcept && source.evidenceById.get(targetConcept.evidenceId);
+        const questionEvidence = targetEvidence
+          ? [
+              ...rankEvidence([targetEvidence], [], source.privateNames, null),
+              ...source.evidence
+                .filter(({ id }) => id !== targetEvidence.id)
+                .slice(0, 7),
+            ]
+          : source.evidence;
         let validationError: string | undefined;
         let failureCode = "INVALID_MODEL_OUTPUT";
         let generated: Array<{
@@ -525,12 +551,11 @@ export async function executeClaimedAIQuestionGenerationJob(
                   : type === QuestionType.MULTIPLE_CHOICE
                     ? source.request.multipleChoiceOptions
                     : null,
-              evidence: source.evidence,
+              evidence: questionEvidence,
               sourceQuestion: source.sourceQuestion,
-              concepts:
-                source.request.balancedConcepts && source.concepts.length
-                  ? [source.concepts[(ordinal - 1) % source.concepts.length]]
-                  : source.concepts,
+              concepts: (targetConcept ? [targetConcept] : source.concepts).map(
+                ({ id, name }) => ({ id, name }),
+              ),
             };
             if (attempt === 0) firstChecks++;
             const raw = await provider.generateQuestions(aiInput, {
@@ -568,7 +593,7 @@ export async function executeClaimedAIQuestionGenerationJob(
               )
                 throw new Error("编程题测试用例超过 10 个");
               const refs = item.sourceIds.map((id) =>
-                source.evidence.find((ref) => ref.id === id),
+                questionEvidence.find((ref) => ref.id === id),
               );
               if (refs.some((ref) => !ref))
                 throw new Error("引用了不存在的证据");
@@ -636,7 +661,7 @@ export async function executeClaimedAIQuestionGenerationJob(
                 {
                   type,
                   objectives: source.objectives,
-                  evidence: source.evidence,
+                  evidence: questionEvidence,
                   draftText: scrubSensitiveText(
                     JSON.stringify(parsed.questions),
                     source.privateNames,

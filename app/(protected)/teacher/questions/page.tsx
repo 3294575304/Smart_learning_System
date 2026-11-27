@@ -11,6 +11,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { QuestionFilters } from "@/components/questions/question-filters";
 import { QuestionList } from "@/components/questions/question-list";
+import { QuestionObjectiveAppend } from "@/components/questions/question-objective-append";
+import { QuestionObjectiveBatch } from "@/components/questions/question-objective-batch";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import {
   questionListQuerySchema,
@@ -81,6 +83,9 @@ export default async function QuestionsPage({
     listTeacherQuestionCourseOptions(teacher.id),
     listTeacherQuestionCategoryOptions(teacher.id),
   ]);
+  const batchCandidates = questions.items.filter(
+    (item) => item.canReclassifyCourseObjective,
+  );
 
   return (
     <section className="space-y-6">
@@ -126,6 +131,32 @@ export default async function QuestionsPage({
           {Math.max(questions.pagination.totalPages, 1)} 页
         </span>
       </div>
+      {query.courseId &&
+        questions.objectiveScope &&
+        questions.items.length > 0 && (
+          <QuestionObjectiveAppend
+            key={JSON.stringify([
+              query,
+              questions.objectiveScope.syllabusStructureId,
+            ])}
+            courseId={query.courseId}
+            scope={questions.objectiveScope}
+            candidates={questions.items.map(
+              ({ id, title, courseObjectives }) => ({
+                id,
+                title,
+                codes: courseObjectives?.map(({ code }) => code) ?? [],
+              }),
+            )}
+          />
+        )}
+      {query.courseId && batchCandidates.length > 0 && (
+        <QuestionObjectiveBatch
+          key={JSON.stringify(query)}
+          courseId={query.courseId}
+          candidates={batchCandidates.map(({ id, title }) => ({ id, title }))}
+        />
+      )}
       <QuestionList items={questions.items} courseId={query.courseId} />
       {questions.pagination.totalPages > 1 ? (
         <nav

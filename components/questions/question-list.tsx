@@ -73,9 +73,11 @@ export function QuestionList({
                   </span>
                   <span className="tq-objective">
                     课程目标：
-                    {question.courseObjective
-                      ? `${question.courseObjective.code} · ${question.courseObjective.title}`
-                      : question.courseObjective === null
+                    {question.courseObjectives?.length
+                      ? question.courseObjectives
+                          .map(({ code, title }) => `${code} · ${title}`)
+                          .join(" / ")
+                      : question.courseObjectives !== undefined
                         ? "待分类"
                         : question.defaultObjectiveKind === "KNOWLEDGE"
                           ? "1 · 知识"
@@ -85,13 +87,15 @@ export function QuestionList({
                               ? "3 · 素养"
                               : "待分类"}
                   </span>
-                  {(question.courseObjective === null ||
-                    (question.courseObjective === undefined &&
+                  {(question.courseObjectives?.length === 0 ||
+                    (question.courseObjectives === undefined &&
                       !question.defaultObjectiveKind)) && (
                     <QuestionObjectiveRetry
                       questionId={question.id}
                       courseId={
-                        question.courseObjective === null ? courseId : null
+                        question.courseObjectives?.length === 0
+                          ? courseId
+                          : null
                       }
                     />
                   )}

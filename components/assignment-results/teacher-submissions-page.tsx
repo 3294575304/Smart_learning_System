@@ -12,7 +12,12 @@ import { PageIndex } from "@/components/dashboard/page-index";
 import { PublishResultsButton } from "@/components/assignment-results/publish-results-button";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { resolveTeacherAssessmentPage } from "@/services/exams/classroom-page-scope";
-import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
+import {
+  examListContext,
+  examMonitorHref,
+  examWorkspaceHref,
+  teacherAssessmentHref,
+} from "@/services/exams/classroom-navigation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { listTeacherAssignmentSubmissions } from "@/services/assignments/manual-grading";
 import {
@@ -39,13 +44,14 @@ function pageHref(
   base: string,
   query: TeacherSubmissionListQuery,
   page: number,
+  listContext?: string,
 ): string {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(query.pageSize),
   });
   if (query.status) params.set("status", query.status);
-  return `${base}/submissions?${params.toString()}`;
+  return examWorkspaceHref(`${base}/submissions?${params}`, listContext);
 }
 
 export default async function TeacherSubmissionsPage({
@@ -71,12 +77,14 @@ export default async function TeacherSubmissionsPage({
     raw,
   );
   const base = teacherAssessmentHref(assignmentId.data, examSessionId);
+  const listContext = examSessionId ? examListContext(raw.examList) : "";
   if (query.data.status === SubmissionStatus.PUBLISHED) {
     redirect(
       pageHref(
         base,
         { ...query.data, status: SubmissionStatus.GRADED },
         query.data.page,
+        listContext,
       ),
     );
   }
@@ -88,12 +96,11 @@ export default async function TeacherSubmissionsPage({
       query.data,
     );
     if (query.data.page !== result.pagination.page) {
-      redirect(pageHref(base, query.data, result.pagination.page));
+      redirect(pageHref(base, query.data, result.pagination.page, listContext));
     }
-    const publication = await getAssignmentPublicationState(
-      teacher.id,
-      assignmentId.data,
-    );
+    const publication = examSessionId
+      ? null
+      : await getAssignmentPublicationState(teacher.id, assignmentId.data);
     return (
       <section className="space-y-6">
         <AssignmentStateRefresh renderedAt={Date.now()} />
@@ -102,7 +109,10 @@ export default async function TeacherSubmissionsPage({
             <TeacherBackLink
               href={
                 examSessionId
-                  ? `/teacher/exams/${examSessionId}`
+                  ? examWorkspaceHref(
+                      `/teacher/exams/${examSessionId}`,
+                      listContext,
+                    )
                   : "/teacher/assignments"
               }
             >
@@ -116,7 +126,7 @@ export default async function TeacherSubmissionsPage({
               满分 {result.assignment.totalPoints}
             </p>
           </div>
-          {result.totalSubmitted > 0 ? (
+          {publication && result.totalSubmitted > 0 ? (
             <div className="flex flex-col items-end gap-2">
               <PublishResultsButton
                 assignmentId={assignmentId.data}
@@ -130,6 +140,8 @@ export default async function TeacherSubmissionsPage({
           assignmentId={assignmentId.data}
           active="submissions"
           examSessionId={examSessionId}
+          classroomId={result.assignment.classroomId}
+          listContext={listContext}
         />
         {result.totalSubmitted > 0 || !examSessionId ? (
           <nav
@@ -150,7 +162,7 @@ export default async function TeacherSubmissionsPage({
                       ? "rounded-full bg-sky-700 px-4 py-2 text-sm text-white"
                       : "rounded-full border bg-white px-4 py-2 text-sm"
                   }
-                  href={href}
+                  href={examWorkspaceHref(href, listContext)}
                   key={filter.label}
                 >
                   {filter.label}
@@ -182,13 +194,21 @@ export default async function TeacherSubmissionsPage({
             </p>
             <Link
               className="mt-4 inline-flex rounded-lg border border-sky-200 px-4 py-2 text-sm text-sky-800"
-              href={
-                result.totalSubmitted === 0 ? `${base}` : `${base}/submissions`
-              }
+              href={examWorkspaceHref(
+                result.totalSubmitted === 0 && examSessionId
+                  ? examMonitorHref(
+                      examSessionId,
+                      result.assignment.classroomId,
+                    )
+                  : result.totalSubmitted === 0
+                    ? base
+                    : `${base}/submissions`,
+                listContext,
+              )}
             >
               {result.totalSubmitted === 0
                 ? examSessionId
-                  ? "查看试卷"
+                  ? "查看班级监考"
                   : "查看作业内容"
                 : "查看全部提交"}
             </Link>
@@ -263,7 +283,7 @@ export default async function TeacherSubmissionsPage({
                         href={personalWorkHref(
                           assignmentId.data,
                           submission.id,
-                          `${pageHref(base, query.data, query.data.page)}#submission-${submission.id}`,
+                          `${pageHref(base, query.data, query.data.page, listContext)}#submission-${submission.id}`,
                           "ALL",
                           examSessionId,
                         )}
@@ -300,7 +320,9 @@ export default async function TeacherSubmissionsPage({
         {result.pagination.totalPages > 1 ? (
           <PageIndex
             ariaLabel="提交分页"
-            hrefForPage={(page) => pageHref(base, query.data, page)}
+            hrefForPage={(page) =>
+              pageHref(base, query.data, page, listContext)
+            }
             page={result.pagination.page}
             summary={`第 ${result.pagination.page} / ${result.pagination.totalPages} 页`}
             totalPages={result.pagination.totalPages}

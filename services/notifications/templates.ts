@@ -76,7 +76,13 @@ export function assignmentDueSoonTemplate(input: {
 
 export function assignmentGradedTemplate(input: {
   assignmentTitle: string;
+  isExam?: boolean;
 }): NotificationTemplate {
+  if (input.isExam)
+    return template(
+      "考试成绩已公布",
+      `考试《${plainText(input.assignmentTitle, 80)}》成绩已公布，可查看得分、错题解析与教师反馈。`,
+    );
   return template(
     "作业已批改",
     `作业《${plainText(input.assignmentTitle, 80)}》已完成批改，可前往成绩页面查看结果。`,

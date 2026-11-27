@@ -7,14 +7,23 @@ import { requireAuthenticatedUser } from "@/services/auth/authorization";
 import { saveQuestionCourseObjective } from "@/services/question-objectives/editing";
 import { questionIdSchema } from "@/services/questions/schemas";
 
-const inputSchema = z
-  .object({
-    courseId: z.string().cuid(),
-    syllabusStructureId: z.string().cuid(),
-    objectiveCode: z.string().trim().min(1).max(50),
-    expectedObjectiveCode: z.string().trim().min(1).max(50).nullable(),
-  })
-  .strict();
+const objectiveCode = z.string().trim().min(1).max(50);
+const objectiveCodes = z
+  .array(objectiveCode)
+  .max(3)
+  .refine((codes) => new Set(codes).size === codes.length);
+const scope = z.object({
+  courseId: z.string().cuid(),
+  syllabusStructureId: z.string().cuid(),
+});
+const inputSchema = z.union([
+  scope
+    .extend({ objectiveCodes, expectedObjectiveCodes: objectiveCodes })
+    .strict(),
+  scope
+    .extend({ objectiveCode, expectedObjectiveCode: objectiveCode.nullable() })
+    .strict(),
+]);
 
 export async function PUT(
   request: Request,

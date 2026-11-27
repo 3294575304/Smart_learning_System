@@ -29,3 +29,21 @@ export function latestEffectiveSubmissions<
   }
   return [...latest.values()];
 }
+
+export function submissionNeedsGrading(submission: {
+  status: string;
+  score: unknown;
+  maxScore: unknown;
+  gradedAt: Date | null;
+  _count: { answers: number };
+}) {
+  return (
+    submission.status === "SUBMITTED" ||
+    submission.status === "PENDING_REVIEW" ||
+    submission._count.answers > 0 ||
+    (submission.status === "GRADED" &&
+      (submission.score === null ||
+        submission.maxScore === null ||
+        submission.gradedAt === null))
+  );
+}

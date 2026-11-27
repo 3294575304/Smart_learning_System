@@ -1,3 +1,5 @@
+import { StudentAnalysisReturnLink } from "@/components/dashboard/student-analysis-return-link";
+import { readStudentAnalysisReturn } from "@/services/student-experience/analysis-navigation";
 import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import { StudentPageHeader } from "@/components/dashboard/student-page-header";
 import { practiceSetQuerySchema } from "@/services/practice-sets/types";
@@ -27,6 +29,7 @@ interface Props {
     classroomId?: string | string[];
     conceptId?: string | string[];
     chapterId?: string | string[];
+    analysisReturn?: string | string[];
     objectiveCode?: string | string[];
     template?: string | string[];
     mode?: string | string[];
@@ -43,6 +46,7 @@ export default async function StudentRecommendationsPage({
 }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const query = await searchParams;
+  const analysisReturn = readStudentAnalysisReturn(query.analysisReturn);
   if (firstQueryValue(query.view) === "favorites") {
     const params = new URLSearchParams({ view: "favorites" });
     const courseId = firstQueryValue(query.courseId);
@@ -112,10 +116,15 @@ export default async function StudentRecommendationsPage({
     <section className="st-practice-workspace mx-auto max-w-[1440px] min-w-0 space-y-5">
       <StudentPageHeader
         actions={
-          <StudentCourseReturnLink
-            courseId={initialCourseId}
-            classroomId={initialClassroomId}
-          />
+          analysisReturn ? (
+            <StudentAnalysisReturnLink href={analysisReturn} />
+          ) : (
+            <StudentCourseReturnLink
+              hideFallback
+              courseId={initialCourseId}
+              classroomId={initialClassroomId}
+            />
+          )
         }
         title="自主练习"
         description="按课程生成与完成练习，或与 AI 梳理学习疑问。"

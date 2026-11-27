@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 
 interface PageHeaderProps {
   title: string;
-  description: string;
+  /** 允许传入结构化内容，便于把长描述拆成多行而不用堆分隔符。 */
+  description: ReactNode;
   actions?: ReactNode;
   eyebrow?: string;
   variant?: "default" | "student";

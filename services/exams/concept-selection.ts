@@ -1,3 +1,15 @@
+export const maxExamConcepts = 200;
+
+export function examConceptIndex(
+  ordinal: number,
+  topics: number,
+  questions: number,
+) {
+  return topics > questions
+    ? Math.floor(((ordinal - 0.5) * topics) / questions)
+    : (ordinal - 1) % topics;
+}
+
 export function toggleChapterConcepts(
   selectedIds: string[],
   chapterIds: string[],

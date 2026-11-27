@@ -89,6 +89,8 @@ interface AssignmentGradeNotification {
   recipientId: string;
   submissionId: string;
   assignmentTitle: string;
+  /** 考试走「考试成绩已公布」文案，作业走「作业已批改」。 */
+  isExam?: boolean;
 }
 
 export async function notifyAssignmentGraded(
@@ -125,7 +127,8 @@ export async function deliverMissingAssignmentGradeNotifications() {
   return prisma.$transaction(async (tx) => {
     const missing = await tx.$queryRaw<AssignmentGradeNotification[]>`
       SELECT s.id AS "submissionId", s."studentId" AS "recipientId",
-             a.title AS "assignmentTitle"
+             a.title AS "assignmentTitle",
+             (a."examSessionId" IS NOT NULL) AS "isExam"
       FROM "Submission" s
       JOIN "Assignment" a ON a.id = s."assignmentId"
       JOIN "User" u ON u.id = s."studentId"

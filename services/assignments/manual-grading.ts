@@ -7,7 +7,10 @@ import {
   touchAssignmentLifecycle,
 } from "./lifecycle-lock";
 import "server-only";
-import { latestEffectiveSubmissions } from "./latest-submissions";
+import {
+  latestEffectiveSubmissions,
+  submissionNeedsGrading,
+} from "./latest-submissions";
 
 import {
   AuditAction,
@@ -22,6 +25,7 @@ import { prisma } from "@/lib/prisma";
 import {
   formatCorrectAnswer,
   formatStudentAnswer,
+  hasStudentAnswer,
 } from "@/services/assignments/answer-presentation";
 import { AssignmentOperationError } from "@/services/assignments/errors";
 import { gradeAnswer, savedAnswerInput } from "@/services/assignments/grading";
@@ -171,6 +175,10 @@ function detailFromRecord(
         answer,
         answer.assignmentQuestion.typeSnapshot,
       ),
+      hasStudentAnswer: hasStudentAnswer(
+        answer,
+        answer.assignmentQuestion.typeSnapshot,
+      ),
       correctAnswer: formatCorrectAnswer(answer.assignmentQuestion),
       automaticScore:
         answer.assignmentQuestion.typeSnapshot === QuestionType.SHORT_ANSWER
@@ -257,6 +265,7 @@ export async function listTeacherAssignmentSubmissions(
       dueAt: true,
       classroom: {
         select: {
+          id: true,
           name: true,
           status: true,
           memberships: {
@@ -346,6 +355,7 @@ export async function listTeacherAssignmentSubmissions(
     assignment: {
       id: assignment.id,
       title: assignment.title,
+      classroomId: assignment.classroom.id,
       classroomName: assignment.classroom.name,
       totalPoints: assignment.totalPoints.toNumber(),
     },
@@ -931,6 +941,7 @@ export async function publishAssignmentResults(
             id: true,
             title: true,
             status: true,
+            examSessionId: true,
             classroom: {
               select: {
                 memberships: {
@@ -1010,6 +1021,7 @@ export async function publishAssignmentResults(
             recipientId: submission.studentId,
             submissionId: submission.id,
             assignmentTitle: assignment.title,
+            isExam: Boolean(assignment.examSessionId),
           })),
           transaction,
         );
@@ -1173,16 +1185,7 @@ export async function getAssignmentPublicationState(
   const latest = latestEffectiveSubmissions(
     assignment.submissions.filter((item) => members.has(item.studentId)),
   );
-  const pendingCount = latest.filter(
-    (item) =>
-      item.status === "SUBMITTED" ||
-      item.status === "PENDING_REVIEW" ||
-      item._count.answers > 0 ||
-      (item.status === "GRADED" &&
-        (item.score === null ||
-          item.maxScore === null ||
-          item.gradedAt === null)),
-  ).length;
+  const pendingCount = latest.filter(submissionNeedsGrading).length;
   const grantWindow = await usableGrantWindow(prisma, assignmentId);
   const capability = assignmentCapabilities({
     ...assignment,

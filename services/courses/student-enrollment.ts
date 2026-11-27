@@ -1,7 +1,13 @@
 import { CLASSROOM_STATUS_LABELS } from "@/services/classrooms/presentation";
 
 export interface StudentEnrollmentContext {
-  course: { id: string; name: string; term: string; status?: string };
+  course: {
+    id: string;
+    name: string;
+    term: string;
+    status?: string;
+    courseNo?: string;
+  };
   classroom: { id: string; name: string; status?: string };
 }
 export function studentEnrollmentLabel(item: StudentEnrollmentContext) {
@@ -49,4 +55,60 @@ export function selectStudentEnrollment<T extends StudentEnrollmentContext>(
       (x) => x.classroom.status === "ACTIVE" && x.course.status !== "ARCHIVED",
     ) ?? matching[0]
   );
+}
+
+function normalizeEnrollmentSearch(text: string) {
+  return text.normalize("NFKC").trim().toLowerCase();
+}
+
+export function searchStudentEnrollments<T extends StudentEnrollmentContext>(
+  items: T[],
+  search: string,
+) {
+  const terms = normalizeEnrollmentSearch(search)
+    .split(/[\s·,，、]+/)
+    .filter(Boolean);
+  if (!terms.length) return items;
+  return items
+    .map((item) => {
+      const names = [
+        item.course.name,
+        item.classroom.name,
+        item.course.courseNo ?? "",
+      ].map(normalizeEnrollmentSearch);
+      const term = normalizeEnrollmentSearch(item.course.term);
+      let rank = 0;
+      for (const keyword of terms) {
+        if (names.some((name) => name.startsWith(keyword))) rank += 2;
+        else if (
+          names.some((name) => name.includes(keyword)) ||
+          term.includes(keyword)
+        )
+          rank += 1;
+        else return { item, rank: 0 };
+      }
+      return { item, rank };
+    })
+    .filter(({ rank }) => rank > 0)
+    .sort((a, b) => b.rank - a.rank)
+    .map(({ item }) => item);
+}
+
+export function selectMostActiveStudentEnrollment<
+  T extends StudentEnrollmentContext & {
+    lastClassActivityAt: number;
+    lastPracticeAt: number;
+  },
+>(items: T[]) {
+  const active = items.filter(
+    ({ course, classroom }) =>
+      classroom.status === "ACTIVE" &&
+      !studentEnrollmentStatus(course.status, classroom.status).readOnly,
+  );
+  return [...(active.length ? active : items)].sort(
+    (a, b) =>
+      Math.max(b.lastClassActivityAt, b.lastPracticeAt) -
+        Math.max(a.lastClassActivityAt, a.lastPracticeAt) ||
+      b.lastClassActivityAt - a.lastClassActivityAt,
+  )[0];
 }

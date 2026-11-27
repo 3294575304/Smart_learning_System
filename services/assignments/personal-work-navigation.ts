@@ -1,15 +1,36 @@
 import { z } from "zod";
+import { QuestionType } from "@prisma/client";
 import { safeStudentWorkReturn } from "./student-query";
 import { teacherSubmissionListQuerySchema } from "./schemas";
-import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
+import {
+  examListContext,
+  examMonitorHref,
+  examWorkspaceHref,
+  teacherAssessmentHref,
+} from "@/services/exams/classroom-navigation";
 
 export const personalWorkQuerySchema = z.object({
   filter: z
-    .enum(["ALL", "WRONG", "CORRECT", "INCORRECT", "PENDING", "PENDING_REVIEW"])
+    .enum([
+      "ALL",
+      "WRONG",
+      "CORRECT",
+      "INCORRECT",
+      "PARTIAL",
+      "PENDING",
+      "PENDING_REVIEW",
+    ])
     .default("ALL")
     .transform((value) => (value === "PENDING_REVIEW" ? "ALL" : value)),
   returnTo: z.string().max(8000).optional(),
+  questionType: z.nativeEnum(QuestionType).optional(),
+  answerStatus: z.enum(["ANSWERED", "UNANSWERED"]).optional(),
 });
+
+export type PersonalWorkFilters = Pick<
+  z.output<typeof personalWorkQuerySchema>,
+  "filter" | "questionType" | "answerStatus"
+>;
 
 export function personalWorkHref(
   assignmentId: string,
@@ -17,9 +38,12 @@ export function personalWorkHref(
   returnTo?: string,
   filter = "ALL",
   examId?: string | null,
+  filters?: Omit<PersonalWorkFilters, "filter">,
 ) {
   const query = new URLSearchParams({ filter });
   if (returnTo) query.set("returnTo", returnTo);
+  if (filters?.questionType) query.set("questionType", filters.questionType);
+  if (filters?.answerStatus) query.set("answerStatus", filters.answerStatus);
   return `${teacherAssessmentHref(assignmentId, examId)}/submissions/${submissionId}?${query}`;
 }
 
@@ -55,6 +79,27 @@ export function personalWorkReturn(
   try {
     const url = new URL(value, "http://localhost");
     if (url.origin !== "http://localhost") throw new Error("Invalid origin");
+    const context = examId
+      ? examListContext(url.searchParams.get("examList"))
+      : "";
+    url.searchParams.delete("examList");
+    if (examId && url.pathname === `/teacher/exams/${examId}/monitor`) {
+      if (
+        url.searchParams.size !== 1 ||
+        url.searchParams.get("classroomId") !== classroomId
+      )
+        throw new Error("Invalid classroom");
+      const hash = /^#(?:monitor-|review-)[a-z0-9]+$/i.test(url.hash)
+        ? url.hash
+        : "";
+      return {
+        href: examWorkspaceHref(
+          `${examMonitorHref(examId, classroomId)}${hash}`,
+          context,
+        ),
+        label: "返回监考与公布",
+      };
+    }
     const legacyBase = teacherAssessmentHref(assignmentId);
     const results =
       url.pathname === `${base}/results` ||
@@ -84,7 +129,10 @@ export function personalWorkReturn(
       ? url.hash
       : "";
     return {
-      href: `${results ? `${base}/results` : fallback}?${params}${hash}`,
+      href: examWorkspaceHref(
+        `${results ? `${base}/results` : fallback}?${params}${hash}`,
+        context,
+      ),
       label: results ? "返回班级成绩" : fallbackLabel,
     };
   } catch {

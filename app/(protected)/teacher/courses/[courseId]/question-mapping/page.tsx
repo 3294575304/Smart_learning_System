@@ -21,11 +21,11 @@ export default async function QuestionMappingPage({
   const teacher = await requirePageRole(Role.TEACHER);
   const path = courseQuestionMappingPathSchema.safeParse(await params);
   if (!path.success) notFound();
-  const courseBase = `/teacher/courses/${path.data.courseId}`;
+  const courseId = path.data.courseId;
   const fromKnowledgeGraph = (await searchParams).from === "knowledge-graph";
   const backHref = fromKnowledgeGraph
-    ? `${courseBase}/knowledge-graph`
-    : courseBase;
+    ? `/teacher/courses/${courseId}/knowledge-graph`
+    : `/teacher/courses/${courseId}`;
   const backLabel = fromKnowledgeGraph ? "返回知识图谱" : "返回课程";
   try {
     const result = await listUnboundTeacherQuestions(
@@ -54,13 +54,13 @@ export default async function QuestionMappingPage({
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 className="inline-flex min-h-11 items-center rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
-                href={`${courseBase}/knowledge-graph`}
+                href={`/teacher/courses/${courseId}/knowledge-graph`}
               >
                 前往知识图谱
               </Link>
               <Link
                 className="inline-flex min-h-11 items-center rounded-lg border border-sky-200 px-4 py-2 text-sm font-medium text-sky-800 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
-                href={`${courseBase}/syllabus`}
+                href={`/teacher/courses/${courseId}/syllabus`}
               >
                 查看教学大纲
               </Link>

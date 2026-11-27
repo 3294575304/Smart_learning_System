@@ -1,3 +1,5 @@
+import { StudentAnalysisReturnLink } from "@/components/dashboard/student-analysis-return-link";
+import { readStudentAnalysisReturn } from "@/services/student-experience/analysis-navigation";
 import {
   StudentActivityFilters,
   StudentActivityPagination,
@@ -63,6 +65,10 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
   });
   if (!scopeResult.success) notFound();
   const { courseId, classroomId } = scopeResult.data;
+  const analysisReturn = readStudentAnalysisReturn(raw.analysisReturn);
+  const analysisAction = analysisReturn ? (
+    <StudentAnalysisReturnLink href={analysisReturn} />
+  ) : null;
   const returnTo = assignmentTaskReturn(raw.returnTo, scopeResult.data);
   const taskReturnLink = returnTo ? (
     <StudentBackLink href={returnTo}>返回学习任务</StudentBackLink>
@@ -103,6 +109,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
           description="统一查看提交记录、批改进度与正式成绩；历史班级保留本人记录，未发布成绩不提前显示。"
           eyebrow={course?.name}
           actions={
+            analysisAction ??
             taskReturnLink ??
             (course && classroomId ? (
               <StudentCourseReturnLink
@@ -125,11 +132,13 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
         />
         <StudentAssignmentTabs
           view="records"
+          analysisReturn={analysisReturn}
           returnTo={returnTo}
           courseId={course?.id}
           classroomId={classroomId}
         />
         <StudentSubmissionHistory
+          analysisReturn={analysisReturn}
           query={resultQuery}
           results={results}
           courseId={course?.id}
@@ -149,6 +158,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
     <section className="space-y-4">
       <PageHeader
         actions={
+          analysisAction ??
           taskReturnLink ??
           (course ? (
             <StudentCourseReturnLink
@@ -180,6 +190,7 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
       />
       <StudentAssignmentTabs
         view="work"
+        analysisReturn={analysisReturn}
         returnTo={returnTo}
         courseId={course?.id}
         classroomId={classroomId}
@@ -192,7 +203,11 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
               <Link
                 className="text-sm font-medium underline"
                 href={withAssignmentTaskReturn(
-                  activityHref("assignments", { courseId, classroomId }),
+                  activityHref("assignments", {
+                    courseId,
+                    classroomId,
+                    analysisReturn,
+                  }),
                   returnTo,
                 )}
               >
@@ -220,14 +235,19 @@ export default async function StudentAssignmentsPage({ searchParams }: Props) {
             return (
               <Link
                 className={`${activityCardClass} group flex flex-col transition-colors hover:border-sky-300 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-sky-600`}
-                href={withAssignmentTaskReturn(
-                  studentTaskHref(
-                    state === "SUBMITTED" && assignment.latestSubmissionId
-                      ? `/student/submissions/${assignment.latestSubmissionId}/result`
-                      : `/student/assignments/${assignment.id}`,
-                    scopeResult.data,
-                  ),
-                  state === "SUBMITTED" ? undefined : returnTo,
+                /*
+                 * 卡片不再继承列表页的 returnTo。
+                 * 之前未提交/已截止的作业会把 returnTo=/student/tasks 带进详情页，
+                 * 于是从「我的作业」点进去、左上角却写「返回学习任务」——
+                 * 面包屑应该回到上一屏（作业列表），而不是两屏之前的任务板。
+                 * 已提交的走结果页，本来就不带 returnTo，这正好解释了为什么只有
+                 * 未提交和已截止的作业存在这个问题。
+                 */
+                href={studentTaskHref(
+                  state === "SUBMITTED" && assignment.latestSubmissionId
+                    ? `/student/submissions/${assignment.latestSubmissionId}/result`
+                    : `/student/assignments/${assignment.id}`,
+                  scopeResult.data,
                 )}
                 key={assignment.id}
               >

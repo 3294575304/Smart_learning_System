@@ -2,12 +2,15 @@
 
 import { EditorDialog } from "@/components/assignments/editor-dialog";
 import type { ExamCreateInput } from "@/services/exams/schemas";
+import { examTypeLabel } from "@/services/exams/exam-types";
 
 export function ExamPublicationDialog({
   exam,
   course,
   classrooms,
   fromPaper = false,
+  onBankLabelChange,
+  labelUnmappedBankQuestions,
   busy,
   error,
   onClose,
@@ -17,6 +20,8 @@ export function ExamPublicationDialog({
   course: string;
   classrooms: string[];
   fromPaper?: boolean;
+  onBankLabelChange?: (checked: boolean) => void;
+  labelUnmappedBankQuestions?: boolean;
   busy: boolean;
   error: string;
   onClose: () => void;
@@ -35,8 +40,7 @@ export function ExamPublicationDialog({
             <div className="min-w-0 sm:col-span-2">
               <dt className="text-slate-600">考试</dt>
               <dd className="font-medium [overflow-wrap:anywhere]">
-                {exam.title} ·{" "}
-                {exam.type === "MIDTERM" ? "期中考试" : "期末考试"}
+                {exam.title} · {examTypeLabel(exam.type)}
               </dd>
             </div>
             <div className="min-w-0">
@@ -92,6 +96,18 @@ export function ExamPublicationDialog({
             {fromPaper &&
               "本次发布使用已保存且已审核的题目，新题将进入共享题库。"}
           </p>
+          {onBankLabelChange && (
+            <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={labelUnmappedBankQuestions}
+                disabled={busy}
+                onChange={(event) => onBankLabelChange(event.target.checked)}
+                className="mt-1 shrink-0"
+              />
+              将本卷的计分目标同时补标到当前大纲下尚无目标的复用题
+            </label>
+          )}
           {error && (
             <p role="alert" className="mt-3 text-sm text-rose-800">
               {error}

@@ -18,6 +18,7 @@ import { assignmentSectionWhere } from "@/services/assignments/presentation";
 import "server-only";
 import type { ExamSubmissionReason } from "@prisma/client";
 import { examAttemptAvailability } from "@/services/exams/attempt-policy";
+import { countedExamSwitchKinds } from "@/services/exams/switch-policy";
 import { assignmentStatusWhere } from "./presentation";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -48,6 +49,7 @@ import { prisma } from "@/lib/prisma";
 import {
   formatCorrectAnswer,
   formatStudentAnswer,
+  hasRecordedStudentAnswer,
 } from "@/services/assignments/answer-presentation";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import {
@@ -1741,7 +1743,7 @@ export async function submitStudentAssignment(
           }
         } else {
           const switches = await transaction.examSwitchEvent.count({
-            where: { submissionId },
+            where: { submissionId, kind: { in: [...countedExamSwitchKinds] } },
           });
           if (switches <= exam.allowedSwitches)
             throw new AssignmentOperationError("尚未达到考试自动交卷条件", 409);
@@ -1905,6 +1907,7 @@ export async function submitStudentAssignment(
 export async function getStudentSubmissionResult(
   studentId: string,
   submissionId: string,
+  reviewQuestionNumber?: number,
 ): Promise<SubmissionResultView> {
   const submission = await prisma.submission.findFirst({
     where: {
@@ -1926,6 +1929,8 @@ export async function getStudentSubmissionResult(
           title: true,
           status: true,
           examSessionId: true,
+          _count: { select: { questions: true } },
+          totalPoints: true,
           classroom: {
             select: {
               memberships: {
@@ -1995,18 +2000,47 @@ export async function getStudentSubmissionResult(
   }
   const isPublished = submission.status === SubmissionStatus.PUBLISHED;
   const answeredQuestions = new Set<string>();
+  let missingExamQuestions: SubmissionResultView["submittedAnswers"] = [];
   if (submission.assignment.examSessionId) {
     for (const answer of submission.answers) {
-      if (
-        answer.booleanAnswer !== null ||
-        answer.selectedOptions.length > 0 ||
-        answer.textAnswer?.trim()
-      ) {
+      if (hasRecordedStudentAnswer(answer, answer.selectedOptions.length)) {
         answeredQuestions.add(answer.assignmentQuestionId);
       }
     }
     for (const attachment of submission.attachments) {
       answeredQuestions.add(attachment.assignmentQuestionId);
+    }
+    if (submission.answers.length < submission.assignment._count.questions) {
+      const missing = await prisma.assignmentQuestion.findMany({
+        where: {
+          assignmentId: submission.assignmentId,
+          id: {
+            notIn: submission.answers.map(
+              ({ assignmentQuestionId }) => assignmentQuestionId,
+            ),
+          },
+        },
+        select: {
+          id: true,
+          titleSnapshot: true,
+          contentSnapshot: true,
+          typeSnapshot: true,
+          sortOrder: true,
+          examImages: { select: { id: true }, orderBy: { sortOrder: "asc" } },
+        },
+      });
+      missingExamQuestions = missing.map((question) => ({
+        assignmentQuestionId: question.id,
+        title: question.titleSnapshot,
+        content: question.contentSnapshot,
+        images: question.examImages.map(({ id }) => ({
+          id,
+          url: `/api/assignment-question-images/${id}`,
+        })),
+        type: question.typeSnapshot,
+        sortOrder: question.sortOrder,
+        studentAnswer: "未作答",
+      }));
     }
   }
   return {
@@ -2017,6 +2051,14 @@ export async function getStudentSubmissionResult(
           answeredCount: answeredQuestions.size,
         }
       : null,
+    ...(submission.assignment.examSessionId && {
+      examAnswerSheet: {
+        examId: submission.assignment.examSessionId,
+        totalPoints: submission.assignment.totalPoints.toNumber(),
+        answeredQuestionIds: [...answeredQuestions],
+        unansweredQuestions: missingExamQuestions,
+      },
+    }),
     id: submission.id,
     assignmentId: submission.assignmentId,
     assignmentTitle: submission.assignment.title,
@@ -2078,6 +2120,17 @@ export async function getStudentSubmissionResult(
             answer.assignmentQuestion.typeSnapshot,
           ),
           correctAnswer: formatCorrectAnswer(answer.assignmentQuestion),
+          ...(submission.assignment.examSessionId &&
+            answer.assignmentQuestion.sortOrder === reviewQuestionNumber && {
+              reviewOptions: answer.assignmentQuestion.optionSnapshots.map(
+                (option) => ({
+                  id: option.id,
+                  label: option.labelSnapshot,
+                  content: option.contentSnapshot,
+                  isCorrect: option.isCorrectSnapshot,
+                }),
+              ),
+            }),
           explanation: answer.assignmentQuestion.explanationSnapshot,
           teacherFeedback: answer.teacherFeedback,
           knowledgePoints:

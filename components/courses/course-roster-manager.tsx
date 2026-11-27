@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { EditorDialog } from "@/components/assignments/editor-dialog";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { requestApi } from "@/components/courses/request-api";
 import type { listCourseRoster } from "@/services/course-rosters/service";
@@ -52,11 +53,13 @@ export function CourseRosterManager({
   initialData,
   initialClassroomId,
   lockedClassroomId,
+  importHref,
 }: {
   courseId: string;
   initialData: Data;
   initialClassroomId?: string;
   lockedClassroomId?: string;
+  importHref?: string;
 }) {
   const router = useRouter();
   const [data, setData] = useState(initialData),
@@ -230,32 +233,42 @@ export function CourseRosterManager({
               未认领信息可纠正；已认领学生可纠正姓名，学号保持不变；跨教师共用信息请联系管理员。移出仅解除本班关系，保留历史作业与成绩。
             </p>
           </div>
-          <button
-            ref={addButton}
-            type="button"
-            className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white disabled:opacity-50"
-            disabled={
-              !(filter.classroomId
-                ? data.editableClassrooms.some(
-                    (c) => c.id === filter.classroomId,
-                  )
-                : data.editableClassrooms.length) ||
-              busy ||
-              loading
-            }
-            onClick={() => {
-              setError("");
-              setForm({
-                mode: "ADD",
-                classroomId:
-                  filter.classroomId || data.editableClassrooms[0]?.id || "",
-                studentNo: "",
-                name: "",
-              });
-            }}
-          >
-            添加学生
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {importHref && (
+              <Link
+                href={importHref}
+                className="inline-flex min-h-10 items-center rounded-lg border border-sky-200 bg-white px-4 py-2 text-sm font-medium text-sky-800 hover:bg-sky-50"
+              >
+                批量导入名单
+              </Link>
+            )}
+            <button
+              ref={addButton}
+              type="button"
+              className="min-h-10 rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              disabled={
+                !(filter.classroomId
+                  ? data.editableClassrooms.some(
+                      (c) => c.id === filter.classroomId,
+                    )
+                  : data.editableClassrooms.length) ||
+                busy ||
+                loading
+              }
+              onClick={() => {
+                setError("");
+                setForm({
+                  mode: "ADD",
+                  classroomId:
+                    filter.classroomId || data.editableClassrooms[0]?.id || "",
+                  studentNo: "",
+                  name: "",
+                });
+              }}
+            >
+              添加学生
+            </button>
+          </div>
         </div>
         <form
           onSubmit={(e) => {

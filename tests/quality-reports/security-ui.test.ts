@@ -25,10 +25,12 @@ test("报告接口强制教师身份、课程归属和私有无缓存下载", as
   );
   assert.ok(downloadRoute.includes('"Cache-Control": "private, no-store"'));
   assert.match(reviewRoute, /requireAuthenticatedUser\(\[Role\.TEACHER\]\)/u);
+  // 下载前必须按归属取报告：课程报告查课程归属，独立报告查发起人，两条分支都不能少。
   assert.match(
     service,
-    /where: \{ id: reportId, courseId, course: \{ teacherId \} \}/u,
+    /where: \{[\s\S]{0,200}?id: reportId,[\s\S]{0,80}?courseId,[\s\S]{0,200}?course: \{ teacherId \}/u,
   );
+  assert.match(service, /requestedById: teacherId/u);
   assert.match(service, /isolatedFromFormalGradebook: true/u);
   assert.match(service, /QUALITY_REPORT_DOWNLOADED/u);
 });

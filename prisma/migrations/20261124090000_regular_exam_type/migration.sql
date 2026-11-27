@@ -1,0 +1,1 @@
+ALTER TYPE "ExamType" ADD VALUE 'REGULAR';

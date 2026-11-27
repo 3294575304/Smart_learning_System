@@ -1,3 +1,4 @@
+import { readStudentAnalysisReturn } from "./analysis-navigation";
 import { z } from "zod";
 import { studentTaskScopeSchema } from "./task-scope";
 
@@ -15,6 +16,9 @@ export const activityStatuses = [
   "UPCOMING",
   "SUBMITTED",
   "EXPIRED",
+  "AWAITING",
+  "CLOSED",
+  "SPECIAL",
 ] as const;
 export type ActivityStatus = (typeof activityStatuses)[number];
 export const activityStatusLabels: Record<ActivityStatus, string> = {
@@ -23,16 +27,51 @@ export const activityStatusLabels: Record<ActivityStatus, string> = {
   UPCOMING: "待开放",
   SUBMITTED: "已完成",
   EXPIRED: "已结束",
+  AWAITING: "等待结果",
+  CLOSED: "已截止",
+  SPECIAL: "已登记",
 };
+/**
+ * 考试列表的状态词与其他列表不同：
+ * - TODO 同时包含「进行中」和「已交卷但还能重考」；
+ * - SUBMITTED 只表示「已出分」，不再泛指已交卷。
+ */
+export const examStatusFilterLabels: Record<ActivityStatus, string> = {
+  ...activityStatusLabels,
+  ALL: "全部状态",
+  TODO: "进行中 / 可重考",
+  UPCOMING: "待开考",
+  AWAITING: "已交卷待出分",
+  SUBMITTED: "已出分",
+  CLOSED: "已截止",
+  EXPIRED: "已截止",
+  SPECIAL: "已登记成绩状态",
+};
+export function activityStatusLabelFor(
+  view: ActivityView,
+  status: ActivityStatus,
+) {
+  return view === "exams"
+    ? examStatusFilterLabels[status]
+    : activityStatusLabels[status];
+}
 export const activityStatusOptions: Record<
   ActivityView,
   readonly ActivityStatus[]
 > = {
   tasks: ["ALL", "TODO", "UPCOMING"],
-  exams: activityStatuses,
+  exams: [
+    "ALL",
+    "TODO",
+    "UPCOMING",
+    "AWAITING",
+    "SUBMITTED",
+    "CLOSED",
+    "SPECIAL",
+  ],
   assignments: ["ALL", "TODO", "SUBMITTED", "EXPIRED"],
-  attendance: activityStatuses,
-  surveys: activityStatuses,
+  attendance: ["ALL", "TODO", "UPCOMING", "SUBMITTED", "EXPIRED"],
+  surveys: ["ALL", "TODO", "UPCOMING", "SUBMITTED", "EXPIRED"],
 };
 export const activityKindLabels = {
   ALL: "全部类型",
@@ -42,6 +81,7 @@ export const activityKindLabels = {
   survey: "课程问卷",
 };
 const querySchema = studentTaskScopeSchema.extend({
+  analysisReturn: z.unknown().optional().transform(readStudentAnalysisReturn),
   courseId: z.preprocess(
     (value) => (value === "" ? undefined : value),
     studentTaskScopeSchema.shape.courseId,
@@ -61,6 +101,17 @@ const querySchema = studentTaskScopeSchema.extend({
   kind: z
     .enum(["ALL", "exam", "assignment", "attendance", "survey"])
     .default("ALL"),
+  /** 考试类型筛选，仅考试列表使用。 */
+  examType: z.enum(["ALL", "MIDTERM", "FINAL", "REGULAR"]).default("ALL"),
+  /** 标题关键词，仅考试列表使用。 */
+  q: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  /** 时间范围：term = 仅本学期，all = 全部（默认，避免误以为记录丢失）。 */
+  range: z.enum(["all", "term"]).default("all"),
   focus: studentTaskScopeSchema.shape.classroomId,
   page: z.coerce.number().int().min(1).max(100000).default(1),
 });
@@ -88,6 +139,20 @@ export function activityQuerySchema(view: ActivityView) {
         message: "此页面不支持类型筛选。",
       });
     }
+    if (view !== "exams" && query.examType !== "ALL") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["examType"],
+        message: "仅考试列表支持考试类型筛选。",
+      });
+    }
+    if (view !== "exams" && query.q) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["q"],
+        message: "仅考试列表支持关键词搜索。",
+      });
+    }
   });
 }
 
@@ -101,7 +166,12 @@ export function activityHref(
   if (query.status && query.status !== "ALL")
     params.set("status", query.status);
   if (query.kind && query.kind !== "ALL") params.set("kind", query.kind);
+  if (query.examType && query.examType !== "ALL")
+    params.set("examType", query.examType);
+  if (query.q) params.set("q", query.q);
+  if (query.range && query.range !== "all") params.set("range", query.range);
   if (query.focus) params.set("focus", query.focus);
+  if (query.analysisReturn) params.set("analysisReturn", query.analysisReturn);
   if (query.page && query.page !== 1) params.set("page", String(query.page));
   return `/student/${view}${params.size ? `?${params}` : ""}`;
 }

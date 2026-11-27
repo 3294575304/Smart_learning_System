@@ -2,6 +2,7 @@ import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
 import { notFound } from "next/navigation";
 
+import { QuestionReviewContent } from "@/components/questions/question-review-content";
 import { QuestionActions } from "@/components/questions/question-actions";
 import { QuestionCourseObjectivePanel } from "@/components/questions/question-course-objective-panel";
 import { QuestionGraphBindingPanel } from "@/components/questions/question-graph-binding-panel";
@@ -47,6 +48,18 @@ export default async function QuestionDetailPage({
     question.answer.kind === "CHOICE"
       ? new Set(question.answer.correctOptionLabels)
       : new Set<string>();
+  const answer =
+    question.answer.kind === "BOOLEAN"
+      ? { label: "标准答案", value: question.answer.value ? "正确" : "错误" }
+      : question.answer.kind === "TEXT"
+        ? {
+            label: "可接受答案",
+            value: question.answer.acceptableAnswers.join("；"),
+            note: question.answer.caseSensitive ? "区分大小写" : "不区分大小写",
+          }
+        : question.answer.kind === "REFERENCE"
+          ? { label: "参考答案", value: question.answer.value }
+          : undefined;
   const courses = await listTeacherBindingCourses(teacher.id);
   const objectiveCourses = await listQuestionObjectiveCourses(
     teacher.id,
@@ -76,7 +89,7 @@ export default async function QuestionDetailPage({
       : editPreview
         ? `/teacher/assignments/${editId.data}/edit`
         : coverageCourse
-          ? `/teacher/courses/${coverageCourse.id}#course-content-coverage`
+          ? `/teacher/courses/${coverageCourse.id}/content-coverage?open=gaps&limit=all#course-content-coverage`
           : "/teacher/questions";
   const backLabel = examPreview
     ? "返回新建考试"
@@ -122,58 +135,17 @@ export default async function QuestionDetailPage({
         </div>
       ) : null}
       <div className="space-y-6 rounded-xl border bg-white p-6">
-        <div>
-          <h2 className="font-semibold">题干</h2>
-          <p className="mt-2 whitespace-pre-wrap">{question.content}</p>
-        </div>
-        {question.options.length > 0 ? (
-          <div>
-            <h2 className="font-semibold">选项</h2>
-            <div className="mt-2 space-y-2">
-              {question.options.map((option) => (
-                <div
-                  className={`rounded-md border p-3 ${correctLabels.has(option.label) ? "border-green-500 bg-green-50" : ""}`}
-                  key={option.id}
-                >
-                  <span className="font-medium">{option.label}.</span>{" "}
-                  {option.content}
-                  {correctLabels.has(option.label) ? (
-                    <span className="ml-2 text-xs text-green-700">
-                      正确答案
-                    </span>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {question.answer.kind === "BOOLEAN" ? (
-          <div>
-            <h2 className="font-semibold">标准答案</h2>
-            <p className="mt-2">{question.answer.value ? "正确" : "错误"}</p>
-          </div>
-        ) : null}
-        {question.answer.kind === "TEXT" ? (
-          <div>
-            <h2 className="font-semibold">可接受答案</h2>
-            <p className="mt-2">
-              {question.answer.acceptableAnswers.join("；")}
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              {question.answer.caseSensitive ? "区分大小写" : "不区分大小写"}
-            </p>
-          </div>
-        ) : null}
-        {question.answer.kind === "REFERENCE" ? (
-          <div>
-            <h2 className="font-semibold">参考答案</h2>
-            <p className="mt-2 whitespace-pre-wrap">{question.answer.value}</p>
-          </div>
-        ) : null}
-        <div>
-          <h2 className="font-semibold">答案解析</h2>
-          <p className="mt-2 whitespace-pre-wrap">{question.explanation}</p>
-        </div>
+        <QuestionReviewContent
+          content={question.content}
+          options={question.options.map(({ id, label, content }) => ({
+            id: id ?? label,
+            label,
+            content,
+            isCorrect: correctLabels.has(label),
+          }))}
+          explanation={question.explanation}
+          answer={answer}
+        />
         <div>
           <h2 className="font-semibold">知识点与标签</h2>
           <div className="mt-2 flex flex-wrap gap-2">

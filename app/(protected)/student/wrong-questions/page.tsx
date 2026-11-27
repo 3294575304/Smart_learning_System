@@ -1,3 +1,5 @@
+import { StudentAnalysisReturnLink } from "@/components/dashboard/student-analysis-return-link";
+import { readStudentAnalysisReturn } from "@/services/student-experience/analysis-navigation";
 import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -59,12 +61,17 @@ export default async function StudentWrongQuestionsPage({
   const favorites = raw.view === "favorites";
   const {
     view: _view,
+    analysisReturn: rawAnalysisReturn,
     backCourseId: _backCourseId,
     backClassroomId: _backClassroomId,
     ...filters
   } = raw;
-  const returnAction = (
+  const analysisReturn = readStudentAnalysisReturn(rawAnalysisReturn);
+  const returnAction = analysisReturn ? (
+    <StudentAnalysisReturnLink href={analysisReturn} />
+  ) : (
     <StudentCourseReturnLink
+      hideFallback
       courseId={_backCourseId}
       classroomId={_backClassroomId}
     />
@@ -121,6 +128,7 @@ export default async function StudentWrongQuestionsPage({
           <WrongQuestionsContent
             studentId={student.id}
             query={parsed.data}
+            analysisReturn={analysisReturn}
             returnTo={`/student/wrong-questions?${new URLSearchParams(Object.entries(raw).filter(([, value]) => value !== undefined) as [string, string][])}`}
           />
         </Suspense>
@@ -133,10 +141,12 @@ async function WrongQuestionsContent({
   studentId,
   query,
   returnTo,
+  analysisReturn,
 }: {
   studentId: string;
   query: WrongQuestionListQuery;
   returnTo: string;
+  analysisReturn?: string;
 }) {
   let result: Awaited<ReturnType<typeof listWrongQuestions>>;
   let chapters: Awaited<ReturnType<typeof listReviewChapters>>;
@@ -157,6 +167,7 @@ async function WrongQuestionsContent({
       <WrongQuestionFilters
         total={result.pagination.total}
         filterOptions={result.filterOptions}
+        analysisReturn={analysisReturn}
         chapters={chapters}
         query={query}
       />
@@ -171,6 +182,7 @@ async function WrongQuestionsContent({
       />
       <WrongQuestionPagination
         query={query}
+        analysisReturn={analysisReturn}
         total={result.pagination.total}
         totalPages={result.pagination.totalPages}
       />

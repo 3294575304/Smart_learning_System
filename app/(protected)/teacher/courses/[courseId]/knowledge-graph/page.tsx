@@ -33,7 +33,7 @@ export default async function Page({
         }
         actions={
           <TeacherBackLink
-            href={`/teacher/courses/${parsed.data}${point.success ? "#course-content-coverage" : ""}`}
+            href={`/teacher/courses/${parsed.data}${point.success ? "/content-coverage" : ""}`}
           >
             {point.success ? "返回内容覆盖自检" : "返回课程"}
           </TeacherBackLink>

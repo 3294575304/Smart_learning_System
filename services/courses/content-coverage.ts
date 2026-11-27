@@ -1,9 +1,10 @@
 import "server-only";
 
-import { KnowledgeGraphNodeType, QuestionStatus } from "@prisma/client";
+import { KnowledgeGraphNodeType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { coverageQuestionWhere } from "@/services/question-graph-bindings/question-scope";
 import { teacherCourseManagementWhere } from "./repository";
 
 function percent(numerator: number, denominator: number) {
@@ -32,6 +33,7 @@ export async function getTeacherCourseContentCoverage(
     select: {
       id: true,
       name: true,
+      questionCategoryId: true,
       currentPublishedKnowledgeGraphVersion: {
         select: {
           versionNumber: true,
@@ -92,12 +94,15 @@ export async function getTeacherCourseContentCoverage(
   }
   const conceptIds = points.map((point) => point.conceptId);
 
-  const [bindings, masteryStates] = await Promise.all([
+  const [bindings, latestRevisions] = await Promise.all([
     prisma.questionKnowledgeGraphBinding.findMany({
       where: {
         courseId,
         conceptId: { in: conceptIds },
-        question: { status: QuestionStatus.ACTIVE, deletedAt: null },
+        // 与绑定写入路径（accessibleQuestion）和知识图谱题库统计共用同一口径：
+        // 启用 + 未删除 + 属于本课程题库分类。此前这里只过滤状态、不过滤分类，
+        // 会把其它课程分类的题目算进本课程覆盖。
+        question: coverageQuestionWhere(course.questionCategoryId),
       },
       select: { conceptId: true, questionId: true },
     }),
@@ -105,21 +110,17 @@ export async function getTeacherCourseContentCoverage(
      * 「有证据」必须以每个学生的最新掌握度修订为准。
      * 早期实现按任意历史修订统计，撤销评分后旧修订仍会留下证据，
      * 覆盖卡会虚高。
+     * 这里直接按 stateId 去重取 revisionNumber 最大的一条：一次查询拿到
+     * 「每生最新修订」，不再按父记录逐条取子记录。
      */
-    prisma.studentCourseConceptMasteryState.findMany({
-      where: { courseId },
-      select: {
-        revisions: {
-          orderBy: { revisionNumber: "desc" },
-          take: 1,
-          select: { id: true },
-        },
-      },
+    prisma.studentCourseConceptMasteryRevision.findMany({
+      where: { state: { courseId } },
+      orderBy: [{ stateId: "asc" }, { revisionNumber: "desc" }],
+      distinct: ["stateId"],
+      select: { id: true },
     }),
   ]);
-  const latestRevisionIds = masteryStates.flatMap((state) =>
-    state.revisions.map((revision) => revision.id),
-  );
+  const latestRevisionIds = latestRevisions.map((revision) => revision.id);
   const evidenced = latestRevisionIds.length
     ? await prisma.studentCourseConceptMasteryEntry.findMany({
         where: {
@@ -174,11 +175,13 @@ export async function getTeacherCourseContentCoverage(
     if (row.hasEvidence) chapter.evidencedConceptCount += 1;
     chapterMap.set(key, chapter);
   }
-  const gaps = rows
-    .filter((row) => row.questionCount === 0)
-    .sort((left, right) =>
-      (left.chapterName ?? "").localeCompare(right.chapterName ?? "", "zh-CN"),
-    );
+  /*
+   * 缺口顺序必须沿用图谱 sortOrder（rows 由 nodes 按 sortOrder/code 排序而来）。
+   * 早期实现按章节名 localeCompare('zh-CN') 重排，中文下会排成
+   * 「第二章 → 第三章 → 第十章 → 第一章」，与教学顺序无关，
+   * 而页面对外只展示前 8 条，等于"优先补哪几个"是随机的。
+   */
+  const gaps = rows.filter((row) => row.questionCount === 0);
   return {
     course: { id: course.id, name: course.name },
     graphVersion: graph.versionNumber,
@@ -214,20 +217,28 @@ export async function getCoverageQuestionContext(
       questionCategoryId: true,
       currentPublishedKnowledgeGraphVersion: {
         select: {
+          id: true,
           nodes: {
             where: {
               conceptId,
               nodeType: KnowledgeGraphNodeType.KNOWLEDGE_POINT,
             },
             take: 1,
-            select: { code: true, name: true },
+            select: { id: true, code: true, name: true },
           },
         },
       },
     },
   });
-  const node = course?.currentPublishedKnowledgeGraphVersion?.nodes[0];
-  return course && node
-    ? { courseName: course.name, categoryId: course.questionCategoryId, node }
+  const version = course?.currentPublishedKnowledgeGraphVersion;
+  const node = version?.nodes[0];
+  return course && version && node
+    ? {
+        courseName: course.name,
+        categoryId: course.questionCategoryId,
+        graphVersionId: version.id,
+        publishedNodeId: node.id,
+        node,
+      }
     : null;
 }

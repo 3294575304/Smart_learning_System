@@ -1,3 +1,5 @@
+import { StudentAnalysisReturnLink } from "@/components/dashboard/student-analysis-return-link";
+import { studentAnalysisHref } from "@/services/student-experience/analysis-navigation";
 import { Role } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -17,7 +19,8 @@ import { StudentPageLink } from "@/components/dashboard/student-page-link";
 import { StatFunnel } from "@/components/ui/stat-funnel";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StudentHomeTasks } from "@/components/dashboard/student-home-tasks";
-import { HomeKnowledgeMatrix } from "@/components/dashboard/home-knowledge-matrix";
+import { ChapterMasteryPanel } from "@/components/learner-profiles/chapter-mastery-panel";
+import { KnowledgeDistribution } from "@/components/learner-profiles/knowledge-distribution";
 import { ScoreChart } from "@/components/dashboard/student-analysis-workspace";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import { CourseWorkspaceTabs } from "@/components/learner-profiles/course-workspace-tabs";
@@ -50,6 +53,7 @@ import { getStudentClassAnalytics } from "@/services/dashboard/student-class-ana
 import { listStudentCourseEvaluationContexts } from "@/services/gradebook/service";
 import { getStudentCourseLearningCenter } from "@/services/learner-profiles/learning-center";
 import { getStudentGrowthSummary } from "@/services/learner-profiles/growth-summary";
+import { filterActivitySince } from "@/services/learner-profiles/learning-center-format";
 import { getStudentLearnerProfileView } from "@/services/learner-profiles/service";
 
 const action =
@@ -132,28 +136,36 @@ export default async function StudentCourseLearningCenterPage({
             )}
           </p>
         </div>
-        <StudentPageLink
-          className="border-line bg-card text-ink-body hover:bg-muted inline-flex min-h-11 w-fit max-w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
-          href="/student/courses"
-        >
-          <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
-          我的课程
-        </StudentPageLink>
+        <div className="flex flex-wrap items-center gap-2">
+          {query.analysisReturn && (
+            <StudentAnalysisReturnLink href={query.analysisReturn} />
+          )}
+          <StudentPageLink
+            className="border-line bg-card text-ink-body hover:bg-muted inline-flex min-h-11 w-fit max-w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+            href="/student/courses"
+          >
+            <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
+            我的课程
+          </StudentPageLink>
+        </div>
       </header>
       <CourseWorkspaceTabs
         courseId={course.id}
         classroomId={classroom.id}
         tab={location.tab}
       />
-      <p className="text-ink-soft -mt-2 text-xs">
-        {
-          {
-            overview: "本课程概览、下一步建议与知识掌握汇总",
-            tasks: "本课程待办与课程记录入口",
-            growth: "章节掌握、学习路径、我的画像与趋势记录",
-          }[location.tab]
-        }
-      </p>
+      {/*
+        说明行只在「学习概况 / 课程任务」保留：growth 的文案曾逐字重复下面四个标签
+        （章节掌握、学习路径、我的画像、趋势与记录），等于让人先读目录再看目录。
+      */}
+      {location.tab === "overview" ? (
+        <p className="text-ink-soft -mt-2 text-xs">
+          本课程概览、下一步建议与知识掌握汇总
+        </p>
+      ) : null}
+      {location.tab === "tasks" ? (
+        <p className="text-ink-soft -mt-2 text-xs">本课程待办与课程记录入口</p>
+      ) : null}
       {location.tab === "growth" && (
         <>
           <GrowthSectionNavigation
@@ -162,7 +174,11 @@ export default async function StudentCourseLearningCenterPage({
             initialSection={location.section}
           />
           <Suspense fallback={null}>
-            <GrowthSummary studentId={student.id} courseId={course.id} />
+            <GrowthSummary
+              studentId={student.id}
+              courseId={course.id}
+              section={location.section}
+            />
           </Suspense>
         </>
       )}
@@ -198,12 +214,16 @@ export default async function StudentCourseLearningCenterPage({
 async function GrowthSummary({
   studentId,
   courseId,
+  section,
 }: {
   studentId: string;
   courseId: string;
+  section: "knowledge" | "path" | "profile" | "trends";
 }) {
   const summary = await getStudentGrowthSummary(studentId, courseId);
-  return summary ? <GrowthSummaryStrip summary={summary} /> : null;
+  return summary ? (
+    <GrowthSummaryStrip summary={summary} section={section} />
+  ) : null;
 }
 
 async function CourseContent({
@@ -459,7 +479,7 @@ async function CourseContent({
               </h2>
               <StudentPageLink
                 className={action}
-                href={`/student/analytics?${scoped}`}
+                href={studentAnalysisHref(scope, { fromCourseCenter: true })}
               >
                 我的学习分析
                 <ArrowUpRight aria-hidden="true" className="size-4" />
@@ -525,6 +545,23 @@ async function CourseContent({
           <LearnerProfileDetail
             evidenceHref={evidenceHref}
             focusConceptId={focus}
+            links={{
+              knowledge: studentCourseTabHref(
+                courseId,
+                classroomId,
+                "growth",
+                "knowledge",
+              ),
+              practice: `/student/recommendations?${new URLSearchParams({
+                view: "generate",
+                courseId,
+                classroomId,
+              }).toString()}`,
+              attendance: `/student/attendance?${new URLSearchParams({
+                courseId,
+                classroomId,
+              }).toString()}`,
+            }}
             profile={profile}
             reflectionHref={`/student/recommendations?${new URLSearchParams({
               view: "assistant",
@@ -592,6 +629,10 @@ async function CourseContent({
               <div className="mt-3">
                 <ScoreChart compactSmallSample points={scorePoints} />
               </div>
+              <p className="text-ink-soft mt-3 border-t pt-3 text-xs leading-5">
+                这里画的是每次作答的得分率；下方「稳定掌握度」按知识点聚合，
+                两者取样不同，不能直接比较高低。
+              </p>
             </section>
           )}
           <StudentCourseLearningCenterView
@@ -600,6 +641,11 @@ async function CourseContent({
               masteryTrend: data.masteryTrend.filter(
                 (point) => !since || Date.parse(point.at) >= since.getTime(),
               ),
+              /*
+               * 区间必须同时作用于时间线：只过滤图表会出现「切到近 30 天，
+               * 图上只剩 30 天，下面学习记录一条没少」，看起来像筛选失效。
+               */
+              recentActivity: filterActivitySince(data.recentActivity, since),
             }}
             scoreTrend={false}
             tab="activity"
@@ -639,7 +685,8 @@ async function CourseContent({
                       </StudentPageLink>
                     </header>
                     <div className="mt-4">
-                      <HomeKnowledgeMatrix
+                      <KnowledgeDistribution chapters={data.heatmap} />
+                      <ChapterMasteryPanel
                         chapters={data.heatmap.map((chapter) => ({
                           key: chapter.key,
                           name: chapter.name,
@@ -652,20 +699,30 @@ async function CourseContent({
                             masteryScore: c.masteryScore,
                           })),
                         }))}
+                        practiceBase={
+                          readOnly
+                            ? null
+                            : `/student/recommendations?${new URLSearchParams({
+                                view: "generate",
+                                courseId,
+                                classroomId,
+                              }).toString()}`
+                        }
                         profileHref={studentCourseTabHref(
                           courseId,
                           classroomId,
                           "growth",
                           "profile",
                         )}
+                        readOnly={readOnly}
                         generatedAt={data.generatedAt.toISOString()}
                         profileRevision={data.profileRevision}
-                        scroll={false}
                       />
                     </div>
                   </section>
                 }
                 objectiveCount={data.objectives.length}
+                objectiveNotice="目标维度按正式考核方案聚合，与章节维度口径不同：同一知识点可能同时计入多个目标，因此两边的数量不必相等。"
                 objectiveView={
                   <ObjectiveMasteryGrid
                     classroomId={classroomId}
@@ -677,17 +734,26 @@ async function CourseContent({
               />
             }
             path={
-              <div className="space-y-4">
-                <StudentCourseLearningCenterView
-                  data={data}
-                  readOnly={readOnly}
-                  tab="path"
-                />
+              /*
+               * 「本周计划」和「优先巩固」原先取的是同一份数据（learningPath.current
+               * 前 6 项），同页出现两组同样的知识点、两套「练习」按钮。
+               * 现在由本周计划承担主导航（有序、可勾选、带进度），右侧只留
+               * 已掌握与尚无评分记录两类参考信息。
+               *
+               * 高度按视口收敛而不是写死：窗口矮时自动变矮，最高 420px。
+               * 两卡共用同一行高，超出部分在各自列表区内滚动，底边始终对齐。
+               */
+              <div className="grid gap-4 lg:h-[clamp(340px,46vh,420px)] lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-stretch">
                 <WeeklyPlan
                   classroomId={classroomId}
                   courseId={courseId}
                   items={data.learningPath.current.slice(0, 6)}
                   readOnly={readOnly}
+                />
+                <StudentCourseLearningCenterView
+                  data={data}
+                  readOnly={readOnly}
+                  tab="path"
                 />
               </div>
             }

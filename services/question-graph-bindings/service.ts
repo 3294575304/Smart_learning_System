@@ -5,7 +5,6 @@ import {
   KnowledgeGraphRelationType,
   Prisma,
   QuestionGraphBindingType,
-  QuestionStatus,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -13,6 +12,7 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { writeGovernanceAuditLog } from "@/services/audit/repository";
 import type { AuditRequestContext } from "@/services/audit/types";
 import { QuestionGraphBindingError } from "@/services/question-graph-bindings/errors";
+import { coverageQuestionWhere } from "@/services/question-graph-bindings/question-scope";
 import type {
   GraphConceptQuestionsQuery,
   SaveGraphBindingsData,
@@ -33,9 +33,8 @@ async function accessibleQuestion(
     where: {
       ...schoolQuestionAccessWhere(teacherId),
       id: questionId,
-      deletedAt: null,
-      status: QuestionStatus.ACTIVE,
-      questionCategoryId: course.questionCategoryId,
+      // 与覆盖统计共用同一「有效题目」口径，避免绑定判定与统计判定漂移。
+      ...coverageQuestionWhere(course.questionCategoryId),
     },
     select: { id: true },
   });
@@ -105,15 +104,14 @@ export async function getGraphQuestionCoverage(
     throw new QuestionGraphBindingError("当前正式知识图谱不可用", 409);
 
   // 旧版本绑定通过课程内稳定 Concept 解析，只统计本教师仍可管理的题目。
+  // 口径与「内容覆盖自检」共用 coverageQuestionWhere（启用 + 未删除 + 本课程题库分类），
+  // 否则同一门课在两个页面会显示不同的"有题"数字。
   const counts = await prisma.questionKnowledgeGraphBinding.groupBy({
     by: ["conceptId"],
     where: {
       courseId,
       conceptId: { in: version.nodes.map((node) => node.conceptId) },
-      question: {
-        deletedAt: null,
-        questionCategoryId: course.questionCategoryId,
-      },
+      question: coverageQuestionWhere(course.questionCategoryId),
     },
     _count: { _all: true },
   });
@@ -182,9 +180,7 @@ export async function listGraphConceptQuestions(
           ]
         : []),
     ],
-    status: QuestionStatus.ACTIVE,
-    deletedAt: null,
-    questionCategoryId: course.questionCategoryId,
+    ...coverageQuestionWhere(course.questionCategoryId),
     graphBindings:
       query.mode === "BOUND" ? { some: bindingScope } : { none: bindingScope },
   };
@@ -242,14 +238,17 @@ export async function listBindableNodes(
       id: true,
       versionNumber: true,
       nodes: {
-        where: keyword
-          ? {
-              OR: [
-                { name: { contains: keyword, mode: "insensitive" } },
-                { code: { contains: keyword, mode: "insensitive" } },
-              ],
-            }
-          : undefined,
+        where: {
+          nodeType: "KNOWLEDGE_POINT",
+          ...(keyword
+            ? {
+                OR: [
+                  { name: { contains: keyword, mode: "insensitive" } },
+                  { code: { contains: keyword, mode: "insensitive" } },
+                ],
+              }
+            : {}),
+        },
         take: limit,
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
         select: {
@@ -393,6 +392,7 @@ export async function saveQuestionGraphBindings(
         const nodes = await tx.publishedKnowledgeGraphNode.findMany({
           where: {
             graphVersionId: input.graphVersionId,
+            nodeType: "KNOWLEDGE_POINT",
             id: { in: input.bindings.map((item) => item.publishedNodeId) },
           },
           select: { id: true, conceptId: true },

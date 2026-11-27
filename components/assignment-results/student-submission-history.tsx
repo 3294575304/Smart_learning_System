@@ -1,3 +1,4 @@
+import { withStudentAnalysisReturn } from "@/services/student-experience/analysis-navigation";
 import { studentScoreLabel } from "@/services/recommendations/scoring";
 import { FeedbackLink } from "@/components/dashboard/feedback-link";
 import { SubmissionStatus } from "@prisma/client";
@@ -21,11 +22,13 @@ export function StudentSubmissionHistory({
   results,
   courseId,
   classroomId,
+  analysisReturn,
 }: {
   query: ReturnType<typeof studentResultsQuerySchema.parse>;
   results: Awaited<ReturnType<typeof listStudentResults>>;
   courseId?: string;
   classroomId?: string;
+  analysisReturn?: string;
 }) {
   return (
     <section className="space-y-5" aria-label="提交记录与成绩">
@@ -34,7 +37,10 @@ export function StudentSubmissionHistory({
           action={
             <Link
               className="text-sm font-medium underline"
-              href={`/student/assignments?${new URLSearchParams({ ...(courseId ? { courseId } : {}), ...(classroomId ? { classroomId } : {}) })}`}
+              href={withStudentAnalysisReturn(
+                `/student/assignments?${new URLSearchParams({ ...(courseId ? { courseId } : {}), ...(classroomId ? { classroomId } : {}) })}`,
+                analysisReturn,
+              )}
             >
               查看待完成作业
             </Link>
@@ -91,7 +97,10 @@ export function StudentSubmissionHistory({
                   <td className="px-5 py-4">
                     <FeedbackLink
                       ariaLabel={`查看${result.assignmentTitle}成绩详情`}
-                      href={`/student/submissions/${result.id}/result?${new URLSearchParams({ ...(courseId ? { courseId } : {}), ...(classroomId ? { classroomId } : {}), page: String(query.page), pageSize: String(query.pageSize) })}`}
+                      href={withStudentAnalysisReturn(
+                        `/student/submissions/${result.id}/result?${new URLSearchParams({ ...(courseId ? { courseId } : {}), ...(classroomId ? { classroomId } : {}), page: String(query.page), pageSize: String(query.pageSize) })}`,
+                        analysisReturn,
+                      )}
                       label="查看详情"
                       icon="detail"
                       arrow={false}
@@ -107,7 +116,10 @@ export function StudentSubmissionHistory({
         <PageIndex
           ariaLabel="成绩分页"
           hrefForPage={(page) =>
-            `/student/assignments?view=records&page=${page}&pageSize=${query.pageSize}${courseId ? `&courseId=${encodeURIComponent(courseId)}` : ""}${classroomId ? `&classroomId=${encodeURIComponent(classroomId)}` : ""}`
+            withStudentAnalysisReturn(
+              `/student/assignments?view=records&page=${page}&pageSize=${query.pageSize}${courseId ? `&courseId=${encodeURIComponent(courseId)}` : ""}${classroomId ? `&classroomId=${encodeURIComponent(classroomId)}` : ""}`,
+              analysisReturn,
+            )
           }
           page={results.pagination.page}
           summary={`第 ${results.pagination.page} / ${results.pagination.totalPages} 页`}

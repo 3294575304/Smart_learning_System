@@ -5,6 +5,7 @@
 # Next.js
 /.next
 /.next.bak-*
+/.next-verify/
 /out
 
 # production

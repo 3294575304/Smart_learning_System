@@ -1,6 +1,7 @@
 import "server-only";
 
 import { z } from "zod";
+import type { ExamType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 
@@ -26,7 +27,7 @@ export interface PublishedExamScore {
   studentId: string;
   assignmentId: string | null;
   title: string;
-  type: "MIDTERM" | "FINAL";
+  type: ExamType;
   status: string;
   score: number | null;
   maxScore: number;
@@ -55,7 +56,13 @@ export async function listPublishedExamScores(
       gradeItems: {
         where: {
           enabled: true,
-          component: { type: { in: ["MIDTERM_EXAM", "FINAL_EXAM"] } },
+          OR: [
+            { component: { type: { in: ["MIDTERM_EXAM", "FINAL_EXAM"] } } },
+            {
+              component: { type: "REGULAR_PERFORMANCE" },
+              assignment: { examSession: { type: "REGULAR" } },
+            },
+          ],
         },
         select: {
           id: true,
@@ -65,7 +72,9 @@ export async function listPublishedExamScores(
           component: { select: { type: true } },
           assignment: {
             select: {
-              examSession: { select: { cancelledAt: true, endsAt: true } },
+              examSession: {
+                select: { type: true, cancelledAt: true, endsAt: true },
+              },
             },
           },
         },
@@ -138,9 +147,10 @@ export async function listPublishedExamScores(
             assignmentId: item.assignmentId,
             title: item.name,
             type:
-              item.component.type === "MIDTERM_EXAM"
+              item.assignment?.examSession?.type ??
+              (item.component.type === "MIDTERM_EXAM"
                 ? ("MIDTERM" as const)
-                : ("FINAL" as const),
+                : ("FINAL" as const)),
             status: grade.status,
             score,
             maxScore,

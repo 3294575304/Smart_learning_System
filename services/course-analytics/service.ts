@@ -15,6 +15,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { withClassroomQuery } from "@/lib/course-classroom";
 import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
+import { examTypeLabel } from "@/services/exams/exam-types";
 import {
   loadTeacherEvaluationScope,
   loadTeacherEvaluationStep,
@@ -328,7 +329,7 @@ export async function getTeacherCourseAnalytics(
       score: item.score,
       maxScore: item.maxScore,
       status: item.status,
-      title: `${item.type === "MIDTERM" ? "期中" : "期末"} · ${item.title}`,
+      title: `${examTypeLabel(item.type)} · ${item.title}`,
       date: item.publishedAt,
     }));
   const assignmentIds = reportingAssignments.map((assignment) => assignment.id);
@@ -559,7 +560,7 @@ export async function getTeacherCourseAnalytics(
     assignments: reportingAssignments.map((assignment) => ({
       ...assignment,
       title: assignment.examSession
-        ? `${assignment.examSession.type === "MIDTERM" ? "期中" : "期末"} · ${assignment.title}`
+        ? `${examTypeLabel(assignment.examSession.type)} · ${assignment.title}`
         : assignment.title,
     })),
     activeStudentIdsByClassroom,

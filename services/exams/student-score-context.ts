@@ -40,6 +40,10 @@ export async function loadExamScoreContext(
   const latest =
     latestEffectiveSubmissions(submissions).get(assignmentId) ??
     new Map<string, (typeof submissions)[number]>();
+  const latestPublished =
+    latestEffectiveSubmissions(
+      submissions.filter(({ status }) => status === "PUBLISHED"),
+    ).get(assignmentId) ?? new Map<string, (typeof submissions)[number]>();
   const ledgerByStudent = new Map(
     ledger
       .filter((row) => row.assignmentId === assignmentId)
@@ -52,7 +56,7 @@ export async function loadExamScoreContext(
       return grade.status === "SCORED" && grade.score !== null
         ? { score: grade.score, max: grade.maxScore }
         : null;
-    const attempt = latest.get(studentId);
+    const attempt = latestPublished.get(studentId);
     return attempt?.status === "PUBLISHED" &&
       attempt.score !== null &&
       attempt.maxScore !== null
@@ -70,7 +74,14 @@ export async function loadExamScoreContext(
             classScores.length,
         )
       : null;
-  return { latest, ledgerByStudent, scoreFor, classScores, classAverage };
+  return {
+    latest,
+    latestPublished,
+    ledgerByStudent,
+    scoreFor,
+    classScores,
+    classAverage,
+  };
 }
 
 export async function getStudentExamClassAverage(

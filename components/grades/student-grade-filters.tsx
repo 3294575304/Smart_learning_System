@@ -1,5 +1,6 @@
 "use client";
 
+import { withStudentAnalysisReturn } from "@/services/student-experience/analysis-navigation";
 import React, { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { studentEnrollmentLabel } from "@/services/courses/student-enrollment";
@@ -8,11 +9,15 @@ import { studentGradeFilterHref } from "@/services/gradebook/student-card-filter
 
 export function StudentGradeFilters({
   contexts,
+  courseReturn,
+  analysisReturn,
   classroomId,
   publication,
   q,
 }: {
   contexts: GradeCardContext[];
+  analysisReturn?: string;
+  courseReturn?: { courseId: string; classroomId: string };
   courseId: string;
   classroomId: string;
   publication: string;
@@ -49,7 +54,16 @@ export function StudentGradeFilters({
   function navigate(nextClassroom: string, nextPublication: string, query = q) {
     startNavigation(() => {
       router.push(
-        studentGradeFilterHref(contexts, nextClassroom, nextPublication, query),
+        withStudentAnalysisReturn(
+          studentGradeFilterHref(
+            contexts,
+            nextClassroom,
+            nextPublication,
+            query,
+            courseReturn,
+          ),
+          analysisReturn,
+        ),
         { scroll: false },
       );
     });
@@ -68,6 +82,23 @@ export function StudentGradeFilters({
       className="grid gap-3 rounded-xl border border-sky-100 bg-white p-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_9rem_minmax(0,1fr)_auto]"
     >
       <input type="hidden" name="view" value="course" />
+      {analysisReturn && (
+        <input type="hidden" name="analysisReturn" value={analysisReturn} />
+      )}
+      {courseReturn && (
+        <>
+          <input
+            type="hidden"
+            name="backCourseId"
+            value={courseReturn.courseId}
+          />
+          <input
+            type="hidden"
+            name="backClassroomId"
+            value={courseReturn.classroomId}
+          />
+        </>
+      )}
       <input type="hidden" name="courseId" value={course} />
       <label className="min-w-0 text-xs text-slate-500">
         课程

@@ -8,6 +8,7 @@ import type { TeacherCourseAnalytics } from "@/services/course-analytics/service
 import { withAnalyticsOrigin } from "@/lib/analytics-origin";
 import { withClassroomQuery } from "@/lib/course-classroom";
 import { REPORTING_SECTION_LABELS } from "@/services/assignments/reporting";
+import { examTypeLabel } from "@/services/exams/exam-types";
 
 const assignmentStatusLabel: Record<string, string> = {
   DRAFT: "草稿",
@@ -341,9 +342,7 @@ function RecentAssignmentsPanel({
                     </span>
                     {assignment.examType ? (
                       <span className="text-xs text-violet-700">
-                        {assignment.examType === "MIDTERM"
-                          ? "期中考试"
-                          : "期末考试"}
+                        {examTypeLabel(assignment.examType)}
                         {assignment.gradebookId ? " · 成绩台账" : " · 在线考试"}
                       </span>
                     ) : null}
@@ -405,8 +404,7 @@ function RecentAssignmentsPanel({
                 )}
                 key={exam.id}
               >
-                {exam.type === "MIDTERM" ? "期中考试" : "期末考试"} ·{" "}
-                {exam.title} · 台账已发布
+                {examTypeLabel(exam.type)} · {exam.title} · 台账已发布
               </Link>
             ))}
           </>

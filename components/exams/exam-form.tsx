@@ -30,7 +30,11 @@ import {
 import { organizeQuestionsByType } from "@/services/questions/question-order";
 import { distributeEvenPoints } from "@/services/questions/score-distribution";
 import type { ExamCreateInput } from "@/services/exams/schemas";
-import { toggleChapterConcepts } from "@/services/exams/concept-selection";
+import {
+  maxExamConcepts,
+  toggleChapterConcepts,
+} from "@/services/exams/concept-selection";
+import { examTypeLabel, examTypeLabels } from "@/services/exams/exam-types";
 import {
   applyExamTypeSubtotals,
   AUTO_EXAM_TOTAL_POINTS,
@@ -44,7 +48,7 @@ type Q = {
   id: string;
   title: string;
   type: QuestionType;
-  objectiveCode: string | null;
+  objectiveCodes: string[];
   blocked: boolean;
 };
 type Selected = {
@@ -52,6 +56,8 @@ type Selected = {
   title: string;
   type: QuestionType;
   points: number;
+  objectiveCodes?: string[];
+  scoringObjectiveCode?: string;
 };
 const emptyCounts = () =>
   Object.fromEntries(
@@ -165,6 +171,10 @@ export function ExamForm({
   );
   const [conceptIds, setConceptIds] = useState<string[]>([]);
   const [conceptSelectionMessage, setConceptSelectionMessage] = useState("");
+  const [assemblyCoverage, setAssemblyCoverage] = useState<{
+    selection: string;
+    covered: number;
+  } | null>(null);
   const [autoCounts, setAutoCounts] =
     useState<Record<QuestionType, number>>(emptyCounts);
   const [weights, setWeights] = useState(DEFAULT_EXAM_TYPE_WEIGHTS);
@@ -475,6 +485,7 @@ export function ExamForm({
     id: string;
     title: string;
     type: QuestionType;
+    objectiveCodes?: string[];
   }) {
     if (
       selected.length >= 200 &&
@@ -498,6 +509,7 @@ export function ExamForm({
                   title: item.title,
                   type: item.type,
                   points: 0,
+                  objectiveCodes: item.objectiveCodes,
                 },
               ]
             : rescore([
@@ -507,6 +519,7 @@ export function ExamForm({
                   title: item.title,
                   type: item.type,
                   points: 0,
+                  objectiveCodes: item.objectiveCodes,
                 },
               ]),
     );
@@ -536,10 +549,21 @@ export function ExamForm({
         throw new Error(body.error ?? "组卷失败");
       if (currentCourseRef.current !== requestedCourseId) return;
       const data = body.data as {
-        questions: Array<{ id: string; title: string; type: QuestionType }>;
+        questions: Array<{
+          id: string;
+          title: string;
+          type: QuestionType;
+          objectiveCodes: string[];
+        }>;
         shortages: typeof shortages;
+        coverage: Record<string, number>;
       };
       setShortages(data.shortages);
+      setAssemblyCoverage({
+        selection: conceptIds.join(","),
+        covered: Object.values(data.coverage).filter((count) => count > 0)
+          .length,
+      });
       setAutoMode(true);
       setScoreMessage(null);
       setSelected((old) => {
@@ -550,6 +574,7 @@ export function ExamForm({
             title: item.title,
             type: item.type,
             points: 0,
+            objectiveCodes: item.objectiveCodes,
           })),
         ];
         return scoresEdited ? next : rescore(next);
@@ -599,7 +624,13 @@ export function ExamForm({
     setScoreMessage(null);
     setSelected((old) => [
       ...old,
-      { questionId: item.id, title: item.title, type: item.type, points: 10 },
+      {
+        questionId: item.id,
+        title: item.title,
+        type: item.type,
+        points: 10,
+        objectiveCodes: item.objectiveCodes,
+      },
     ]);
   }
   /** 列表里直接“移出”，不用滚到下方题序区删除。 */
@@ -641,6 +672,7 @@ export function ExamForm({
         title: item.title,
         type: item.type,
         points: 10,
+        objectiveCodes: item.objectiveCodes,
       })),
     ]);
   }
@@ -720,7 +752,50 @@ export function ExamForm({
     }
     applyCourse(nextCourseId);
   }
-  function previewPublication() {
+  async function previewPublication() {
+    let rows = selected;
+    if (rows.some((item) => !item.objectiveCodes) && courseId && startsAt) {
+      try {
+        const params = new URLSearchParams({
+          courseId,
+          startsAt: new Date(startsAt).toISOString(),
+        });
+        const response = await fetch(`/api/teacher/exams/questions?${params}`);
+        const body = await response.json();
+        if (!response.ok || !body.success)
+          throw new Error(body.error ?? "无法核对题库目标");
+        if (currentCourseRef.current !== courseId) return;
+        const byId = new Map<string, string[]>(
+          (body.data as Q[]).map((item) => [item.id, item.objectiveCodes]),
+        );
+        rows = selected.map((item) => ({
+          ...item,
+          objectiveCodes: byId.get(item.questionId) ?? [],
+        }));
+        setSelected(rows);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "无法核对题库目标");
+        return;
+      }
+    }
+    const firstMissingObjective = rows.find(
+      (item) =>
+        (item.objectiveCodes?.length ?? 0) > 1 &&
+        !item.objectiveCodes?.includes(item.scoringObjectiveCode ?? ""),
+    );
+    if (firstMissingObjective) {
+      const message = "请在已选题目中为多目标题选择本场考试的计分目标。";
+      setError(message);
+      setFieldErrors({ questions: message });
+      window.requestAnimationFrame(() => {
+        document
+          .getElementById(
+            `exam-scoring-objective-${firstMissingObjective.questionId}`,
+          )
+          ?.focus();
+      });
+      return;
+    }
     if ((autoMode || typeSubtotals) && needsScoring) {
       const message = `试卷总分须为 ${targetPoints} 分，且每题分值大于零。请重新配分。`;
       setError(message);
@@ -739,9 +814,10 @@ export function ExamForm({
       allowedSwitches,
       allowedAttempts,
       autoSubmitOnExit,
-      questions: selected.map(({ questionId, points }) => ({
+      questions: rows.map(({ questionId, points, scoringObjectiveCode }) => ({
         questionId,
         points,
+        objectiveCode: scoringObjectiveCode,
       })),
     };
     const issues = collectExamPublicationIssues(
@@ -936,8 +1012,11 @@ export function ExamForm({
                 value={type}
                 onChange={(e) => setType(e.target.value)}
               >
-                <option value="MIDTERM">期中考试</option>
-                <option value="FINAL">期末考试</option>
+                {Object.entries(examTypeLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="grid min-w-0 content-start gap-1.5 text-sm font-medium">
@@ -1150,8 +1229,12 @@ export function ExamForm({
               <div className="border-border bg-muted/30 space-y-4 rounded-lg border p-4">
                 <fieldset>
                   <legend className="text-sm font-medium">
-                    知识点（可多选，最多 20 个，已选 {conceptIds.length} 个）
+                    知识点（已选 {conceptIds.length} 个，上限 {maxExamConcepts}
+                    ）
                   </legend>
+                  <p className="mt-1 text-xs text-slate-600">
+                    可跨章勾选。组卷会优先覆盖所选范围，覆盖情况取决于题量与题库。
+                  </p>
                   {chapters.length ? (
                     <div className="mt-2 max-h-52 space-y-3 overflow-y-auto rounded border bg-white p-3">
                       {chapters.map((chapter) => {
@@ -1184,11 +1267,11 @@ export function ExamForm({
                                   const result = toggleChapterConcepts(
                                     conceptIds,
                                     chapterIds,
-                                    20,
+                                    maxExamConcepts,
                                   );
                                   if (result.exceeded) {
                                     setConceptSelectionMessage(
-                                      `最多选择 20 个知识点；整章「${chapter.name}」将超过上限，请先取消其他知识点。`,
+                                      `最多选择 ${maxExamConcepts} 个知识点。整章选择会超出上限，请减少其他选择。`,
                                     );
                                     return;
                                   }
@@ -1211,7 +1294,7 @@ export function ExamForm({
                                       node.conceptId,
                                     )}
                                     disabled={
-                                      conceptIds.length >= 20 &&
+                                      conceptIds.length >= maxExamConcepts &&
                                       !conceptIds.includes(node.conceptId)
                                     }
                                     onChange={(event) => {
@@ -1324,6 +1407,12 @@ export function ExamForm({
                 >
                   {assembling ? "正在组卷…" : "从题库自动组卷"}
                 </button>
+                {assemblyCoverage?.selection === conceptIds.join(",") && (
+                  <p role="status" className="text-sm text-slate-700">
+                    本次新增题目覆盖 {assemblyCoverage.covered} /{" "}
+                    {conceptIds.length} 个所选知识点。
+                  </p>
+                )}
                 {shortages.length ? (
                   <p role="status" className="text-sm text-amber-800">
                     题库数量不足：
@@ -1540,6 +1629,16 @@ export function ExamForm({
               onClear={() => setPendingClear(true)}
             />
             {fieldError("questions")}
+            {!fieldErrors.questions &&
+              selected.some(
+                (item) =>
+                  (item.objectiveCodes?.length ?? 0) > 1 &&
+                  !item.scoringObjectiveCode,
+              ) && (
+                <p className="mt-2 text-sm text-slate-600">
+                  有些题目关联多个课程目标，请为每道此类题选择本场考试的计分目标。
+                </p>
+              )}
             {(autoMode || typeSubtotals) &&
             selected.length > 0 &&
             needsScoring ? (
@@ -1574,6 +1673,37 @@ export function ExamForm({
                       {item.title}
                     </Link>
                   </span>
+                  {(item.objectiveCodes?.length ?? 0) > 1 && (
+                    <select
+                      id={`exam-scoring-objective-${item.questionId}`}
+                      aria-label={`第 ${index + 1} 题考试计分目标`}
+                      className="relative z-10 h-10 max-w-full rounded-lg border bg-white px-2 text-sm"
+                      value={item.scoringObjectiveCode ?? ""}
+                      onChange={(event) => {
+                        const scoringObjectiveCode =
+                          event.target.value || undefined;
+                        setSelected((old) =>
+                          old.map((row) =>
+                            row.questionId === item.questionId
+                              ? { ...row, scoringObjectiveCode }
+                              : row,
+                          ),
+                        );
+                        clearFieldError("questions");
+                      }}
+                    >
+                      <option value="">选择计分目标</option>
+                      {item.objectiveCodes?.map((code) => (
+                        <option key={code} value={code}>
+                          {code} ·{" "}
+                          {courseObjectives
+                            .find((item) => item.courseId === courseId)
+                            ?.objectives.find((item) => item.code === code)
+                            ?.title ?? code}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <input
                     aria-label={`第 ${index + 1} 题分值`}
                     className="relative z-10 h-10 w-20 rounded-lg border bg-white px-2 text-sm"
@@ -1642,7 +1772,7 @@ export function ExamForm({
                 {courseLabel}
               </p>
               <p className="text-muted-foreground text-xs leading-5">
-                {type === "FINAL" ? "期末考试" : "期中考试"} · {timeLabel}
+                {examTypeLabel(type)} · {timeLabel}
               </p>
               <p className="text-muted-foreground text-xs leading-5">
                 参加班级 {classroomIds.length} 个 · {selected.length} 题 ·{" "}

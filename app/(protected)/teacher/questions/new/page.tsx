@@ -35,13 +35,25 @@ export default async function NewQuestionPage({
   if (fromCoverage && !context) notFound();
   const coverageCourseId =
     context && scope.success ? scope.data.courseId : undefined;
+  const coverageBinding =
+    context && coverageCourseId && scope.success
+      ? {
+          courseId: coverageCourseId,
+          categoryId: context.categoryId,
+          nodeCode: context.node.code,
+          nodeName: context.node.name,
+          conceptId: scope.data.conceptId,
+          graphVersionId: context.graphVersionId,
+          publishedNodeId: context.publishedNodeId,
+        }
+      : undefined;
   return (
     <section className="space-y-6">
       <div>
         <TeacherBackLink
           href={
             coverageCourseId
-              ? `/teacher/courses/${coverageCourseId}#course-content-coverage`
+              ? `/teacher/courses/${coverageCourseId}/content-coverage`
               : "/teacher/questions"
           }
         >
@@ -51,7 +63,7 @@ export default async function NewQuestionPage({
         {context && (
           <p className="mt-2 text-sm text-slate-600">
             {context.courseName} · {context.node.code} {context.node.name}
-            。保存后请在课程知识图谱绑定区确认关联。
+            。保存后会自动把本题绑定为该知识点的主题目；编程题需先完成判题配置，之后可在题目详情的绑定区确认。
           </p>
         )}
       </div>
@@ -59,15 +71,7 @@ export default async function NewQuestionPage({
         categories={categories}
         knowledgePoints={knowledgePoints}
         mode="create"
-        coverage={
-          context && coverageCourseId
-            ? {
-                courseId: coverageCourseId,
-                categoryId: context.categoryId,
-                nodeCode: context.node.code,
-              }
-            : undefined
-        }
+        coverage={coverageBinding}
       />
       {!context && (
         <p className="rounded-lg border p-4 text-sm text-gray-600">

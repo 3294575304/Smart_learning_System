@@ -34,3 +34,18 @@ export const learningPriority: Record<ConceptStatus, number> = {
   NO_EVIDENCE: 3,
   MASTERED: 4,
 };
+
+/**
+ * 按区间裁剪时间线。
+ *
+ * 抽成纯函数的原因：它原本内联在页面组件里，既不能单测，也很容易被后续改动
+ * 顺手漏掉（图表过滤了、时间线没过滤，用户会以为筛选失效）。
+ * `since` 为 null 表示「全部」，直接返回原数组；边界相等要保留（含起点）。
+ */
+export function filterActivitySince<T extends { occurredAt: Date }>(
+  items: readonly T[],
+  since: Date | null,
+): T[] {
+  if (!since) return [...items];
+  return items.filter((item) => item.occurredAt >= since);
+}

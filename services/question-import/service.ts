@@ -23,6 +23,7 @@ import {
 } from "@/services/question-import/parser";
 import type { QuestionImportCommitData } from "@/services/question-import/schemas";
 import type { QuestionImportPreview } from "@/services/question-import/types";
+import { listCourseObjectives } from "@/services/learner-profiles/concept-objectives";
 import {
   questionUpsertSchema,
   type QuestionUpsertData,
@@ -221,6 +222,52 @@ async function commitQuestionImport(
         actorId,
         transaction,
       );
+      const scoped = input.objectiveScope;
+      if (
+        (input.questions.some((item) => item.objectiveCodes?.length) &&
+          !scoped) ||
+        (scoped && options.role !== Role.TEACHER)
+      )
+        throw new QuestionImportError(
+          "导入课程目标须选择本人课程及正式大纲。",
+          400,
+          "OBJECTIVE_SCOPE_REQUIRED",
+        );
+      if (scoped) {
+        const course = await transaction.course.findFirst({
+          where: {
+            id: scoped.courseId,
+            teacherId: actorId,
+            status: { not: "ARCHIVED" },
+            questionCategoryId: questionCategory.id,
+            currentPublishedSyllabusStructureId: scoped.syllabusStructureId,
+          },
+          select: { id: true },
+        });
+        if (!course)
+          throw new QuestionImportError(
+            "课程范围或大纲版本已变化，请重新选择。",
+            409,
+            "OBJECTIVE_SCOPE_STALE",
+          );
+        const syllabus = await listCourseObjectives(course.id, transaction);
+        const allowed = new Set(syllabus.objectives.map(({ code }) => code));
+        if (syllabus.structureId !== scoped.syllabusStructureId)
+          throw new QuestionImportError(
+            "大纲版本已变化，请重新选择。",
+            409,
+            "OBJECTIVE_SCOPE_STALE",
+          );
+        const invalid = input.questions.findIndex((item) =>
+          item.objectiveCodes?.some((code) => !allowed.has(code)),
+        );
+        if (invalid !== -1)
+          throw new QuestionImportError(
+            `第 ${invalid + 1} 道题的目标不属于当前正式大纲。`,
+            400,
+            "OBJECTIVE_CODE_INVALID",
+          );
+      }
       const ids: string[] = [];
       const skippedCount = 0;
       for (const [index, question] of questions.entries()) {
@@ -249,6 +296,16 @@ async function commitQuestionImport(
           select: { id: true },
         });
         const config = input.questions[index]?.programmingConfig;
+        const codes = input.questions[index]?.objectiveCodes ?? [];
+        if (scoped && codes.length)
+          await transaction.questionCourseObjective.createMany({
+            data: codes.map((objectiveCode) => ({
+              questionId: created.id,
+              ...scoped,
+              objectiveCode,
+              source: "TEACHER",
+            })),
+          });
         if (question.type === QuestionType.PYTHON_PROGRAMMING && config) {
           await createProgrammingConfigInTransaction(
             transaction,
@@ -274,6 +331,11 @@ async function commitQuestionImport(
           createdCount: ids.length,
           skippedCount,
           categoryId: input.categoryId,
+          objectiveScope: scoped ?? null,
+          objectiveTagCount: input.questions.reduce(
+            (total, item) => total + (item.objectiveCodes?.length ?? 0),
+            0,
+          ),
           ruleVersion: IMPORT_RULE_VERSION,
         },
         context,

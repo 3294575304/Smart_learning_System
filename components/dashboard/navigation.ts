@@ -196,6 +196,7 @@ export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   profiles: "课程画像",
   "knowledge-graph": "知识图谱",
   "question-mapping": "题目知识点映射",
+  "content-coverage": "内容覆盖自检",
   "teaching-progress": "教学进度",
   "outcome-attainment": "课程目标达成度",
   students: "学生名单",
@@ -251,7 +252,7 @@ export function getSegmentLabels(
     return { ...labels, import: "上传试卷" };
   if (pathname === "/teacher/exams/new") return { ...labels, new: "新建考试" };
   if (/^\/teacher\/exams\/[^/]+\/monitor$/.test(pathname))
-    return { ...labels, monitor: "考试监考" };
+    return { ...labels, monitor: "监考与公布" };
   if (/^\/teacher\/assignments\/[^/]+\/results$/.test(pathname))
     return { ...labels, results: "成绩统计" };
   // 教师课程通知与管理员「系统公告」同名段，按路径区分标题。

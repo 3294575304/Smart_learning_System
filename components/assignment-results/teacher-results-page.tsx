@@ -7,7 +7,6 @@ import { TeacherAssignmentNav } from "@/components/assignments/teacher-assignmen
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role, SubmissionStatus } from "@prisma/client";
 import { Eye } from "lucide-react";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { ResultsPagination } from "@/components/assignment-results/pagination";
@@ -23,7 +22,11 @@ import {
 } from "@/services/assignment-results/service";
 import { assignmentIdSchema } from "@/services/assignments/schemas";
 import { resolveTeacherAssessmentPage } from "@/services/exams/classroom-page-scope";
-import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
+import {
+  examListContext,
+  examWorkspaceHref,
+  teacherAssessmentHref,
+} from "@/services/exams/classroom-navigation";
 import {
   analyticsSearchParams,
   isAnalyticsOrigin,
@@ -54,9 +57,13 @@ function studentDetailHref(
   page: number,
   pageSize: number,
   examId?: string | null,
+  listContext?: string,
 ): string {
   const base = teacherAssessmentHref(assignmentId, examId);
-  const back = `${base}/results?page=${page}&pageSize=${pageSize}#student-${studentId}`;
+  const back = examWorkspaceHref(
+    `${base}/results?page=${page}&pageSize=${pageSize}#student-${studentId}`,
+    listContext,
+  );
   return submissionId
     ? personalWorkHref(assignmentId, submissionId, back, "ALL", examId)
     : base;
@@ -107,6 +114,7 @@ export default async function AssignmentResultsPage({
     rawQuery,
   );
   const base = teacherAssessmentHref(parsedId.data, examSessionId);
+  const listContext = examSessionId ? examListContext(rawQuery.examList) : "";
 
   try {
     if (parsedQuery.data.studentId) {
@@ -115,14 +123,19 @@ export default async function AssignmentResultsPage({
         parsedId.data,
         parsedQuery.data,
       );
-      const returnTo = safeStudentWorkReturn(
-        parsedQuery.data.returnTo,
-        parsedQuery.data.studentId,
-        personal.assignment.classroom.id,
-      );
+      const returnTo = examSessionId
+        ? null
+        : safeStudentWorkReturn(
+            parsedQuery.data.returnTo,
+            parsedQuery.data.studentId,
+            personal.assignment.classroom.id,
+          );
       const backHref =
         returnTo ??
-        `${base}/results?page=${parsedQuery.data.page}&pageSize=${parsedQuery.data.pageSize}`;
+        examWorkspaceHref(
+          `${base}/results?page=${parsedQuery.data.page}&pageSize=${parsedQuery.data.pageSize}`,
+          listContext,
+        );
       if (personal.detail.selectedSubmission) {
         redirect(
           personalWorkHref(
@@ -165,19 +178,21 @@ export default async function AssignmentResultsPage({
     );
     if (parsedQuery.data.page !== results.students.page) {
       redirect(
-        `${base}/results?${keepOriginParams(
-          new URLSearchParams({
-            page: String(results.students.page),
-            pageSize: String(parsedQuery.data.pageSize),
-          }),
-        ).toString()}`,
+        examWorkspaceHref(
+          `${base}/results?${keepOriginParams(
+            new URLSearchParams({
+              page: String(results.students.page),
+              pageSize: String(parsedQuery.data.pageSize),
+            }),
+          ).toString()}`,
+          listContext,
+        ),
       );
     }
 
-    const publication = await getAssignmentPublicationState(
-      teacher.id,
-      parsedId.data,
-    );
+    const publication = examSessionId
+      ? null
+      : await getAssignmentPublicationState(teacher.id, parsedId.data);
     return (
       <section className="space-y-6">
         <AssignmentStateRefresh renderedAt={Date.now()} />
@@ -185,7 +200,10 @@ export default async function AssignmentResultsPage({
           <TeacherBackLink
             href={
               examSessionId
-                ? `/teacher/exams/${examSessionId}`
+                ? examWorkspaceHref(
+                    `/teacher/exams/${examSessionId}`,
+                    listContext,
+                  )
                 : (analyticsBackHref ?? "/teacher/assignments")
             }
           >
@@ -206,17 +224,11 @@ export default async function AssignmentResultsPage({
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">
-              <PublishResultsButton
-                assignmentId={results.assignment.id}
-                publication={publication}
-              />
-              {examSessionId && (
-                <Link
-                  className="text-sm font-medium text-sky-800 hover:underline"
-                  href={`/teacher/exams/${examSessionId}/monitor?classroomId=${results.assignment.classroom.id}`}
-                >
-                  监考与公布设置
-                </Link>
+              {publication && (
+                <PublishResultsButton
+                  assignmentId={results.assignment.id}
+                  publication={publication}
+                />
               )}
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs">
                 基于每名学生最新有效提交
@@ -228,6 +240,8 @@ export default async function AssignmentResultsPage({
           assignmentId={parsedId.data}
           active="results"
           examSessionId={examSessionId}
+          classroomId={results.assignment.classroom.id}
+          listContext={listContext}
         />
         <p className="text-xs leading-5 text-slate-500">
           统计统一按百分制展示（原始得分÷原始满分×100）；题目分值及历史成绩保持原记录。原始满分为
@@ -459,6 +473,7 @@ export default async function AssignmentResultsPage({
                                 results.students.page,
                                 results.students.pageSize,
                                 examSessionId,
+                                listContext,
                               )}
                               title="查看作答"
                             >
@@ -480,6 +495,7 @@ export default async function AssignmentResultsPage({
           )}
           <ResultsPagination
             examId={examSessionId}
+            listContext={listContext}
             assignmentId={results.assignment.id}
             page={results.students.page}
             pageSize={results.students.pageSize}

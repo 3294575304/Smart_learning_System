@@ -1,5 +1,8 @@
 import { TeacherPaperQuestionList } from "./teacher-paper-question-list";
-import { QuestionText } from "@/components/assignments/question-text";
+import {
+  QuestionReviewContent,
+  questionReviewAnswerLabels,
+} from "@/components/questions/question-review-content";
 import { CategoryCorrection } from "@/components/assignments/category-correction";
 import { AssignmentCategoryBadge } from "@/components/assignments/category-badge";
 import { HistoricalAssignmentCopy } from "@/components/assignments/historical-assignment-copy";
@@ -19,8 +22,12 @@ import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { assignmentIdSchema } from "@/services/assignments/schemas";
 import { getTeacherExamHeader } from "@/services/exams/analysis";
+import {
+  examListContext,
+  examWorkspaceHref,
+} from "@/services/exams/classroom-navigation";
 import { resolveTeacherAssessmentPage } from "@/services/exams/classroom-page-scope";
-import { ExamWorkspaceSummary } from "@/components/exams/exam-workspace-summary";
+import { ExamPaperSummary } from "@/components/exams/exam-paper-summary";
 import { getTeacherAssignmentOverview } from "@/services/assignments/teacher-overview";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import {
@@ -30,8 +37,10 @@ import {
 
 export default async function TeacherAssignmentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ assignmentId: string; examId?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const teacher = await requirePageRole(Role.TEACHER);
   const route = await params;
@@ -41,6 +50,9 @@ export default async function TeacherAssignmentPage({
   try {
     const { assignment, examSessionId, questions } =
       await getTeacherAssignmentOverview(teacher.id, id.data);
+    const listContext = examSessionId
+      ? examListContext((await searchParams).examList)
+      : "";
     const [exam, makeup, copyTargets] = await Promise.all([
       examSessionId ? getTeacherExamHeader(teacher.id, examSessionId) : null,
       examSessionId ? null : getAssignmentMakeupManagement(teacher.id, id.data),
@@ -74,30 +86,22 @@ export default async function TeacherAssignmentPage({
           <p className="mt-1 text-xs text-slate-500">
             {QUESTION_TYPE_LABELS[type]}
           </p>
-          <div className="mt-3 min-w-0">
-            <QuestionText text={question.content} />
+          <div className="mt-5 min-w-0">
+            <QuestionReviewContent
+              heading="h3"
+              content={question.content}
+              options={question.options}
+              explanation={question.explanation}
+              answer={
+                question.options.some((option) => option.isCorrect)
+                  ? undefined
+                  : {
+                      label: questionReviewAnswerLabels[type],
+                      value: question.correctAnswer,
+                    }
+              }
+            />
           </div>
-          {question.options.length ? (
-            <ul className="mt-3 space-y-2">
-              {question.options.map((option) => (
-                <li
-                  className="min-w-0 rounded-lg bg-slate-50 px-3 py-2 text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
-                  key={option.id}
-                >
-                  {option.label}. {option.content}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <details className="mt-4 border-t pt-3">
-            <summary className="cursor-pointer text-sm text-sky-800">
-              参考答案与解析（仅教师可见）
-            </summary>
-            <div className="mt-3 space-y-2 rounded-lg bg-slate-50 p-3 text-sm leading-6 break-words whitespace-pre-wrap">
-              <p>参考答案：{question.correctAnswer}</p>
-              <p>解析：{question.explanation || "暂无解析"}</p>
-            </div>
-          </details>
         </article>
       ),
     }));
@@ -106,7 +110,10 @@ export default async function TeacherAssignmentPage({
         <TeacherBackLink
           href={
             examSessionId
-              ? `/teacher/exams/${examSessionId}`
+              ? examWorkspaceHref(
+                  `/teacher/exams/${examSessionId}`,
+                  listContext,
+                )
               : assignment.classroom.status === "ACTIVE" &&
                   !["ARCHIVED", "REVOKED"].includes(assignment.status) &&
                   assignment.status !== "CLOSED"
@@ -150,14 +157,6 @@ export default async function TeacherAssignmentPage({
                   sourceClassroomId={assignment.classroom.id}
                   targets={copyTargets}
                 />
-              )}
-              {examSessionId && (
-                <Link
-                  className="rounded-lg border px-3 py-2 text-sm text-sky-800 hover:bg-sky-50"
-                  href={`/teacher/exams/${examSessionId}/monitor?classroomId=${assignment.classroom.id}`}
-                >
-                  监考与成绩公布
-                </Link>
               )}
               {!examSessionId &&
               assignment.status === "DRAFT" &&
@@ -210,11 +209,14 @@ export default async function TeacherAssignmentPage({
           assignmentId={assignment.id}
           active="content"
           examSessionId={examSessionId}
+          classroomId={assignment.classroom.id}
+          listContext={listContext}
         />
         {exam && (
-          <ExamWorkspaceSummary
-            details={{ exam }}
+          <ExamPaperSummary
+            exam={exam}
             assignmentId={assignment.id}
+            listContext={listContext}
           />
         )}
         <p className="text-xs leading-5 text-slate-500">

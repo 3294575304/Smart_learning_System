@@ -63,6 +63,7 @@ const serverOnlyTests = new Set([
   "courses/syllabus-parsing.test.ts",
   "courses/syllabus-review.test.ts",
   "courses/syllabus-service.test.ts",
+  "learner-profiles/activity-range-filter.test.ts",
   "course-recommendations/learning-assistant-stream.test.ts",
   "quality-reports/evaluation-workflow.test.ts",
   "quality-reports/standalone.test.ts",

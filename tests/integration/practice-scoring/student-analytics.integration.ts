@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../../../lib/prisma";
 import { assertIsolatedIntegrationEnvironment } from "../database";
 import { getStudentClassAnalytics } from "../../../services/dashboard/student-class-analytics";
+import { createPublishedGraphFixture } from "../../helpers/teaching-graph-fixture";
 assertIsolatedIntegrationEnvironment("RECOMMENDATION_INTEGRATION_SCHEMA");
 test("class analytics isolate same-course classes and courses, preserve score visibility and latest effective work", async () => {
   const teacher = await prisma.user.create({
@@ -206,5 +207,85 @@ test("class analytics isolate same-course classes and courses, preserve score vi
     ),
   );
   assert.ok(missing.id);
+
+  const graphFixture = await createPublishedGraphFixture(course.id, teacher.id);
+  const graph = await graphFixture.publishVersion(1, []);
+  const policy = await prisma.courseRecommendationPolicyRevision.create({
+    data: {
+      courseId: course.id,
+      createdById: teacher.id,
+      revisionNumber: 1,
+      ruleVersion: "analytics-test",
+      inputFingerprint: "1".repeat(64),
+    },
+  });
+  const cycle = await prisma.courseRecommendationCycle.create({
+    data: {
+      studentId: student.id,
+      courseId: course.id,
+      classroomId: a.id,
+      graphVersionId: graph.id,
+      policyRevisionId: policy.id,
+      cycleKey: randomUUID(),
+      inputFingerprint: "2".repeat(64),
+      requestSnapshot: {},
+    },
+  });
+  const practiceDates = Array.from(
+    { length: 10 },
+    (_, index) => new Date(Date.UTC(2040, 11, 28 + index, 2)),
+  );
+  for (const [index, createdAt] of [
+    ...practiceDates,
+    new Date("2041-01-05T16:30:00.000Z"),
+    new Date("2041-01-10T02:00:00.000Z"),
+  ].entries()) {
+    const question = await prisma.question.create({
+      data: {
+        creatorId: teacher.id,
+        type: "TRUE_FALSE",
+        title: "跨年练习",
+        content: "日历分组",
+        explanation: "按北京时间归入作答日期。",
+        correctBoolean: true,
+      },
+    });
+    await prisma.personalizedRecommendation.create({
+      data: {
+        studentId: student.id,
+        questionId: question.id,
+        courseCycleId: cycle.id,
+        cycleKey: randomUUID(),
+        source: "RULE",
+        reason: "analytics day fixture",
+        practiceAnswer: {
+          create: {
+            idempotencyKey: randomUUID(),
+            questionId: question.id,
+            score: index === 10 ? 0 : 1,
+            maxScore: 1,
+            isCorrect: index !== 10,
+            createdAt,
+          },
+        },
+      },
+    });
+  }
+  const analytics = await getStudentClassAnalytics(
+    student.id,
+    { courseId: course.id, classroomId: a.id },
+    new Date("2041-01-08T00:00:00.000Z"),
+  );
+  const recent = analytics.classes[0];
+  assert.equal(recent.practiceHistory.length, 8);
+  assert.equal(recent.practiceHistory[0].id, "practice:2040-12-30");
+  assert.deepEqual(recent.practiceHistory.at(-1), {
+    id: "practice:2041-01-06",
+    label: "01/06",
+    answered: 2,
+    correct: 1,
+    rate: 50,
+  });
+  assert.equal(recent.lastPracticeAt, practiceDates.at(-1)?.getTime());
 });
 test.after(() => prisma.$disconnect());

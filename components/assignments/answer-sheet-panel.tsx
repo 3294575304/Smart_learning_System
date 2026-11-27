@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 import type { QuestionType } from "@prisma/client";
 import {
   QuestionNumberGrid,
-  groupQuestionsByType,
   questionNumberNeutralTone,
+  type QuestionNumberGroup,
   type QuestionNumberItem,
 } from "./question-number-grid";
 
@@ -61,6 +61,8 @@ export function AnswerSheetPanel({
   groupByType = false,
   plainNumbers = false,
   showProgress = true,
+  totalQuestionCount,
+  filters,
 }: {
   questions: AnswerSheetQuestion[];
   activeIndex: number;
@@ -68,7 +70,7 @@ export function AnswerSheetPanel({
   questionState?: (index: number) => AnswerSheetState;
   onSelect: (index: number) => void;
   disabled?: boolean;
-  answeredCount: number;
+  answeredCount?: number;
   totalPoints?: number;
   footer?: ReactNode;
   className?: string;
@@ -76,47 +78,58 @@ export function AnswerSheetPanel({
   progressLabel?: string;
   legendItems?: readonly AnswerSheetState[];
   summary?: ReactNode;
-  groupByType?: boolean;
+  groupByType?: boolean | "type";
   plainNumbers?: boolean;
   showProgress?: boolean;
+  totalQuestionCount?: number;
+  filters?: ReactNode;
 }) {
   const titleId = useId();
-  const total = questions.length;
-  const percent = total === 0 ? 0 : Math.round((answeredCount / total) * 100);
-  const ordered = groupByType
-    ? questions
-    : questions.map((question) => ({ ...question, type: undefined }));
-  const gridGroups = groupQuestionsByType(ordered).map((group) => ({
-    key: group.key,
-    type: group.type,
-    items: ordered
-      .slice(group.start, group.end)
-      .map((question, offset): QuestionNumberItem => {
-        const index = group.start + offset;
-        const current = index === activeIndex;
-        const answered = isAnswered?.(question.id);
-        const state = plainNumbers
-          ? { label: "题目", className: questionNumberNeutralTone }
-          : (questionState?.(index) ?? {
-              label: answered ? "已作答" : "未作答",
-              className: answered
-                ? "bg-brand-soft text-brand-strong border-sky-200 hover:border-sky-300"
-                : "border-line text-ink-soft bg-white hover:border-sky-300 hover:bg-sky-50/60",
-            });
-        return {
-          id: question.id,
-          label: question.sortOrder,
-          ariaLabel: plainNumbers
-            ? `第 ${question.sortOrder} 题`
-            : `第 ${question.sortOrder} 题（${state.label}）`,
-          title: plainNumbers ? undefined : state.label,
-          toneClassName: state.className,
-          mark: state.mark,
-          current,
-          disabled,
-        };
-      }),
-  }));
+  const total = totalQuestionCount ?? questions.length;
+  const percent =
+    total === 0 ? 0 : Math.round(((answeredCount ?? 0) / total) * 100);
+  // "type" 按题型全局归组，true 只合并相邻题型；两者都不改题号与正文的对应关系。
+  const indexOrder: number[] = [];
+  if (groupByType === "type") {
+    const byType = new Map<QuestionType | undefined, number[]>();
+    questions.forEach((question, index) => {
+      const list = byType.get(question.type) ?? [];
+      list.push(index);
+      byType.set(question.type, list);
+    });
+    for (const indexes of byType.values()) indexOrder.push(...indexes);
+  } else {
+    questions.forEach((_, index) => indexOrder.push(index));
+  }
+  const gridGroups: QuestionNumberGroup[] = [];
+  for (const index of indexOrder) {
+    const question = questions[index];
+    const type = groupByType ? question.type : undefined;
+    const answered = isAnswered?.(question.id);
+    const state = plainNumbers
+      ? { label: "题目", className: questionNumberNeutralTone }
+      : (questionState?.(index) ?? {
+          label: answered ? "已作答" : "未作答",
+          className: answered
+            ? "bg-brand-soft text-brand-strong border-sky-200 hover:border-sky-300"
+            : "border-line text-ink-soft bg-white hover:border-sky-300 hover:bg-sky-50/60",
+        });
+    const item: QuestionNumberItem = {
+      id: question.id,
+      label: question.sortOrder,
+      ariaLabel: plainNumbers
+        ? `第 ${question.sortOrder} 题`
+        : `第 ${question.sortOrder} 题（${index === activeIndex ? "当前题 · " : ""}${state.label}）`,
+      title: plainNumbers ? undefined : state.label,
+      toneClassName: state.className,
+      mark: state.mark,
+      current: index === activeIndex,
+      disabled,
+    };
+    const previous = gridGroups[gridGroups.length - 1];
+    if (previous && previous.type === type) previous.items.push(item);
+    else gridGroups.push({ key: question.id, type, items: [item] });
+  }
 
   return (
     <section
@@ -134,11 +147,13 @@ export function AnswerSheetPanel({
         )}
         <span className="bg-muted text-ink-soft rounded-md px-2 py-0.5 text-[11px] leading-5 font-medium">
           {total} 题
-          {totalPoints ? ` · ${Number(totalPoints.toFixed(2))} 分` : ""}
+          {totalPoints !== undefined
+            ? ` · ${Number(totalPoints.toFixed(2))} 分`
+            : ""}
         </span>
       </div>
 
-      {showProgress && (
+      {showProgress && answeredCount !== undefined && (
         <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between gap-3 text-[13px]">
             <span className="text-ink-soft font-medium">
@@ -164,6 +179,12 @@ export function AnswerSheetPanel({
         <div className="text-ink-soft mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs leading-5">
           {summary}
         </div>
+      )}
+      {filters}
+      {questions.length !== total && (
+        <p role="status" className="text-ink-soft mt-3 text-xs tabular-nums">
+          显示 {questions.length} / {total} 题
+        </p>
       )}
       <QuestionNumberGrid
         ariaLabel="题目导航"

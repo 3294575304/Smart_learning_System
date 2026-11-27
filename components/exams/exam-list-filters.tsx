@@ -1,4 +1,5 @@
 "use client";
+import { examTypeLabels } from "@/services/exams/exam-types";
 
 import { useTransition } from "react";
 import Link from "next/link";
@@ -17,12 +18,14 @@ export function ExamListFilters({
   classrooms,
   scope,
   archivedCourseSelected,
+  fromCourseId,
   archivedClassroomSelected,
 }: {
   courses: { id: string; name: string; term: string; courseNo: string }[];
   classrooms: { id: string; name: string; courseId: string }[];
   scope: TeacherExamListScope;
   archivedCourseSelected: boolean;
+  fromCourseId?: string;
   archivedClassroomSelected: boolean;
 }) {
   const router = useRouter();
@@ -72,6 +75,9 @@ export function ExamListFilters({
       }}
       className="grid items-end gap-3 rounded-2xl border border-sky-100 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-[minmax(10rem,1.4fr)_repeat(2,minmax(8rem,1fr))_repeat(2,minmax(7rem,0.65fr))_auto]"
     >
+      {fromCourseId && (
+        <input type="hidden" name="fromCourseId" value={fromCourseId} />
+      )}
       <label className="grid min-w-0 gap-1.5 text-sm font-medium">
         考试名称
         <input
@@ -150,8 +156,11 @@ export function ExamListFilters({
         考试类型
         <select name="type" defaultValue={scope.type ?? ""} className={control}>
           <option value="">全部类型</option>
-          <option value="MIDTERM">期中考试</option>
-          <option value="FINAL">期末考试</option>
+          {Object.entries(examTypeLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
         </select>
       </label>
       <div className="flex flex-wrap items-center gap-2">
@@ -163,7 +172,11 @@ export function ExamListFilters({
           {pending ? "更新中" : "搜索"}
         </button>
         <Link
-          href="/teacher/exams"
+          href={
+            fromCourseId
+              ? `/teacher/exams?fromCourseId=${encodeURIComponent(fromCourseId)}`
+              : "/teacher/exams"
+          }
           onClick={(event) => {
             event.currentTarget.closest("form")?.reset();
           }}

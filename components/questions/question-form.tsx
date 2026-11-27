@@ -2,7 +2,7 @@
 import { editQuestionKnowledgeTag } from "@/services/questions/knowledge-tags";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { QuestionType } from "@prisma/client";
+import { QuestionGraphBindingType, QuestionType } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import {
@@ -33,7 +33,51 @@ interface QuestionFormProps {
   categories: Array<{ id: string; name: string }>;
   knowledgePoints: KnowledgePointOption[];
   question?: QuestionDetail;
-  coverage?: { courseId: string; categoryId: string; nodeCode: string };
+  /**
+   * 从「内容覆盖自检」的缺口进入时携带的绑定上下文。
+   * 保存成功后直接写入主知识点绑定，避免教师再手动确认一次。
+   */
+  coverage?: {
+    courseId: string;
+    categoryId: string;
+    nodeCode: string;
+    nodeName: string;
+    conceptId: string;
+    graphVersionId: string;
+    publishedNodeId: string;
+  };
+}
+
+type CoverageContext = NonNullable<QuestionFormProps["coverage"]>;
+
+/**
+ * 把新建题目绑定到覆盖缺口对应的主知识点。
+ * 复用既有绑定 API 而不是直接写库：版本校验、乐观并发和审计日志都不绕过。
+ */
+async function bindCoverageConcept(
+  questionId: string,
+  coverage: CoverageContext,
+) {
+  const result = await requestQuestionApi<unknown>(
+    `/api/teacher/questions/${questionId}/knowledge-graph-bindings`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        courseId: coverage.courseId,
+        graphVersionId: coverage.graphVersionId,
+        expectedRevision: 0,
+        bindings: [
+          {
+            conceptId: coverage.conceptId,
+            publishedNodeId: coverage.publishedNodeId,
+            type: QuestionGraphBindingType.PRIMARY,
+          },
+        ],
+      }),
+    },
+  );
+  return result.success;
 }
 
 function emptyQuestion(categoryId: string): QuestionUpsertData {
@@ -207,6 +251,31 @@ export function QuestionForm({
     }
     const programming =
       input.type === QuestionType.PYTHON_PROGRAMMING && mode === "create";
+    /*
+     * 从覆盖缺口进来时，创建成功后立即写入主知识点绑定。
+     * 旧流程只把 nodeCode 当作绑定区的过滤词传过去，教师还要再确认一次；
+     * 一旦漏点，缺口不会消失，看起来像"没保存成功"。
+     * 绑定失败（如图谱刚被重新发布、或教师改了题库分类）时退回原路径，
+     * 由题目详情页的绑定区手动完成，不阻断创建结果。
+     */
+    if (coverage && mode === "create" && !programming) {
+      const bound =
+        input.questionCategoryId === coverage.categoryId
+          ? await bindCoverageConcept(result.data.id, coverage)
+          : false;
+      if (bound) {
+        const query = new URLSearchParams({
+          open: "gaps",
+          limit: "all",
+          created: coverage.nodeName,
+        });
+        router.push(
+          `/teacher/courses/${coverage.courseId}/content-coverage?${query}#course-content-coverage`,
+        );
+        router.refresh();
+        return;
+      }
+    }
     const query = coverage
       ? `?${new URLSearchParams({ courseId: coverage.courseId, bindingKeyword: coverage.nodeCode })}`
       : "";
