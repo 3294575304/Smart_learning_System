@@ -18,6 +18,8 @@ function sample(): StudentClassAnalysis {
       template: { coverKey: "engineering" },
     },
     classroom: { id: "class", name: "示例班", status: "ACTIVE" },
+    lastClassActivityAt: 0,
+    lastPracticeAt: 0,
     assignmentProgress: { total: 0, submitted: 0, overdue: 0 },
     total: 0,
     submitted: 0,

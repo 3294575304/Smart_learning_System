@@ -1,0 +1,1 @@
+ALTER TYPE "ExamObservationKind" ADD VALUE 'WINDOW_SWITCH';

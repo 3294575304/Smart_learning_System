@@ -7,6 +7,7 @@ import {
   FileText,
   GitBranch,
   ListChecks,
+  PackageOpen,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -115,6 +116,13 @@ export function CourseSetupChecklist({
       description: "查看和维护本课程的题目",
       href: `/teacher/questions?courseId=${encodeURIComponent(courseId)}`,
       icon: BookOpenCheck,
+    },
+    {
+      id: "course-content-coverage",
+      title: "内容覆盖自检",
+      description: "查看知识点绑题与评分证据",
+      href: `/teacher/courses/${courseId}/content-coverage`,
+      icon: PackageOpen,
     },
   ];
 
@@ -296,8 +304,12 @@ export function CourseSetupChecklist({
               ({ id, title, description, href, icon: Icon }) => (
                 <Link
                   key={id}
+                  id={id === "course-content-coverage" ? id : undefined}
                   href={href}
-                  className="group flex min-w-0 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+                  prefetch={
+                    id === "course-content-coverage" ? false : undefined
+                  }
+                  className="group flex min-w-0 scroll-mt-24 items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/80 p-3 transition-colors hover:border-sky-400 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
                 >
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-white text-slate-500 group-hover:text-blue-600">
                     <Icon aria-hidden="true" className="size-5" />

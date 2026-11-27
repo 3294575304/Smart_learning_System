@@ -1,3 +1,5 @@
+import { withStudentAnalysisReturn } from "@/services/student-experience/analysis-navigation";
+
 export function reviewTabHref(search: string, view: "wrong" | "favorites") {
   const source = new URLSearchParams(search);
   const params = new URLSearchParams({ view });
@@ -11,5 +13,8 @@ export function reviewTabHref(search: string, view: "wrong" | "favorites") {
     const chapter = source.get("chapterId");
     if (chapter) params.set("chapterId", chapter);
   }
-  return `/student/wrong-questions?${params}`;
+  return withStudentAnalysisReturn(
+    `/student/wrong-questions?${params}`,
+    source.get("analysisReturn"),
+  );
 }

@@ -35,6 +35,8 @@ export default async function SubmissionGradingPage({
   const query = personalWorkQuerySchema.safeParse({
     filter: rawQuery.filter,
     returnTo: rawQuery.returnTo,
+    questionType: rawQuery.questionType,
+    answerStatus: rawQuery.answerStatus,
   });
   if (!assignmentId.success || !submissionId.success || !query.success)
     notFound();
@@ -66,13 +68,14 @@ export default async function SubmissionGradingPage({
           back.href,
           "ALL",
           examId,
+          query.data,
         ),
       );
     return (
       <SubmissionGradingWorkspace
         key={submission.id}
         initialSubmission={submission}
-        filter={query.data.filter}
+        filters={query.data}
         back={back}
         examId={examId}
       />

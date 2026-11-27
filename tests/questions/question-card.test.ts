@@ -7,10 +7,31 @@ import {
   type AppRouterInstance,
 } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { QuestionList } from "@/components/questions/question-list";
+import { QuestionReviewContent } from "@/components/questions/question-review-content";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import type { QuestionListItem } from "@/services/questions/types";
 
 Object.assign(globalThis, { React });
+
+test("题目解析直接显示，并仅高亮已标记的正确选项", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(QuestionReviewContent, {
+      content: "阅读题干",
+      options: [
+        { id: "a", label: "A", content: "相同选项文本", isCorrect: true },
+        { id: "b", label: "B", content: "相同选项文本", isCorrect: false },
+        { id: "c", label: "C", content: "另一正确选项", isCorrect: true },
+      ],
+      heading: "h3",
+      explanation: "核对答案依据。",
+    }),
+  );
+  assert.equal((html.match(/正确答案/g) ?? []).length, 2);
+  assert.equal((html.match(/bg-green-50/g) ?? []).length, 2);
+  assert.match(html, /<h3[^>]*>答案解析/);
+  assert.match(html, /核对答案依据。/);
+  assert.doesNotMatch(html, /<details/);
+});
 const router: AppRouterInstance = {
   back() {},
   forward() {},
@@ -33,7 +54,10 @@ const base: QuestionListItem = {
   creator: { id: "teacher", displayName: "示例教师" },
   knowledgePoints: [],
   courseGraphConcepts: [{ id: "concept", code: "C01", name: "函数定义" }],
-  courseObjective: { code: "1", title: "知识" },
+  courseObjectives: [
+    { code: "1", title: "知识" },
+    { code: "2", title: "能力" },
+  ],
   assignmentReferenceCount: 3,
   canEdit: true,
   canDelete: true,
@@ -70,7 +94,7 @@ test("课程目标未分类与未绑定课程知识点不会伪装成全局分�
   const unbound = render([
     {
       ...base,
-      courseObjective: null,
+      courseObjectives: [],
       defaultObjectiveKind: "KNOWLEDGE",
       courseGraphConcepts: [],
     },
@@ -80,6 +104,10 @@ test("课程目标未分类与未绑定课程知识点不会伪装成全局分�
   assert.doesNotMatch(unbound, /课程目标：1 · 知识/u);
   const noCourse = render([{ ...base, courseGraphConcepts: undefined }]);
   assert.doesNotMatch(noCourse, /选择课程后查看该课程的知识点分类/u);
+});
+
+test("题库卡片显示同题的全部课程目标", () => {
+  assert.match(render([base]), /课程目标：1 · 知识 \/ 2 · 能力/u);
 });
 
 test("草稿、题干核对与空结果继续保留，卡片不增加不存在的作答预览", () => {

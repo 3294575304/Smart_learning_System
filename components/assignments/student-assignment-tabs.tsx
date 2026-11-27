@@ -5,11 +5,13 @@ export function StudentAssignmentTabs({
   courseId,
   classroomId,
   returnTo,
+  analysisReturn,
 }: {
   view: "work" | "records";
   courseId?: string;
   classroomId?: string;
   returnTo?: string;
+  analysisReturn?: string;
 }) {
   return (
     <nav
@@ -23,6 +25,7 @@ export function StudentAssignmentTabs({
         ] as const
       ).map((tab) => {
         const params = new URLSearchParams({ view: tab.id });
+        if (analysisReturn) params.set("analysisReturn", analysisReturn);
         if (courseId) params.set("courseId", courseId);
         if (classroomId) params.set("classroomId", classroomId);
         return (

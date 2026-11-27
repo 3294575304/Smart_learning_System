@@ -50,6 +50,8 @@ function item(
       teacher: { profile: null },
     },
     classroom: { id, name: `班级${id}`, status },
+    lastClassActivityAt: 0,
+    lastPracticeAt: 0,
     assignmentProgress: { total, submitted, overdue: 0 },
     total,
     submitted,
@@ -181,6 +183,8 @@ test("同名课程分别展示，待办数与最近截止都来自同一次统�
 test("作业环图区分未到期、逾期和已交，无作业不显示零提交率", () => {
   const row = {
     ...item("one", 9, 6),
+    lastClassActivityAt: 0,
+    lastPracticeAt: 0,
     assignmentProgress: { total: 9, submitted: 6, overdue: 2 },
   };
   const html = render(

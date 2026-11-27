@@ -4,7 +4,11 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
-import { latestEffectiveSubmissions } from "@/services/assignments/reporting";
+import {
+  EFFECTIVE_SUBMISSION_STATUSES,
+  latestEffectiveSubmissions,
+} from "@/services/assignments/reporting";
+import { submissionNeedsGrading } from "@/services/assignments/latest-submissions";
 import { listPublishedExamScores } from "@/services/course-analytics/exam-scores";
 import {
   kr20,
@@ -164,14 +168,12 @@ async function loadOwnedExam(teacherId: string, examId: string) {
   return exam;
 }
 
-async function calculate(exam: ExamRecord, thresholds: ExamThresholds) {
-  const assignmentIds = exam.assignments.map((item) => item.id);
-  const classroomIds = exam.assignments.map((item) => item.classroomId);
-  const [submissions, ledger] = await Promise.all([
-    prisma.submission.findMany({
+async function loadExamSubmissions(exam: ExamRecord) {
+  return latestEffectiveSubmissions(
+    await prisma.submission.findMany({
       where: {
-        assignmentId: { in: assignmentIds },
-        status: { in: ["SUBMITTED", "PENDING_REVIEW", "GRADED", "PUBLISHED"] },
+        assignmentId: { in: exam.assignments.map(({ id }) => id) },
+        status: { in: EFFECTIVE_SUBMISSION_STATUSES },
       },
       select: {
         id: true,
@@ -183,6 +185,12 @@ async function calculate(exam: ExamRecord, thresholds: ExamThresholds) {
         score: true,
         maxScore: true,
         updatedAt: true,
+        gradedAt: true,
+        _count: {
+          select: {
+            answers: { where: { gradingStatus: "MANUAL_REVIEW_REQUIRED" } },
+          },
+        },
       },
       orderBy: [
         { attemptNumber: "desc" },
@@ -190,9 +198,17 @@ async function calculate(exam: ExamRecord, thresholds: ExamThresholds) {
         { id: "desc" },
       ],
     }),
-    listPublishedExamScores(classroomIds),
-  ]);
-  const latest = latestEffectiveSubmissions(submissions);
+  );
+}
+
+type ExamSubmissions = Awaited<ReturnType<typeof loadExamSubmissions>>;
+
+async function calculate(
+  exam: ExamRecord,
+  thresholds: ExamThresholds,
+  latest: ExamSubmissions,
+  ledger: Awaited<ReturnType<typeof listPublishedExamScores>>,
+) {
   const eligible = new Set(
     exam.assignments.flatMap((assignment) =>
       assignment.classroom.memberships.map(
@@ -625,11 +641,43 @@ export async function getTeacherExamHeader(teacherId: string, examId: string) {
 
 export async function getTeacherExamDetails(teacherId: string, examId: string) {
   const exam = await loadOwnedExam(teacherId, examId);
-  if (exam.cancelledAt || exam.endsAt > new Date())
-    return { exam, analysis: null };
-  const analysis = await calculate(exam, { pass: 60, excellent: 85 });
+  const now = new Date();
+  const ended = !exam.cancelledAt && exam.endsAt <= now;
+  const [latest, ledger] = await Promise.all([
+    !exam.cancelledAt && (ended || exam.startsAt <= now)
+      ? loadExamSubmissions(exam)
+      : (new Map() as ExamSubmissions),
+    ended
+      ? listPublishedExamScores(
+          exam.assignments.map(({ classroomId }) => classroomId),
+        )
+      : [],
+  ]);
+  const classroomProgress = Object.fromEntries(
+    exam.assignments.map((assignment) => {
+      const submissions = latest.get(assignment.id);
+      const counts = { participated: 0, pending: 0, published: 0, ready: 0 };
+      for (const { studentId } of assignment.classroom.memberships) {
+        const submission = submissions?.get(studentId);
+        if (!submission) continue;
+        counts.participated++;
+        if (submissionNeedsGrading(submission)) counts.pending++;
+        else if (submission.status === "GRADED") counts.ready++;
+        if (submission.status === "PUBLISHED") counts.published++;
+      }
+      return [assignment.id, counts] as const;
+    }),
+  );
+  if (!ended) return { exam, classroomProgress, analysis: null };
+  const analysis = await calculate(
+    exam,
+    { pass: 60, excellent: 85 },
+    latest,
+    ledger,
+  );
   return {
     exam,
+    classroomProgress,
     analysis: analysis.overview.publishedClassrooms ? analysis : null,
   };
 }

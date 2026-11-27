@@ -37,6 +37,16 @@ test("下拉跳转同时更新课程与状态，只保留已提交的搜索条�
   );
   assert.equal(all.searchParams.has("courseId"), false);
   assert.equal(all.searchParams.has("classroomId"), false);
+  assert.equal(all.searchParams.has("backClassroomId"), false);
+  const scoped = new URL(
+    studentGradeFilterHref(contexts, "b", "ALL", "", {
+      courseId: "c1",
+      classroomId: "a",
+    }),
+    "http://localhost",
+  );
+  assert.equal(scoped.searchParams.get("classroomId"), "b");
+  assert.equal(scoped.searchParams.get("backClassroomId"), "a");
   assert.throws(() => studentGradeFilterHref(contexts, "foreign", "ALL", ""));
 });
 test("学生总评只显示一个课程选择框，每个已加入班级独立成项", () => {

@@ -1,5 +1,6 @@
 "use client";
 import { safeStudentReturn } from "@/services/assignments/student-query";
+import { examListContext } from "@/services/exams/classroom-navigation";
 
 import { Role } from "@prisma/client";
 import {
@@ -75,11 +76,37 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
   const classroomId = searchParams.get("classroomId");
   const returnTo = searchParams.get("returnTo");
   const studentQueryHref = safeStudentReturn(returnTo ?? undefined);
+  const examPath = pathname.split("/");
+  const inExam = examPath[1] === "teacher" && examPath[2] === "exams";
+  const examList = inExam
+    ? examListContext(
+        searchParams.get("examList") ??
+          (examPath.length === 4 || examPath.length === 3
+            ? Object.fromEntries(searchParams)
+            : new URLSearchParams(returnTo?.split("?")[1]?.split("#")[0]).get(
+                "examList",
+              )),
+      )
+    : "";
   const crumbs = buildBreadcrumbs(pathname, undefined, {
     studentId: searchParams.get("studentId"),
     view: searchParams.get("view"),
     studentQueryHref,
     source: searchParams.get("source"),
+    examList,
+    studentScope: {
+      courseId: searchParams.get("courseId"),
+      classroomId,
+    },
+    reportCrumb: (() => {
+      const reportReturn = searchParams.get("reportReturn");
+      if (
+        !reportReturn ||
+        !/^\/student\/exams\/[^/?#]+\/report(\?|$)/.test(reportReturn)
+      )
+        return null;
+      return { href: reportReturn.split("#")[0], label: "考试报告" };
+    })(),
     classroomListFilters: readTeacherClassroomListFilters({
       keyword: searchParams.get("keyword"),
       status: searchParams.get("status"),
@@ -169,12 +196,18 @@ function ContextPageTitle({
   groups: NavigationGroup[];
 }) {
   const query = useSearchParams();
+  const reportReturn = query.get("reportReturn");
   return (
     <p className="truncate text-sm font-semibold">
       {buildBreadcrumbs(pathname, undefined, {
         studentId: query.get("studentId"),
         view: query.get("view"),
         source: query.get("source"),
+        reportCrumb:
+          reportReturn &&
+          /^\/student\/exams\/[^/?#]+\/report(\?|$)/.test(reportReturn)
+            ? { href: reportReturn.split("#")[0], label: "考试报告" }
+            : null,
       }).at(-1)?.label ?? getDashboardPageTitle(pathname, groups)}
     </p>
   );
@@ -426,6 +459,7 @@ export function DashboardShell({
         跳到正文
       </a>
       <aside
+        data-exam-navigation=""
         className={cn(
           "fixed inset-y-0 left-0 z-30 hidden border-r border-sky-100 bg-white/95 lg:flex lg:flex-col",
           railClass,
@@ -608,8 +642,10 @@ export function DashboardShell({
           "[--dashboard-header-height:calc(4rem+1px)]",
           railOffsetClass,
         )}
+        data-exam-content=""
       >
         <header
+          data-exam-navigation=""
           className={cn(
             "bg-background/95 sticky top-0 z-30 border-b backdrop-blur",
             compactWorkspace && "workspace-topbar",

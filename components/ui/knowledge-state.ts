@@ -16,7 +16,12 @@ import type { KnowledgeStatus } from "@/services/learner-profiles/knowledge-stat
  */
 export const knowledgeStateColor: Record<KnowledgeStatus, string> = {
   MASTERED: "bg-emerald-600",
-  DEVELOPING: "bg-brand-strong",
+  /*
+   * 「巩固中」原本用 brand-strong（深品牌蓝），亮度高于已掌握的翠绿，
+   * 在 8px 分布条上反而最抢眼，与「过渡态应弱于已掌握」的语义相反。
+   * 改为天蓝，恢复「深绿=好 / 浅蓝=过渡 / 玫红=差」的强弱顺序。
+   */
+  DEVELOPING: "bg-sky-500",
   NEEDS_SUPPORT: "bg-rose-600",
   INSUFFICIENT: "bg-amber-500",
   NO_EVIDENCE: "bg-neutral-400",
@@ -25,7 +30,7 @@ export const knowledgeStateColor: Record<KnowledgeStatus, string> = {
 export const knowledgeStateDot: Record<KnowledgeStatus, string> = {
   MASTERED: "rounded-full bg-emerald-600",
   DEVELOPING:
-    "rounded-full border border-brand-strong bg-gradient-to-r from-brand-strong from-50% to-transparent to-50%",
+    "rounded-full border border-sky-500 bg-gradient-to-r from-sky-500 from-50% to-transparent to-50%",
   NEEDS_SUPPORT: "rotate-45 rounded-[1px] bg-rose-600",
   INSUFFICIENT: "rounded-full border-2 border-amber-500 bg-transparent",
   NO_EVIDENCE:

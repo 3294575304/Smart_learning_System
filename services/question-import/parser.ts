@@ -14,7 +14,7 @@ const MAX_QUESTIONS = 500;
 const OPTION_LINE =
   /^\s*[（(]?([A-Ha-hＡ-Ｈａ-ｈ])(?:[）)]|[、.．：:])\s*(.*)$/u;
 const META_LINE =
-  /^\s*(?:标题|答案|标准答案|参考答案|解析|难易度|难度|知识点|正确率|使用次数)\s*[：:]/u;
+  /^\s*(?:标题|答案|标准答案|参考答案|解析|难易度|难度|知识点|课程目标|正确率|使用次数)\s*[：:]/u;
 
 interface SourceBlock {
   originalNumber: string | null;
@@ -373,10 +373,10 @@ function draftFromBlock(
   const configMatch = block.text.match(
     /判题配置开始\s*([\s\S]*?)\s*判题配置结束/u,
   );
-  const visibleText = block.text.replace(
-    /判题配置开始[\s\S]*?判题配置结束/gu,
-    "",
-  );
+  const objectiveLine = /^[ \t]*课程目标[ \t]*[：:][ \t]*([^\n]*)/mu;
+  const visibleText = block.text
+    .replace(objectiveLine, "")
+    .replace(/判题配置开始[\s\S]*?判题配置结束/gu, "");
   const lines = visibleText
     .split("\n")
     .map((line) => line.trimEnd())
@@ -412,6 +412,9 @@ function draftFromBlock(
     ).slice(0, 120),
     content,
     type,
+    objectiveCodes: (block.text.match(objectiveLine)?.[1] ?? "")
+      .split(/[、，,;；\s]+/u)
+      .filter(Boolean),
     options:
       type === QuestionType.SINGLE_CHOICE ||
       type === QuestionType.MULTIPLE_CHOICE
@@ -487,6 +490,14 @@ function parseJsonDrafts(
         })
       : [];
     const content = String(item.content ?? "").slice(0, 5000);
+    if (
+      item.objectiveCodes !== undefined &&
+      (!Array.isArray(item.objectiveCodes) ||
+        item.objectiveCodes.some((code) => typeof code !== "string"))
+    )
+      throw new Error(
+        `第 ${index + 1} 道题的 objectiveCodes 必须是目标编码数组。`,
+      );
     const draft: QuestionImportDraft = {
       rowKey: `json-${index + 1}`,
       originalNumber: String(index + 1),
@@ -496,6 +507,9 @@ function parseJsonDrafts(
       ),
       content,
       type,
+      objectiveCodes: Array.isArray(item.objectiveCodes)
+        ? item.objectiveCodes.map((code: string) => code.trim())
+        : [],
       options,
       answer:
         item.answer && typeof item.answer === "object"

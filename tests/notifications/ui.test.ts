@@ -8,7 +8,7 @@ import {
   resolveNotificationDestination,
 } from "../../components/notifications/presenters";
 
-test("签到通知的查看详情使用已校验的单场签到地址，失效时不回退到通知详情", () => {
+test("签到通知先打开通知详情，业务动作失效时仍可查看正文", () => {
   assert.equal(
     notificationDetailsHref({
       id: "notice",
@@ -19,7 +19,7 @@ test("签到通知的查看详情使用已校验的单场签到地址，失效�
         label: "前往签到",
       },
     }),
-    "/student/attendance/session-id?classroomId=classroom-id",
+    "/notifications/notice",
   );
   assert.equal(
     notificationDetailsHref({
@@ -27,7 +27,7 @@ test("签到通知的查看详情使用已校验的单场签到地址，失效�
       type: "ATTENDANCE_PUBLISHED",
       action: null,
     }),
-    null,
+    "/notifications/notice",
   );
   assert.equal(
     notificationDetailsHref({
@@ -35,7 +35,7 @@ test("签到通知的查看详情使用已校验的单场签到地址，失效�
       type: "ATTENDANCE_PUBLISHED",
       action: { kind: "LINK", href: "//external.example", label: "前往签到" },
     }),
-    null,
+    "/notifications/notice",
   );
   assert.equal(
     notificationDetailsHref({ id: "notice", type: "SYSTEM_ANNOUNCEMENT" }),

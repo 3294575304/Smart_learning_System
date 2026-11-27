@@ -6,6 +6,11 @@ import {
   StudentAnalysisWorkspace,
 } from "../../components/dashboard/student-analysis-workspace";
 import { TrendChart } from "../../components/dashboard/trend-chart";
+import {
+  readStudentAnalysisReturn,
+  studentAnalysisHref,
+  studentAnalysisReturnFromHref,
+} from "../../services/student-experience/analysis-navigation";
 import type { StudentClassAnalysis } from "../../services/dashboard/student-class-analytics";
 import { renderWithRouter as render } from "../helpers/render-with-router";
 
@@ -62,6 +67,8 @@ function sample(): StudentClassAnalysis {
       template: { coverKey: "engineering" },
     },
     classroom: { id: "class", name: "示例班", status: "ACTIVE" },
+    lastClassActivityAt: 0,
+    lastPracticeAt: 0,
     assignmentProgress: { total: 0, submitted: 0, overdue: 0 },
     total: 0,
     submitted: 0,
@@ -267,4 +274,63 @@ test("practice tab stays in the course scope and never enters the score axis", (
   assert.match(html, /不计入课程成绩/);
   // 成绩序列（含 80 分作业）不应混进练习视图。
   assert.doesNotMatch(html, /作业一/);
+});
+
+test("learning analysis links restore the classroom and label the course-centre action by origin", () => {
+  Object.assign(globalThis, { React });
+  const selected = sample();
+  selected.practiceHistory = [
+    { id: "practice:11-14", label: "11/14", answered: 6, correct: 5, rate: 83 },
+  ];
+  selected.course.id = "cm00000000000000000000001";
+  selected.classroom.id = "cm00000000000000000000002";
+  const scope = {
+    courseId: selected.course.id,
+    classroomId: selected.classroom.id,
+  };
+  const renderWorkspace = (fromCourseCenter: boolean) =>
+    render(
+      React.createElement(StudentAnalysisWorkspace, {
+        selected,
+        contexts: [selected],
+        updatedAt: new Date("2026-11-26T00:00:00Z"),
+        initialChart: "exam",
+        fromCourseCenter,
+      }),
+    );
+  const standard = renderWorkspace(false);
+  assert.match(standard, /当前教学班<\/span><a[^>]*>课程学习中心/);
+  assert.doesNotMatch(standard, /返回课程学习中心/);
+  assert.match(
+    renderWorkspace(true),
+    /当前教学班<\/span><a[^>]*>.*?返回课程学习中心/,
+  );
+  for (const path of [
+    "assignments",
+    "exams",
+    "attendance",
+    "recommendations",
+    "wrong-questions",
+    "tasks",
+    "results",
+  ]) {
+    const href = [...standard.matchAll(/href="([^"]+)"/g)]
+      .map(([, value]) => value.replaceAll("&amp;", "&"))
+      .find((value) => value.startsWith("/student/" + path + "?"));
+    assert.ok(href, path);
+    assert.equal(
+      studentAnalysisReturnFromHref(href),
+      studentAnalysisHref(scope, { chart: "exam" }),
+      path,
+    );
+  }
+  assert.equal(
+    readStudentAnalysisReturn("https://external.example/student/analytics"),
+    undefined,
+  );
+  assert.equal(readStudentAnalysisReturn("/student/tasks"), undefined);
+  assert.equal(
+    readStudentAnalysisReturn("/student/analytics?courseId=invalid"),
+    undefined,
+  );
 });

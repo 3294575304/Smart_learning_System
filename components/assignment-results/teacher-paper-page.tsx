@@ -20,7 +20,7 @@ import { ResourceNotFoundError } from "@/services/auth/policy";
 import { assignmentIdSchema } from "@/services/assignments/schemas";
 import { getTeacherExamHeader } from "@/services/exams/analysis";
 import { resolveTeacherAssessmentPage } from "@/services/exams/classroom-page-scope";
-import { ExamWorkspaceSummary } from "@/components/exams/exam-workspace-summary";
+import { ExamPaperSummary } from "@/components/exams/exam-paper-summary";
 import { getTeacherAssignmentOverview } from "@/services/assignments/teacher-overview";
 import { QUESTION_TYPE_LABELS } from "@/services/questions/constants";
 import {
@@ -211,12 +211,7 @@ export default async function TeacherAssignmentPage({
           active="content"
           examSessionId={examSessionId}
         />
-        {exam && (
-          <ExamWorkspaceSummary
-            details={{ exam }}
-            assignmentId={assignment.id}
-          />
-        )}
+        {exam && <ExamPaperSummary exam={exam} assignmentId={assignment.id} />}
         <p className="text-xs leading-5 text-slate-500">
           {assignment.status === "DRAFT"
             ? assignment.classroom.status === "ACTIVE"

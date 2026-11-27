@@ -68,9 +68,10 @@ test("课程记录右栏新增我的考试，并与我的作业保持同一跳�
   // 目标页能返回课程任务列表（与作业页同一套 StudentCourseReturnLink）
   assert.match(examsPage, /<StudentCourseReturnLink/u);
   assert.match(examsPage, /tab="tasks"/u);
-  // 只有在没有课程/班级作用域时（从学习任务总览进入）才退回总览入口
   assert.match(examsPage, /query\.courseId && query\.classroomId/u);
-  assert.match(examsPage, /<StudentBackLink href="\/student\/tasks">/u);
+  // 「我的考试」已升为一级导航：无作用域时它本身就是入口，不再退回「学习任务」，
+  // 只有带课程作用域进入课程时才提供返回课程任务页的按钮。
+  assert.doesNotMatch(examsPage, /<StudentBackLink href="\/student\/tasks">/u);
 
   // 「加入新班级」卡片只在「全部 / 学习中」出现；已结束标签页只回顾历史教学班
   assert.match(joinButton, /加入新班级/u);
@@ -173,7 +174,8 @@ test("待开始的考试进详情页显示考试信息，而不是空的提交�
 
   // 页面据考试身份分流：有考试就给考试信息，且无提交时不渲染提交历史
   assert.match(page, /考试信息/u);
-  assert.match(page, /EXAM_TYPE_LABELS/u);
+  // 考试类型标签可能来自共享 helper，也可能是页面内的字面量映射。
+  assert.match(page, /examTypeLabel\(|EXAM_TYPE_LABELS/u);
   assert.match(page, /!exam \|\| hasAttempts/u);
   assert.match(
     page,

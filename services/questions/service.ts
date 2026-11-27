@@ -562,20 +562,26 @@ export async function listTeacherQuestions(
             syllabusStructureId,
             questionId: { in: records.map(({ id }) => id) },
           },
-          select: { questionId: true, objectiveCode: true },
+          select: { questionId: true, objectiveCode: true, source: true },
         })
       : [];
-  const objectiveByQuestion = new Map(
-    objectiveMappings.map(({ questionId, objectiveCode }) => [
-      questionId,
-      {
-        code: objectiveCode,
-        title:
-          syllabusObjectives.find(({ code }) => code === objectiveCode)
-            ?.title ?? objectiveCode,
-      },
-    ]),
+  const objectiveByQuestion = new Map<
+    string,
+    Array<{ code: string; title: string }>
+  >();
+  const aiCandidates = new Set(
+    objectiveMappings
+      .filter((item) => item.source === "AI")
+      .map((item) => item.questionId),
   );
+  for (const { questionId, objectiveCode } of objectiveMappings) {
+    const title =
+      syllabusObjectives.find(({ code }) => code === objectiveCode)?.title ??
+      objectiveCode;
+    const rows = objectiveByQuestion.get(questionId) ?? [];
+    rows.push({ code: objectiveCode, title });
+    objectiveByQuestion.set(questionId, rows);
+  }
   for (const binding of courseBindings) {
     const current = conceptsByQuestion.get(binding.questionId) ?? [];
     current.push(binding);
@@ -583,10 +589,25 @@ export async function listTeacherQuestions(
   }
 
   return {
+    ...(syllabusStructureId && syllabusObjectives.length
+      ? {
+          objectiveScope: {
+            syllabusStructureId,
+            objectives: syllabusObjectives,
+          },
+        }
+      : {}),
     items: records.map((question) => ({
       ...listItemFromRecord(teacherId, question),
       ...(query.courseId && syllabusStructureId
-        ? { courseObjective: objectiveByQuestion.get(question.id) ?? null }
+        ? {
+            courseObjectives: (objectiveByQuestion.get(question.id) ?? []).sort(
+              (a, b) => a.code.localeCompare(b.code),
+            ),
+            canReclassifyCourseObjective:
+              aiCandidates.has(question.id) &&
+              objectiveByQuestion.get(question.id)?.length === 1,
+          }
         : {}),
       ...(query.courseId
         ? {

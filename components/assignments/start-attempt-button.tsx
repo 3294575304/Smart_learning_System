@@ -6,11 +6,13 @@ import {
 } from "@/services/student-experience/task-scope";
 
 import { withAssignmentTaskReturn } from "@/services/student-experience/activity-query";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { notifyStudentExamStarted } from "@/components/student-assistant/use-availability";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
 import { EditorDialog } from "@/components/assignments/editor-dialog";
+import { examWindowBlurThresholdMs } from "@/services/exams/switch-policy";
 
 interface Props {
   assignmentId: string;
@@ -31,6 +33,7 @@ export function StartAttemptButton({
   className,
   exam,
 }: Props) {
+  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [confirmStart, setConfirmStart] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +46,15 @@ export function StartAttemptButton({
     requestId.current ??= crypto.randomUUID();
     setPending(true);
     setError(null);
+    /*
+     * 考试必须尽量在全屏中开始。这里必须在点击手势的同步栈内发起请求，
+     * 一旦 await 之后再调用就会被浏览器判定为缺少用户激活而拒绝。
+     * 失败不阻断流程，答题页会用遮罩再兜一次。
+     */
+    if (exam) {
+      const request = document.documentElement.requestFullscreen?.();
+      if (request) void request.catch(() => undefined);
+    }
     const response = await requestAssignmentApi<{
       id: string;
       examSessionId: string | null;
@@ -58,7 +70,11 @@ export function StartAttemptButton({
       return;
     }
     if (response.data.examSessionId) notifyStudentExamStarted();
-    window.location.assign(
+    /*
+     * 用软导航而不是 location.assign：硬跳转会卸载文档，浏览器会退出全屏，
+     * 学生进入答题页后又得点一次。软导航保留文档，全屏得以延续。
+     */
+    router.push(
       withAssignmentTaskReturn(
         studentTaskHref(
           `/student/submissions/${response.data.id}/answer`,
@@ -94,6 +110,14 @@ export function StartAttemptButton({
             {exam.autoSubmitOnExit
               ? "考试期间请留在作答页。离开、刷新或关闭此页会自动交卷，并消耗 1 次考试机会。"
               : "退出时保留已保存的作答。你可以在截止前继续本次考试，正式交卷会消耗 1 次考试机会。"}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            本场考试将在浏览器全屏下进行，计时从点击「确认开始」起立即计算。若浏览器拦截全屏，作答页会提示你再次进入。
+          </p>
+          <p className="mt-2 text-sm leading-6">
+            切换标签页、最小化浏览器，或让考试窗口失去焦点至少{" "}
+            {examWindowBlurThresholdMs / 1000}{" "}
+            秒，都会计入切屏。超过本场上限后自动交卷。
           </p>
           {error && (
             <p role="alert" className="mt-2 text-sm text-red-700">

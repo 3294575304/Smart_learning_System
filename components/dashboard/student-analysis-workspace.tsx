@@ -1,7 +1,12 @@
-import { StudentCourseReturnLink } from "./student-course-return-link";
-import { StudentPageHeader } from "./student-page-header";
-import { StudentEnrollmentPicker } from "./student-enrollment-picker";
+import { studentAnalysisActionClass as panelAction } from "./student-analysis-return-link";
 import {
+  studentAnalysisHref,
+  withStudentAnalysisReturn,
+} from "@/services/student-experience/analysis-navigation";
+import { StudentPageHeader } from "./student-page-header";
+import { StudentAnalysisCoursePicker } from "./student-analysis-course-picker";
+import {
+  ArrowLeft,
   ArrowRight,
   ArrowUpRight,
   ChartNoAxesCombined,
@@ -29,8 +34,6 @@ type Contexts = Awaited<
 >["contexts"];
 const panel =
   "workspace-panel min-w-0 rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/30";
-const panelAction =
-  "inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-sky-50 px-3 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700";
 const specialGradeLabels: Record<string, string> = {
   ABSENT: "缺考",
   DEFERRED: "缓考",
@@ -320,16 +323,26 @@ export function StudentAnalysisWorkspace({
   contexts,
   updatedAt,
   initialChart = "all",
+  fromCourseCenter = false,
 }: {
   selected: StudentClassAnalysis;
   contexts: Contexts;
   updatedAt: Date;
   initialChart?: "all" | "assignment" | "exam" | "practice";
+  fromCourseCenter?: boolean;
 }) {
   const scope = new URLSearchParams({
     courseId: s.course.id,
     classroomId: s.classroom.id,
   });
+  const analysisHref = studentAnalysisHref(
+    { courseId: s.course.id, classroomId: s.classroom.id },
+    { fromCourseCenter, chart: initialChart },
+  );
+  const outgoing = (href: string) =>
+    withStudentAnalysisReturn(href, analysisHref);
+  const chartLinks = (points: StudentClassAnalysis["scoreHistory"]) =>
+    points.map((point) => ({ ...point, href: outgoing(point.href) }));
   const assignments = `/student/assignments?${scope}`;
   const center = `/student/courses/${s.course.id}/learning-center?classroomId=${s.classroom.id}`;
   const attendance = [
@@ -393,7 +406,7 @@ export function StudentAnalysisWorkspace({
           tone: "practice" as const,
           title: `练习正确率 ${Math.round((practiceCorrect / practiceAnswered) * 100)}%`,
           text: `本课程最近 ${s.practiceHistory.length} 个练习日 · 共 ${practiceAnswered} 道题`,
-          href: `/student/practice?${scope}`,
+          href: `/student/recommendations?${scope}`,
           label: "去练习",
         }
       : null;
@@ -480,21 +493,11 @@ export function StudentAnalysisWorkspace({
         <StudentPageHeader
           title="学习分析"
           description="查看我的作业、成绩和出勤记录。"
-          actions={
-            <StudentCourseReturnLink
-              courseId={s.course.id}
-              classroomId={s.classroom.id}
-            />
-          }
         />
       </div>
       <header
-        className={`${panel} relative overflow-hidden px-5 py-5 sm:px-6 xl:col-span-2 xl:row-start-2`}
+        className={`${panel} border-s-4 border-s-sky-500 px-5 py-5 sm:px-6 xl:col-span-2 xl:row-start-2`}
       >
-        <div
-          aria-hidden="true"
-          className="absolute inset-y-0 left-0 w-1 bg-sky-500"
-        />
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="min-w-0">
             <h2 className="text-xl font-semibold tracking-tight [overflow-wrap:anywhere] text-slate-950 sm:text-2xl">
@@ -507,22 +510,33 @@ export function StudentAnalysisWorkspace({
               <span>{s.course.term}</span>
               <span>·</span>
               <span>当前教学班</span>
+              <Link
+                href={fromCourseCenter ? center : outgoing(center)}
+                className={panelAction}
+              >
+                {fromCourseCenter && (
+                  <ArrowLeft className="size-3.5" aria-hidden="true" />
+                )}
+                {fromCourseCenter ? "返回课程学习中心" : "课程学习中心"}
+                {!fromCourseCenter && (
+                  <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                )}
+              </Link>
             </div>
           </div>
           <div className="w-full min-w-0 sm:max-w-sm">
-            <p className="mb-1.5 text-xs text-slate-500">当前课程</p>
-            <StudentEnrollmentPicker
+            <StudentAnalysisCoursePicker
               contexts={contexts.map((item) => ({
                 course: {
                   id: item.course.id,
                   name: item.course.name,
                   term: item.course.term,
                   status: item.course.status,
+                  courseNo: item.course.courseNo,
                 },
                 classroom: item.classroom,
               }))}
               selectedId={s.classroom.id}
-              action="/student/analytics"
             />
           </div>
         </div>
@@ -554,7 +568,7 @@ export function StudentAnalysisWorkspace({
             title="我的学习记录"
             description="切换统计口径，查看最近的成绩变化"
             action={
-              <Link href={assignments} className={panelAction}>
+              <Link href={outgoing(assignments)} className={panelAction}>
                 作业记录
                 <ArrowUpRight className="size-3.5" aria-hidden="true" />
               </Link>
@@ -563,11 +577,11 @@ export function StudentAnalysisWorkspace({
           <ScoreTrendChart
             initialTab={initialChart}
             practice={s.practiceHistory}
-            practiceHref={`/student/practice?${scope}`}
+            practiceHref={outgoing(`/student/recommendations?${scope}`)}
             series={{
-              all: s.scoreHistory,
-              assignment: s.scoreHistoryByKind.assignment,
-              exam: s.scoreHistoryByKind.exam,
+              all: chartLinks(s.scoreHistory),
+              assignment: chartLinks(s.scoreHistoryByKind.assignment),
+              exam: chartLinks(s.scoreHistoryByKind.exam),
             }}
             status={{
               total: s.total,
@@ -586,7 +600,7 @@ export function StudentAnalysisWorkspace({
               title="我的出勤记录"
               action={
                 <Link
-                  href={`/student/attendance?${scope}`}
+                  href={outgoing(`/student/attendance?${scope}`)}
                   className={panelAction}
                 >
                   明细
@@ -680,7 +694,7 @@ export function StudentAnalysisWorkspace({
               {suggestions.map((item) => (
                 <li key={item.title}>
                   <Link
-                    href={item.href}
+                    href={outgoing(item.href)}
                     className="flex min-h-14 items-start gap-2.5 px-5 py-2.5 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-700"
                   >
                     <span
@@ -718,7 +732,7 @@ export function StudentAnalysisWorkspace({
                 {quickLinks.map((link) => (
                   <li key={link.label} className="flex min-h-11 flex-1">
                     <Link
-                      href={link.href}
+                      href={outgoing(link.href)}
                       className="flex w-full items-center gap-2.5 px-5 py-1.5 hover:bg-sky-50/40 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-700"
                     >
                       <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sky-600">
@@ -754,7 +768,7 @@ export function StudentAnalysisWorkspace({
                 </p>
               </div>
               <Link
-                href={center}
+                href={outgoing(center)}
                 className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
               >
                 学习中心
@@ -775,8 +789,8 @@ export function StudentAnalysisWorkspace({
               description="当前教学班最近 8 项记录（含待公布成绩）"
               action={
                 <StudentRecordLinks
-                  assignmentsHref={assignments}
-                  examsHref={`/student/exams?${scope}`}
+                  assignmentsHref={outgoing(assignments)}
+                  examsHref={outgoing(`/student/exams?${scope}`)}
                   triggerClassName={panelAction}
                 />
               }
@@ -795,7 +809,7 @@ export function StudentAnalysisWorkspace({
                 {s.recent.map((row) => (
                   <li key={row.id}>
                     <Link
-                      href={row.href}
+                      href={outgoing(row.href)}
                       className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3 px-5 py-3 transition hover:bg-sky-50/50 sm:grid-cols-[minmax(0,1fr)_4.5rem_6rem_6rem] sm:px-6"
                     >
                       <span className="min-w-0">

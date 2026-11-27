@@ -1,12 +1,4 @@
-import {
-  ArrowUpRight,
-  CheckCircle2,
-  Clock3,
-  GitBranch,
-  Route,
-  Sparkles,
-  TriangleAlert,
-} from "lucide-react";
+import { CheckCircle2, Clock3, GitBranch, Route } from "lucide-react";
 import Link from "next/link";
 
 import { TrendChart } from "@/components/dashboard/trend-chart";
@@ -79,18 +71,24 @@ export function StudentCourseLearningCenterView({
       concepts.map((concept) => [concept.key, { key, name }] as const),
     ),
   );
-  const focusItem =
-    data.learningPath.current.find((item) => item.conceptId) ?? null;
-  const focusHref =
-    !readOnly && focusItem?.conceptId
-      ? `/student/recommendations?${new URLSearchParams({
-          view: "generate",
-          courseId: data.course.id,
-          ...(data.classroom ? { classroomId: data.classroom.id } : {}),
-          conceptId: focusItem.conceptId,
-        }).toString()}`
-      : null;
+  const scope = new URLSearchParams({
+    courseId: data.course.id,
+    ...(data.classroom ? { classroomId: data.classroom.id } : {}),
+  }).toString();
   const masteryPoints = data.masteryTrend;
+  /*
+   * 小样本提示按「哪条线点不够」分别生成。
+   * 原来它只写在 scoreTrend 分支里，而趋势页传 scoreTrend={false}，
+   * 于是掌握度只剩 1 个点时页面毫无提示，容易被读成「数据丢了」。
+   */
+  const smallSampleNotes = [
+    masteryPoints.length > 0 && masteryPoints.length < 3
+      ? `稳定掌握度只有 ${masteryPoints.length} 个版本`
+      : null,
+    scoreTrend && data.accuracyTrend.length > 0 && data.accuracyTrend.length < 3
+      ? `得分率只有 ${data.accuracyTrend.length} 次`
+      : null,
+  ].filter((note): note is string => Boolean(note));
   const masteryDelta =
     masteryPoints.length >= 2
       ? Number(
@@ -103,72 +101,64 @@ export function StudentCourseLearningCenterView({
   return (
     <div className="space-y-6">
       {tab === "path" && (
-        <Panel className="scroll-mt-24" id="learning-path">
-          <SectionHeading
-            actions={
-              focusHref ? (
-                <Link
-                  className="bg-brand hover:bg-brand-strong inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
-                  href={focusHref}
-                >
-                  练习{focusItem?.name}
-                  <ArrowUpRight aria-hidden="true" className="size-4" />
-                </Link>
-              ) : undefined
-            }
-            description="先看需要巩固的内容，也可以查看已掌握和尚无评分记录的知识点。"
-            icon={<Route aria-hidden="true" className="text-ink-soft size-5" />}
-            level="page"
-            title="我的学习路径"
-          />
-          <div className="mt-5 grid items-start gap-4 lg:grid-cols-3">
-            <PathColumn
-              empty={
-                data.overview.evidenceConcepts === 0
-                  ? "先完成几道作业或练习题，看看掌握得怎么样。"
-                  : "有评分记录的知识点都已掌握，可以继续学习其他内容。"
+        <Panel
+          className="flex h-full min-h-0 scroll-mt-24 flex-col overflow-hidden"
+          id="learning-path"
+        >
+          <div className="shrink-0">
+            <SectionHeading
+              description="「优先巩固」清单已合并到「本周计划」，这里只列已掌握与尚无评分记录的知识点，用来核对整体进度。"
+              icon={
+                <Route aria-hidden="true" className="text-ink-soft size-5" />
               }
-              icon={TriangleAlert}
-              items={data.learningPath.current}
-              chaptersByPoint={chaptersByPoint}
-              readOnly={readOnly}
-              scope={{
-                courseId: data.course.id,
-                classroomId: data.classroom?.id ?? null,
-              }}
-              previewCount={3}
-              title="优先巩固"
+              level="page"
+              title="我的学习路径"
             />
-            <PathColumn
-              empty="完成相关题目并拿到评分后，就能看到哪些内容已经掌握。"
-              icon={CheckCircle2}
-              items={data.learningPath.mastered}
-              chaptersByPoint={chaptersByPoint}
-              readOnly={readOnly}
-              scope={{
-                courseId: data.course.id,
-                classroomId: data.classroom?.id ?? null,
-              }}
-              previewCount={0}
-              title="已掌握"
-            />
-            <PathColumn
-              empty={
-                data.overview.totalConcepts
+          </div>
+          {/*
+            主区由本周计划承担（有序、可勾选、每项带去练），这里降为参考信息。
+            两块卡片等高：外层是固定高度的 flex 列，只有这里滚动，
+            避免出现「卡片内滚动条 + 页面滚动条」双层收缩。
+          */}
+          <div className="mt-4 grid min-h-0 flex-1 [scrollbar-gutter:stable] content-start gap-4 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-1">
+            {[
+              {
+                key: "mastered",
+                title: "已掌握",
+                icon: CheckCircle2,
+                items: data.learningPath.mastered,
+                empty: "完成相关题目并拿到评分后，就能看到哪些内容已经掌握。",
+              },
+              {
+                key: "next",
+                title: "尚无评分记录",
+                icon: GitBranch,
+                items: data.learningPath.next,
+                empty: data.overview.totalConcepts
                   ? "所有知识点已有评分记录。"
-                  : "等待教师发布课程知识图谱。"
-              }
-              icon={GitBranch}
-              items={data.learningPath.next}
-              chaptersByPoint={chaptersByPoint}
-              readOnly={readOnly}
-              scope={{
-                courseId: data.course.id,
-                classroomId: data.classroom?.id ?? null,
-              }}
-              previewCount={0}
-              title="尚无评分记录"
-            />
+                  : "等待教师发布课程知识图谱。",
+              },
+            ]
+              .filter((column) => column.items.length > 0)
+              .map(({ key, ...column }) => (
+                <PathColumn
+                  key={key}
+                  {...column}
+                  chaptersByPoint={chaptersByPoint}
+                  readOnly={readOnly}
+                  scope={{
+                    courseId: data.course.id,
+                    classroomId: data.classroom?.id ?? null,
+                  }}
+                  previewCount={0}
+                />
+              ))}
+            {data.learningPath.mastered.length === 0 &&
+            data.learningPath.next.length === 0 ? (
+              <p className="text-ink-soft border-line rounded-xl border border-dashed p-4 text-sm leading-6">
+                目前没有可归类的知识点。完成作业或练习、拿到评分后，这里会区分「已掌握」与「尚无评分记录」。
+              </p>
+            ) : null}
           </div>
         </Panel>
       )}
@@ -184,12 +174,10 @@ export function StudentCourseLearningCenterView({
                   ? "掌握度只采用评分记录达到评估要求的画像；得分率按已发布作业、已完成整组练习展示，二者取样不同。"
                   : "掌握度只采用评分记录达到评估要求的画像，未评估不等于零分；得分率见上方「我的作业成绩」。"}
               </p>
-              {scoreTrend &&
-              data.accuracyTrend.length > 0 &&
-              data.accuracyTrend.length < 3 ? (
+              {smallSampleNotes.length ? (
                 <p className="mt-1 text-xs text-amber-700">
-                  目前只有 {data.accuracyTrend.length}{" "}
-                  次成绩，趋势仅供参考，累积到 3 次后更稳定。
+                  样本较少：{smallSampleNotes.join("、")}
+                  ，趋势仅供参考，累积到 3 个点后更稳定。
                 </p>
               ) : null}
             </div>
@@ -216,58 +204,80 @@ export function StudentCourseLearningCenterView({
             </div>
           </section>
 
-          <section
-            className="grid scroll-mt-24 gap-6 xl:grid-cols-[1fr_0.8fr]"
-            id="learning-records"
-          >
+          <section className="scroll-mt-24" id="learning-records">
             <Panel>
-              <div className="flex items-center gap-2">
-                <Clock3 aria-hidden="true" className="text-ink-soft size-5" />
-                <h2 className="text-ink text-[15px] font-semibold">
-                  我的学习记录
-                </h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Clock3 aria-hidden="true" className="text-ink-soft size-5" />
+                  <h2 className="text-ink text-[15px] font-semibold">
+                    我的学习记录
+                  </h2>
+                </div>
+                <p className="text-ink-soft text-xs">
+                  共 {data.recentActivity.length} 条 · 按时间倒序
+                </p>
               </div>
               {data.recentActivity.length ? (
                 <ol className="mt-4 divide-y">
-                  {data.recentActivity.map((activity) => (
-                    <li
-                      className="flex items-start gap-3 py-3 first:pt-0"
-                      key={activity.id}
-                    >
-                      <span className="mt-1.5 size-2 shrink-0 rounded-full bg-sky-500" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{activity.label}</p>
-                        <p className="text-ink-soft mt-1 text-xs">
-                          涉及 {activity.conceptCount} 个知识点
-                        </p>
-                      </div>
-                      <time className="text-ink-soft shrink-0 text-xs">
-                        {activity.occurredAt.toLocaleString("zh-CN")}
-                      </time>
-                    </li>
-                  ))}
+                  {data.recentActivity.map((activity) => {
+                    /*
+                     * 作业类事件带着提交 ID，可以直达「本次作业结果」；
+                     * 练习类没有单次结果页，退回课程练习记录，
+                     * 文案跟着改，不让人以为点进去还是这张时间线。
+                     */
+                    const href =
+                      activity.href ??
+                      (activity.kind === "assignment"
+                        ? `/student/results?view=course&${scope}`
+                        : `/student/recommendations?${scope}`);
+                    const actionLabel = activity.href
+                      ? "查看本次作业结果"
+                      : activity.kind === "assignment"
+                        ? "查看成绩记录"
+                        : "查看练习记录";
+                    return (
+                      <li
+                        className="flex items-start gap-3 py-3 first:pt-0"
+                        key={activity.id}
+                      >
+                        <span className="mt-1.5 size-2 shrink-0 rounded-full bg-sky-500" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">
+                            {activity.label}
+                          </p>
+                          <p className="text-ink-soft mt-1 text-xs">
+                            涉及 {activity.conceptCount} 个知识点
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <time className="text-ink-soft block text-xs">
+                            {activity.occurredAt.toLocaleString("zh-CN")}
+                          </time>
+                          <Link
+                            className="text-brand-strong mt-1 inline-flex min-h-9 items-center text-xs underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+                            href={href}
+                          >
+                            {actionLabel}
+                          </Link>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ol>
               ) : (
                 <p className="text-ink-soft mt-4 rounded-xl border border-dashed p-8 text-center text-sm">
-                  暂无作业或练习评分记录。
+                  当前区间内没有作业或练习评分记录。切换「全部」可以看完整历史。
                 </p>
               )}
             </Panel>
-            <Panel>
-              <div className="flex size-10 items-center justify-center rounded-xl bg-sky-100/70">
-                <Sparkles aria-hidden="true" className="text-ink-body size-5" />
-              </div>
-              <h2 className="text-ink mt-4 text-[15px] font-semibold">
-                画像说明
-              </h2>
-              <p className="text-ink-soft mt-2 text-sm leading-7">
-                {data.summary}
-              </p>
-              <p className="text-ink-soft mt-4 border-t pt-4 text-xs leading-5">
-                更新时间：{data.generatedAt.toLocaleString("zh-CN")}
-                。出勤、自我反思与知识掌握分别计算，不会相互覆盖。
-              </p>
-            </Panel>
+            {/*
+              原先右侧是一整张「画像说明」卡，内容和「我的画像」首段重复，
+              白占 1/3 行宽。改成卡下一行脚注，信息保留、版面收窄。
+            */}
+            <p className="text-ink-soft mt-3 text-xs leading-5">
+              {data.summary}（更新于 {data.generatedAt.toLocaleString("zh-CN")}
+              。出勤、自我反思与知识掌握分别计算，不会相互覆盖。）
+            </p>
           </section>
         </>
       )}
@@ -337,11 +347,6 @@ function PathColumn({
               ? ` · ${item.masteryScore}%`
               : ""}
           </p>
-          {item.prerequisiteGaps?.length ? (
-            <p className="mt-1 text-xs text-amber-800">
-              先补：{item.prerequisiteGaps.join("、")}
-            </p>
-          ) : null}
         </div>
         {practiceHref && (
           <Link
@@ -401,11 +406,12 @@ function PathColumn({
                 查看{previewCount ? "其余" : "全部"}{" "}
                 {items.length - previewCount} 个知识点
               </summary>
+              {/* 内层不再单独滚动：滚动交给整块「我的学习路径」的列表区，避免双层滚动条。 */}
               <div
                 role="region"
                 aria-label={`${title}章节列表`}
                 tabIndex={0}
-                className="border-line focus-visible:outline-brand mt-1 max-h-[min(22rem,55dvh)] min-w-0 [scrollbar-gutter:stable] overflow-y-auto overscroll-y-contain rounded-md border px-3 pb-1 focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="border-line focus-visible:outline-brand mt-1 min-w-0 rounded-md border px-3 pb-1 focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 {[...groups].map(([key, { name, rows }]) => (
                   <section key={key ?? "__unassigned"}>

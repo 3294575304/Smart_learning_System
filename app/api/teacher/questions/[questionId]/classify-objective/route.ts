@@ -10,6 +10,7 @@ import { questionIdSchema } from "@/services/questions/schemas";
 const requestSchema = z.object({
   courseId: z.string().cuid().nullable(),
   requestId: z.string().uuid(),
+  reclassify: z.boolean().optional(),
 });
 
 export async function POST(
@@ -31,6 +32,7 @@ export async function POST(
         parsedId.data,
         parsedInput.data.courseId,
         parsedInput.data.requestId,
+        parsedInput.data.reclassify,
       ),
     );
   } catch (error: unknown) {

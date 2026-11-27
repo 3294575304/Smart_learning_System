@@ -40,7 +40,8 @@ export interface QuestionListItem {
   type: QuestionType;
   origin: QuestionOrigin;
   defaultObjectiveKind?: string | null;
-  courseObjective?: { code: string; title: string } | null;
+  courseObjectives?: Array<{ code: string; title: string }>;
+  canReclassifyCourseObjective?: boolean;
   status: QuestionStatus;
   questionCategoryId: string | null;
   questionCategoryName: string | null;
@@ -73,6 +74,10 @@ export interface QuestionPagination {
 export interface QuestionListResult {
   items: QuestionListItem[];
   pagination: QuestionPagination;
+  objectiveScope?: {
+    syllabusStructureId: string;
+    objectives: Array<{ code: string; title: string }>;
+  };
 }
 
 export interface QuestionReferenceCounts {

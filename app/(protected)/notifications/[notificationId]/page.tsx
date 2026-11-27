@@ -67,69 +67,69 @@ export default async function NotificationDetailPage({
           );
 
     return (
-      <section className="mx-auto max-w-3xl space-y-5">
+      <section className="w-full min-w-0 space-y-4 sm:space-y-6">
         <Link
-          className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-50"
+          className="border-line bg-card inline-flex min-h-11 items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium text-sky-800 transition hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
           href="/notifications"
         >
           <ArrowLeft aria-hidden="true" className="size-4" />
           返回通知中心
         </Link>
 
-        <article className="rounded-xl border bg-white p-5 sm:p-7">
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-700">
-              {TYPE_LABELS[notification.type]}
-            </span>
-            {notification.priority !== NotificationPriority.NORMAL ? (
-              <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-800">
-                {PRIORITY_LABELS[notification.priority]}
+        <article className="border-line bg-card overflow-hidden rounded-xl border shadow-[var(--shadow-card)]">
+          <div className="min-w-0 p-4 sm:p-6 lg:p-8">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+              <span className="bg-brand-soft text-brand-strong rounded-full px-3 py-1 font-medium">
+                {TYPE_LABELS[notification.type]}
               </span>
-            ) : null}
-            <time className="text-gray-500">
-              {formatTime(notification.createdAt)}
-            </time>
-            <NotificationReadStatus
-              id={notification.id}
-              alreadyRead={!!notification.readAt}
-            />
-          </div>
+              {notification.priority !== NotificationPriority.NORMAL ? (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-800">
+                  {PRIORITY_LABELS[notification.priority]}
+                </span>
+              ) : null}
+              <time
+                className="text-ink-soft tabular-nums"
+                dateTime={notification.createdAt.toISOString()}
+              >
+                {formatTime(notification.createdAt)}
+              </time>
+              <NotificationReadStatus
+                id={notification.id}
+                alreadyRead={!!notification.readAt}
+              />
+            </div>
 
-          <h1 className="mt-5 text-xl font-semibold text-gray-950">
-            {notification.title}
-          </h1>
-          <p className="mt-3 text-sm leading-7 whitespace-pre-wrap text-gray-700">
-            {notification.content}
-          </p>
-        </article>
-
-        {expired && (
-          <p className="rounded-lg border bg-amber-50 p-4 text-sm text-amber-800">
-            该通知已过期，内容仅供回顾。请从课程或作业列表查看最新状态。
-          </p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {!expired && notification.action && (
-            <StudentNotificationAction
-              action={notification.action}
-              title={notification.title}
-            />
-          )}
-          {notification.actionMessage && (
-            <p className="basis-full text-sm text-slate-600">
-              {notification.actionMessage}
+            <h1 className="text-ink mt-4 text-2xl leading-tight font-semibold [overflow-wrap:anywhere] sm:mt-6 sm:text-3xl">
+              {notification.title}
+            </h1>
+            <p className="text-ink-body mt-3 max-w-[68ch] text-base leading-7 [overflow-wrap:anywhere] whitespace-pre-wrap sm:mt-4">
+              {notification.content}
             </p>
+          </div>
+          {(expired ||
+            notification.action ||
+            notification.actionMessage ||
+            (destination && destination !== "/notifications")) && (
+            <div className="border-line flex flex-wrap items-center gap-3 border-t bg-sky-50/40 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
+              {!expired && notification.action && (
+                <StudentNotificationAction
+                  action={notification.action}
+                  title={notification.title}
+                />
+              )}
+              {(expired || notification.actionMessage) && (
+                <p className="text-ink-body min-w-0 text-sm leading-6 [overflow-wrap:anywhere]">
+                  {expired
+                    ? "通知已过期。请从课程记录查看最新状态。"
+                    : notification.actionMessage}
+                </p>
+              )}
+              {destination && destination !== "/notifications" ? (
+                <NotificationLink href={destination} label="打开相关内容" />
+              ) : null}
+            </div>
           )}
-          {destination && destination !== "/notifications" ? (
-            <NotificationLink href={destination} label="打开相关内容" />
-          ) : null}
-          <Link
-            className="inline-flex items-center rounded-md border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
-            href="/notifications"
-          >
-            返回通知列表
-          </Link>
-        </div>
+        </article>
       </section>
     );
   } catch (error: unknown) {

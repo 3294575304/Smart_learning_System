@@ -5,7 +5,10 @@ import type { ReactNode } from "react";
 
 import { Panel, SectionHeading } from "@/components/ui/panel";
 import type { getStudentLearnerProfile } from "@/services/learner-profiles/service";
-import { DIMENSION_REGISTRY } from "@/services/learner-profiles/dimension-registry";
+import {
+  DIMENSION_REGISTRY,
+  type DimensionKey,
+} from "@/services/learner-profiles/dimension-registry";
 
 type Profile = Awaited<ReturnType<typeof getStudentLearnerProfile>>;
 
@@ -21,11 +24,51 @@ const evidenceStyles: Record<LearnerProfileEvidenceState, string> = {
   CONCLUSIVE: "border-emerald-200 bg-emerald-50 text-emerald-800",
 };
 
-const LEGEND = [
-  { key: "stable", label: "记录充足", color: "#10b981" },
-  { key: "insufficient", label: "评分记录较少", color: "#fbbf24" },
-  { key: "unassessed", label: "尚未评估", color: "#cbd5e1" },
+/**
+ * 覆盖度用单一色阶（天蓝由深到浅），刻意不复用状态色。
+ *
+ * 原来的「记录充足」用翠绿，和「章节掌握」里「已掌握」的翠绿同色不同义，
+ * 学生跨页看到的绿其实是两件事。色阶只表达「覆盖了多少」，不表达「好不好」。
+ */
+const COVERAGE_LEGEND = [
+  { key: "stable", label: "记录充足", className: "bg-sky-700" },
+  { key: "insufficient", label: "记录较少", className: "bg-sky-300" },
+  {
+    key: "unassessed",
+    label: "尚未评估",
+    className: "bg-sky-100 ring-1 ring-sky-200 ring-inset",
+  },
 ] as const;
+
+/** 五维分两组：客观掌握可以直接横向比较，行为与自述只作辅助理解。 */
+const DIMENSION_GROUPS: Array<{
+  title: string;
+  hint: string;
+  keys: DimensionKey[];
+  columns: string;
+}> = [
+  {
+    title: "客观掌握",
+    hint: "来自出勤、评分记录与判题结果，可以和同学、和自己上次比较。",
+    keys: ["objectiveMastery", "attendance", "programming"],
+    columns: "sm:grid-cols-3",
+  },
+  {
+    title: "学习行为与自述",
+    hint: "活跃度只统计有评分事件的日期，自我反思是学生自述，两者都不参与客观掌握度。",
+    keys: ["activity", "reflection"],
+    columns: "sm:grid-cols-2",
+  },
+];
+
+export interface ProfileQuickLinks {
+  /** 章节掌握板块（含按章节下钻）。 */
+  knowledge?: string;
+  /** 自主练习（生成条件页）。 */
+  practice?: string;
+  /** 签到与出勤。 */
+  attendance?: string;
+}
 
 export function LearnerProfileDetail({
   profile,
@@ -33,6 +76,7 @@ export function LearnerProfileDetail({
   studentView = false,
   reflectionHref,
   evidenceHref,
+  links,
 }: {
   profile: Profile;
   focusConceptId?: string;
@@ -40,6 +84,8 @@ export function LearnerProfileDetail({
   /** 学生端：跳转到自主练习里的自我反思面板。 */
   reflectionHref?: string;
   evidenceHref?: string;
+  /** 学生端的动作入口；教师端不传，卡片只读。 */
+  links?: ProfileQuickLinks;
 }) {
   const dimensions = profile.dimensions as unknown as Record<string, unknown>;
 
@@ -54,17 +100,38 @@ export function LearnerProfileDetail({
   const courseUnassessed = allConcepts.filter(
     (point) => point.evidenceState === "NO_EVIDENCE",
   ).length;
-  const overallSegments = [
-    { key: "stable", count: courseStable, color: "#10b981" },
-    { key: "insufficient", count: courseInsufficient, color: "#fbbf24" },
-    { key: "unassessed", count: courseUnassessed, color: "#cbd5e1" },
-  ].map((segment) => ({
-    ...segment,
-    width: courseTotal
-      ? Math.round((segment.count / courseTotal) * 1000) / 10
-      : 0,
-  }));
-  const overallAriaLabel = `整门课评分覆盖：记录充足 ${courseStable} 个，待积累 ${courseInsufficient} 个，尚未评估 ${courseUnassessed} 个，共 ${courseTotal} 个知识点`;
+  const focusedConcept = focusConceptId
+    ? (allConcepts.find((point) => point.conceptId === focusConceptId) ?? null)
+    : null;
+
+  function cardAction(key: DimensionKey, fallback?: ReactNode) {
+    if (!studentView) return undefined;
+    if (key === "reflection") return fallback;
+    const target =
+      key === "objectiveMastery"
+        ? links?.knowledge
+        : key === "activity"
+          ? links?.practice
+          : key === "attendance"
+            ? links?.attendance
+            : undefined;
+    if (!target) return undefined;
+    const label =
+      key === "objectiveMastery"
+        ? "看需要再练的知识点"
+        : key === "activity"
+          ? "去做一组练习"
+          : "查看签到记录";
+    return (
+      <Link
+        className="text-brand-strong mt-2 inline-flex min-h-9 items-center gap-1 text-xs font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+        href={target}
+      >
+        {label}
+        <ArrowUpRight aria-hidden="true" className="size-3.5" />
+      </Link>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -72,7 +139,7 @@ export function LearnerProfileDetail({
         <SectionHeading
           actions={
             <div className="text-ink-soft text-right text-xs">
-              <p>快照修订 #{profile.revisionNumber}</p>
+              <p>数据更新于</p>
               <p className="mt-1">
                 {profile.generatedAt.toLocaleString("zh-CN")}
               </p>
@@ -85,173 +152,323 @@ export function LearnerProfileDetail({
         <p className="text-ink-body mt-3 max-w-[70ch] text-sm leading-6">
           {profile.summary}
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {DIMENSION_REGISTRY.map((definition) => {
-            const card = definition.build(
-              dimensions[definition.key],
-              Boolean(studentView),
-            );
-            return (
-              <DimensionCard
-                action={
-                  card.action === "reflection" && reflectionHref ? (
-                    <Link
-                      className="mt-2 inline-flex min-h-10 items-center gap-1 text-xs font-medium text-amber-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700"
-                      href={reflectionHref}
-                    >
-                      {card.actionLabel}
-                      <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                    </Link>
-                  ) : undefined
-                }
-                detail={card.detail}
-                headline={card.headline}
-                key={definition.key}
-                label={card.label}
-                state={card.state}
-                tone={card.tone}
-                unit={card.unit}
-              />
-            );
-          })}
+        {/*
+          分组渲染而不是五张平铺：客观三项可以直接比，行为与自述两项只能辅助理解。
+          原来 5 张卡放在 3 列网格里，第二行空一格，也没有语义提示。
+        */}
+        <div className="mt-4 space-y-4">
+          {DIMENSION_GROUPS.map((group) => (
+            <div key={group.title}>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <h3 className="text-ink text-[13px] font-semibold">
+                  {group.title}
+                </h3>
+                <p className="text-ink-soft text-[11px] leading-5">
+                  {group.hint}
+                </p>
+              </div>
+              <div className={`mt-2 grid gap-3 ${group.columns}`}>
+                {group.keys.map((key) => {
+                  const definition = DIMENSION_REGISTRY.find(
+                    (item) => item.key === key,
+                  );
+                  if (!definition) return null;
+                  const card = definition.build(
+                    dimensions[definition.key],
+                    Boolean(studentView),
+                  );
+                  const reflectionAction =
+                    card.action === "reflection" && reflectionHref ? (
+                      <Link
+                        className="mt-2 inline-flex min-h-10 items-center gap-1 text-xs font-medium text-amber-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700"
+                        href={reflectionHref}
+                      >
+                        {card.actionLabel}
+                        <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                      </Link>
+                    ) : undefined;
+                  return (
+                    <DimensionCard
+                      action={cardAction(definition.key, reflectionAction)}
+                      detail={card.detail}
+                      headline={card.headline}
+                      key={definition.key}
+                      label={card.label}
+                      state={card.state}
+                      tone={card.tone}
+                      unit={card.unit}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
         <p className="text-ink-soft mt-3 text-xs leading-5">
           知识点掌握度按已公布评分记录的累计得分与满分计算，再汇总评分记录达到评估要求的概念。
           活跃度只统计作业/练习的评分事件，不代表努力程度；自我反思是学生自述，两者都不参与客观掌握度与课程总评。
         </p>
-        <p className="text-ink-soft mt-2 text-xs leading-5">
-          画像口径 {profile.ruleVersion}：本版接入活跃度、自我反思与编程判题，
-          与历史版本不可直接对比。
-        </p>
       </Panel>
 
-      <Panel>
-        <SectionHeading
-          description="章节熟练度根据已有评分记录计算。展开章节可查看每个知识点的状态和评分依据，未评估的知识点不按零分计。"
-          level="page"
-          title="章节熟练度与评估覆盖"
-        />
-        {profile.chapters.length > 0 ? (
-          <div className="border-line mt-4 rounded-xl border">
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-4 py-3">
-              <div className="min-w-[180px]">
-                <p className="text-ink-soft text-[11px]">整门课知识点</p>
-                <p className="text-ink text-lg leading-tight font-semibold tabular-nums">
-                  {courseTotal}
-                </p>
-              </div>
-              <div className="min-w-[180px]">
-                <p className="text-ink-soft text-[11px]">记录充足</p>
-                <p className="text-lg leading-tight font-semibold tabular-nums">
-                  <span className="text-emerald-700">{courseStable}</span>
-                  <span className="text-ink-soft ml-1 text-xs font-normal">
-                    {courseTotal
-                      ? Math.round((courseStable / courseTotal) * 100)
-                      : 0}
-                    %
-                  </span>
-                </p>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div
-                  className="flex h-2.5 overflow-hidden rounded-full bg-slate-100"
-                  role="img"
-                  aria-label={overallAriaLabel}
+      {studentView ? (
+        <Panel>
+          <SectionHeading
+            actions={
+              links?.knowledge ? (
+                <Link
+                  className="border-line bg-card text-ink-body hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+                  href={links.knowledge}
                 >
-                  {overallSegments.map((segment) =>
-                    segment.width > 0 ? (
-                      <span
-                        key={segment.key}
-                        className="h-full"
-                        style={{
-                          width: `${segment.width}%`,
-                          background: segment.color,
-                        }}
-                      />
-                    ) : null,
+                  查看章节明细
+                  <ArrowUpRight aria-hidden="true" className="size-4" />
+                </Link>
+              ) : undefined
+            }
+            description="这里只汇总评分覆盖情况。逐章、逐知识点的状态与评分依据统一放在「章节掌握」，避免同一批章节在两个板块各给一套数字。"
+            level="page"
+            title="评分覆盖"
+          />
+          {courseTotal > 0 ? (
+            <CoverageBar
+              stable={courseStable}
+              insufficient={courseInsufficient}
+              unassessed={courseUnassessed}
+              total={courseTotal}
+            />
+          ) : (
+            <p className="text-ink-soft mt-5 py-6 text-center text-sm">
+              暂无正式章节结构，请等待教师发布课程图谱。
+            </p>
+          )}
+          <p className="text-ink-soft mt-3 text-xs leading-5">
+            章节熟练度按已有评分知识点取平均，仅供学习参考；评分记录较少时不形成稳定结论。
+          </p>
+          {/*
+            深链保留：从章节列表点「查看评分依据」会带 conceptId 过来，
+            这里直接展开该知识点的评分依据，锚点 id 与跳转约定保持一致。
+          */}
+          {focusedConcept ? (
+            <div
+              className="border-line mt-4 scroll-mt-24 rounded-xl border p-4"
+              id={`profile-concept-${focusedConcept.conceptId}`}
+              tabIndex={-1}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-ink text-sm font-medium">
+                  {focusedConcept.name}
+                </h3>
+                <span className="text-sm font-semibold text-sky-800">
+                  {focusedConcept.masteryScore === null
+                    ? "尚未评估"
+                    : `${focusedConcept.masteryScore}%`}
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-sky-50">
+                <div
+                  className="h-full rounded-full bg-sky-600"
+                  style={{ width: `${focusedConcept.masteryScore ?? 0}%` }}
+                />
+              </div>
+              <p className="text-ink-soft mt-2 text-xs">
+                {evidenceLabels[focusedConcept.evidenceState]} ·{" "}
+                {focusedConcept.evidenceCount} 条评分记录 · 结论可靠度{" "}
+                {Math.round(focusedConcept.confidence * 100)}%
+              </p>
+              {focusedConcept.historicalEvidence.latestReferences.length ? (
+                <div className="mt-3 space-y-2">
+                  {focusedConcept.historicalEvidence.latestReferences.map(
+                    (item) => (
+                      <div
+                        className="bg-muted/60 rounded-lg p-3 text-sm"
+                        key={item.evidenceId}
+                      >
+                        <div className="flex flex-wrap justify-between gap-2">
+                          <span className="font-medium">
+                            {item.assignmentName} · {item.questionName}
+                          </span>
+                          <span className="tabular-nums">
+                            {item.score}/{item.maxScore} 分
+                          </span>
+                        </div>
+                        <p className="text-ink-soft mt-1 text-xs">
+                          {item.gradedAt.toLocaleString("zh-CN")} · 评分修订{" "}
+                          {item.revision}
+                        </p>
+                      </div>
+                    ),
                   )}
                 </div>
-                <div className="text-ink-soft mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-                  {LEGEND.map((item) => (
-                    <span
-                      className="inline-flex items-center gap-1.5"
-                      key={item.key}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="size-2.5 rounded-sm"
-                        style={{ background: item.color }}
-                      />
-                      {item.label}
-                    </span>
-                  ))}
-                </div>
+              ) : evidenceHref && focusedConcept.evidenceCount > 0 ? (
+                <a
+                  className="text-brand-strong mt-2 inline-flex min-h-10 items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                  href={`${evidenceHref}&conceptId=${encodeURIComponent(focusedConcept.conceptId)}#profile-concept-${encodeURIComponent(focusedConcept.conceptId)}`}
+                >
+                  查看评分依据
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+        </Panel>
+      ) : (
+        /* 教师端保留逐章明细：教师需要按章下钻，向学生解释某一章为什么是这个结论。 */
+        <Panel>
+          <SectionHeading
+            description="章节熟练度根据已有评分记录计算。展开章节可查看每个知识点的状态和评分依据，未评估的知识点不按零分计。"
+            level="page"
+            title="章节熟练度与评估覆盖"
+          />
+          {profile.chapters.length > 0 ? (
+            <div className="border-line mt-4 rounded-xl border">
+              <CoverageBar
+                stable={courseStable}
+                insufficient={courseInsufficient}
+                unassessed={courseUnassessed}
+                total={courseTotal}
+                bordered
+              />
+              <div className="divide-y">
+                {profile.chapters.map((chapter) => {
+                  const points = chapter.conceptIds.flatMap((id) => {
+                    const point = profile.concepts.find(
+                      (item) => item.conceptId === id,
+                    );
+                    return point ? [point] : [];
+                  });
+                  const scored = points.filter(
+                    (point) => point.masteryScore !== null,
+                  );
+                  const average = scored.length
+                    ? Math.round(
+                        scored.reduce(
+                          (sum, point) => sum + (point.masteryScore ?? 0),
+                          0,
+                        ) / scored.length,
+                      )
+                    : null;
+                  const stable = points.filter(
+                    (point) => point.evidenceState === "CONCLUSIVE",
+                  ).length;
+                  const insufficient = points.filter(
+                    (point) => point.evidenceState === "INSUFFICIENT_EVIDENCE",
+                  ).length;
+                  const unassessed = points.filter(
+                    (point) => point.evidenceState === "NO_EVIDENCE",
+                  ).length;
+                  return (
+                    <ChapterRow
+                      key={chapter.id}
+                      chapter={chapter}
+                      concepts={points}
+                      average={average}
+                      stable={stable}
+                      insufficient={insufficient}
+                      unassessed={unassessed}
+                      focusConceptId={focusConceptId}
+                      evidenceHref={evidenceHref}
+                    />
+                  );
+                })}
               </div>
             </div>
-            <div className="divide-y">
-              {profile.chapters.map((chapter) => {
-                const points = chapter.conceptIds.flatMap((id) => {
-                  const point = profile.concepts.find(
-                    (item) => item.conceptId === id,
-                  );
-                  return point ? [point] : [];
-                });
-                const scored = points.filter(
-                  (point) => point.masteryScore !== null,
-                );
-                const average = scored.length
-                  ? Math.round(
-                      scored.reduce(
-                        (sum, point) => sum + (point.masteryScore ?? 0),
-                        0,
-                      ) / scored.length,
-                    )
-                  : null;
-                const stable = points.filter(
-                  (point) => point.evidenceState === "CONCLUSIVE",
-                ).length;
-                const insufficient = points.filter(
-                  (point) => point.evidenceState === "INSUFFICIENT_EVIDENCE",
-                ).length;
-                const unassessed = points.filter(
-                  (point) => point.evidenceState === "NO_EVIDENCE",
-                ).length;
-                return (
-                  <ChapterRow
-                    key={chapter.id}
-                    chapter={chapter}
-                    concepts={points}
-                    average={average}
-                    stable={stable}
-                    insufficient={insufficient}
-                    unassessed={unassessed}
-                    focusConceptId={focusConceptId}
-                    evidenceHref={evidenceHref}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <p className="text-ink-soft mt-5 py-6 text-center text-sm">
-            暂无正式章节结构，请等待教师发布课程图谱。
+          ) : (
+            <p className="text-ink-soft mt-5 py-6 text-center text-sm">
+              暂无正式章节结构，请等待教师发布课程图谱。
+            </p>
+          )}
+          <p className="text-ink-soft mt-4 text-xs">
+            章节熟练度按已有评分知识点取平均，仅供学习参考；评分记录较少时不形成稳定结论。
           </p>
-        )}
-        <p className="text-ink-soft mt-4 text-xs">
-          章节熟练度按已有评分知识点取平均，仅供学习参考；评分记录较少时不形成稳定结论。
-        </p>
-      </Panel>
+        </Panel>
+      )}
 
       <details className="text-ink-soft text-xs">
-        <summary className="cursor-pointer">查看画像版本信息</summary>
+        <summary className="cursor-pointer">数据与版本说明</summary>
         <p className="mt-2 break-all">
           规则版本 {profile.ruleVersion} · 图谱版本{" "}
           {profile.graphVersion?.versionNumber ?? "无"} · 快照修订{" "}
-          {profile.revisionNumber}
-          。v2 起活跃度、自我反思与编程判题纳入画像，
+          {profile.revisionNumber}。v2 起活跃度、自我反思与编程判题纳入画像，
           历史快照的口径与指纹不同，不能与 v2 直接比较。
         </p>
       </details>
+    </div>
+  );
+}
+
+function CoverageBar({
+  stable,
+  insufficient,
+  unassessed,
+  total,
+  bordered = false,
+}: {
+  stable: number;
+  insufficient: number;
+  unassessed: number;
+  total: number;
+  bordered?: boolean;
+}) {
+  const segments = [
+    { key: "stable", count: stable, className: "bg-sky-700" },
+    { key: "insufficient", count: insufficient, className: "bg-sky-300" },
+    { key: "unassessed", count: unassessed, className: "bg-sky-100" },
+  ];
+  return (
+    <div
+      className={
+        bordered
+          ? "border-b px-4 py-3"
+          : "border-line mt-4 rounded-xl border px-4 py-3"
+      }
+    >
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+        <div>
+          <p className="text-ink-soft text-[11px]">整门课知识点</p>
+          <p className="text-ink text-lg leading-tight font-semibold tabular-nums">
+            {total}
+          </p>
+        </div>
+        <div>
+          <p className="text-ink-soft text-[11px]">记录充足</p>
+          <p className="text-lg leading-tight font-semibold text-sky-800 tabular-nums">
+            {stable}
+            <span className="text-ink-soft ml-1 text-xs font-normal">
+              {total ? Math.round((stable / total) * 100) : 0}%
+            </span>
+          </p>
+        </div>
+        <div>
+          <p className="text-ink-soft text-[11px]">待积累</p>
+          <p className="text-ink text-lg leading-tight font-semibold tabular-nums">
+            {insufficient + unassessed}
+          </p>
+        </div>
+      </div>
+      <div
+        aria-label={`评分覆盖：记录充足 ${stable} 个，记录较少 ${insufficient} 个，尚未评估 ${unassessed} 个，共 ${total} 个知识点`}
+        className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-sky-50"
+        role="img"
+      >
+        {segments.map((segment) =>
+          segment.count > 0 ? (
+            <span
+              className={`h-full ${segment.className}`}
+              key={segment.key}
+              style={{ width: `${(segment.count / (total || 1)) * 100}%` }}
+            />
+          ) : null,
+        )}
+      </div>
+      <div className="text-ink-soft mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+        {COVERAGE_LEGEND.map((item) => (
+          <span className="inline-flex items-center gap-1.5" key={item.key}>
+            <span
+              aria-hidden="true"
+              className={`size-2.5 rounded-sm ${item.className}`}
+            />
+            {item.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -291,7 +508,7 @@ function ChapterRow({
           {chapter.name}
         </h3>
         <div
-          className="flex h-2.5 min-w-[120px] flex-1 overflow-hidden rounded-full bg-slate-100 sm:max-w-[220px]"
+          className="flex h-2.5 min-w-[120px] flex-1 overflow-hidden rounded-full bg-sky-50 sm:max-w-[220px]"
           role="img"
           aria-label={`${chapter.name}评分记录：记录充足 ${stable} 个，记录较少 ${insufficient} 个，尚未评估 ${unassessed} 个，共 ${concepts.length} 个知识点`}
         >
@@ -299,13 +516,13 @@ function ChapterRow({
             <>
               {stable > 0 ? (
                 <span
-                  className="h-full bg-emerald-500"
+                  className="h-full bg-sky-700"
                   style={{ width: `${(stable / concepts.length) * 100}%` }}
                 />
               ) : null}
               {insufficient > 0 ? (
                 <span
-                  className="h-full bg-amber-400"
+                  className="h-full bg-sky-300"
                   style={{
                     width: `${(insufficient / concepts.length) * 100}%`,
                   }}
@@ -313,7 +530,7 @@ function ChapterRow({
               ) : null}
               {unassessed > 0 ? (
                 <span
-                  className="h-full bg-slate-300"
+                  className="h-full bg-sky-100"
                   style={{ width: `${(unassessed / concepts.length) * 100}%` }}
                 />
               ) : null}
@@ -348,15 +565,15 @@ function ChapterRow({
                       : `${concept.masteryScore}%`}
                   </span>
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-sky-50">
                   <div
-                    className="h-full rounded-full bg-sky-500"
+                    className="h-full rounded-full bg-sky-600"
                     style={{ width: `${concept.masteryScore ?? 0}%` }}
                   />
                 </div>
                 <p className="text-ink-soft mt-2 text-xs">
                   {evidenceLabels[concept.evidenceState]} ·{" "}
-                  {concept.evidenceCount} 条评分记录 · 置信度{" "}
+                  {concept.evidenceCount} 条评分记录 · 结论可靠度{" "}
                   {Math.round(concept.confidence * 100)}%
                 </p>
                 {concept.historicalEvidence.latestReferences.length ? (

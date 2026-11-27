@@ -65,9 +65,13 @@ export function GrowthRangeTabs({
           href={`/api/student/courses/${encodeURIComponent(courseId)}/growth/export?${new URLSearchParams(
             { classroomId, range },
           ).toString()}`}
+          title={`只导出当前区间（${
+            STUDENT_GROWTH_RANGES.find((item) => item.id === range)?.label ??
+            "全部"
+          }）内的聚合数据`}
         >
           <Download aria-hidden="true" className="size-3.5" />
-          导出 CSV
+          导出当前区间 CSV
         </a>
       </div>
       {panels[range]}

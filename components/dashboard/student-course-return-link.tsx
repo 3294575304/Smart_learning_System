@@ -6,12 +6,15 @@ export function StudentCourseReturnLink({
   courseId,
   classroomId,
   tab = "overview",
+  hideFallback = false,
 }: {
   courseId?: unknown;
   classroomId?: unknown;
   tab?: "overview" | "tasks";
+  hideFallback?: boolean;
 }) {
   const href = studentCourseReturnHref(courseId, classroomId, tab);
+  if (hideFallback && href === "/student/courses") return null;
   return (
     <StudentBackLink href={href}>
       {href === "/student/courses"

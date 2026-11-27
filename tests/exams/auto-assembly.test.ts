@@ -8,7 +8,16 @@ import {
 import { examAutoAssembleSchema } from "@/services/exams/schemas";
 import { selectExamAssemblyCandidates } from "@/services/exams/auto-assembly-selection";
 import { questionGenerationRequestSchema } from "@/services/ai-question-generation/schemas";
-import { toggleChapterConcepts } from "@/services/exams/concept-selection";
+import {
+  examConceptIndex,
+  maxExamConcepts,
+  toggleChapterConcepts,
+} from "@/services/exams/concept-selection";
+
+const conceptFixtures = Array.from(
+  { length: maxExamConcepts + 1 },
+  (_, index) => `ck${String(index).padStart(23, "0")}`,
+);
 
 test("题型权重换算后恰好为 100 分，并保持题序", () => {
   const questions = [
@@ -39,6 +48,20 @@ test("自动组卷请求拒绝重复知识点和超额题量", () => {
     excludeQuestionIds: [],
   };
   assert.equal(examAutoAssembleSchema.safeParse(valid).success, true);
+  assert.equal(
+    examAutoAssembleSchema.safeParse({
+      ...valid,
+      conceptIds: conceptFixtures.slice(0, maxExamConcepts),
+    }).success,
+    true,
+  );
+  assert.equal(
+    examAutoAssembleSchema.safeParse({
+      ...valid,
+      conceptIds: conceptFixtures,
+    }).success,
+    false,
+  );
   assert.equal(
     examAutoAssembleSchema.safeParse({
       ...valid,
@@ -127,10 +150,46 @@ test("考试 AI 出题请求保留知识点均衡标记与题型上限", () => {
   assert.equal(
     questionGenerationRequestSchema.safeParse({
       ...base,
+      conceptIds: conceptFixtures.slice(0, 83),
+    }).success,
+    true,
+  );
+  assert.equal(
+    questionGenerationRequestSchema.safeParse({
+      ...base,
+      balancedConcepts: false,
+      conceptIds: conceptFixtures.slice(0, 21),
+    }).success,
+    false,
+  );
+  assert.equal(
+    questionGenerationRequestSchema.safeParse({
+      ...base,
       counts: { SINGLE_CHOICE: 11 },
     }).success,
     false,
   );
+});
+
+test("题量少于知识点时在整个范围均匀分配，并保持重试顺序", () => {
+  assert.deepEqual(
+    [1, 2, 3, 4].map((ordinal) => examConceptIndex(ordinal, 83, 4)),
+    [10, 31, 51, 72],
+  );
+  assert.deepEqual(
+    [1, 2, 3, 4].map((ordinal) => examConceptIndex(ordinal, 2, 4)),
+    [0, 1, 0, 1],
+  );
+  const chapters = [
+    conceptFixtures.slice(0, 10),
+    conceptFixtures.slice(10, 20),
+    conceptFixtures.slice(20, 30),
+  ];
+  const selected = chapters.reduce(
+    (ids, chapter) => toggleChapterConcepts(ids, chapter, maxExamConcepts).ids,
+    [] as string[],
+  );
+  assert.equal(selected.length, 30);
 });
 
 test("整章勾选补齐部分选择、再次点击取消整章，超限时不部分勾选", () => {

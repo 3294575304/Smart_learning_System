@@ -1,9 +1,19 @@
 import "server-only";
 
-import { LearnerProfileEvidenceState, QuestionStatus } from "@prisma/client";
+import { createHash } from "node:crypto";
+import { runAssignmentSerializable } from "@/services/assignments/transactions";
+import {
+  AuditAction,
+  AuditTargetType,
+  LearnerProfileEvidenceState,
+  Prisma,
+  QuestionStatus,
+} from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
+import { writeGovernanceAuditLog } from "@/services/audit/repository";
+import type { AuditRequestContext } from "@/services/audit/types";
 
 export interface CourseObjective {
   code: string;
@@ -19,12 +29,15 @@ function text(value: unknown) {
  * 目标来自当前正式大纲的 objectives；同时返回大纲版本，
  * 供映射与展示判断"这条映射是不是基于当前大纲"。
  */
-export async function listCourseObjectives(courseId: string): Promise<{
+export async function listCourseObjectives(
+  courseId: string,
+  db: Prisma.TransactionClient = prisma,
+): Promise<{
   structureId: string | null;
   versionNumber: number | null;
   objectives: CourseObjective[];
 }> {
-  const course = await prisma.course.findUnique({
+  const course = await db.course.findUnique({
     where: { id: courseId },
     select: {
       currentPublishedSyllabusStructure: {
@@ -70,17 +83,53 @@ export async function listCourseObjectives(courseId: string): Promise<{
  * 判定：知识点下至少 2 道题服务同一目标，且该目标占该知识点题目的 50% 以上。
  * 推断结果只落 DERIVED，教师确认后才是 MANUAL。
  */
-export async function deriveConceptObjectiveLinks(courseId: string) {
+async function loadObjectiveDerivation(
+  courseId: string,
+  db: Prisma.TransactionClient,
+) {
+  const [currentSyllabus, graph] = await Promise.all([
+    listCourseObjectives(courseId, db),
+    db.course.findUnique({
+      where: { id: courseId },
+      select: {
+        currentPublishedKnowledgeGraphVersion: {
+          select: {
+            id: true,
+            nodes: {
+              where: { nodeType: "KNOWLEDGE_POINT" },
+              select: { conceptId: true, code: true, name: true },
+            },
+          },
+        },
+      },
+    }),
+  ]);
+  const version = graph?.currentPublishedKnowledgeGraphVersion;
+  if (
+    !version ||
+    !currentSyllabus.structureId ||
+    !currentSyllabus.objectives.length
+  )
+    return null;
+  const concepts = new Map(version.nodes.map((node) => [node.conceptId, node]));
   const [mappings, bindings, existing] = await Promise.all([
-    prisma.questionCourseObjective.findMany({
-      where: { courseId },
+    db.questionCourseObjective.findMany({
+      where: {
+        courseId,
+        syllabusStructureId: currentSyllabus.structureId,
+        question: { status: QuestionStatus.ACTIVE, deletedAt: null },
+      },
       select: { questionId: true, objectiveCode: true },
     }),
-    prisma.questionKnowledgeGraphBinding.findMany({
-      where: { courseId },
+    db.questionKnowledgeGraphBinding.findMany({
+      where: {
+        courseId,
+        conceptId: { in: [...concepts.keys()] },
+        question: { status: QuestionStatus.ACTIVE, deletedAt: null },
+      },
       select: { questionId: true, conceptId: true },
     }),
-    prisma.conceptObjectiveLink.findMany({
+    db.conceptObjectiveLink.findMany({
       where: { courseId },
       select: {
         id: true,
@@ -88,21 +137,17 @@ export async function deriveConceptObjectiveLinks(courseId: string) {
         objectiveCode: true,
         syllabusStructureId: true,
         source: true,
+        confidence: true,
+        weight: true,
       },
     }),
   ]);
-  if (!mappings.length || !bindings.length) {
-    return { derived: 0, skippedManual: 0 };
-  }
-  const currentSyllabus = await listCourseObjectives(courseId);
-  if (!currentSyllabus.structureId) {
-    return { derived: 0, skippedManual: 0 };
-  }
   const activeObjectiveCodes = new Set(
     currentSyllabus.objectives.map((objective) => objective.code),
   );
   const objectivesByQuestion = new Map<string, Set<string>>();
   for (const mapping of mappings) {
+    if (!activeObjectiveCodes.has(mapping.objectiveCode)) continue;
     const set = objectivesByQuestion.get(mapping.questionId) ?? new Set();
     set.add(mapping.objectiveCode);
     objectivesByQuestion.set(mapping.questionId, set);
@@ -113,6 +158,7 @@ export async function deriveConceptObjectiveLinks(courseId: string) {
     set.add(binding.questionId);
     questionsByConcept.set(binding.conceptId, set);
   }
+  const support = new Map<string, number>();
   const candidates: Array<{
     conceptId: string;
     objectiveCode: string;
@@ -121,7 +167,7 @@ export async function deriveConceptObjectiveLinks(courseId: string) {
   }> = [];
   for (const [conceptId, questionIds] of questionsByConcept) {
     const total = questionIds.size;
-    if (total < 2) continue;
+
     const countByObjective = new Map<string, number>();
     for (const questionId of questionIds) {
       for (const objectiveCode of objectivesByQuestion.get(questionId) ?? []) {
@@ -133,6 +179,7 @@ export async function deriveConceptObjectiveLinks(courseId: string) {
     }
     for (const [objectiveCode, count] of countByObjective) {
       const share = count / total;
+      support.set(objectiveLinkKey({ conceptId, objectiveCode }), share);
       if (
         count >= 2 &&
         share >= 0.5 &&
@@ -142,211 +189,233 @@ export async function deriveConceptObjectiveLinks(courseId: string) {
       }
     }
   }
-  /*
-   * 独占度上限：一个目标最多认领 40% 的知识点（至少 3 个）。
-   * 否则「知识目标」会把 80–90% 的知识点全收走，目标视图就退化成课程均分。
-   * 被裁掉的只是自动推断；教师确认过的 MANUAL 行不受影响。
-   */
-  const graph = await prisma.course.findUnique({
-    where: { id: courseId },
-    select: {
-      currentPublishedKnowledgeGraphVersion: {
-        select: {
-          nodes: {
-            where: { nodeType: "KNOWLEDGE_POINT" },
-            select: { id: true },
-          },
-        },
-      },
-    },
-  });
-  const totalConcepts =
-    graph?.currentPublishedKnowledgeGraphVersion?.nodes.length ??
-    questionsByConcept.size;
-  const maxLinksPerObjective = Math.max(3, Math.ceil(totalConcepts * 0.4));
-  const candidatesByObjective = new Map<string, typeof candidates>();
-  for (const candidate of candidates) {
-    const list = candidatesByObjective.get(candidate.objectiveCode) ?? [];
-    list.push(candidate);
-    candidatesByObjective.set(candidate.objectiveCode, list);
+  const existingByKey = new Map(
+    existing.map((link) => [objectiveLinkKey(link), link]),
+  );
+  const candidateKeys = new Set(candidates.map(objectiveLinkKey));
+  const proposals = candidates.filter(
+    (item) => existingByKey.get(objectiveLinkKey(item))?.source !== "MANUAL",
+  );
+  const removals = existing.filter(
+    (link) =>
+      link.source === "DERIVED" && !candidateKeys.has(objectiveLinkKey(link)),
+  );
+  const manual = existing.filter((link) => link.source === "MANUAL");
+  const currentManual = manual.filter(
+    (link) =>
+      link.syllabusStructureId === currentSyllabus.structureId &&
+      concepts.has(link.conceptId) &&
+      activeObjectiveCodes.has(link.objectiveCode),
+  );
+  const byConcept = new Map<string, number>();
+  for (const link of [...proposals, ...currentManual]) {
+    byConcept.set(link.conceptId, (byConcept.get(link.conceptId) ?? 0) + 1);
   }
-  const cappedCandidates = [...candidatesByObjective.values()].flatMap((list) =>
-    [...list]
-      .sort(
-        (left, right) => right.share - left.share || right.count - left.count,
-      )
-      .slice(0, maxLinksPerObjective),
+  const names = <T extends { conceptId: string; objectiveCode: string }>(
+    items: readonly T[],
+  ) =>
+    items.map((item) => ({
+      ...item,
+      name: concepts.get(item.conceptId)?.name ?? "历史知识点",
+    }));
+  const additions = proposals.filter(
+    (item) => !existingByKey.has(objectiveLinkKey(item)),
   );
-
-  const existingKey = new Map(
-    existing.map((link) => [
-      `${link.conceptId}\u0000${link.objectiveCode}`,
-      link,
-    ]),
-  );
-  const candidateKeys = new Set(
-    cappedCandidates.map(
-      (item) => `${item.conceptId}\u0000${item.objectiveCode}`,
-    ),
-  );
-  let derived = 0;
-  let skippedManual = 0;
-  await prisma.$transaction(async (transaction) => {
-    for (const candidate of cappedCandidates) {
-      const key = `${candidate.conceptId}\u0000${candidate.objectiveCode}`;
-      const current = existingKey.get(key);
-      if (current?.source === "MANUAL") {
-        skippedManual += 1;
-        continue;
-      }
-      if (current) {
-        await transaction.conceptObjectiveLink.update({
-          where: { id: current.id },
-          data: {
-            confidence: candidate.share,
-            weight: candidate.count,
-            source: "DERIVED",
-            syllabusStructureId: currentSyllabus.structureId,
-          },
-        });
-      } else {
-        await transaction.conceptObjectiveLink.create({
-          data: {
-            courseId,
-            conceptId: candidate.conceptId,
-            objectiveCode: candidate.objectiveCode,
-            confidence: candidate.share,
-            weight: candidate.count,
-            source: "DERIVED",
-            syllabusStructureId: currentSyllabus.structureId,
-          },
-        });
-      }
-      derived += 1;
-    }
-    /*
-     * 只回收「这次不再成立」的推断行。注意不能按 syllabusStructureId 是否等于
-     * 当前版本来删：上面刚把旧版候选原地更新成当前版本，若再按版本删一次，
-     * 会把刚更新的行一起删掉（曾经真的全部删空过）。
-     */
-    const stale = existing.filter(
-      (link) =>
-        link.source === "DERIVED" &&
-        !candidateKeys.has(`${link.conceptId}\u0000${link.objectiveCode}`),
+  const updates = proposals.filter((item) => {
+    const old = existingByKey.get(objectiveLinkKey(item));
+    return (
+      old &&
+      (old.syllabusStructureId !== currentSyllabus.structureId ||
+        old.weight.toNumber() !== item.count ||
+        old.confidence.toNumber() !== Number(item.share.toFixed(4)))
     );
-    if (stale.length) {
-      await transaction.conceptObjectiveLink.deleteMany({
-        where: { id: { in: stale.map((link) => link.id) } },
-      });
-    }
   });
-  return { derived, skippedManual };
+  const token = createHash("sha256")
+    .update(
+      JSON.stringify([
+        courseId,
+        currentSyllabus.structureId,
+        version.id,
+        [...concepts.keys()].sort(),
+        candidates
+          .map((item) =>
+            JSON.stringify([objectiveLinkKey(item), item.count, item.share]),
+          )
+          .sort(),
+        existing.map((item) => JSON.stringify(item)).sort(),
+      ]),
+    )
+    .digest("hex");
+  return {
+    currentSyllabus,
+    version,
+    concepts,
+    support,
+    questionsByConcept,
+    objectivesByQuestion,
+    existing,
+    updates,
+    additions,
+    removals,
+    preview: {
+      token,
+      additions: names(additions),
+      updates: names(updates),
+      removals: names(removals),
+      unassigned: [...concepts.values()].filter(
+        (node) => !byConcept.has(node.conceptId),
+      ),
+      overlapping: [...concepts.values()].filter(
+        (node) => (byConcept.get(node.conceptId) ?? 0) > 1,
+      ),
+      historicalManualCount: manual.length - currentManual.length,
+    },
+  };
 }
 
-async function assertTeacherCourse(teacherId: string, courseId: string) {
-  const course = await prisma.course.findFirst({
-    where: { id: courseId, teacherId },
+function objectiveLinkKey(item: { conceptId: string; objectiveCode: string }) {
+  return `${item.conceptId}:${item.objectiveCode}`;
+}
+
+export async function deriveConceptObjectiveLinks(
+  teacherId: string,
+  courseId: string,
+  token: string,
+  context: AuditRequestContext = { ipAddress: null, userAgent: null },
+) {
+  return runAssignmentSerializable(
+    async (tx) => {
+      await assertTeacherCourse(teacherId, courseId, tx);
+      const plan = await loadObjectiveDerivation(courseId, tx);
+      if (!plan || plan.preview.token !== token) return false;
+      for (const item of [...plan.additions, ...plan.updates]) {
+        const key = {
+          courseId,
+          conceptId: item.conceptId,
+          objectiveCode: item.objectiveCode,
+        };
+        const data = {
+          confidence: item.share,
+          weight: item.count,
+          syllabusStructureId: plan.currentSyllabus.structureId,
+        };
+        await tx.conceptObjectiveLink.upsert({
+          where: { courseId_conceptId_objectiveCode: key },
+          create: { ...key, ...data, source: "DERIVED" },
+          update: data,
+        });
+      }
+      if (plan.removals.length) {
+        await tx.conceptObjectiveLink.deleteMany({
+          where: {
+            courseId,
+            source: "DERIVED",
+            id: { in: plan.removals.map((link) => link.id) },
+          },
+        });
+      }
+      if (
+        plan.additions.length ||
+        plan.updates.length ||
+        plan.removals.length
+      ) {
+        await writeGovernanceAuditLog(tx, {
+          actorId: teacherId,
+          action: AuditAction.COURSE_UPDATED,
+          targetType: AuditTargetType.COURSE,
+          targetId: courseId,
+          summary: "按当前正式图谱和大纲重新推断知识点目标",
+          beforeData: null,
+          afterData: {
+            graphVersionId: plan.version.id,
+            syllabusStructureId: plan.currentSyllabus.structureId,
+            additions: plan.additions.length,
+            updates: plan.updates.length,
+            removals: plan.removals.length,
+          },
+          context,
+        });
+      }
+      return true;
+    },
+    "映射已变化，请重新预览",
+    30_000,
+  );
+}
+
+async function assertTeacherCourse(
+  teacherId: string,
+  courseId: string,
+  db: Prisma.TransactionClient = prisma,
+) {
+  const course = await db.course.findFirst({
+    where: { id: courseId, teacherId, status: { not: "ARCHIVED" } },
     select: { id: true, name: true },
   });
   if (!course) throw new ResourceNotFoundError("课程不存在");
   return course;
 }
 
-export async function assertTeacherOwnsCourse(
-  teacherId: string,
-  courseId: string,
-) {
-  return assertTeacherCourse(teacherId, courseId);
-}
-
-/** 教师审核视图：目标 → 关联知识点 + 推断置信度。 */
 export async function getCourseObjectiveMap(
   teacherId: string,
   courseId: string,
-  options: { deriveIfEmpty?: boolean } = {},
 ) {
   const course = await assertTeacherCourse(teacherId, courseId);
-  const currentSyllabus = await listCourseObjectives(courseId);
-  if (options.deriveIfEmpty && currentSyllabus.structureId) {
-    /*
-     * 只在「当前大纲没有任何映射」时自动推断。
-     * 旧大纲留下的 DERIVED 由 derive 自己回收，不会挡住新版本的首次生成。
-     */
-    const existing = await prisma.conceptObjectiveLink.count({
-      where: {
-        courseId,
-        OR: [
-          { syllabusStructureId: currentSyllabus.structureId },
-          { source: "MANUAL" },
-        ],
-      },
-    });
-    if (existing === 0) await deriveConceptObjectiveLinks(courseId);
-  }
-  const [links, questionCounts] = await Promise.all([
-    prisma.conceptObjectiveLink.findMany({
-      where: {
-        courseId,
-        OR: [
-          { syllabusStructureId: currentSyllabus.structureId },
-          { source: "MANUAL" },
-        ],
-      },
-      orderBy: [{ objectiveCode: "asc" }, { confidence: "desc" }],
-      select: {
-        id: true,
-        conceptId: true,
-        objectiveCode: true,
-        source: true,
-        confidence: true,
-        weight: true,
-        concept: {
-          select: {
-            stableKey: true,
-            nodes: {
-              orderBy: { sortOrder: "desc" },
-              take: 1,
-              select: { code: true, name: true },
-            },
-          },
-        },
-      },
+  const [plan, syllabus] = await Promise.all([
+    prisma.$transaction((tx) => loadObjectiveDerivation(courseId, tx), {
+      isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
     }),
-    prisma.questionKnowledgeGraphBinding.groupBy({
-      by: ["conceptId"],
-      where: {
-        courseId,
-        question: { status: QuestionStatus.ACTIVE, deletedAt: null },
-      },
-      _count: { _all: true },
-    }),
+    listCourseObjectives(courseId),
   ]);
-  const questionCountByConcept = new Map(
-    questionCounts.map((row) => [row.conceptId, row._count._all]),
-  );
+  const current = plan?.currentSyllabus ?? syllabus;
+  const taggedQuestions = [...(plan?.objectivesByQuestion.values() ?? [])];
   return {
     course,
-    syllabusVersion: currentSyllabus.versionNumber,
-    objectives: currentSyllabus.objectives.map((objective) => {
-      const rows = links
-        .filter((link) => link.objectiveCode === objective.code)
-        .map((link) => ({
-          id: link.id,
-          conceptId: link.conceptId,
-          code: link.concept.nodes[0]?.code ?? link.concept.stableKey,
-          name: link.concept.nodes[0]?.name ?? "知识点",
-          source: link.source,
-          confidence: link.confidence.toNumber(),
-          questionCount: questionCountByConcept.get(link.conceptId) ?? 0,
-        }));
+    syllabusVersion: current.versionNumber,
+    reviewVersion: plan ? `${current.structureId}/${plan.version.id}` : null,
+    preview: plan?.preview ?? null,
+    taggedQuestionCount: taggedQuestions.length,
+    multiTargetQuestionCount: taggedQuestions.filter((codes) => codes.size > 1)
+      .length,
+    objectives: current.objectives.map((objective) => {
+      const links = (plan?.existing ?? [])
+        .flatMap((link) => {
+          const node = plan?.concepts.get(link.conceptId);
+          const currentVersion =
+            link.syllabusStructureId === current.structureId;
+          if (
+            !node ||
+            link.objectiveCode !== objective.code ||
+            (!currentVersion && link.source !== "MANUAL")
+          )
+            return [];
+          return [
+            {
+              id: link.id,
+              conceptId: link.conceptId,
+              code: node.code,
+              name: node.name,
+              source: link.source,
+              needsReview: !currentVersion,
+              support: plan?.support.get(objectiveLinkKey(link)) ?? 0,
+              questionCount:
+                plan?.questionsByConcept.get(link.conceptId)?.size ?? 0,
+            },
+          ];
+        })
+        .sort((a, b) => b.support - a.support || a.code.localeCompare(b.code));
       return {
         ...objective,
-        links: rows,
-        confirmedCount: rows.filter((row) => row.source === "MANUAL").length,
-        derivedCount: rows.filter((row) => row.source === "DERIVED").length,
+        taggedQuestionCount: taggedQuestions.filter((codes) =>
+          codes.has(objective.code),
+        ).length,
+        links,
+        confirmedCount: links.filter(
+          (row) => row.source === "MANUAL" && !row.needsReview,
+        ).length,
+        derivedCount: links.filter((row) => row.source === "DERIVED").length,
       };
     }),
-    totalLinks: links.length,
   };
 }
 
@@ -356,34 +425,55 @@ export type CourseObjectiveMap = Awaited<
 
 export async function reviewConceptObjectiveLink(input: {
   teacherId: string;
+  courseId: string;
   linkId: string;
   action: "confirm" | "dismiss";
+  reviewVersion?: string;
 }) {
-  const link = await prisma.conceptObjectiveLink.findUnique({
-    where: { id: input.linkId },
-    select: { id: true, courseId: true },
-  });
-  if (!link) throw new ResourceNotFoundError("映射不存在");
-  await assertTeacherCourse(input.teacherId, link.courseId);
-  const course = await prisma.course.findUnique({
-    where: { id: link.courseId },
-    select: { currentPublishedSyllabusStructureId: true },
-  });
-  if (input.action === "dismiss") {
-    await prisma.conceptObjectiveLink.delete({ where: { id: link.id } });
-    return { id: link.id, action: "dismiss" as const };
-  }
-  await prisma.conceptObjectiveLink.update({
-    where: { id: link.id },
-    data: {
-      source: "MANUAL",
-      createdById: input.teacherId,
-      confidence: 1,
-      syllabusStructureId:
-        course?.currentPublishedSyllabusStructureId ?? undefined,
-    },
-  });
-  return { id: link.id, action: "confirm" as const };
+  return runAssignmentSerializable(async (tx) => {
+    const link = await tx.conceptObjectiveLink.findFirst({
+      where: {
+        id: input.linkId,
+        courseId: input.courseId,
+        course: { teacherId: input.teacherId, status: { not: "ARCHIVED" } },
+      },
+      select: {
+        id: true,
+        courseId: true,
+        objectiveCode: true,
+        conceptId: true,
+      },
+    });
+    if (!link) throw new ResourceNotFoundError("映射不存在");
+    const plan = await loadObjectiveDerivation(link.courseId, tx);
+    if (
+      !plan ||
+      (input.reviewVersion &&
+        input.reviewVersion !==
+          `${plan.currentSyllabus.structureId}/${plan.version.id}`)
+    )
+      return null;
+    if (input.action === "dismiss") {
+      await tx.conceptObjectiveLink.delete({ where: { id: link.id } });
+      return { id: link.id, action: "dismiss" as const };
+    }
+    if (
+      !plan?.concepts.has(link.conceptId) ||
+      !plan.currentSyllabus.objectives.some(
+        (item) => item.code === link.objectiveCode,
+      )
+    )
+      throw new ResourceNotFoundError("映射已不属于当前正式大纲或图谱");
+    await tx.conceptObjectiveLink.update({
+      where: { id: link.id },
+      data: {
+        source: "MANUAL",
+        createdById: input.teacherId,
+        syllabusStructureId: plan.currentSyllabus.structureId,
+      },
+    });
+    return { id: link.id, action: "confirm" as const };
+  }, "映射已经更新，请刷新后重试");
 }
 
 /** 批量确认自动推断：可按目标限定，未限定时确认全课程。 */
@@ -391,21 +481,41 @@ export async function confirmDerivedConceptObjectiveLinks(input: {
   teacherId: string;
   courseId: string;
   objectiveCode?: string;
+  reviewVersion?: string;
 }) {
   await assertTeacherCourse(input.teacherId, input.courseId);
-  const result = await prisma.conceptObjectiveLink.updateMany({
-    where: {
-      courseId: input.courseId,
-      source: "DERIVED",
-      ...(input.objectiveCode ? { objectiveCode: input.objectiveCode } : {}),
+  return runAssignmentSerializable(
+    async (tx) => {
+      const plan = await loadObjectiveDerivation(input.courseId, tx);
+      if (
+        !plan ||
+        (input.reviewVersion &&
+          input.reviewVersion !==
+            `${plan.currentSyllabus.structureId}/${plan.version.id}`)
+      )
+        return null;
+      const codes = plan.currentSyllabus.objectives.map(
+        (objective) => objective.code,
+      );
+      const result = await tx.conceptObjectiveLink.updateMany({
+        where: {
+          courseId: input.courseId,
+          source: "DERIVED",
+          syllabusStructureId: plan.currentSyllabus.structureId,
+          conceptId: { in: [...plan.concepts.keys()] },
+          objectiveCode: {
+            in: input.objectiveCode
+              ? codes.filter((code) => code === input.objectiveCode)
+              : codes,
+          },
+        },
+        data: { source: "MANUAL", createdById: input.teacherId },
+      });
+      return result.count;
     },
-    data: {
-      source: "MANUAL",
-      confidence: 1,
-      createdById: input.teacherId,
-    },
-  });
-  return result.count;
+    "映射已经更新，请刷新后重试",
+    30_000,
+  );
 }
 
 export interface ObjectiveMasteryConcept {
@@ -423,12 +533,27 @@ export async function getObjectiveMastery(
   concepts: ObjectiveMasteryConcept[],
 ) {
   const syllabus = await listCourseObjectives(courseId);
-  /*
-   * 优先使用「当前大纲 + 人工确认」的映射；刚重发大纲、教师还没重建时，
-   * 回退到同目标代码的历史映射，避免学生端目标视图突然整块消失。
-   */
+  const graph = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: {
+      currentPublishedKnowledgeGraphVersion: {
+        select: {
+          nodes: {
+            where: { nodeType: "KNOWLEDGE_POINT" },
+            distinct: ["conceptId"],
+            select: { conceptId: true },
+          },
+        },
+      },
+    },
+  });
+  const graphConceptIds = new Set(
+    graph?.currentPublishedKnowledgeGraphVersion?.nodes.map(
+      ({ conceptId }) => conceptId,
+    ) ?? [],
+  );
   const allLinks = await prisma.conceptObjectiveLink.findMany({
-    where: { courseId },
+    where: { courseId, syllabusStructureId: syllabus.structureId },
     select: {
       conceptId: true,
       objectiveCode: true,
@@ -451,15 +576,11 @@ export async function getObjectiveMastery(
   };
   return syllabus.objectives
     .map((objective) => {
-      const scoped = allLinks.filter(
-        (link) => link.objectiveCode === objective.code,
-      );
-      const preferred = scoped.filter(
+      const rows = allLinks.filter(
         (link) =>
-          link.syllabusStructureId === syllabus.structureId ||
-          link.source === "MANUAL",
+          link.objectiveCode === objective.code &&
+          graphConceptIds.has(link.conceptId),
       );
-      const rows = preferred.length ? preferred : scoped;
       const points = rows.flatMap((row) => {
         const point = byConcept.get(row.conceptId);
         return point ? [point] : [];
@@ -477,15 +598,17 @@ export async function getObjectiveMastery(
         code: objective.code,
         title: objective.title,
         description: objective.description,
-        conceptCount: points.length,
-        coverageRatio: concepts.length
-          ? Math.round((points.length / concepts.length) * 100)
+        conceptCount: rows.length,
+        coverageRatio: graphConceptIds.size
+          ? Math.round((rows.length / graphConceptIds.size) * 100)
           : 0,
         conclusiveCount: conclusive.length,
         needsSupportCount: points.filter(
           (point) => point.status === "NEEDS_SUPPORT",
         ).length,
-        noEvidenceCount: noEvidence.length,
+        noEvidenceCount: noEvidence.length + rows.length - points.length,
+        masteredCount: conclusive.filter((point) => point.status === "MASTERED")
+          .length,
         masteryAverage: conclusive.length
           ? Number(
               (

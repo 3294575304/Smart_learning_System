@@ -6,10 +6,7 @@ import {
   KnowledgeGraphSourceType,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-export async function createPublishedGraphFixture(
-  courseId: string,
-  teacherId: string,
-) {
+async function createGraphSyllabusFixture(courseId: string, teacherId: string) {
   const suffix = randomBytes(5).toString("hex");
   const syllabus = await prisma.courseSyllabus.create({
     data: {
@@ -44,7 +41,7 @@ export async function createPublishedGraphFixture(
       structureJson: {},
     },
   });
-  const publishedSyllabus = await prisma.publishedSyllabusStructure.create({
+  return prisma.publishedSyllabusStructure.create({
     data: {
       courseId,
       syllabusId: syllabus.id,
@@ -55,13 +52,23 @@ export async function createPublishedGraphFixture(
       structureJson: {},
     },
   });
+}
+
+export async function createPublishedGraphFixture(
+  courseId: string,
+  teacherId: string,
+  syllabusStructureId?: string,
+) {
+  const sourceSyllabusStructureId =
+    syllabusStructureId ??
+    (await createGraphSyllabusFixture(courseId, teacherId)).id;
   const graphDraft = await prisma.knowledgeGraphDraft.create({
     data: {
       courseId,
-      sourceSyllabusStructureId: publishedSyllabus.id,
+      sourceSyllabusStructureId,
       requestedById: teacherId,
       status: KnowledgeGraphStatus.SUCCEEDED,
-      generatorVersion: `test-generator-${suffix}`,
+      generatorVersion: "test-generator",
       promptVersion: "test-prompt-v1",
       ruleVersion: "test-rule-v1",
       progress: 100,
@@ -79,7 +86,7 @@ export async function createPublishedGraphFixture(
       data: {
         courseId,
         graphDraftId: graphDraft.id,
-        sourceSyllabusStructureId: publishedSyllabus.id,
+        sourceSyllabusStructureId,
         editedById: teacherId,
         revisionNumber: versionNumber,
         structureJson: {},
@@ -88,7 +95,7 @@ export async function createPublishedGraphFixture(
     const version = await prisma.publishedKnowledgeGraphVersion.create({
       data: {
         courseId,
-        sourceSyllabusStructureId: publishedSyllabus.id,
+        sourceSyllabusStructureId,
         graphDraftId: graphDraft.id,
         reviewRevisionId: review.id,
         publishedById: teacherId,

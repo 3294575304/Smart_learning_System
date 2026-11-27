@@ -97,6 +97,12 @@ export interface SubmissionResultView {
     lastSavedAt: Date | null;
     answeredCount: number;
   } | null;
+  examAnswerSheet?: {
+    examId: string;
+    totalPoints: number;
+    answeredQuestionIds: string[];
+    unansweredQuestions: SubmittedAnswerView[];
+  };
   id: string;
   assignmentId: string;
   assignmentTitle: string;
@@ -133,6 +139,12 @@ export interface SubmissionResultView {
     gradingStatus: GradingStatus;
     studentAnswer: string;
     correctAnswer: string;
+    reviewOptions?: Array<{
+      id: string;
+      label: string;
+      content: string;
+      isCorrect: boolean;
+    }>;
     explanation: string;
     teacherFeedback: string | null;
     knowledgePoints: Array<{
@@ -177,6 +189,7 @@ export interface TeacherSubmissionListResult {
     id: string;
     title: string;
     classroomName: string;
+    classroomId: string;
     totalPoints: number;
   };
   items: TeacherSubmissionListItem[];
@@ -199,6 +212,7 @@ export interface TeacherSubmissionAnswerView {
   sortOrder: number;
   maxScore: number;
   studentAnswer: string;
+  hasStudentAnswer: boolean;
   correctAnswer: string;
   automaticScore: number | null;
   manualScore: number | null;

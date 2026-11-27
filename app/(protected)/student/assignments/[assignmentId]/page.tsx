@@ -3,6 +3,7 @@ import { StudentAssignmentListBackLink } from "@/components/assignments/student-
 import { StudentBackLink } from "@/components/dashboard/student-back-link";
 import { StudentRevokedAssignment } from "@/components/assignments/student-revoked-assignment";
 import { AssignmentRevokedError } from "@/services/assignments/errors";
+import { examTypeLabel } from "@/services/exams/exam-types";
 import {
   studentTaskScopeSchema,
   studentTaskHref,
@@ -46,12 +47,6 @@ const submittedAtFormat = new Intl.DateTimeFormat("zh-CN", {
   minute: "2-digit",
   timeZone: "Asia/Shanghai",
 });
-
-/** ExamType → 中文。用字符串键避免把 Prisma 枚举拖进页面层。 */
-const EXAM_TYPE_LABELS: Record<string, string> = {
-  MIDTERM: "期中考试",
-  FINAL: "期末考试",
-};
 
 interface Props {
   params: Promise<{ assignmentId: string }>;
@@ -121,9 +116,7 @@ export default async function StudentAssignmentPage({
             </h1>
             {exam ? (
               <>
-                <StatusChip tone="brand">
-                  {EXAM_TYPE_LABELS[exam.type] ?? "考试"}
-                </StatusChip>
+                <StatusChip tone="brand">{examTypeLabel(exam.type)}</StatusChip>
                 <ExamAttemptBadge remaining={exam.remainingAttempts} />
               </>
             ) : null}
@@ -189,6 +182,9 @@ export default async function StudentAssignmentPage({
                 <dt className="text-ink-soft text-xs">允许切屏</dt>
                 <dd className="text-ink-body mt-0.5">
                   {exam.allowedSwitches} 次，超出后自动交卷
+                </dd>
+                <dd className="text-ink-soft mt-1 text-xs leading-5">
+                  切换标签页、最小化浏览器或让考试窗口持续失焦，都会计入。
                 </dd>
               </div>
               <div>

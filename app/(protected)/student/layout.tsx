@@ -30,7 +30,7 @@ export default async function StudentLayout({
         ) : undefined
       }
       navBadges={{
-        "/student/tasks": overview.counts.assignment + overview.counts.exam,
+        "/student/tasks": overview.counts.assignment,
       }}
       platformAnnouncement={config.platformAnnouncement}
       platformName={config.platformName}

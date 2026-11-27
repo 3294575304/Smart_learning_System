@@ -1,6 +1,7 @@
 import { QuestionType } from "@prisma/client";
 import { z } from "zod";
 import { AI_PROMPTS } from "@/services/ai/prompt-registry";
+import { maxExamConcepts } from "@/services/exams/concept-selection";
 
 import { programmingConfigRevisionInputSchema } from "@/services/programming-questions/schemas";
 import {
@@ -22,7 +23,7 @@ export const questionGenerationRequestSchema = z
     courseId: z.string().cuid(),
     mode: z.enum(["RANGE", "ANALOGY", "FILE"]),
     chapterCode: z.string().trim().max(100).nullable().default(null),
-    conceptIds: z.array(z.string().cuid()).max(20).default([]),
+    conceptIds: z.array(z.string().cuid()).max(maxExamConcepts).default([]),
     balancedConcepts: z.boolean().optional(),
     sourceQuestionId: z.string().cuid().nullable().default(null),
     bloomLevel: z.enum([
@@ -43,6 +44,14 @@ export const questionGenerationRequestSchema = z
     idempotencyKey: z.string().uuid(),
   })
   .superRefine((value, ctx) => {
+    const conceptLimit =
+      value.mode === "RANGE" && value.balancedConcepts ? maxExamConcepts : 20;
+    if (value.conceptIds.length > conceptLimit)
+      ctx.addIssue({
+        code: "custom",
+        path: ["conceptIds"],
+        message: `最多选择 ${conceptLimit} 个知识点`,
+      });
     const total = Object.values(value.counts).reduce(
       (sum, count) => sum + count,
       0,

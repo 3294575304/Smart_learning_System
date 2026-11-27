@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import {
   AuditAction,
   AuditTargetType,
-  ExamType,
   Prisma,
   QuestionStatus,
 } from "@prisma/client";
@@ -23,6 +22,12 @@ import {
   overlapsThreeYears,
   plusThreeYears,
 } from "./fingerprint";
+import {
+  countedExamSwitchKinds,
+  countsTowardExamSwitchLimit,
+  type ExamSwitchEventKind,
+} from "./switch-policy";
+import { examTypeLabel } from "./exam-types";
 import { storedPublishableSyllabusStructureSchema } from "@/services/syllabus-parsing/schemas";
 import {
   examAttemptRulesSchema,
@@ -161,7 +166,7 @@ export async function listEligibleExamQuestions(
             syllabusStructureId: course.syllabusStructureId ?? undefined,
           },
           select: { objectiveCode: true },
-          take: 1,
+          orderBy: { objectiveCode: "asc" },
         },
       },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -179,7 +184,11 @@ export async function listEligibleExamQuestions(
       id: question.id,
       title: question.title,
       type: question.type,
-      objectiveCode: question.courseObjectiveMappings[0]?.objectiveCode ?? null,
+      objectiveCodes: syllabusStructureId
+        ? question.courseObjectiveMappings.map(
+            ({ objectiveCode }) => objectiveCode,
+          )
+        : [],
       blocked,
     };
   });
@@ -266,12 +275,47 @@ export async function createExamSessionInTransaction(
           syllabusStructureId: course.syllabusStructureId ?? undefined,
         },
         select: { objectiveCode: true },
-        take: 1,
+        orderBy: { objectiveCode: "asc" },
       },
     },
   });
   if (questions.length !== input.questions.length)
     throw new AssignmentOperationError("部分题目不可用于本课程考试", 400);
+  const selectedById = new Map(
+    input.questions.map((item) => [item.questionId, item]),
+  );
+  const syllabus = storedPublishableSyllabusStructureSchema.safeParse(
+    course.syllabusStructure,
+  );
+  const objectiveCodes = new Set(
+    syllabus.success ? syllabus.data.objectives.map(({ code }) => code) : [],
+  );
+  const frozenObjectives = new Map<string, string | null>();
+  for (const question of questions) {
+    const explicit = selectedById.get(question.id)?.objectiveCode;
+    const tags = course.syllabusStructureId
+      ? question.courseObjectiveMappings.map(
+          ({ objectiveCode }) => objectiveCode,
+        )
+      : [];
+    if (explicit && !objectiveCodes.has(explicit))
+      throw new AssignmentOperationError(
+        `题目「${question.title}」的计分目标不在当前正式大纲中`,
+        400,
+      );
+    if (!explicit && tags.length > 1)
+      throw new AssignmentOperationError(
+        `请为题目「${question.title}」选择本场考试的计分目标`,
+        400,
+      );
+    frozenObjectives.set(
+      question.id,
+      explicit ??
+        (course.syllabusStructureId
+          ? (tags[0] ?? null)
+          : question.defaultObjectiveKind),
+    );
+  }
   const uses = await recentUses(tx, course.categoryId, input.startsAt);
   const selectedHashes = new Set<string>();
   for (const question of questions) {
@@ -310,9 +354,7 @@ export async function createExamSessionInTransaction(
           questionCategoryId: course.categoryId,
           contentHash: examQuestionHash(question),
           startsAt: input.startsAt,
-          objectiveCode: course.syllabusStructureId
-            ? (question.courseObjectiveMappings[0]?.objectiveCode ?? null)
-            : question.defaultObjectiveKind,
+          objectiveCode: frozenObjectives.get(question.id) ?? null,
           syllabusStructureId: course.syllabusStructureId,
         })),
       },
@@ -321,7 +363,7 @@ export async function createExamSessionInTransaction(
   for (const classroomId of [...input.classroomIds].sort()) {
     const assignmentId = await createDraftInTransaction(tx, teacherId, {
       title: input.title,
-      description: input.type === ExamType.MIDTERM ? "期中考试" : "期末考试",
+      description: examTypeLabel(input.type),
       classroomId,
       publishedAt: input.startsAt,
       dueAt: input.endsAt,
@@ -516,7 +558,9 @@ export async function listStudentExams(
     ...(scope.classroomId ? { classroomId: scope.classroomId } : {}),
     classroom: {
       ...(scope.courseId ? { courseId: scope.courseId } : {}),
-      memberships: { some: { studentId, status: "ACTIVE" } },
+      // 退课/转班后仍要能回看自己的记录，所以这里不限定 ACTIVE；
+      // 是否可作答由 membershipStatus 单独判定。
+      memberships: { some: { studentId } },
     },
   } satisfies Prisma.AssignmentWhereInput;
   return prisma.examSession.findMany({
@@ -536,10 +580,28 @@ export async function listStudentExams(
           publishedAt: true,
           dueAt: true,
           classroomId: true,
-          classroom: { select: { name: true, status: true, courseId: true } },
+          classroom: {
+            select: {
+              name: true,
+              status: true,
+              courseId: true,
+              memberships: {
+                where: { studentId },
+                select: { status: true, endedAt: true },
+                take: 1,
+              },
+            },
+          },
           submissions: {
             where: { studentId, status: { not: "WITHDRAWN" } },
-            select: { status: true },
+            select: {
+              id: true,
+              status: true,
+              score: true,
+              maxScore: true,
+              attemptNumber: true,
+              submittedAt: true,
+            },
             orderBy: { attemptNumber: "desc" },
           },
         },
@@ -580,7 +642,13 @@ export async function getStudentExamAttemptStatus(
           },
         },
       },
-      _count: { select: { examSwitchEvents: true } },
+      _count: {
+        select: {
+          examSwitchEvents: {
+            where: { kind: { in: [...countedExamSwitchKinds] } },
+          },
+        },
+      },
     },
   });
   const exam = submission?.assignment.examSession;
@@ -611,6 +679,7 @@ export async function recordExamSwitch(
   studentId: string,
   submissionId: string,
   eventKey: string,
+  kind: ExamSwitchEventKind = "VISIBILITY",
 ) {
   const result = await runAssignmentSerializable(async (tx) => {
     const submission = await tx.submission.findFirst({
@@ -642,18 +711,22 @@ export async function recordExamSwitch(
     if (
       previous &&
       (previous.submissionId !== submissionId ||
-        previous.examSessionId !== exam.id)
+        previous.examSessionId !== exam.id ||
+        previous.kind !== kind)
     )
       throw new AssignmentOperationError("切屏事件键冲突", 409);
     if (!previous)
       await tx.examSwitchEvent.create({
-        data: { eventKey, submissionId, examSessionId: exam.id },
+        data: { eventKey, kind, submissionId, examSessionId: exam.id },
       });
-    const count = await tx.examSwitchEvent.count({ where: { submissionId } });
+    const count = await tx.examSwitchEvent.count({
+      where: { submissionId, kind: { in: [...countedExamSwitchKinds] } },
+    });
     return {
       count,
       allowedSwitches: exam.allowedSwitches,
-      shouldSubmit: count > exam.allowedSwitches,
+      shouldSubmit:
+        countsTowardExamSwitchLimit(kind) && count > exam.allowedSwitches,
     };
   }, "切屏记录发生并发冲突，请重试");
   if (result.shouldSubmit)

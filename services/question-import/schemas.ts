@@ -15,6 +15,11 @@ const importOptionSchema = z.object({
 export const questionImportCommitItemSchema = z.object({
   programmingConfig: programmingConfigRevisionInputSchema.optional(),
   rowKey: z.string().trim().min(1).max(100),
+  objectiveCodes: z
+    .array(z.string().trim().min(1).max(50))
+    .max(3)
+    .refine((codes) => new Set(codes).size === codes.length)
+    .optional(),
   title: z.string(),
   content: z.string(),
   type: z.nativeEnum(QuestionType),
@@ -35,6 +40,12 @@ export const questionImportCommitSchema = z
       checksum: z.string().regex(/^[a-f0-9]{64}$/u),
     }),
     categoryId: questionCourseCategoryIdSchema,
+    objectiveScope: z
+      .object({
+        courseId: z.string().cuid(),
+        syllabusStructureId: z.string().cuid(),
+      })
+      .optional(),
     knowledgePointIds: z.array(z.string().cuid()).max(10).default([]),
     questions: z.array(questionImportCommitItemSchema).min(1).max(500),
   })

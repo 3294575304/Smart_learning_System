@@ -220,6 +220,7 @@ async function mappingSource(
         id: true,
         versionNumber: true,
         nodes: {
+          where: { nodeType: "KNOWLEDGE_POINT" },
           orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
           select: {
             id: true,
@@ -863,6 +864,7 @@ export async function confirmQuestionMappingBatch(
     const nodes = await transaction.publishedKnowledgeGraphNode.findMany({
       where: {
         graphVersionId: batch.graphVersionId,
+        nodeType: "KNOWLEDGE_POINT",
         id: { in: input.selections.map((item) => item.publishedNodeId) },
       },
       select: { id: true, conceptId: true },

@@ -1,7 +1,6 @@
 "use client";
 
-import { PanelRight } from "lucide-react";
-import { useEffect, useId, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AssignmentCategoryBadge } from "@/components/assignments/category-badge";
 import { AssignmentStateRefresh } from "@/components/assignments/state-refresh";
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
@@ -9,22 +8,26 @@ import { QuestionText } from "@/components/assignments/question-text";
 import { StatusChip, type StatusChipTone } from "@/components/ui/status-chip";
 import { SubmissionAttachments } from "@/components/assignments/submission-attachments";
 import { requestAssignmentApi } from "@/components/assignments/request-api";
-import { AnswerSheetPanel } from "@/components/assignments/answer-sheet-panel";
-import {
-  gradingAnswerCardLegend,
-  gradingAnswerCardState,
-} from "@/components/assignments/answer-card-states";
 import { ManualGradeForm } from "./manual-grade-form";
 import { CompleteGradingButton } from "./complete-grading-button";
 import { ProgrammingAttemptActions } from "./programming-attempt-actions";
 import { PythonCodeEditor } from "@/components/programming/code-editor";
-import { EditorDialog } from "@/components/assignments/editor-dialog";
+import {
+  AnswerSheetFilters,
+  TeacherAnswerSheet,
+  answerSheetTypeOptions,
+  type AnswerSheetType,
+} from "./teacher-answer-sheet";
 import { hundredPointScore } from "@/services/assignments/presentation";
-import { personalWorkHref } from "@/services/assignments/personal-work-navigation";
+import {
+  personalWorkHref,
+  type PersonalWorkFilters,
+} from "@/services/assignments/personal-work-navigation";
 import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
 import {
   answerOutcome,
   outcomeLabels,
+  matchesAnswerOutcome,
 } from "@/services/assignments/personal-work-presentation";
 import type { TeacherSubmissionDetail } from "@/services/assignments/types";
 import type { ProgrammingPaperScoreSuggestion } from "@/services/programming-scoring/schemas";
@@ -47,23 +50,17 @@ interface BulkScoreSelection {
 
 export function SubmissionGradingWorkspace({
   initialSubmission,
-  filter: selectedFilter,
+  filters: initialFilters,
   back,
   examId,
 }: {
   initialSubmission: TeacherSubmissionDetail;
-  filter: "ALL" | "WRONG" | "CORRECT" | "INCORRECT" | "PENDING";
+  filters: PersonalWorkFilters;
   back: { href: string; label: string };
   examId?: string | null;
 }) {
-  const questionNavigatorId = useId();
-  const questionNavigatorButton = useRef<HTMLButtonElement>(null);
-  const selectedQuestionId = useRef<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState(selectedFilter);
+  const [activeFilters, setActiveFilters] = useState(initialFilters);
   const [updated, setUpdated] = useState<TeacherSubmissionDetail | null>(null);
-  const [questionNavigatorOpen, setQuestionNavigatorOpen] = useState(
-    selectedFilter !== "ALL",
-  );
   const [mutationBusy, setMutationBusy] = useState(false);
   const [bulkScoreBusy, setBulkScoreBusy] = useState(false);
   const [bulkScoreProgress, setBulkScoreProgress] = useState<string | null>(
@@ -76,10 +73,7 @@ export function SubmissionGradingWorkspace({
   const inFlight = useRef(false);
   const bulkScoreInFlight = useRef(false);
   const bulkScoreRevision = useRef(0);
-  useEffect(() => {
-    setActiveFilter(selectedFilter);
-    setQuestionNavigatorOpen(selectedFilter !== "ALL");
-  }, [selectedFilter]);
+  useEffect(() => setActiveFilters(initialFilters), [initialFilters]);
   const submission =
     updated && updated.snapshotAt >= initialSubmission.snapshotAt
       ? updated
@@ -101,6 +95,7 @@ export function SubmissionGradingWorkspace({
   const questions = submission.questions.map((q) => ({
     ...q,
     outcome: answerOutcome(q.answer),
+    answered: q.answer?.hasStudentAnswer ?? false,
   }));
   const count = (value: string) =>
     questions.filter((q) => q.outcome === value).length;
@@ -240,37 +235,17 @@ export function SubmissionGradingWorkspace({
     });
   }
 
-  function selectFilter(filter: typeof selectedFilter) {
-    setActiveFilter(filter);
+  function selectFilters(filters: PersonalWorkFilters) {
+    setActiveFilters(filters);
     const href = personalWorkHref(
       submission.assignment.id,
       submission.id,
       back.href,
-      filter,
+      filters.filter,
       examId,
+      filters,
     );
-    const target = new URL(href, window.location.origin);
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${target.pathname}${target.search}${target.hash}`,
-    );
-  }
-
-  function handleFilterClick(
-    event: MouseEvent<HTMLAnchorElement>,
-    filter: typeof selectedFilter,
-  ) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    event.preventDefault();
-    selectFilter(filter);
+    window.history.replaceState(window.history.state, "", href);
   }
   // Keep previously confirmed grades visible even when old per-question records are incomplete.
   const finished = ["GRADED", "PUBLISHED"].includes(submission.status);
@@ -278,19 +253,14 @@ export function SubmissionGradingWorkspace({
   const percentage = finished
     ? hundredPointScore(submission.score, submission.maxScore)
     : null;
-  const shown = questions.filter((q) => {
-    if (activeFilter === "WRONG" || activeFilter === "INCORRECT")
-      return ["WRONG", "PARTIAL"].includes(q.outcome);
-    if (activeFilter === "CORRECT") return q.outcome === "CORRECT";
-    if (activeFilter === "PENDING")
-      return [
-        "PENDING_REVIEW",
-        "PENDING_JUDGE",
-        "JUDGE_ERROR",
-        "MISSING",
-      ].includes(q.outcome);
-    return true;
-  });
+  const answeredCount = questions.filter(({ answered }) => answered).length;
+  const shown = questions.filter(
+    (q) =>
+      (!activeFilters.questionType || q.type === activeFilters.questionType) &&
+      (!activeFilters.answerStatus ||
+        q.answered === (activeFilters.answerStatus === "ANSWERED")) &&
+      matchesAnswerOutcome(q.outcome, activeFilters.filter),
+  );
   return (
     <section className="min-w-0 space-y-5">
       <AssignmentStateRefresh
@@ -402,14 +372,16 @@ export function SubmissionGradingWorkspace({
                     ? "请先处理待批改题目。"
                     : "单题评分已齐，可以完成整份批改。")}
           </p>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <a
-              className="inline-flex min-h-10 items-center rounded-lg border border-sky-200 px-3 text-sm font-medium text-sky-800 transition-colors duration-150 hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
-              href={`${teacherAssessmentHref(submission.assignment.id, examId)}/results`}
-            >
-              {examId ? "考试成绩与公布" : "作业成绩与公布"}
-            </a>
-          </div>
+          {!examId && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <a
+                className="inline-flex min-h-10 items-center rounded-lg border border-sky-200 px-3 text-sm font-medium text-sky-800 transition-colors duration-150 hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
+                href={`${teacherAssessmentHref(submission.assignment.id, examId)}/results`}
+              >
+                作业成绩与公布
+              </a>
+            </div>
+          )}
         </div>
         {bulkScoreQuestions.length > 0 ? (
           <section className="mt-3">
@@ -452,22 +424,101 @@ export function SubmissionGradingWorkspace({
           </section>
         ) : null}
       </header>
-      {questions.length > 0 ? (
-        <button
-          ref={questionNavigatorButton}
-          type="button"
-          aria-controls={questionNavigatorId}
-          aria-haspopup="dialog"
-          aria-expanded={questionNavigatorOpen}
-          onClick={() => setQuestionNavigatorOpen(true)}
-          className="fixed top-[38%] right-0 z-40 inline-flex w-9 -translate-y-1/2 flex-col items-center gap-2 rounded-l-lg border border-r-0 border-sky-200 bg-white py-3 text-xs font-medium text-sky-800 shadow-sm transition-colors duration-150 hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
-        >
-          <PanelRight className="size-4" aria-hidden="true" />
-          <span className="leading-5 tracking-widest [writing-mode:vertical-rl]">
-            答题卡
-          </span>
-        </button>
-      ) : null}
+      {questions.length > 0 && (
+        <TeacherAnswerSheet
+          questions={shown}
+          total={questions.length}
+          totalPoints={submission.maxScore}
+          answeredCount={answeredCount}
+          targetPrefix="question-"
+          questionState={(index) => {
+            const { answered, outcome } = shown[index];
+            return {
+              label:
+                (answered ? "已作答" : "未作答") +
+                " · " +
+                outcomeLabels[outcome],
+              mark:
+                outcome === "CORRECT"
+                  ? "✓"
+                  : outcome === "WRONG"
+                    ? "×"
+                    : outcome === "PARTIAL"
+                      ? "½"
+                      : undefined,
+              className: answered
+                ? "border-sky-200 bg-brand-soft text-brand-strong hover:border-sky-400"
+                : "border-line bg-white text-ink-soft hover:border-sky-400",
+            };
+          }}
+          filters={
+            <>
+              <AnswerSheetFilters<PersonalWorkFilters["filter"]>
+                label="批改结果"
+                value={activeFilters.filter}
+                options={[
+                  ["ALL", "全部结果", questions.length],
+                  ["CORRECT", "答对", count("CORRECT")],
+                  ["INCORRECT", "答错", count("WRONG")],
+                  ["PARTIAL", "部分得分", count("PARTIAL")],
+                  ["PENDING", "待处理", pending],
+                  ...(activeFilters.filter === "WRONG"
+                    ? [
+                        [
+                          "WRONG",
+                          "失分题",
+                          count("WRONG") + count("PARTIAL"),
+                        ] as const,
+                      ]
+                    : []),
+                ]}
+                onChange={(filter) =>
+                  selectFilters({ ...activeFilters, filter })
+                }
+              />
+              <AnswerSheetFilters<
+                "ALL" | NonNullable<PersonalWorkFilters["answerStatus"]>
+              >
+                label="作答状态"
+                value={activeFilters.answerStatus ?? "ALL"}
+                options={[
+                  ["ALL", "全部状态", questions.length],
+                  ["ANSWERED", "已作答", answeredCount],
+                  ["UNANSWERED", "未作答", questions.length - answeredCount],
+                ]}
+                onChange={(answerStatus) =>
+                  selectFilters({
+                    ...activeFilters,
+                    answerStatus:
+                      answerStatus === "ALL" ? undefined : answerStatus,
+                  })
+                }
+              />
+              <AnswerSheetFilters<AnswerSheetType>
+                label="题型"
+                value={activeFilters.questionType ?? "ALL"}
+                options={answerSheetTypeOptions(questions)}
+                onChange={(questionType) =>
+                  selectFilters({
+                    ...activeFilters,
+                    questionType:
+                      questionType === "ALL" ? undefined : questionType,
+                  })
+                }
+              />
+              {shown.length !== questions.length && (
+                <button
+                  type="button"
+                  className="text-xs text-sky-700 underline"
+                  onClick={() => selectFilters({ filter: "ALL" })}
+                >
+                  清除筛选
+                </button>
+              )}
+            </>
+          }
+        />
+      )}
       {submission.attempts.length > 1 && (
         <nav
           aria-label="提交次数"
@@ -482,14 +533,29 @@ export function SubmissionGradingWorkspace({
                 submission.assignment.id,
                 attempt.id,
                 back.href,
-                activeFilter,
+                activeFilters.filter,
                 examId,
+                activeFilters,
               )}
             >
               第 {attempt.attemptNumber} 次 · {i === 0 ? "最新有效" : "历史"}
             </a>
           ))}
         </nav>
+      )}
+      {shown.length > 0 && shown.length !== questions.length && (
+        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+          <span role="status">
+            显示 {shown.length} / {questions.length} 题
+          </span>
+          <button
+            type="button"
+            className="text-sky-700 underline"
+            onClick={() => selectFilters({ filter: "ALL" })}
+          >
+            查看全部
+          </button>
+        </div>
       )}
       <div className="min-w-0">
         <div className="min-w-0 space-y-4">
@@ -503,7 +569,7 @@ export function SubmissionGradingWorkspace({
               {questions.length > 0 && (
                 <button
                   className="ml-2 text-sky-700 underline"
-                  onClick={() => selectFilter("ALL")}
+                  onClick={() => selectFilters({ filter: "ALL" })}
                   type="button"
                 >
                   查看全部
@@ -686,116 +752,6 @@ export function SubmissionGradingWorkspace({
               </footer>
             )}
         </div>
-        <EditorDialog
-          open={questionNavigatorOpen}
-          title="答题卡"
-          placement="right"
-          dialogId={questionNavigatorId}
-          showCloseButton
-          onClose={() => setQuestionNavigatorOpen(false)}
-          onAfterClose={() => {
-            const questionId = selectedQuestionId.current;
-            selectedQuestionId.current = null;
-            if (!questionId) {
-              questionNavigatorButton.current?.focus({ preventScroll: true });
-              return;
-            }
-            const jump = () => {
-              const target = document.getElementById(`question-${questionId}`);
-              if (!target) return false;
-              window.history.replaceState(
-                null,
-                "",
-                `${window.location.pathname}${window.location.search}#question-${questionId}`,
-              );
-              target.scrollIntoView({ behavior: "smooth", block: "start" });
-              target.focus({ preventScroll: true });
-              return true;
-            };
-            if (jump()) return;
-            // 目标题被当前筛选隐藏：先回到「全部」，下一帧再滚动，
-            // 避免点了题号却停在原处。
-            selectFilter("ALL");
-            window.requestAnimationFrame(() => {
-              if (!jump())
-                questionNavigatorButton.current?.focus({ preventScroll: true });
-            });
-          }}
-        >
-          <section className="mt-4 space-y-5">
-            <div>
-              <p className="text-xs font-medium text-slate-500">筛选题目</p>
-              <nav
-                aria-label="作答题目筛选"
-                className="mt-2 flex gap-2 overflow-x-auto pb-1"
-              >
-                {(
-                  [
-                    ["ALL", "全部", questions.length],
-                    ["CORRECT", "答对", count("CORRECT")],
-                    ["INCORRECT", "答错", count("WRONG") + count("PARTIAL")],
-                    ["PENDING", "待处理", pending],
-                  ] as const
-                ).map(([filter, label, total]) => {
-                  const selected = activeFilter === filter;
-                  const color =
-                    filter === "CORRECT"
-                      ? selected
-                        ? "border-emerald-500 bg-emerald-100 text-emerald-900"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                      : filter === "INCORRECT"
-                        ? selected
-                          ? "border-rose-500 bg-rose-100 text-rose-900"
-                          : "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
-                        : filter === "PENDING"
-                          ? selected
-                            ? "border-violet-500 bg-violet-100 text-violet-900"
-                            : "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100"
-                          : selected
-                            ? "border-sky-500 bg-sky-100 text-sky-900"
-                            : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100";
-                  return (
-                    <a
-                      key={filter}
-                      aria-current={selected ? "page" : undefined}
-                      className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-3 text-xs font-medium whitespace-nowrap tabular-nums transition focus-visible:ring-2 focus-visible:ring-sky-500 ${color}`}
-                      href={personalWorkHref(
-                        submission.assignment.id,
-                        submission.id,
-                        back.href,
-                        filter,
-                        examId,
-                      )}
-                      onClick={(event) => handleFilterClick(event, filter)}
-                    >
-                      {label} {total}
-                    </a>
-                  );
-                })}
-              </nav>
-            </div>
-            <AnswerSheetPanel
-              activeIndex={-1}
-              answeredCount={questions.length - pending}
-              className="border-0 bg-transparent p-0 shadow-none"
-              groupByType
-              legendItems={gradingAnswerCardLegend}
-              onSelect={(index) => {
-                const question = questions[index];
-                if (!question) return;
-                selectedQuestionId.current = question.id;
-                setQuestionNavigatorOpen(false);
-              }}
-              progressLabel="已批改"
-              questionState={(index) =>
-                gradingAnswerCardState(questions[index].outcome)
-              }
-              questions={questions}
-              showTitle={false}
-              totalPoints={submission.maxScore}
-            />
-          </section>
-        </EditorDialog>
       </div>
     </section>
   );

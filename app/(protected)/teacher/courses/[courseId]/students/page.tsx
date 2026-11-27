@@ -1,6 +1,5 @@
 import { TeacherBackLink } from "@/components/dashboard/teacher-back-link";
 import { Role } from "@prisma/client";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { CourseRosterManager } from "@/components/courses/course-roster-manager";
@@ -41,22 +40,9 @@ export default async function CourseStudentsPage({
         title="学生名单管理"
         description={`${data.course.name} · 查看在读与待认领学生，维护班级名单。`}
         actions={
-          <div className="flex gap-2">
-            <TeacherBackLink href={`/teacher/courses/${id.data}`}>
-              返回课程
-            </TeacherBackLink>
-            {(!classroom || classroom.status === "ACTIVE") && (
-              <Link
-                className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white"
-                href={withClassroomQuery(
-                  `/teacher/courses/${id.data}/students/import`,
-                  classroom?.id,
-                )}
-              >
-                批量导入名单
-              </Link>
-            )}
-          </div>
+          <TeacherBackLink href={`/teacher/courses/${id.data}`}>
+            返回课程
+          </TeacherBackLink>
         }
       />
       <CourseRosterManager
@@ -64,6 +50,14 @@ export default async function CourseStudentsPage({
         courseId={id.data}
         initialClassroomId={classroom?.id}
         initialData={data}
+        importHref={
+          !classroom || classroom.status === "ACTIVE"
+            ? withClassroomQuery(
+                `/teacher/courses/${id.data}/students/import`,
+                classroom?.id,
+              )
+            : undefined
+        }
       />
     </section>
   );

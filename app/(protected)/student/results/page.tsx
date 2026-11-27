@@ -1,3 +1,5 @@
+import { StudentAnalysisReturnLink } from "@/components/dashboard/student-analysis-return-link";
+import { readStudentAnalysisReturn } from "@/services/student-experience/analysis-navigation";
 import { Role } from "@prisma/client";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -17,10 +19,12 @@ interface Props {
 export default async function StudentResultsPage({ searchParams }: Props) {
   const student = await requirePageRole(Role.STUDENT);
   const raw = await searchParams;
+  const analysisReturn = readStudentAnalysisReturn(raw.analysisReturn);
   if (raw.view !== "course") {
     const params = new URLSearchParams({ view: "records" });
     for (const key of ["page", "pageSize", "courseId", "classroomId"])
       if (typeof raw[key] === "string") params.set(key, raw[key]);
+    if (analysisReturn) params.set("analysisReturn", analysisReturn);
     redirect(`/student/assignments?${params}`);
   }
   const [allRows, contexts] = await Promise.all([
@@ -47,22 +51,45 @@ export default async function StudentResultsPage({ searchParams }: Props) {
     }
   })();
   const selected = filters.items;
+  const courseReturn = contexts.find(
+    ({ course, classroom }) =>
+      (course.id === raw.backCourseId &&
+        classroom.id === raw.backClassroomId) ||
+      (raw.backCourseId === undefined &&
+        raw.backClassroomId === undefined &&
+        raw.publication === undefined &&
+        course.id === raw.courseId &&
+        classroom.id === raw.classroomId),
+  );
   return (
     <section className="space-y-5">
       <PageHeader
         title="课程总评"
         description="每门已加入的课程分别查看总评，同名课程也独立显示。"
         actions={
-          <StudentCourseReturnLink
-            courseId={filters.courseId}
-            classroomId={filters.classroomId}
-            tab="tasks"
-          />
+          analysisReturn ? (
+            <StudentAnalysisReturnLink href={analysisReturn} />
+          ) : courseReturn ? (
+            <StudentCourseReturnLink
+              courseId={courseReturn.course.id}
+              classroomId={courseReturn.classroom.id}
+              tab="tasks"
+            />
+          ) : undefined
         }
       />
       <StudentGradeFilters
         key={`${filters.courseId}:${filters.classroomId}:${filters.publication}:${filters.q}`}
         contexts={contexts}
+        analysisReturn={analysisReturn}
+        courseReturn={
+          courseReturn
+            ? {
+                courseId: courseReturn.course.id,
+                classroomId: courseReturn.classroom.id,
+              }
+            : undefined
+        }
         {...filters}
       />
       {filters.selectionRequired ? (

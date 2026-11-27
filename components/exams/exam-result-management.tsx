@@ -1,6 +1,6 @@
 "use client";
 
-import { examClassroomHref } from "@/services/exams/classroom-navigation";
+import { personalWorkHref } from "@/services/assignments/personal-work-navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -32,12 +32,14 @@ export function ExamResultManagement({
   endpoint,
   data,
   canConfigure,
+  monitorHref,
 }: {
   examId: string;
   assignmentId: string;
   endpoint: string;
   data: Management;
   canConfigure: boolean;
+  monitorHref: string;
 }) {
   const router = useRouter();
   const { publication, policy, reviews } = data;
@@ -108,12 +110,6 @@ export function ExamResultManagement({
           {autoPending && (
             <p>考试结束、收卷及批改全部完成后，系统才会按所选方式公布。</p>
           )}
-          <Link
-            className="font-medium text-sky-800 hover:underline"
-            href={`${examClassroomHref(examId, assignmentId)}/results`}
-          >
-            查看本班成绩与答卷
-          </Link>
         </div>
         {!autoPending && publication.canPublish && (
           <PublishResultsButton
@@ -202,7 +198,11 @@ export function ExamResultManagement({
         ) : (
           <ul className="divide-y">
             {reviews.map((review) => (
-              <li key={review.id} className="space-y-2 py-3 text-sm">
+              <li
+                key={review.id}
+                id={`review-${review.id}`}
+                className="scroll-mt-24 space-y-2 py-3 text-sm"
+              >
                 <div className="flex flex-wrap items-center gap-3">
                   <strong>
                     {review.submission.student.profile?.displayName || "学生"}
@@ -213,7 +213,13 @@ export function ExamResultManagement({
                   </span>
                   <Link
                     className="text-sky-800 hover:underline"
-                    href={`${examClassroomHref(examId, assignmentId)}/submissions/${review.submission.id}`}
+                    href={personalWorkHref(
+                      assignmentId,
+                      review.submission.id,
+                      `${monitorHref}#review-${review.id}`,
+                      "ALL",
+                      examId,
+                    )}
                   >
                     核对原答卷
                   </Link>

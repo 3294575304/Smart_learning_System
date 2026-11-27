@@ -7,6 +7,7 @@ import {
   correctTeacherGradeEntry,
   createTeacherCourseGradebook,
   publishTeacherGradebook,
+  syncTeacherPlatformAssignmentGrades,
 } from "@/services/gradebook/service";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -39,6 +40,7 @@ import { executeClaimedExamPaperJob } from "@/services/exams/paper-worker";
 import { EXAM_PAPER_JOB_TYPE } from "@/services/exams/paper-ai";
 import { readAssignmentQuestionImage } from "@/services/exams/paper-images";
 import { getTeacherExamDetails } from "@/services/exams/analysis";
+import { getExamMonitor } from "@/services/exams/monitor";
 import {
   publishDueExamResults,
   setExamResultPublication,
@@ -55,6 +57,7 @@ import {
 } from "@/services/exams/service";
 import { examCreateSchema } from "@/services/exams/schemas";
 import { QUESTION_OBJECTIVE_JOB_TYPE } from "@/services/question-objectives/schemas";
+import { retryQuestionObjectiveClassification } from "@/services/question-objectives/retry";
 import { executeClaimedQuestionObjectiveJob } from "@/services/question-objectives/worker";
 import {
   saveQuestionCourseObjective,
@@ -255,6 +258,13 @@ async function main() {
   const upcomingDetails = await getTeacherExamDetails(teacher.id, exam.id);
   assert.equal(upcomingDetails.analysis, null);
   assert.equal(upcomingDetails.exam.assignments.length, 2);
+  for (const assignment of upcomingDetails.exam.assignments)
+    assert.deepEqual(upcomingDetails.classroomProgress[assignment.id], {
+      participated: 0,
+      pending: 0,
+      published: 0,
+      ready: 0,
+    });
   assert.equal(exam.assignments.length, 2);
   const pendingObjectiveUse = await prisma.examQuestionUse.findFirstOrThrow({
     where: { examSessionId: exam.id, questionId: question.id },
@@ -478,6 +488,7 @@ async function main() {
   );
   const live = await createExamSession(teacher.id, {
     ...input,
+    allowedSwitches: 1,
     requestId: randomUUID(),
     classroomIds: [first.id, second.id],
     startsAt: new Date(Date.now() - 60_000),
@@ -507,6 +518,59 @@ async function main() {
     submitStudentAssignment(student.id, attempt.id, "EXAM_EXIT"),
     /未启用退出自动交卷/,
   );
+  const fullscreenEvent = randomUUID();
+  await assert.rejects(
+    recordExamSwitch(other.id, attempt.id, randomUUID(), "FULLSCREEN_EXIT"),
+  );
+  for (const kind of ["FULLSCREEN_EXIT", "WINDOW_BLUR"] as const) {
+    const eventKey =
+      kind === "FULLSCREEN_EXIT" ? fullscreenEvent : randomUUID();
+    const observed = await recordExamSwitch(
+      student.id,
+      attempt.id,
+      eventKey,
+      kind,
+    );
+    assert.equal(observed.shouldSubmit, false);
+    assert.equal(observed.count, 0);
+    await recordExamSwitch(student.id, attempt.id, eventKey, kind);
+  }
+  await assert.rejects(
+    recordExamSwitch(student.id, attempt.id, fullscreenEvent),
+    /事件键冲突/,
+  );
+  const monitor = await getExamMonitor(teacher.id, live.id, first.id);
+  const monitoredStudent = monitor.rows.find((row) => row.id === student.id);
+  assert.equal(monitoredStudent?.fullscreenExits, 1);
+  assert.equal(monitoredStudent?.windowBlurs, 1);
+  assert.equal(monitoredStudent?.switches, 0);
+  await assert.rejects(
+    submitStudentAssignment(student.id, attempt.id, "EXAM_AUTO"),
+  );
+  const windowEvent = randomUUID();
+  const windowSwitch = await recordExamSwitch(
+    student.id,
+    attempt.id,
+    windowEvent,
+    "WINDOW_SWITCH",
+  );
+  assert.equal(windowSwitch.count, 1);
+  assert.equal(windowSwitch.shouldSubmit, false);
+  assert.equal(
+    (
+      await recordExamSwitch(
+        student.id,
+        attempt.id,
+        windowEvent,
+        "WINDOW_SWITCH",
+      )
+    ).count,
+    1,
+  );
+  const updatedMonitor = await getExamMonitor(teacher.id, live.id, first.id);
+  const updatedRow = updatedMonitor.rows.find((row) => row.id === student.id);
+  assert.equal(updatedRow?.windowSwitches, 1);
+  assert.equal(updatedRow?.switches, 1);
   const switched = await recordExamSwitch(student.id, attempt.id, randomUUID());
   assert.equal(switched.shouldSubmit, true);
   const saved = await prisma.submission.findUniqueOrThrow({
@@ -516,7 +580,7 @@ async function main() {
   assert.equal(saved.examSubmissionReason, "SWITCH_LIMIT");
   const collected = await getStudentExamAttemptStatus(student.id, attempt.id);
   assert.equal(collected.state, "COLLECTED");
-  assert.equal(collected.switches, 1);
+  assert.equal(collected.switches, 2);
   assert.equal(
     (await submitStudentAssignment(student.id, attempt.id, "EXAM_AUTO"))
       .examReceipt?.reason,
@@ -560,6 +624,15 @@ async function main() {
     reason: "MANUAL",
     lastSavedAt: savedAnswers.lastSavedAt,
     answeredCount: 1,
+  });
+  const liveProgress = (await getTeacherExamDetails(teacher.id, live.id))
+    .classroomProgress;
+  assert.equal(liveProgress[firstLive.id].participated, 1);
+  assert.deepEqual(liveProgress[secondLive.id], {
+    participated: 1,
+    pending: 0,
+    published: 0,
+    ready: 1,
   });
   const cutoff = new Date(Date.now() - 1000);
   await prisma.examSession.update({
@@ -699,7 +772,7 @@ async function main() {
     assert.equal(draft.questions[0].reviewedRevision, null);
     return draft;
   }
-  async function prepareDraft(draftId: string) {
+  async function prepareDraft(draftId: string, offsetMs = 0) {
     let draft = await getPaperDraft(teacher.id, draftId);
     const row = draft.questions[0];
     await assert.rejects(
@@ -764,8 +837,8 @@ async function main() {
       expectedRevision: draft.revision,
       type: "MIDTERM",
       title: "AI 试卷草稿发布",
-      startsAt: new Date(Date.now() + 120_000),
-      endsAt: new Date(Date.now() + 3_600_000),
+      startsAt: new Date(Date.now() + offsetMs + 120_000),
+      endsAt: new Date(Date.now() + offsetMs + 3_600_000),
       allowedSwitches: 1,
       classroomIds: [first.id, second.id],
     });
@@ -840,15 +913,53 @@ async function main() {
     courseClaim.currentLeaseId,
     courseJob.input,
   );
+  const objectiveScope = {
+    questionId: question.id,
+    courseId: course.id,
+    syllabusStructureId: publishedSyllabus.id,
+  };
+  await prisma.questionCourseObjective.updateMany({
+    where: { ...objectiveScope, source: "AI" },
+    data: { objectiveCode: "O2" },
+  });
+  async function queueObjectiveReclassification() {
+    const result = await retryQuestionObjectiveClassification(
+      teacher.id,
+      question.id,
+      course.id,
+      randomUUID(),
+      true,
+    );
+    assert.equal(result.status, "QUEUED");
+    return prisma.backgroundJob.findUniqueOrThrow({
+      where: { id: result.jobId },
+    });
+  }
+  async function runObjectiveReclassification(
+    job: Awaited<ReturnType<typeof queueObjectiveReclassification>>,
+  ) {
+    const claimed = await claimBackgroundJobById(job.id, {
+      workerId: "exam-integration",
+      executorVersion: "test-v1",
+      acceptedTypes: [QUESTION_OBJECTIVE_JOB_TYPE],
+      leaseDurationMs: 180_000,
+    });
+    assert.ok(claimed?.currentLeaseId);
+    await executeClaimedQuestionObjectiveJob(
+      job.id,
+      claimed.currentLeaseId,
+      job.input,
+    );
+  }
+  await runObjectiveReclassification(await queueObjectiveReclassification());
+  const queuedBeforeTeacherEdit = await queueObjectiveReclassification();
   assert.equal(
     (
-      await prisma.questionCourseObjective.findUniqueOrThrow({
+      await prisma.questionCourseObjective.findFirstOrThrow({
         where: {
-          questionId_courseId_syllabusStructureId: {
-            questionId: question.id,
-            courseId: course.id,
-            syllabusStructureId: publishedSyllabus.id,
-          },
+          questionId: question.id,
+          courseId: course.id,
+          syllabusStructureId: publishedSyllabus.id,
         },
       })
     ).objectiveCode,
@@ -891,6 +1002,19 @@ async function main() {
     },
     context,
   );
+  await runObjectiveReclassification(queuedBeforeTeacherEdit);
+  assert.equal(
+    (
+      await retryQuestionObjectiveClassification(
+        teacher.id,
+        question.id,
+        course.id,
+        randomUUID(),
+        true,
+      )
+    ).status,
+    "PROTECTED",
+  );
   await assert.rejects(
     saveQuestionCourseObjective(
       teacher.id,
@@ -904,11 +1028,11 @@ async function main() {
       context,
     ),
   );
-  assert.equal(
+  assert.deepEqual(
     (await listQuestionObjectiveCourses(teacher.id, question.id)).find(
       (item) => item.courseId === course.id,
-    )?.objectiveCode,
-    "O2",
+    )?.objectiveCodes,
+    ["O2"],
   );
   const siblingCourse = await prisma.course.create({
     data: {
@@ -941,15 +1065,88 @@ async function main() {
     teacher.id,
     question.id,
   );
-  assert.equal(
+  assert.deepEqual(
     perCourseObjectives.find((item) => item.courseId === course.id)
-      ?.objectiveCode,
-    "O2",
+      ?.objectiveCodes,
+    ["O2"],
   );
-  assert.equal(
+  assert.deepEqual(
     perCourseObjectives.find((item) => item.courseId === siblingCourse.id)
-      ?.objectiveCode,
-    "O1",
+      ?.objectiveCodes,
+    ["O1"],
+  );
+  const multiQuestion = await prisma.question.create({
+    data: {
+      creatorId: teacher.id,
+      questionCategoryId: category.id,
+      title: "多目标回归题",
+      content: `判断内容 ${randomUUID()}`,
+      explanation: "测试",
+      type: "TRUE_FALSE",
+      status: "ACTIVE",
+      correctBoolean: true,
+    },
+  });
+  const multiScope = {
+    courseId: course.id,
+    syllabusStructureId: publishedSyllabus.id,
+  };
+  await saveQuestionCourseObjective(
+    teacher.id,
+    multiQuestion.id,
+    {
+      ...multiScope,
+      objectiveCodes: ["O2", "O1"],
+      expectedObjectiveCodes: [],
+    },
+    context,
+  );
+  const multiBank = await listEligibleExamQuestions(teacher.id, {
+    courseId: course.id,
+    startsAt: input.startsAt,
+    objectiveCode: "O2",
+  });
+  assert.deepEqual(
+    multiBank.find((item) => item.id === multiQuestion.id)?.objectiveCodes,
+    ["O1", "O2"],
+  );
+  const multiInput = {
+    ...input,
+    requestId: randomUUID(),
+    startsAt: new Date(Date.now() + 300_000),
+    endsAt: new Date(Date.now() + 600_000),
+    questions: [{ questionId: multiQuestion.id, points: 100 }],
+  };
+  await assert.rejects(
+    createExamSession(teacher.id, multiInput),
+    /选择本场考试的计分目标/,
+  );
+  const multiExam = await createExamSession(teacher.id, {
+    ...multiInput,
+    questions: [{ ...multiInput.questions[0]!, objectiveCode: "O2" }],
+  });
+  await saveQuestionCourseObjective(
+    teacher.id,
+    multiQuestion.id,
+    {
+      ...multiScope,
+      objectiveCodes: [],
+      expectedObjectiveCodes: ["O2", "O1"],
+    },
+    context,
+  );
+  const frozenMultiTargetUse = await prisma.examQuestionUse.findFirstOrThrow({
+    where: { examSessionId: multiExam.id, questionId: multiQuestion.id },
+  });
+  assert.equal(frozenMultiTargetUse.objectiveCode, "O2");
+  assert.equal(
+    await prisma.questionCourseObjective.count({
+      where: { ...multiScope, questionId: multiQuestion.id },
+    }),
+    0,
+  );
+  console.log(
+    "Multi-target labels, mandatory manual selection, clear and frozen scoring target passed",
   );
   await assert.rejects(
     updatePaperDraftQuestion(
@@ -1019,6 +1216,17 @@ async function main() {
     ),
   );
   const secondDraft = await prepareDraft((await parseDraft()).id);
+  await saveQuestionCourseObjective(
+    teacher.id,
+    bankQuestionId,
+    {
+      courseId: course.id,
+      syllabusStructureId: publishedSyllabus.id,
+      objectiveCodes: ["O1", "O2"],
+      expectedObjectiveCodes: ["O1"],
+    },
+    context,
+  );
   await assert.rejects(
     publishPaperDraft(
       teacher.id,
@@ -1039,6 +1247,7 @@ async function main() {
         {
           expectedRevision: secondDraft.revision,
           requestId,
+          labelUnmappedBankQuestions: true,
         },
         context,
       ),
@@ -1057,6 +1266,60 @@ async function main() {
       where: { examSessionId: republished.value.id },
     });
     assert.equal(reused.questionId, bankQuestionId);
+    assert.equal(reused.objectiveCode, "O1");
+    assert.deepEqual(
+      (await listQuestionObjectiveCourses(teacher.id, bankQuestionId)).find(
+        (item) => item.courseId === course.id,
+      )?.objectiveCodes,
+      ["O1", "O2"],
+    );
+  }
+  const scope = {
+    courseId: course.id,
+    syllabusStructureId: publishedSyllabus.id,
+  };
+  await saveQuestionCourseObjective(
+    teacher.id,
+    bankQuestionId,
+    {
+      ...scope,
+      objectiveCodes: [],
+      expectedObjectiveCodes: ["O1", "O2"],
+    },
+    context,
+  );
+  for (const optIn of [false, true]) {
+    // Keep the earlier published exam available for its separate grade tests.
+    const nextDraft = await prepareDraft(
+      (await parseDraft()).id,
+      4 * 366 * 86_400_000,
+    );
+    const request = {
+      expectedRevision: nextDraft.revision,
+      requestId: randomUUID(),
+      ...(optIn ? { labelUnmappedBankQuestions: true } : {}),
+    };
+    const exam = await publishPaperDraft(
+      teacher.id,
+      nextDraft.id,
+      request,
+      context,
+    );
+    const replay = await publishPaperDraft(
+      teacher.id,
+      nextDraft.id,
+      request,
+      context,
+    );
+    assert.equal(replay.id, exam.id);
+    assert.deepEqual(
+      await prisma.questionCourseObjective.findMany({
+        where: { ...scope, questionId: bankQuestionId },
+        select: { objectiveCode: true, source: true },
+      }),
+      optIn ? [{ objectiveCode: "O1", source: "TEACHER" }] : [],
+    );
+    await cancelExamSession(teacher.id, exam.id);
   }
   const canvas = createCanvas(400, 300);
   const drawing = canvas.getContext("2d");
@@ -1305,6 +1568,10 @@ async function main() {
       (item) => item.classroomId === first.id,
     );
     assert.ok(classAssignment);
+    const pendingAssignment = republished.value.assignments.find(
+      (item) => item.classroomId === second.id,
+    );
+    assert.ok(pendingAssignment);
     await prisma.submission.create({
       data: {
         assignmentId: classAssignment.id,
@@ -1327,6 +1594,52 @@ async function main() {
     assert.equal(partial.analysis?.overview.totalClassrooms, 2);
     assert.equal(partial.analysis?.overview.publishedClassrooms, 1);
     assert.equal(partial.analysis?.overview.average, 75);
+    assert.deepEqual(partial.classroomProgress[classAssignment.id], {
+      participated: 1,
+      pending: 0,
+      published: 1,
+      ready: 0,
+    });
+    await prisma.submission.createMany({
+      data: [
+        {
+          assignmentId: classAssignment.id,
+          studentId: student.id,
+          attemptNumber: 2,
+          status: "IN_PROGRESS",
+          idempotencyKey: randomUUID(),
+        },
+        {
+          assignmentId: pendingAssignment.id,
+          studentId: manualStudent.id,
+          status: "PENDING_REVIEW",
+          startedAt: new Date(Date.now() - 60_000),
+          submittedAt: new Date(),
+          idempotencyKey: randomUUID(),
+        },
+        {
+          assignmentId: pendingAssignment.id,
+          studentId: student.id,
+          status: "PENDING_REVIEW",
+          startedAt: new Date(Date.now() - 60_000),
+          submittedAt: new Date(),
+          idempotencyKey: randomUUID(),
+        },
+      ],
+    });
+    const refreshed = (
+      await getTeacherExamDetails(teacher.id, republished.value.id)
+    ).classroomProgress;
+    assert.deepEqual(
+      refreshed[classAssignment.id],
+      partial.classroomProgress[classAssignment.id],
+    );
+    assert.deepEqual(refreshed[pendingAssignment.id], {
+      participated: 1,
+      pending: 1,
+      published: 0,
+      ready: 0,
+    });
   }
   const programmingQuestion = await prisma.question.create({
     data: {
@@ -1603,6 +1916,97 @@ async function main() {
   console.log(
     "Late judge projection preserves completed-class grading and records excluded results for archived/revoked/left scopes",
   );
+  const regularComponent = await prisma.publishedAssessmentComponent.create({
+    data: {
+      schemeId: scheme.id,
+      code: "REGULAR",
+      name: "平时表现",
+      type: "REGULAR_PERFORMANCE",
+      fullScore: 100,
+      weight: 20,
+      sourceType: "PLATFORM_ASSIGNMENT",
+      sortOrder: 2,
+      sourceJson: [],
+      rubricJson: [],
+    },
+  });
+  await prisma.publishedAssessmentComponent.update({
+    where: { id: gradeItem.componentId },
+    data: { weight: 80 },
+  });
+  await prisma.classMembership.update({
+    where: {
+      classroomId_studentId: { classroomId: first.id, studentId: student.id },
+    },
+    data: { status: "ACTIVE", endedAt: null },
+  });
+  const syncedItemIds = new Set<string>();
+  for (const topic of ["分支结构", "循环结构"]) {
+    const regularQuestion = await prisma.question.create({
+      data: {
+        creatorId: teacher.id,
+        questionCategoryId: category.id,
+        title: topic,
+        content: `判断 Python 中的${topic}是否可以嵌套使用。`,
+        explanation: "Python 支持嵌套控制结构。",
+        type: "TRUE_FALSE",
+        status: "ACTIVE",
+        correctBoolean: true,
+      },
+    });
+    const regular = await createExamSession(teacher.id, {
+      ...input,
+      requestId: randomUUID(),
+      type: "REGULAR",
+      title: `Python 阶段考试 · ${topic}`,
+      classroomIds: [first.id],
+      startsAt: new Date(Date.now() - 60_000),
+      endsAt: new Date(Date.now() + 3_600_000),
+      questions: [{ questionId: regularQuestion.id, points: 100 }],
+    });
+    const regularAssignmentId = regular.assignments[0].id;
+    await prisma.examSession.update({
+      where: { id: regular.id },
+      data: { endsAt: new Date(Date.now() - 1_000) },
+    });
+    await prisma.submission.create({
+      data: {
+        assignmentId: regularAssignmentId,
+        studentId: student.id,
+        idempotencyKey: randomUUID(),
+        status: "PUBLISHED",
+        score: 90,
+        maxScore: 100,
+        percentage: 90,
+        publishedAt: new Date(),
+      },
+    });
+    await assert.rejects(
+      syncTeacherPlatformAssignmentGrades(
+        teacher.id,
+        book.id,
+        gradeItem.componentId,
+        regularAssignmentId,
+        audit,
+      ),
+      /平时考试只能同步/,
+    );
+    const synced = await syncTeacherPlatformAssignmentGrades(
+      teacher.id,
+      book.id,
+      regularComponent.id,
+      regularAssignmentId,
+      audit,
+    );
+    assert.equal(synced.syncedCount, 1);
+    syncedItemIds.add(synced.gradeItemId);
+  }
+  assert.equal(syncedItemIds.size, 2);
+  await publishTeacherGradebook(teacher.id, book.id, audit);
+  const regularScores = (
+    await listPublishedExamScores([first.id], student.id)
+  ).filter(({ type }) => type === "REGULAR");
+  assert.equal(regularScores.length, 2);
   console.log("Exam integration passed");
 }
 main()

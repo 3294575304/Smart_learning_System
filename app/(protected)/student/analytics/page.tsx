@@ -3,12 +3,12 @@ import { BookOpen } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ZodError } from "zod";
 import { StudentPageHeader } from "@/components/dashboard/student-page-header";
-import { StudentCourseReturnLink } from "@/components/dashboard/student-course-return-link";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { StudentAnalysisWorkspace } from "@/components/dashboard/student-analysis-workspace";
 import { requirePageRole } from "@/services/auth/page-authorization";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { getStudentClassAnalytics } from "@/services/dashboard/student-class-analytics";
+import { selectMostActiveStudentEnrollment } from "@/services/courses/student-enrollment";
 export default async function StudentAnalyticsPage({
   searchParams,
 }: {
@@ -31,14 +31,11 @@ export default async function StudentAnalyticsPage({
       notFound();
     throw error;
   }
-  const selected =
-    data.classes.find((item) => item.classroom.status === "ACTIVE") ??
-    data.classes[0];
+  const selected = selectMostActiveStudentEnrollment(data.classes);
   if (!selected)
     return (
       <section className="space-y-5">
         <StudentPageHeader
-          actions={<StudentCourseReturnLink />}
           title="学习分析"
           description="按课程与教学班查看个人学习情况。"
         />
@@ -63,6 +60,7 @@ export default async function StudentAnalyticsPage({
       contexts={data.contexts}
       updatedAt={data.updatedAt}
       initialChart={initialChart}
+      fromCourseCenter={raw.from === "course-center"}
     />
   );
 }

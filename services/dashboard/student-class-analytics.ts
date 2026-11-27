@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ResourceNotFoundError } from "@/services/auth/policy";
 import { listStudentCourseEvaluationContexts } from "@/services/gradebook/service";
@@ -41,27 +42,46 @@ export type StudentHomeExamResult = {
 function shanghaiDayKey(date: Date) {
   return new Date(date.getTime() + 8 * 3_600_000).toISOString().slice(5, 10);
 }
-function summarizePracticeDays(
-  answers: Array<{ createdAt: Date; isCorrect: boolean }>,
+type PracticeDay = {
+  courseId: string;
+  day: string;
+  answered: number;
+  correct: number;
+  lastAnswerAt: Date;
+};
+
+async function listRecentPracticeDays(
+  studentId: string,
+  courseIds: string[],
+  now: Date,
 ) {
-  const days = new Map<string, { answered: number; correct: number }>();
-  for (const answer of answers) {
-    const key = shanghaiDayKey(answer.createdAt);
-    const day = days.get(key) ?? { answered: 0, correct: 0 };
-    day.answered += 1;
-    if (answer.isCorrect) day.correct += 1;
-    days.set(key, day);
-  }
-  return [...days.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .slice(-8)
-    .map(([key, day]) => ({
-      id: `practice:${key}`,
-      label: key.replace("-", "/"),
-      answered: day.answered,
-      correct: day.correct,
-      rate: Math.round((day.correct / day.answered) * 100),
-    }));
+  if (!courseIds.length) return [];
+  // Aggregate in PostgreSQL so a long practice history sends at most eight rows per course.
+  return prisma.$queryRaw<PracticeDay[]>`
+    WITH days AS (
+      SELECT cycle."courseId",
+        (answer."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai')::date AS day,
+        COUNT(*)::int AS answered,
+        COUNT(*) FILTER (WHERE answer."isCorrect")::int AS correct,
+        MAX(answer."createdAt") AS "lastAnswerAt"
+      FROM "RecommendationPracticeAnswer" AS answer
+      JOIN "PersonalizedRecommendation" AS recommendation
+        ON recommendation.id = answer."recommendationId"
+      JOIN "CourseRecommendationCycle" AS cycle
+        ON cycle.id = recommendation."courseCycleId"
+      WHERE recommendation."studentId" = ${studentId}
+        AND cycle."courseId" IN (${Prisma.join(courseIds)})
+        AND answer."createdAt" <= (${now}::timestamptz AT TIME ZONE 'UTC')
+      GROUP BY cycle."courseId", day
+    ), ranked AS (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY "courseId" ORDER BY day DESC) AS day_rank
+      FROM days
+    )
+    SELECT "courseId", TO_CHAR(day, 'YYYY-MM-DD') AS day, answered, correct, "lastAnswerAt"
+    FROM ranked
+    WHERE day_rank <= 8
+    ORDER BY "courseId", day
+  `;
 }
 
 /**
@@ -190,36 +210,19 @@ export async function getStudentClassAnalytics(
             },
             select: {
               currentStatus: true,
+              signedAt: true,
               session: { select: { classroomId: true, startsAt: true } },
             },
           }),
           listPublishedExamScores(ids, studentId, now),
-          prisma.recommendationPracticeAnswer.findMany({
-            where: {
-              createdAt: { lte: now },
-              recommendation: {
-                studentId,
-                courseCycle: { is: { courseId: { in: courseIds } } },
-              },
-            },
-            select: {
-              createdAt: true,
-              isCorrect: true,
-              recommendation: {
-                select: { courseCycle: { select: { courseId: true } } },
-              },
-            },
-            orderBy: { createdAt: "asc" },
-          }),
+          listRecentPracticeDays(studentId, courseIds, now),
         ])
       : [[], [], [], []];
   const practiceByCourse = new Map<string, typeof practiceAnswers>();
-  for (const answer of practiceAnswers) {
-    const courseId = answer.recommendation.courseCycle?.courseId;
-    if (!courseId) continue;
-    const list = practiceByCourse.get(courseId) ?? [];
-    list.push(answer);
-    practiceByCourse.set(courseId, list);
+  for (const day of practiceAnswers) {
+    const list = practiceByCourse.get(day.courseId) ?? [];
+    list.push(day);
+    practiceByCourse.set(day.courseId, list);
   }
   const examResults: StudentHomeExamResult[] = [];
   const examScores: number[] = [];
@@ -374,8 +377,19 @@ export async function getStudentClassAnalytics(
     const records = attendance.filter(
       (x) => x.session.classroomId === context.classroom.id,
     );
+    const practices = practiceByCourse.get(context.course.id);
+    const lastClassActivityAt = rows.reduce(
+      (latest, { submission }) =>
+        Math.max(latest, submission?.submittedAt?.getTime() ?? 0),
+      records.reduce(
+        (latest, { signedAt }) => Math.max(latest, signedAt?.getTime() ?? 0),
+        0,
+      ),
+    );
     return {
       ...context,
+      lastClassActivityAt,
+      lastPracticeAt: practices?.at(-1)?.lastAnswerAt.getTime() ?? 0,
       assignmentProgress: {
         total: assignmentRows.length,
         submitted: assignmentSubmitted,
@@ -414,9 +428,13 @@ export async function getStudentClassAnalytics(
         练习口径独立：课程级、按天聚合、不计入均分与提交率。
         没有记录的课程返回空数组，由图表给出空态，不伪造 0 分。
       */
-      practiceHistory: summarizePracticeDays(
-        practiceByCourse.get(context.course.id) ?? [],
-      ),
+      practiceHistory: (practices ?? []).map(({ day, answered, correct }) => ({
+        id: `practice:${day}`,
+        label: day.slice(5).replace("-", "/"),
+        answered,
+        correct,
+        rate: Math.round((correct / answered) * 100),
+      })),
       awaitingRelease: rows.filter(
         (x) => x.submission && x.submission.status !== "PUBLISHED" && !x.grade,
       ).length,

@@ -1,5 +1,6 @@
 import type {
   AssignmentStatus,
+  ExamType,
   GradingStatus,
   QuestionType,
   SubmissionStatus,
@@ -9,7 +10,7 @@ export interface TeacherResultOverviewItem {
   totalPoints: number;
   id: string;
   title: string;
-  examType?: "MIDTERM" | "FINAL" | null;
+  examType?: ExamType | null;
   gradebookId?: string | null;
   courseId?: string | null;
   specialGradeCount?: number;

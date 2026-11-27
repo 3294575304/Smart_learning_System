@@ -4,11 +4,17 @@ import { BookOpenCheck, Sparkles } from "lucide-react";
 
 import { TeacherQuestionFileImport } from "@/components/admin/admin-question-file-import";
 import { requirePageRole } from "@/services/auth/page-authorization";
-import { listQuestionImportCourses } from "@/services/question-import/courses";
+import {
+  listQuestionImportCourses,
+  listTeacherImportObjectiveCourses,
+} from "@/services/question-import/courses";
 
 export default async function TeacherQuestionImportPage() {
   const teacher = await requirePageRole(Role.TEACHER);
-  const courses = await listQuestionImportCourses(teacher.id);
+  const [courses, objectiveCourses] = await Promise.all([
+    listQuestionImportCourses(teacher.id),
+    listTeacherImportObjectiveCourses(teacher.id),
+  ]);
   return (
     <section className="mx-auto max-w-5xl space-y-4 pb-8">
       <header className="relative overflow-hidden rounded-2xl border border-sky-100 bg-gradient-to-br from-white via-sky-50 to-cyan-50 px-5 py-5 shadow-sm sm:px-6 sm:py-6">
@@ -37,7 +43,10 @@ export default async function TeacherQuestionImportPage() {
           </div>
         </div>
       </header>
-      <TeacherQuestionFileImport courses={courses} />
+      <TeacherQuestionFileImport
+        courses={courses}
+        objectiveCourses={objectiveCourses}
+      />
     </section>
   );
 }

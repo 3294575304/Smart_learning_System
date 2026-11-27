@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { answerOutcome } from "../../services/assignments/personal-work-presentation";
+import {
+  answerOutcome,
+  matchesAnswerOutcome,
+} from "../../services/assignments/personal-work-presentation";
+import { hasStudentAnswer } from "../../services/assignments/answer-presentation";
 import {
   personalWorkQuerySchema,
+  personalWorkHref,
   personalWorkReturn,
   studentAssignmentPersonalHref,
 } from "../../services/assignments/personal-work-navigation";
@@ -10,6 +15,48 @@ import type { TeacherSubmissionAnswerView } from "../../services/assignments/typ
 const id = "cl00000000000000000000001",
   student = "cl00000000000000000000002",
   room = "cl00000000000000000000003";
+
+test("答题卡区分部分得分、答错、未作答和判题异常，并保留组合筛选", () => {
+  assert.equal(matchesAnswerOutcome("PARTIAL", "INCORRECT"), false);
+  assert.equal(matchesAnswerOutcome("PARTIAL", "PARTIAL"), true);
+  assert.equal(matchesAnswerOutcome("PARTIAL", "WRONG"), true);
+  assert.equal(matchesAnswerOutcome("JUDGE_ERROR", "PENDING"), true);
+  const empty = { textAnswer: null, booleanAnswer: null, selectedOptions: [] };
+  assert.equal(hasStudentAnswer(empty, "TRUE_FALSE"), false);
+  assert.equal(
+    hasStudentAnswer({ ...empty, booleanAnswer: false }, "TRUE_FALSE"),
+    true,
+  );
+  assert.equal(
+    hasStudentAnswer({ ...empty, textAnswer: " " }, "FILL_BLANK"),
+    false,
+  );
+  assert.equal(
+    hasStudentAnswer({ ...empty, textAnswer: "未作答" }, "SHORT_ANSWER"),
+    true,
+  );
+  const href = personalWorkHref(
+    id,
+    student,
+    "/teacher/assignments",
+    "PARTIAL",
+    room,
+    {
+      questionType: "TRUE_FALSE",
+      answerStatus: "ANSWERED",
+    },
+  );
+  const url = new URL(href, "http://localhost");
+  assert.deepEqual(
+    personalWorkQuerySchema.parse(Object.fromEntries(url.searchParams)),
+    {
+      filter: "PARTIAL",
+      returnTo: "/teacher/assignments",
+      questionType: "TRUE_FALSE",
+      answerStatus: "ANSWERED",
+    },
+  );
+});
 
 test("考试个人答卷返回保留本班成绩分页，拒绝其他场次地址", () => {
   const examId = "cl00000000000000000000004";
@@ -44,6 +91,7 @@ const answer: TeacherSubmissionAnswerView = {
   sortOrder: 1,
   maxScore: 12,
   studentAnswer: "A",
+  hasStudentAnswer: true,
   correctAnswer: "A",
   automaticScore: 12,
   manualScore: null,

@@ -473,3 +473,11 @@ body:has(
   .workspace-back-to-top {
   display: none;
 }
+html[data-exam-focus] [data-shell-role="STUDENT"] [data-exam-navigation] {
+  display: none;
+}
+
+html[data-exam-focus] [data-shell-role="STUDENT"] [data-exam-content] {
+  --dashboard-header-height: 0px;
+  padding-left: 0;
+}

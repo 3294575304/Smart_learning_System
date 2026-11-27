@@ -1,9 +1,13 @@
 import { PageIndex } from "@/components/dashboard/page-index";
-import { teacherAssessmentHref } from "@/services/exams/classroom-navigation";
+import {
+  examWorkspaceHref,
+  teacherAssessmentHref,
+} from "@/services/exams/classroom-navigation";
 
 interface ResultsPaginationProps {
   assignmentId: string;
   examId?: string | null;
+  listContext?: string;
   page: number;
   pageSize: number;
   total: number;
@@ -21,6 +25,7 @@ function pageHref(base: string, page: number, pageSize: number): string {
 export function ResultsPagination({
   assignmentId,
   examId,
+  listContext,
   page,
   pageSize,
   total,
@@ -33,10 +38,13 @@ export function ResultsPagination({
       <PageIndex
         ariaLabel="学生成绩分页"
         hrefForPage={(targetPage) =>
-          pageHref(
-            teacherAssessmentHref(assignmentId, examId),
-            targetPage,
-            pageSize,
+          examWorkspaceHref(
+            pageHref(
+              teacherAssessmentHref(assignmentId, examId),
+              targetPage,
+              pageSize,
+            ),
+            listContext,
           )
         }
         page={page}

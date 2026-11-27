@@ -27,7 +27,153 @@ import {
 import { ensureTestQuestionCategory } from "@/tests/helpers/question-course-category";
 import { createPublishedGraphFixture } from "@/tests/helpers/teaching-graph-fixture";
 import { getTeacherCourseContentCoverage } from "@/services/courses/content-coverage";
+import { getGraphQuestionCoverage } from "@/services/question-graph-bindings/service";
+import {
+  deriveConceptObjectiveLinks,
+  getCourseObjectiveMap,
+  reviewConceptObjectiveLink,
+} from "@/services/learner-profiles/concept-objectives";
 const prisma = new PrismaClient();
+
+test("知识点推断预览按正式版本统计并保护人工确认", async () => {
+  const [teacher, template] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { email: "teacher@example.com" } }),
+    prisma.courseTemplate.findFirstOrThrow(),
+  ]);
+  const category = await ensureTestQuestionCategory(prisma, teacher.id);
+  const course = await prisma.course.create({
+    data: {
+      teacherId: teacher.id,
+      templateId: template.id,
+      questionCategoryId: category.id,
+      name: "目标映射预览测试",
+      courseNo: `MAP-${randomBytes(4).toString("hex")}`,
+      term: "2026-2027-1",
+    },
+  });
+  const concepts = await Promise.all(
+    Array.from({ length: 6 }, (_, index) =>
+      prisma.knowledgeGraphConcept.create({
+        data: { courseId: course.id, stableKey: `concept-${index}` },
+      }),
+    ),
+  );
+  const fixture = await createPublishedGraphFixture(course.id, teacher.id);
+  const version = await fixture.publishVersion(
+    1,
+    concepts.map(({ id }) => id),
+  );
+  await prisma.publishedKnowledgeGraphNode.update({
+    where: { id: version.nodes[5]?.id },
+    data: { nodeType: "CHAPTER" },
+  });
+  const syllabusStructureId = version.sourceSyllabusStructureId;
+  await prisma.publishedSyllabusStructure.update({
+    where: { id: syllabusStructureId },
+    data: {
+      structureJson: {
+        objectives: [
+          { code: "O1", title: "目标一" },
+          { code: "O2", title: "目标二" },
+        ],
+      },
+    },
+  });
+  await prisma.course.update({
+    where: { id: course.id },
+    data: { currentPublishedSyllabusStructureId: syllabusStructureId },
+  });
+  const questions = await Promise.all(
+    [1, 2, 3].map((number) =>
+      prisma.question.create({
+        data: {
+          creatorId: teacher.id,
+          questionCategoryId: category.id,
+          title: `目标预览题 ${number}`,
+          content: "判断题",
+          explanation: "测试",
+          type: "TRUE_FALSE",
+          correctBoolean: true,
+          status: "ACTIVE",
+        },
+      }),
+    ),
+  );
+  for (const [index, question] of questions.entries()) {
+    await prisma.questionCourseObjective.createMany({
+      data: (index < 2 ? ["O1", "O2"] : ["O2"]).map((objectiveCode) => ({
+        questionId: question.id,
+        courseId: course.id,
+        syllabusStructureId,
+        objectiveCode,
+        source: "TEACHER",
+      })),
+    });
+    await prisma.questionKnowledgeGraphBindingSet.create({
+      data: {
+        questionId: question.id,
+        courseId: course.id,
+        bindings: {
+          create: (index < 2 ? version.nodes : version.nodes.slice(0, 1)).map(
+            (node) => ({
+              questionId: question.id,
+              courseId: course.id,
+              conceptId: node.conceptId,
+              sourceGraphVersionId: version.id,
+              sourceNodeId: node.id,
+              createdById: teacher.id,
+              bindingType: "SECONDARY",
+            }),
+          ),
+        },
+      },
+    });
+  }
+  const view = await getCourseObjectiveMap(teacher.id, course.id);
+  assert.ok(view.preview);
+  assert.equal(view.preview.additions.length, 10);
+  assert.equal(view.preview.overlapping.length, 5);
+  assert.equal(
+    await prisma.conceptObjectiveLink.count({ where: { courseId: course.id } }),
+    0,
+  );
+  assert.equal(
+    await deriveConceptObjectiveLinks(
+      teacher.id,
+      course.id,
+      view.preview.token,
+    ),
+    true,
+  );
+  assert.equal(
+    await deriveConceptObjectiveLinks(
+      teacher.id,
+      course.id,
+      view.preview.token,
+    ),
+    false,
+  );
+  const saved = await getCourseObjectiveMap(teacher.id, course.id);
+  const link = saved.objectives
+    .find((objective) => objective.code === "O1")
+    ?.links.find((item) => item.conceptId === version.nodes[0]?.conceptId);
+  assert.ok(link);
+  assert.equal(link.support, 2 / 3);
+  await reviewConceptObjectiveLink({
+    teacherId: teacher.id,
+    courseId: course.id,
+    linkId: link.id,
+    action: "confirm",
+  });
+  assert.equal(
+    (
+      await prisma.conceptObjectiveLink.findUniqueOrThrow({
+        where: { id: link.id },
+      })
+    ).confidence.toNumber(),
+    0.6667,
+  );
+});
 
 test("覆盖自检区分未绑题、已绑题无证据与仍有有效证据", async () => {
   const [teacher, student, template] = await Promise.all([
@@ -58,6 +204,8 @@ test("覆盖自检区分未绑题、已绑题无证据与仍有有效证据", as
     1,
     concepts.map(({ id }) => id),
   );
+  const [unboundNode] = version.nodes;
+  if (!unboundNode) throw new Error("发布图谱缺少知识点节点");
   const question = await prisma.question.create({
     data: {
       creatorId: teacher.id,
@@ -85,6 +233,41 @@ test("覆盖自检区分未绑题、已绑题无证据与仍有有效证据", as
           bindingType: index === 0 ? "PRIMARY" : "SECONDARY",
           createdById: teacher.id,
         })),
+      },
+    },
+  });
+  /*
+   * 归档题目必须被排除在覆盖之外。修复前「内容覆盖自检」按 ACTIVE 过滤、
+   * 「知识图谱题库覆盖」只过滤 deletedAt，同一条归档题会让两页给出不同数字。
+   */
+  const archived = await prisma.question.create({
+    data: {
+      creatorId: teacher.id,
+      questionCategoryId: category.id,
+      title: "已归档的覆盖自检用题",
+      content: "选择真或假。",
+      explanation: "测试解析",
+      status: "ARCHIVED",
+      type: "TRUE_FALSE",
+      correctBoolean: true,
+    },
+  });
+  await prisma.questionKnowledgeGraphBindingSet.create({
+    data: {
+      questionId: archived.id,
+      courseId: course.id,
+      bindings: {
+        create: [
+          {
+            questionId: archived.id,
+            courseId: course.id,
+            conceptId: unboundNode.conceptId,
+            sourceGraphVersionId: version.id,
+            sourceNodeId: unboundNode.id,
+            bindingType: "PRIMARY",
+            createdById: teacher.id,
+          },
+        ],
       },
     },
   });
@@ -138,6 +321,30 @@ test("覆盖自检区分未绑题、已绑题无证据与仍有有效证据", as
   );
   assert.equal(coverage.totals.boundConceptCount, 2);
   assert.equal(coverage.totals.evidencedConceptCount, 1);
+
+  /*
+   * 口径一致性回归：同一门课在「内容覆盖自检」与「知识图谱题库覆盖」
+   * 必须给出同一个"有题"结论。修复前前者按 ACTIVE 过滤、后者只过滤
+   * deletedAt，归档题会让两页数字不同。
+   */
+  const graphCoverage = await getGraphQuestionCoverage(teacher.id, course.id);
+  const graphBoundCount = graphCoverage.points.filter(
+    (point) => point.questionCount > 0,
+  ).length;
+  assert.equal(
+    graphBoundCount,
+    coverage.totals.boundConceptCount,
+    "两处覆盖统计必须给出同一个「有题」数量",
+  );
+  assert.deepEqual(
+    graphCoverage.points
+      .filter((point) => point.questionCount === 0)
+      .map((point) => point.conceptId),
+    coverage.gaps.map((row) => row.conceptId),
+    "两处覆盖统计必须给出同一批未绑题知识点",
+  );
+  // 归档题不计入覆盖：3 个知识点中只有 2 个被启用题目绑定。
+  assert.equal(graphBoundCount, 2);
 });
 
 const auditContext = {

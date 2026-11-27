@@ -1,3 +1,4 @@
+import { StudentAnalysisReturnLink } from "@/components/dashboard/student-analysis-return-link";
 import { SurveyAvailabilityRefresh } from "@/components/course-surveys/survey-availability-refresh";
 import {
   StudentActivityFilters,
@@ -39,7 +40,9 @@ export default async function StudentAttendancePage({
       <SurveyAvailabilityRefresh at={data.nextChangeAt?.toISOString()} />
       <PageHeader
         actions={
-          courseId ? (
+          query.analysisReturn ? (
+            <StudentAnalysisReturnLink href={query.analysisReturn} />
+          ) : courseId ? (
             <StudentCourseReturnLink
               courseId={courseId}
               classroomId={classroomId}

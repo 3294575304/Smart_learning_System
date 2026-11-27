@@ -48,18 +48,66 @@ export async function getStudentClassroomContext(
   return member.classroom;
 }
 
+/**
+ * 历史教学班上下文：用于退课/转班后回看考试记录。
+ * 与 `getStudentClassroomContext` 的差别只有一处——不限定 ACTIVE。
+ */
+export async function getStudentClassroomHistoryContext(
+  studentId: string,
+  classroomId: string,
+  courseId?: string,
+) {
+  const member = await prisma.classMembership.findFirst({
+    where: {
+      studentId,
+      classroomId,
+      classroom: courseId ? { courseId } : { courseId: { not: null } },
+    },
+    select: {
+      status: true,
+      endedAt: true,
+      classroom: {
+        select: { id: true, name: true, status: true, courseId: true },
+      },
+    },
+  });
+  if (!member) throw new ResourceNotFoundError("教学班不存在。");
+  return {
+    ...member.classroom,
+    membershipStatus: member.status,
+    membershipEndedAt: member.endedAt,
+  };
+}
+
+export async function getStudentCourseHistoryContext(
+  studentId: string,
+  courseId: string,
+) {
+  const course = await prisma.course.findFirst({
+    where: {
+      id: courseId,
+      classrooms: { some: { memberships: { some: { studentId } } } },
+    },
+    select: { id: true, name: true, courseNo: true, term: true },
+  });
+  if (!course) throw new ResourceNotFoundError("课程不存在。");
+  return course;
+}
+
 /** 筛选项来自本人入班关系，不依赖当前是否有作业或签到记录。 */
 export async function listStudentTaskClassrooms(
   studentId: string,
   courseId?: string,
+  options: { includeHistory?: boolean } = {},
 ) {
   const memberships = await prisma.classMembership.findMany({
     where: {
       studentId,
-      status: MembershipStatus.ACTIVE,
+      ...(options.includeHistory ? {} : { status: MembershipStatus.ACTIVE }),
       ...(courseId ? { classroom: { courseId } } : {}),
     },
     select: {
+      status: true,
       classroom: {
         select: {
           id: true,
@@ -70,10 +118,11 @@ export async function listStudentTaskClassrooms(
     },
     orderBy: [{ classroom: { name: "asc" } }, { classroomId: "asc" }],
   });
-  return memberships.map(({ classroom }) => ({
+  return memberships.map(({ classroom, status }) => ({
     id: classroom.id,
     name: classroom.name,
     courseName: classroom.course?.name ?? null,
     term: classroom.course?.term ?? null,
+    inactive: status !== MembershipStatus.ACTIVE,
   }));
 }

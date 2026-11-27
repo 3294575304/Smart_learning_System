@@ -32,6 +32,7 @@ export async function getStudentGrowthSummary(
       orderBy: { revisionNumber: "desc" },
       take: 2,
       select: {
+        id: true,
         revisionNumber: true,
         createdAt: true,
         objectiveMasteryDimension: true,
@@ -57,6 +58,29 @@ export async function getStudentGrowthSummary(
   ]);
   const latest = snapshots[0];
   if (!latest) return null;
+  /*
+   * 概览卡要同时给出两个口径：
+   *   - 「平均掌握度」= 记录充足知识点的评分均值（conclusiveAverageMastery）
+   *   - 「已掌握 n/总数」= 达到 80 分的知识点计数占比
+   * 两者数学上不相等，必须各自带标签，否则同一屏会出现两个互相矛盾的「掌握度」。
+   */
+  const [totalConcepts, assessedConcepts, masteredConcepts] = await Promise.all(
+    [
+      prisma.learnerProfileConceptEntry.count({
+        where: { snapshotId: latest.id },
+      }),
+      prisma.learnerProfileConceptEntry.count({
+        where: { snapshotId: latest.id, evidenceState: "CONCLUSIVE" },
+      }),
+      prisma.learnerProfileConceptEntry.count({
+        where: {
+          snapshotId: latest.id,
+          evidenceState: "CONCLUSIVE",
+          masteryScore: { gte: 80 },
+        },
+      }),
+    ],
+  );
   const previous = snapshots[1] ?? null;
   const mastery = dimensionNumber(
     latest.objectiveMasteryDimension,
@@ -80,6 +104,14 @@ export async function getStudentGrowthSummary(
     mastery,
     masteryDelta: delta,
     previousRevision: previous?.revisionNumber ?? null,
+    /* 计数口径：与「平均掌握度」并列展示，避免学生把两个数字当成同一件事。 */
+    totalConcepts,
+    assessedConcepts,
+    masteredConcepts,
+    masteredRatio:
+      totalConcepts > 0
+        ? Math.round((masteredConcepts / totalConcepts) * 1000) / 10
+        : null,
     weeklyEvidence,
     needsSupport,
     activeDays: dimensionNumber(latest.activityDimension, "activeDays") ?? 0,
